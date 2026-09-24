@@ -11,7 +11,9 @@ marine dynamics, delayed thrusters, and simple pool contacts behind explicit
 
 The viewer, ROS integrations, sensors, Python interface, task interactions, and
 training integrations are not implemented. See [status](docs/STATUS.md) and the
-[architecture plan](docs/ARCHITECTURE_PLAN.md). The current example parameters
+[architecture plan](docs/ARCHITECTURE_PLAN.md). Planned [sensor support](docs/SENSORS.md)
+covers cameras, stereo cameras, IMUs, DVLs, and FOGs; sonar is deferred.
+The current example parameters
 are synthetic, not a calibrated prediction for any team's robot.
 
 ## Build and run

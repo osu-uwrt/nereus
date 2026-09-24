@@ -26,15 +26,19 @@ Talos ROS pipeline has been performed for this milestone.
 1. Complete the behavior/workflow inventory and establish Talos/reference timing
    fixtures, keeping intentional model differences explicit.
 2. Extend native profile composition and the runtime/Python binding, sensor
-   scheduling, seeded noise, and complete lifecycle contracts (phase 2).
+   scheduling, seeded noise, and IMU/DVL/FOG models (phase 2). Define camera and
+   stereo-rig contracts alongside these models.
 3. Build the independent viewer/source/display contracts and a minimal local-data
    viewer (phase 5A), without waiting for ROS or competition tasks.
 4. Add optional ROS/UWRT integration, task/mechanism ownership, coordinated general
-   contacts, and simulation camera rendering in their planned phases.
+   contacts, and camera/stereo rendering in their planned phases.
 
 The viewer, rendering, ROS adapters, full hull/prop contacts, sensors, competition
 scoring, and Python simulation API are not implemented. RL implementation remains
 out of scope. The current plant has no stochastic model and therefore no seed API.
+The agreed sensor scope is cameras, stereo cameras, IMUs, DVLs, and FOGs; sonar
+implementation is deferred. [SENSORS.md](SENSORS.md) records the planned contracts
+and validation requirements, not delivered sensor functionality.
 
 ## Release prerequisites
 

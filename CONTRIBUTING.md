@@ -41,6 +41,14 @@ material limitations. Keep changes reviewable. Record decisions affecting public
 contracts, ownership, dependencies, or numerical semantics in docs/decisions.
 Avoid broad unrelated cleanup and speculative abstractions.
 
+Commit coherent, reviewable increments with descriptive messages that identify
+the resulting behavior. Keep the tests and documentation needed for a change in
+the same commit; separate unrelated changes. Verify the staged diff and relevant
+checks before committing. Keep build outputs, local environment settings, and
+unrelated workspace edits out of the repository. Record unfinished capabilities
+honestly in docs/STATUS.md. Work remains local; do not configure a remote or push
+without an explicit request from the project owner.
+
 ## Review and releases
 
 The project owner acts as maintainer until named owners are established. Public

@@ -21,6 +21,9 @@ In scope:
 
 - A standalone build and runtime, with optional ROS and UWRT integrations.
 - Explicit simulation stepping, complete resets, and direct state/sensor access.
+- Initial sensor families: cameras, stereo camera rigs, IMUs, DVLs, and fiber-optic
+  gyros (FOGs). Sonar is deferred; sensor extension boundaries must accommodate it
+  later. See [sensor scope and contracts](SENSORS.md).
 - Independent robot, world, mechanism, task, and competition descriptions.
 - Optional rendering and viewer; physics-only runs require no graphics stack.
 - A standalone viewer host with source, display, and tool extensions; optional
@@ -196,6 +199,15 @@ state or refreshing the UI must not consume random numbers or advance sensors.
 Camera requests identify the snapshot/acquisition they render, even when rendering
 finishes later. Sensor access remains separate from privileged ground-truth access
 so a future consumer can choose its observation policy explicitly.
+
+Sensor instances compose an acquisition model, mount, schedule, noise/calibration,
+and delivery policy. The scheduler handles the common sample envelope; typed
+measurement payloads belong to the selected sensor extension. Stereo is a composed
+rig with an explicit paired-acquisition contract, not two unrelated camera timers.
+IMU, DVL, and FOG models require no renderer. Optional render or world-query
+providers are requested by models that use them; no universal camera/ROS base
+class or fixed switch over sensor families belongs in the runtime. Detailed
+measurement semantics and acceptance checks are in [SENSORS.md](SENSORS.md).
 
 ### Lifecycle and time
 
@@ -564,12 +576,14 @@ Work:
   Convert selected reference fixtures offline; test staged installation.
 - Introduce the direct runtime interface and the C++/Python boundary. Centralize
   ticks, command application, complete plant reset, seeds, and read-only snapshots.
-- Extract nonvisual sensor models from ROS publication; keep simulated schedules,
-  mounting transforms, noise, drift, and uncertainty in the models.
+- Implement independent IMU, DVL, and FOG models with configured mounts, schedules,
+  noise/bias, uncertainty, and validity. Define the camera/stereo sample and rig
+  contracts now; rendering arrives in phase 5B. See the sensor acceptance matrix.
 - Add a standalone CLI and direct Python example for configure/reset/advance/observe.
   Keep ROS integration out of the standalone lifecycle.
 
-Gate: the example AUV exposes state and nonvisual samples without ROS; repeated
+Gate: the example AUV exposes state and configured IMU/DVL/FOG samples without ROS
+or graphics, including multiple instances and absent sensors; repeated
 seeded command sequences reproduce results; two independent instances do not
 interfere; reading snapshots does not change later results. Install/run tests use
 only declared resources, with no workspace or ROS resource lookup.
@@ -646,6 +660,9 @@ Work:
   interfaces as live sources. Bind simulation controls as an optional provider.
 - Render supplied scene snapshots independently of ROS nodes and the GUI loop.
 - Return camera products directly; publish ROS images through bridges.
+- Support independent cameras and calibrated stereo rigs. Pair images from the
+  same acquisition state/time and preserve individual optical frames, calibration,
+  and pair identity. Test baseline/disparity geometry and pair delivery behavior.
 - Move hardcoded task/robot scene behavior behind descriptors/extensions.
 - Add offscreen camera execution; keep the viewer executable and sensor acquisition
   independently usable, with separate visual settings and render targets.
@@ -694,8 +711,10 @@ remaining RViz-replacement features have a separate follow-on backlog.
 | Standalone example + example tasks | Generic mechanism/task lifecycle and scoring events. |
 | Standalone Talos + 2026 | Full simulation models independent of ROS transport. |
 | Generic ROS example | Standard ROS integration without UWRT packages. |
+| IMU/DVL/FOG models | Sensor-frame and mount semantics, validity, bias/noise, independent rates, reproducible resets, no graphics dependency. |
 | UWRT Talos + 2026 | Selected stack integration and intended sensor/frame, operator, contact, and scoring behavior. |
 | Offscreen cameras | Camera products without a desktop; correct acquisition frames/timestamps. |
+| Stereo camera rig | Paired acquisition, explicit relative calibration, correct optical frames, pair-level failure/drop behavior; distinguished ground-truth and derived products. |
 | Viewer + local asset/synthetic streams | No simulator/ROS/UWRT/content-pack dependency; saved workspaces and neutral displays. |
 | Viewer + live ROS robot | No simulator or UWRT dependency; phase-0 display checklist and timestamped frame handling. |
 | Viewer with two sources | Separate identities, explicit time/frame alignment, isolated disconnect/clear behavior. |
