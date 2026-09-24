@@ -1,0 +1,90 @@
+cmake_minimum_required(VERSION 3.22)
+project(RoboticsPlatform VERSION 0.1.0 LANGUAGES CXX)
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+include(CTest)
+option(RP_BUILD_CLI "Build the YAML scenario loader and standalone runner" ON)
+option(RP_ENABLE_SANITIZERS "Enable address and undefined-behavior sanitizers" OFF)
+
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+
+function(rp_project_options target)
+  target_compile_features(${target} PUBLIC cxx_std_17)
+  set_target_properties(${target} PROPERTIES CXX_EXTENSIONS OFF)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    if(RP_ENABLE_SANITIZERS)
+      target_compile_options(${target} PUBLIC -fsanitize=address,undefined -fno-omit-frame-pointer)
+      target_link_options(${target} PUBLIC -fsanitize=address,undefined)
+    endif()
+  endif()
+endfunction()
+
+add_library(rp_simulation
+  libraries/simulation/src/marine_dynamics.cpp
+  libraries/simulation/src/thruster_dynamics.cpp
+  libraries/simulation/src/plant.cpp)
+add_library(RoboticsPlatform::simulation ALIAS rp_simulation)
+set_target_properties(rp_simulation PROPERTIES EXPORT_NAME simulation)
+target_include_directories(rp_simulation PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libraries/simulation/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+  PRIVATE libraries/simulation/src)
+target_link_libraries(rp_simulation PUBLIC Eigen3::Eigen)
+rp_project_options(rp_simulation)
+
+if(RP_BUILD_CLI)
+  find_package(yaml-cpp REQUIRED CONFIG)
+  add_library(rp_config libraries/config/src/scenario.cpp)
+  add_library(RoboticsPlatform::config ALIAS rp_config)
+  set_target_properties(rp_config PROPERTIES EXPORT_NAME config)
+  target_include_directories(rp_config PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libraries/config/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+  target_link_libraries(rp_config PUBLIC rp_simulation PRIVATE yaml-cpp)
+  rp_project_options(rp_config)
+  add_executable(robotics-sim applications/simulator/main.cpp)
+  target_link_libraries(robotics-sim PRIVATE rp_config)
+  rp_project_options(robotics-sim)
+  install(TARGETS rp_config EXPORT RoboticsPlatformTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  install(TARGETS robotics-sim RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  install(DIRECTORY libraries/config/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+endif()
+
+install(TARGETS rp_simulation EXPORT RoboticsPlatformTargets
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(DIRECTORY libraries/simulation/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY content/ DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform)
+install(FILES LICENSE.md docs/PROVENANCE.md DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform/legal)
+install(EXPORT RoboticsPlatformTargets NAMESPACE RoboticsPlatform::
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/RoboticsPlatform)
+configure_package_config_file(cmake/RoboticsPlatformConfig.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/RoboticsPlatformConfig.cmake
+  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/RoboticsPlatform)
+write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/RoboticsPlatformConfigVersion.cmake
+  VERSION ${PROJECT_VERSION} COMPATIBILITY SameMajorVersion)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/RoboticsPlatformConfig.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/RoboticsPlatformConfigVersion.cmake
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/RoboticsPlatform)
+
+if(BUILD_TESTING)
+  find_package(GTest REQUIRED CONFIG)
+  include(GoogleTest)
+  add_executable(plant_tests libraries/simulation/tests/plant_test.cpp
+    libraries/simulation/tests/model_reference_test.cpp)
+  target_include_directories(plant_tests PRIVATE libraries/simulation/src)
+  target_link_libraries(plant_tests PRIVATE rp_simulation GTest::gtest_main)
+  rp_project_options(plant_tests)
+  gtest_discover_tests(plant_tests DISCOVERY_MODE PRE_TEST)
+  if(RP_BUILD_CLI)
+    add_executable(config_tests tests/config_test.cpp)
+    target_link_libraries(config_tests PRIVATE rp_config GTest::gtest_main)
+    rp_project_options(config_tests)
+    gtest_discover_tests(config_tests DISCOVERY_MODE PRE_TEST)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME cli_contract COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_test.py
+      $<TARGET_FILE:robotics-sim> ${CMAKE_CURRENT_SOURCE_DIR}/content/examples/empty_pool.yaml)
+  endif()
+endif()

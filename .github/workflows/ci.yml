@@ -1,0 +1,24 @@
+name: build-and-test
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  standalone:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        preset: [release, asan]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libeigen3-dev libyaml-cpp-dev libgtest-dev clang-tidy
+          python3 -m pip install clang-format==23.1.1
+      - name: Check
+        run: python3 tools/check.py --preset ${{ matrix.preset }} --install-check --tidy
+      - name: Verify minimal plant build
+        if: matrix.preset == 'release'
+        run: |
+          cmake --preset plant-only
+          cmake --build --preset plant-only

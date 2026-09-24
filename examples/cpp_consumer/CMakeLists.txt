@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.22)
+project(StandaloneConsumer LANGUAGES CXX)
+find_package(RoboticsPlatform 0.1 REQUIRED CONFIG)
+add_executable(consumer main.cpp)
+target_link_libraries(consumer PRIVATE RoboticsPlatform::simulation)

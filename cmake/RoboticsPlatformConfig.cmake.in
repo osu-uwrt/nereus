@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+include(CMakeFindDependencyMacro)
+find_dependency(Eigen3 3.3 NO_MODULE)
+if(@RP_BUILD_CLI@)
+  find_dependency(yaml-cpp CONFIG)
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/RoboticsPlatformTargets.cmake")
+check_required_components(RoboticsPlatform)
