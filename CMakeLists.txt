@@ -52,6 +52,7 @@ if(RP_BUILD_SIMULATION)
 add_library(rp_simulation
   libraries/simulation/src/marine_dynamics.cpp
   libraries/simulation/src/thruster_dynamics.cpp
+  libraries/simulation/src/box_contacts.cpp
   libraries/simulation/src/plant.cpp)
 add_library(RoboticsPlatform::simulation ALIAS rp_simulation)
 set_target_properties(rp_simulation PROPERTIES EXPORT_NAME simulation)
@@ -151,7 +152,8 @@ if(BUILD_TESTING AND RP_BUILD_SIMULATION)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
   add_executable(plant_tests libraries/simulation/tests/plant_test.cpp
-    libraries/simulation/tests/model_reference_test.cpp libraries/simulation/tests/stage_reference_test.cpp)
+    libraries/simulation/tests/model_reference_test.cpp libraries/simulation/tests/stage_reference_test.cpp
+    libraries/simulation/tests/contact_reference_test.cpp)
   target_compile_definitions(plant_tests PRIVATE RP_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures")
   target_include_directories(plant_tests PRIVATE libraries/simulation/src)
   target_link_libraries(plant_tests PRIVATE rp_simulation GTest::gtest_main)

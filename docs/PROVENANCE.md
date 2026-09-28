@@ -57,3 +57,19 @@ invoked. Its test driver extracts original expressions into a temporary build wi
 the original pure numerical kernels, then records checked fixture data. The driver
 and all inputs/results are hashed in `tests/fixtures/legacy_stage_dynamics.json`.
 See `reference/STAGE_DYNAMICS.md` for reproduction and the bounded comparison scope.
+
+## Static box contact equations
+
+`libraries/simulation/src/box_contacts.cpp` adapts SAT, contact-point selection and
+impulse/friction response from original revision
+`07647eebe706f96ea7b76db3cc9802735a146698`:
+`c_simulator/src/{collisionBox_class,physics_simulator}.cpp` and
+`c_simulator/include/c_simulator/collisionBox.h`. Geometry validation, neutral
+value descriptors, fixed-size temporaries, ownership and caching were rewritten.
+Original proxy ordering and response expressions remain reference-tested.
+The original license metadata remains unresolved as described above.
+
+The offline contact capture extracts original method bodies, disables logging,
+and excludes the separate optional task-contact hook. It does not build a ROS node.
+All source/driver/fixture hashes are in `tests/fixtures/legacy_box_contacts.json`;
+see `reference/BOX_CONTACTS.md` for scope and reproduction.

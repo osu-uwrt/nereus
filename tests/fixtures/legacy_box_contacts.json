@@ -1,0 +1,15 @@
+{
+  "revision": "07647eebe706f96ea7b76db3cc9802735a146698",
+  "sources_sha256": {
+    "c_simulator/include/c_simulator/MarineDynamics.h": "75af4caedc79ddbaf7f3c09a793389bf8dd90d34eccf5a40c9ae14738a6e5a34",
+    "c_simulator/include/c_simulator/collisionBox.h": "e4e43222c392addffeba5eecfd2d53d8381c158761eb8454507fcb0e95396a98",
+    "c_simulator/include/c_simulator/settings.h": "65f763f9d7bfb6270866f55050706d4316f88d03d253855c15c567e98d27e5d5",
+    "c_simulator/src/marine_dynamics.cpp": "ae591befab556ded015206f0eb029a336fd9e1ed7bddeaf7392f5e2979e21fcc",
+    "c_simulator/src/collisionBox_class.cpp": "552bec7ea1890b8097165eee6d327e4f0215b246c4636228b364d94592c44551",
+    "c_simulator/src/physics_simulator.cpp": "d4b05d378425bfdb59773ba6b20f0db44f14469c2be4eb0ccdfb69824ff05e14"
+  },
+  "driver_sha256": "e0079840d7d7a58589d84e5fe54d9c646d64770b9319d9fff432d5567825f616",
+  "fixture_sha256": "3d579b657eb5af75d49bbf82f52df764c800a8f67b2f018900631f0a086a3752",
+  "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "scope": "Single static-box contact resolution at supplied states; original SAT/contact point/impulse/friction. Logging disabled; optional task-contact hook omitted. No integration, Talos content, sensors or ROS."
+}

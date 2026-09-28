@@ -364,3 +364,23 @@ synthetic scenarios with construction excluded, not Talos/contact/task/camera or
 full-stack results. Maximum observed tick latency was also recorded; no hard-real-time
 or other-hardware guarantee is implied. Release compilation, configured static
 analysis, formatting and the recording tool's lint/checksum checks passed.
+
+## Static compound-box numerical extraction
+
+A private static-box contact component now preserves the original SAT, contact-point,
+depenetration, coupled-mass normal impulse and friction sequence. Robot/world proxy
+values and ordering are explicit; static geometry is cached and per-call geometry
+uses fixed-size Eigen temporaries. No ROS/task names or dynamic prop ownership enter
+this solver. It is not yet selected by Plant or profile configuration.
+
+Eleven cases captured from actual pinned original equations compare all state fields
+within 2e-12, including separating contacts, disjoint geometry, compound/local/world
+rotation and nonunit stage quaternions. All 78 Release tests passed; the two new
+contact tests passed under ASan/UBSan and after final geometry validation changes.
+Formatting, configured static analysis and independent numerical review passed.
+See [reference/BOX_CONTACTS.md](reference/BOX_CONTACTS.md) for hashes and limits.
+
+Next: expose explicit disabled/sphere-pool/compound-box contact selection, keep body
+and world geometry in their owning profiles, and validate original pre/post-RK4
+ordering through whole-step comparisons. Dynamic task/prop contacts remain later
+runtime-owned work, and full-scene performance still requires measurement.

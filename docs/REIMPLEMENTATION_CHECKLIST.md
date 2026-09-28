@@ -84,6 +84,8 @@ Current physics uses a spherical pool contact proxy; the viewer draws line geome
 - [ ] Verify partial buoyancy and hydrodynamic behavior under native Talos
   configuration and longer reference rollouts, including stop/watchdog response.
 - [ ] Hull/course collisions with required friction/restitution and prop coupling.
+- [x] Extract private static compound-box response and match 11 pinned original
+  contact cases (reference/BOX_CONTACTS.md); Plant/profile integration remains open.
 - [ ] Distinct placement, task reset and full reset semantics, plus ROS clock mapping.
 - [ ] Match required Talos sensor products/calibration through declared models/adapters.
 - [ ] Native assets and reproducible resolved configuration load outside old workspace.
