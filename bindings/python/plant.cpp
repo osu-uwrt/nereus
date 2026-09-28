@@ -49,7 +49,11 @@ void bindPlant(py::module_ &m) {
                         .def_readwrite("slew_rate", &Thruster::slew_rate)
                         .def_readwrite("forward_limit", &Thruster::forward_limit)
                         .def_readwrite("reverse_limit", &Thruster::reverse_limit)
-                        .def_readwrite("propeller_radius", &Thruster::propeller_radius);
+                        .def_readwrite("propeller_radius", &Thruster::propeller_radius)
+                        .def_readwrite("deadband", &Thruster::deadband)
+                        .def_readwrite("forward_scale", &Thruster::forward_scale)
+                        .def_readwrite("reverse_scale", &Thruster::reverse_scale)
+                        .def_readwrite("efficiency", &Thruster::efficiency);
     valueProperty(thruster, "position", &Thruster::position);
     valueProperty(thruster, "direction", &Thruster::direction);
     auto parameters =

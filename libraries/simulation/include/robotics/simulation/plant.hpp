@@ -44,6 +44,9 @@ struct Thruster {
     double slew_rate = 300.0; // N/s; zero disables rate limiting.
     double forward_limit = 28.0;
     double reverse_limit = 28.0;
+    double deadband = 0; // Command magnitude below this threshold becomes zero, N.
+    double forward_scale = 1, reverse_scale = 1;
+    double efficiency = 1; // [0,1], applied after command scaling and saturation.
     // If present, scale thrust by the immersed fraction of this disk (metres).
     // Absence leaves actuator force unmodulated for other propulsion models.
     std::optional<double> propeller_radius = std::nullopt;
@@ -100,6 +103,9 @@ class Plant {
     // Forces in profile order, N. Applied at the current tick boundary.
     // Last command at a boundary wins. Rejects wrong-size/nonfinite input before mutation.
     void command(const Eigen::VectorXd &forces);
+    // Clear delayed commands/targets immediately; existing force coasts down on
+    // subsequent steps. Does not reset time or latch out future explicit commands.
+    void stopThrusters();
     Snapshot advance(std::uint64_t ticks = 1);
     Snapshot observe() const;                 // Value copy: callers cannot mutate the plant.
     MotionSample motion() const;              // Read-only derivatives for sensor acquisition.

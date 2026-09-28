@@ -199,6 +199,7 @@ class Runtime {
         return *typed;
     }
     void command(const Eigen::VectorXd &forces);
+    void stopThrusters(); // Clears propulsion targets/queues without restarting sensors/time.
     simulation::Snapshot advance(std::uint64_t ticks = 1);
     simulation::Snapshot observe() const;
     simulation::Snapshot reset(const simulation::BodyState &initial, std::uint64_t seed);

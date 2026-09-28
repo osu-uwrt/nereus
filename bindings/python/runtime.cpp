@@ -25,6 +25,7 @@ void bindRuntime(py::module_ &m) {
                                      const simulation::BodyState &, std::uint64_t>(),
                             py::arg("parameters"), py::arg("initial"), py::arg("seed") = 0)
                        .def("command", &Runtime::command, py::arg("forces"))
+                       .def("stop_thrusters", &Runtime::stopThrusters)
                        .def("advance", &Runtime::advance, py::arg("ticks") = 1)
                        .def("observe", &Runtime::observe)
                        .def("reset", &Runtime::reset, py::arg("initial"), py::arg("seed"))

@@ -29,6 +29,10 @@ void Runtime::command(const Eigen::VectorXd &forces) {
     requireHealthy();
     plant_.command(forces);
 }
+void Runtime::stopThrusters() {
+    requireHealthy();
+    plant_.stopThrusters();
+}
 simulation::Snapshot Runtime::observe() const {
     return plant_.observe();
 }

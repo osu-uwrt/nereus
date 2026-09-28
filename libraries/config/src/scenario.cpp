@@ -35,7 +35,8 @@ void parseVehicle(const YAML::Node &v, simulation::PlantParameters &plant,
         const std::string field = path + ".thrusters[" + std::to_string(i) + "]";
         keys(t,
              {"id", "position_m", "direction", "delay_s", "rise_time_s", "fall_time_s",
-              "slew_rate_n_s", "forward_limit_n", "reverse_limit_n", "propeller_radius_m"},
+              "slew_rate_n_s", "forward_limit_n", "reverse_limit_n", "propeller_radius_m",
+              "deadband_n", "forward_scale", "reverse_scale", "efficiency"},
              field);
         simulation::Thruster thruster;
         thruster.id = text(t, "id", field);
@@ -47,6 +48,14 @@ void parseVehicle(const YAML::Node &v, simulation::PlantParameters &plant,
         thruster.slew_rate = number(t, "slew_rate_n_s", field);
         thruster.forward_limit = number(t, "forward_limit_n", field);
         thruster.reverse_limit = number(t, "reverse_limit_n", field);
+        if (t["deadband_n"])
+            thruster.deadband = number(t, "deadband_n", field);
+        if (t["forward_scale"])
+            thruster.forward_scale = number(t, "forward_scale", field);
+        if (t["reverse_scale"])
+            thruster.reverse_scale = number(t, "reverse_scale", field);
+        if (t["efficiency"])
+            thruster.efficiency = number(t, "efficiency", field);
         if (t["propeller_radius_m"])
             thruster.propeller_radius = number(t, "propeller_radius_m", field);
         plant.thrusters.push_back(thruster);

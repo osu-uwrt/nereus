@@ -22,6 +22,27 @@ def passive(seed: int = 42) -> rp.Runtime:
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_calibrated_thruster_stop_clears_delay_without_rewinding(self) -> None:
+        params = rp.PlantParameters()
+        thruster = rp.Thruster()
+        thruster.id = "propeller"
+        thruster.delay = 0.05
+        thruster.rise_time = thruster.fall_time = thruster.slew_rate = 0
+        thruster.deadband = 2
+        thruster.forward_scale = 0.5
+        thruster.reverse_scale = 0.8
+        thruster.efficiency = 0.5
+        params.thrusters = [thruster]
+        runtime = rp.Runtime(params, initial())
+        runtime.command([10])
+        runtime.advance(5)
+        runtime.stop_thrusters()
+        self.assertEqual(runtime.observe().elapsed_ns, 10_000_000)
+        self.assertEqual(runtime.observe().generation, 0)
+        self.assertEqual(runtime.advance(50).thruster_forces[0], 0)
+        runtime.command([10])
+        self.assertEqual(runtime.advance(50).thruster_forces[0], 2.5)
+
     def test_optional_wet_propeller_and_current_configuration(self) -> None:
         params = rp.PlantParameters()
         thruster = rp.Thruster()

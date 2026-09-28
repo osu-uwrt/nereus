@@ -182,3 +182,17 @@ disk-area thrust model against the world's water surface, recalculated at every
 integration stage. Without it, actuator thrust is unmodulated. Geometry remains
 robot-owned and water/flow remain world-owned. This is not a ventilation/cavitation
 model. See [the numerical reference](reference/STAGE_DYNAMICS.md).
+
+### Actuator calibration
+
+Each thruster may declare `deadband_n` (default 0), `forward_scale` and
+`reverse_scale` (default 1), and `efficiency` (default 1, in [0,1]). A command with
+magnitude strictly below deadband becomes zero, then sign-specific scaling is
+applied, then asymmetric saturation, then efficiency. Delay/response dynamics
+operate on that calibrated target. These are robot-owned model parameters.
+
+`Plant::stopThrusters`, `Runtime::stopThrusters`, and Python `stop_thrusters()` clear
+queued commands and targets immediately. Realized force coasts down during later
+steps; time, generation and sensor schedules remain unchanged. A later explicit
+command is accepted normally. Stop is not a latched kill/arming policy: optional
+robot mechanism/integration components own that policy and command authorization.

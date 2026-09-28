@@ -256,3 +256,39 @@ TEST(Motion, DerivativesIncludeThrustTorqueAndContactValidity) {
     EXPECT_TRUE(plant.motion().acceleration_valid);
     EXPECT_NEAR(plant.motion().acceleration_body.norm(), 0, 1e-12);
 }
+
+TEST(Plant, ActuatorCalibrationOrdersDeadbandScaleSaturationAndEfficiency) {
+    auto p = ideal();
+    auto &t = p.thrusters.front();
+    t.deadband = 2;
+    t.forward_scale = 2;
+    t.reverse_scale = .5;
+    t.forward_limit = 8;
+    t.reverse_limit = 2;
+    t.efficiency = .5;
+    Plant plant(p, initial());
+    for (const auto &command :
+         std::vector<std::pair<double, double>>{{1.9, 0}, {2, 2}, {5, 4}, {-5, -1}}) {
+        plant.command(force(command.first));
+        EXPECT_DOUBLE_EQ(plant.advance().thruster_forces[0], command.second);
+    }
+    t.efficiency = 1.1;
+    EXPECT_THROW(Plant(p, initial()), std::invalid_argument);
+    t.efficiency = .5;
+    t.forward_scale = -1;
+    EXPECT_THROW(Plant(p, initial()), std::invalid_argument);
+}
+
+TEST(Plant, StopCancelsDelayedCommandsAndAllowsSubsequentExplicitCommands) {
+    auto p = ideal();
+    p.thrusters.front().delay = .05;
+    Plant plant(p, initial());
+    plant.command(force(10));
+    const auto before = plant.observe();
+    plant.stopThrusters();
+    plant.stopThrusters();
+    same(before, plant.observe());
+    EXPECT_DOUBLE_EQ(plant.advance(100).thruster_forces[0], 0);
+    plant.command(force(4));
+    EXPECT_DOUBLE_EQ(plant.advance(50).thruster_forces[0], 4);
+}

@@ -72,8 +72,10 @@ Current physics uses a spherical pool contact proxy; the viewer draws line geome
 - [ ] Preserve COM/base_link/CAD frame conversions and offset velocity/acceleration.
 - [x] Stage-dependent thruster submersion and water current evolution match the
   pinned synthetic free-motion fixture through native C++/profile/Python interfaces.
-- [ ] Preserve actuator response/scales/deadbands, partial buoyancy and hydrodynamic
-  behavior under native Talos configuration and longer reference rollouts.
+- [x] Expose actuator response/scales/deadbands/efficiency and immediate queue-clearing
+  stop with coast-down, preserving clock and sensor acquisition phase.
+- [ ] Verify partial buoyancy and hydrodynamic behavior under native Talos
+  configuration and longer reference rollouts, including stop/watchdog response.
 - [ ] Hull/course collisions with required friction/restitution and prop coupling.
 - [ ] Distinct placement, task reset and full reset semantics, plus ROS clock mapping.
 - [ ] Match required Talos sensor products/calibration through declared models/adapters.
@@ -146,9 +148,9 @@ selected live-robot workflows required here.
 1. Source-linked review matrix is recorded; full reference capture remains open.
 2. Read-only pose transport and application composition are validated. Explicit
    simulation controls remain open and separate from recording playback.
-3. Stage-dependent wet-thruster/current behavior is verified for the pinned synthetic
-   fixture. Next expose actuator calibration/stop semantics, then frame/contact
-   parity and native Talos content; neutral scene/assets follow.
+3. Stage forcing and actuator calibration/stop interfaces are verified in their
+   bounded reference/contracts. Next capture and port compound box contact behavior,
+   named body/world frame support and native Talos content; neutral scene/assets follow.
 4. Re-evaluate this order after each validated commit against concrete dependencies.
 
 For every increment: state its acceptance target, implement, test appropriate

@@ -197,3 +197,17 @@ TEST_F(Profiles, NativeWorldAndRobotDeclareFlowAndImmersionIndependently) {
     replace("robots/synthetic_auv.yaml", "propeller_radius_m: 0.05", "propeller_radius_m: -1");
     EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
 }
+
+TEST_F(Profiles, RobotActuatorCalibrationReachesNativeRuntime) {
+    replace("robots/synthetic_auv.yaml", "reverse_limit_n: 28",
+            "reverse_limit_n: 28\n      deadband_n: 2\n      forward_scale: 1.5\n"
+            "      reverse_scale: 0.8\n      efficiency: 0.7");
+    const auto config = robotics::config::loadScenario(scenario());
+    const auto &thruster = config.plant.thrusters.front();
+    EXPECT_DOUBLE_EQ(thruster.deadband, 2);
+    EXPECT_DOUBLE_EQ(thruster.forward_scale, 1.5);
+    EXPECT_DOUBLE_EQ(thruster.reverse_scale, .8);
+    EXPECT_DOUBLE_EQ(thruster.efficiency, .7);
+    replace("robots/synthetic_auv.yaml", "efficiency: 0.7", "efficiency: 1.01");
+    EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
+}

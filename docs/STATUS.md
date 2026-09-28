@@ -316,3 +316,26 @@ This does not establish full Talos fidelity. The original's accumulated floating
 clock may diverge slightly from tick-based flow phase on long runs; preserving that
 incidental drift is not the new clock contract. Actuator calibration/stop interfaces,
 COM/base/CAD conversions, contacts and native Talos configuration are next.
+
+## Actuator calibration and explicit stop
+
+Native thruster configuration now exposes command deadband, forward/reverse scale
+and efficiency through C++, profiles and Python. The existing numerical actuator
+kernel retains calibration order and validation. Plant/runtime `stopThrusters()`
+(and Python `stop_thrusters()`) clears delayed commands and targets, preserves
+realized force until coast-down, and leaves simulation/sensor clocks unchanged.
+It deliberately does not own robot kill/arming policy or reject later commands.
+
+Validation: all 76 Release and ASan/UBSan tests passed. The stop/sensor-phase test
+was strengthened after review to stop at62ms, between acquisitions; its updated
+Release and sanitizer checks also passed. The installed Python wheel passed13
+checks including calibration and delayed-stop behavior, plus Ruff/strict mypy.
+Configured native static analysis, formatting/dependency scans and relocated C++
+consumers passed. No sanitizer diagnostics were reported.
+
+The reviewed [Talos content conversion map](reference/TALOS_CONTENT_CONVERSION.md)
+records source revisions, physical parameters, effective collision proxies, and
+startup-versus-placement frame conventions. Compound box contacts and world/body
+frames remain prerequisites for a faithful competition profile. The user's added
+performance constraint uses the current machine as a provisional baseline; collect
+headless costs now and repeat for contacts, Talos and the full renderer as delivered.

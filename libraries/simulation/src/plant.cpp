@@ -150,6 +150,10 @@ struct Plant::Impl {
             a.slew = t.slew_rate;
             a.forwardLimit = t.forward_limit;
             a.reverseLimit = t.reverse_limit;
+            a.deadband = t.deadband;
+            a.forwardScale = t.forward_scale;
+            a.reverseScale = t.reverse_scale;
+            a.efficiency = t.efficiency;
             actuator_parameters.push_back(a);
             allocation.col(static_cast<Eigen::Index>(i)) << t.direction,
                 t.position.cross(t.direction);
@@ -208,6 +212,11 @@ void Plant::command(const Eigen::VectorXd &forces) {
         throw std::logic_error("plant must be reset after a failed advance");
     }
     impl_->actuators.command(forces);
+}
+void Plant::stopThrusters() {
+    if (impl_->faulted)
+        throw std::logic_error("plant must be reset after a failed advance");
+    impl_->actuators.stop();
 }
 
 Snapshot Plant::observe() const {

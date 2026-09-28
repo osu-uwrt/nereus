@@ -492,3 +492,36 @@ TEST(Pressure, MissingEnvironmentRangeAndInvalidProviderAreDistinct) {
     EXPECT_THROW((Pressure{parameters, HydrostaticPressure(0)}), std::invalid_argument);
     EXPECT_THROW((HydrostaticPressure{0, -1}), std::invalid_argument);
 }
+
+TEST(Scheduler, StopCoastsPropulsionWithoutResettingClockOrSensorSchedule) {
+    sim::PlantParameters parameters;
+    sim::Thruster thruster;
+    thruster.id = "propeller";
+    thruster.delay = .02;
+    thruster.fall_time = .05;
+    thruster.slew_rate = 0;
+    parameters.thrusters.push_back(thruster);
+    parameters.command_timeout = 0;
+    Runtime runtime(parameters, initial(), 42);
+    auto stream = runtime.add(device(), Imu());
+    runtime.command(Eigen::VectorXd::Constant(1, 14));
+    auto before = runtime.advance(31); // 62ms: deliberately not a 5ms acquisition boundary.
+    ASSERT_GT(before.thruster_forces[0], 0);
+    const auto acquired = stream->stats().acquired;
+    runtime.command(Eigen::VectorXd::Constant(1, -20));
+    runtime.stopThrusters();
+    EXPECT_EQ(runtime.observe().thruster_forces, before.thruster_forces);
+    EXPECT_EQ(runtime.observe().elapsed, before.elapsed);
+    EXPECT_EQ(runtime.observe().generation, before.generation);
+    EXPECT_EQ(stream->stats().acquired, acquired);
+    double force = before.thruster_forces[0];
+    for (int tick = 0; tick < 30; ++tick) {
+        const auto after = runtime.advance();
+        EXPECT_GE(after.thruster_forces[0], 0); // Queued reverse command must never activate.
+        EXPECT_LT(after.thruster_forces[0], force);
+        force = after.thruster_forces[0];
+    }
+    EXPECT_EQ(runtime.observe().elapsed, before.elapsed + 60ms);
+    EXPECT_EQ(stream->stats().acquired, 24U); // Original 5ms schedule, no restart on stop.
+    EXPECT_EQ(stream->latest()->header.generation, before.generation);
+}
