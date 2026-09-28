@@ -70,6 +70,16 @@ struct Snapshot {
     Eigen::VectorXd thruster_forces;
 };
 
+// Instantaneous rigid-body kinematics, not a noisy sensor measurement.
+struct MotionSample {
+    Snapshot state;
+    Eigen::Vector3d acceleration_body = Eigen::Vector3d::Zero(); // Inertial COM acceleration.
+    Eigen::Vector3d angular_acceleration_body = Eigen::Vector3d::Zero();
+    Eigen::Vector3d gravity_world{0, 0, -9.80665};
+    // The current impulsive pool-contact model has no instantaneous force history.
+    bool acceleration_valid = true;
+};
+
 // Single-owner, synchronous plant. Methods are not concurrently callable.
 // No ROS, wall time, IO, callbacks, or global mutable state.
 class Plant {
@@ -86,6 +96,7 @@ class Plant {
     void command(const Eigen::VectorXd &forces);
     Snapshot advance(std::uint64_t ticks = 1);
     Snapshot observe() const;                 // Value copy: callers cannot mutate the plant.
+    MotionSample motion() const;              // Read-only derivatives for sensor acquisition.
     Snapshot reset(const BodyState &initial); // Restarts time and clears actuator history.
 
   private:

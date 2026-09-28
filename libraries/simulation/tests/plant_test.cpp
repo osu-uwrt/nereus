@@ -222,3 +222,37 @@ TEST(Plant, NumericalFailureRequiresResetAndKeepsLastSnapshot) {
     plant.reset(initial());
     EXPECT_EQ(plant.advance().tick, 1U);
 }
+
+TEST(Motion, InertialAccelerationIsNotBodyVelocityDerivative) {
+    auto state = initial();
+    state.angular_velocity.z() = 2;
+    state.linear_velocity.x() = 3;
+    Plant plant({}, state);
+    const auto first = plant.motion();
+    EXPECT_NEAR(first.acceleration_body.norm(), 0, 1e-12);
+    EXPECT_NEAR(first.angular_acceleration_body.norm(), 0, 1e-12);
+    EXPECT_EQ(plant.motion().state.tick, 0U);
+    EXPECT_EQ(plant.observe().body.position, state.position);
+    EXPECT_TRUE(first.acceleration_valid);
+}
+
+TEST(Motion, DerivativesIncludeThrustTorqueAndContactValidity) {
+    PlantParameters parameters;
+    Thruster thruster;
+    thruster.id = "motor";
+    thruster.position.y() = 0.2;
+    thruster.delay = thruster.rise_time = thruster.fall_time = thruster.slew_rate = 0;
+    parameters.thrusters = {thruster};
+    Plant plant(parameters, initial());
+    plant.command(Eigen::VectorXd::Constant(1, 10));
+    plant.advance();
+    EXPECT_NEAR(plant.motion().acceleration_body.x(), 1, 1e-10);
+    EXPECT_NEAR(plant.motion().angular_acceleration_body.z(), -2, 1e-10);
+    auto contact = initial();
+    contact.position.z() = -parameters.pool.depth + parameters.body.collision_radius;
+    plant.reset(contact);
+    EXPECT_FALSE(plant.motion().acceleration_valid);
+    plant.reset(initial());
+    EXPECT_TRUE(plant.motion().acceleration_valid);
+    EXPECT_NEAR(plant.motion().acceleration_body.norm(), 0, 1e-12);
+}

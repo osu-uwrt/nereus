@@ -76,6 +76,11 @@ class PoolContacts {
                 "initial collision sphere must be inside the pool walls and above the floor");
     }
 
+    bool touching(const detail::State13d &x) const {
+        return (x.head<3>().array() <= lower_.array() + 1e-9).any() ||
+               (x.head<3>().array() >= upper_.array() - 1e-9).any();
+    }
+
     void resolve(detail::State13d &x, const Matrix6 &inverse_mass) const {
         const Eigen::Quaterniond q(x[3], x[4], x[5], x[6]);
         x.head<3>() = x.head<3>().cwiseMax(lower_).cwiseMin(upper_);
@@ -172,6 +177,27 @@ Snapshot Plant::observe() const {
         unpack(p.state), p.committed_forces};
 }
 
+MotionSample Plant::motion() const {
+    const auto &p = *impl_;
+    if (p.faulted) {
+        throw std::logic_error("plant must be reset before sampling failed dynamics");
+    }
+    MotionSample sample;
+    sample.state = observe();
+    const Vector6 wrench = p.allocation * p.committed_forces;
+    const auto derivative =
+        p.dynamics.derivative(p.state, wrench, p.parameters.pool.current_velocity);
+    const auto &body = sample.state.body;
+    sample.acceleration_body =
+        derivative.segment<3>(7) + body.angular_velocity.cross(body.linear_velocity);
+    sample.angular_acceleration_body = derivative.tail<3>();
+    sample.acceleration_valid = !p.contacts.touching(p.state);
+    if (!sample.acceleration_body.allFinite() || !sample.angular_acceleration_body.allFinite()) {
+        throw std::runtime_error("nonfinite motion derivative");
+    }
+    return sample;
+}
+
 Snapshot Plant::advance(std::uint64_t ticks) {
     auto &p = *impl_;
     if (p.faulted) {
@@ -186,7 +212,7 @@ Snapshot Plant::advance(std::uint64_t ticks) {
     try {
         for (std::uint64_t i = 0; i < ticks; ++i) {
             // Midpoint actuator force held during the RK4 body step (operator splitting).
-            // Sensor-free phase-1 model: one authoritative state commit per integer tick.
+            // One authoritative state commit per integer tick.
             p.actuators.advance(dt / 2);
             const Vector6 wrench = p.allocation * p.actuators.forces();
             auto next = p.dynamics.step(p.state, wrench, dt, p.parameters.pool.current_velocity);
