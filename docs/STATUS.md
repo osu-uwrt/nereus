@@ -54,25 +54,41 @@ Implemented:
 [PROFILES.md](PROFILES.md) defines the delivered schema and extension boundaries.
 This remains single-vehicle/pool composition; serialized resolved manifests,
 content hashes, search roots, visual assets, task packs, and public dynamic plugin
-loading are not delivered. Python access is the next runtime increment.
+loading are not delivered. The Python increment below now exposes this runtime.
+
+## Python API increment
+
+Implemented:
+
+- Optional pybind11 module and PEP 517 wheel/sdist packaging with typed public API,
+  NumPy conversions, bundled profiles, and an installed standalone example.
+- Profile-based and programmatic construction; explicit command/advance/reset;
+  typed IMU, FOG, DVL, and pressure streams using the existing native scheduler.
+- Detached observations, exact integer nanosecond times, independent instances,
+  exception translation, and safe stream/data lifetime after runtime destruction.
+- Python binding tests, C++ runner comparisons, type/lint checks, source-distribution
+  installation checks, and native ASan/UBSan checks under CPython.
+
+[PYTHON.md](PYTHON.md) documents ownership, build dependencies, and current limits.
+This is direct simulation access, not a training environment or complete phase 2.
+Python callbacks/plugins, concurrent shared-instance calls, checkpoints, and batched
+training environments are not implemented. Calls retain the GIL.
 
 ## Next increments
 
 1. Complete the behavior/workflow inventory and establish Talos/reference timing
    fixtures, keeping intentional model differences explicit.
-2. Add the Python binding over the explicit runtime lifecycle (remaining phase 2).
-   Extend profile composition with assets/tasks when their implementations exist;
-   refine executable camera/stereo contracts when rendering integration begins.
-3. Build the independent viewer/source/display contracts and a minimal local-data
+2. Build independent viewer/source/display/frame contracts and a minimal local-data
    viewer (phase 5A), without waiting for ROS or competition tasks.
+3. Extend native profile composition with assets/tasks when their implementations
+   exist; refine executable camera/stereo contracts when rendering begins.
 4. Add optional ROS/UWRT integration, task/mechanism ownership, coordinated general
    contacts, and camera/stereo rendering in their planned phases.
 
-The viewer, rendering, ROS adapters, full hull/prop contacts, competition scoring,
-and Python simulation API are not implemented. RL
-implementation remains out of scope. The plant remains deterministic without a
-seed API; the composed sensor runtime owns seeded measurement noise. Cameras and
-stereo cameras are planned; sonar implementation is deferred.
+The viewer, rendering, ROS adapters, full hull/prop contacts, and competition scoring
+are not implemented. RL implementation remains out of scope. The plant is deterministic;
+the composed sensor runtime owns seeded measurement noise. Cameras/stereo are planned;
+sonar implementation is deferred.
 
 ## Release prerequisites
 
@@ -148,3 +164,25 @@ Locally verified on 2026-09-28 on Ubuntu 22.04 / aarch64:
 
 Remote CI has not run. These remain synthetic-model and local packaging checks,
 not hardware calibration or full phase-2 completion.
+
+## Verification of the Python increment
+
+Locally verified on Ubuntu 22.04 / aarch64, GCC 11.4, CPython 3.10.12, NumPy 2.2.6,
+pybind11 3.1.0, and scikit-build-core 1.0.3:
+
+- All 68 existing CTest entries and relocated C++ installation checks passed.
+- Eleven installed Python tests passed in Release and native ASan/UBSan builds.
+  They include all trajectory states and sensor numeric fields from the C++ runner;
+  cross-build floats use 1e-12 relative/absolute tolerance, with exact timestamps
+  and within-build seeded replay. No sanitizer diagnostics were reported.
+- The release and sanitizer wheels built from sdists outside the checkout, then ran
+  in fresh environments after removal of copied source/build trees. The bundled
+  example delivered its configured samples and reset successfully.
+- Ruff, strict mypy, C++ formatting/dependency checks, and configured clang-tidy on
+  native bindings passed. The headless C++ preset still built with Python/CLI off.
+- LeakSanitizer is disabled specifically for the CPython embedding check; address
+  and undefined-behavior checks remain enabled. This does not claim process leak
+  checking or cross-platform/free-threaded Python support.
+
+CI jobs are configured but have not run remotely. Python wheels remain local,
+platform-specific artifacts with system yaml-cpp linkage; nothing was published.

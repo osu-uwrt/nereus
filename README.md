@@ -12,8 +12,9 @@ marine dynamics, delayed thrusters, and simple pool contacts behind explicit
 A second library adds deterministic sensor scheduling, seeded noise, IMU, FOG,
 pressure/depth, and ideal bottom-track DVL models. Native robot/world/sensor
 [profiles](docs/PROFILES.md) compose these into standalone runs. See the [sensor API and example](docs/SENSOR_RUNTIME.md).
-The viewer, ROS integrations, cameras/stereo, Python interface, task interactions,
-and training integrations are not implemented. See [status](docs/STATUS.md) and the
+An optional [Python API](docs/PYTHON.md) exposes profile loading, programmatic
+configuration, stepping/reset, and typed sensor streams. The viewer, ROS integrations,
+cameras/stereo, task interactions, and training integrations are not implemented. See [status](docs/STATUS.md) and the
 [architecture plan](docs/ARCHITECTURE_PLAN.md). [Sensor scope](docs/SENSORS.md)
 covers cameras, stereo cameras, IMUs, DVLs, FOGs, and pressure/depth sensors; sonar is deferred.
 The current example parameters
@@ -47,6 +48,19 @@ cmake --build --preset plant-only
 
 `COLCON_IGNORE` keeps this project out of automatic recursive workspace discovery.
 Build it directly; all generated files stay in this project's `build/` directory.
+
+## Python
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install .
+.venv/bin/python examples/python/run_profile.py
+```
+
+Building the wheel also requires Python development headers and the native Eigen/
+yaml-cpp dependencies. See [Python installation, contracts, and checks](docs/PYTHON.md).
+The C++ build remains independent; Python is enabled only for the wheel or with
+`RP_BUILD_PYTHON=ON`.
 
 ## Install and consume
 

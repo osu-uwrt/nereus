@@ -38,7 +38,7 @@ def main():
     formatter = shutil.which("clang-format")
     if not all((cmake, ctest, formatter)):
         parser.error("cmake, ctest, and clang-format are required (see CONTRIBUTING.md)")
-    sources = sorted(p for folder in ("libraries", "applications", "examples", "tests")
+    sources = sorted(p for folder in ("libraries", "applications", "bindings", "examples", "tests")
                      for p in (ROOT / folder).rglob("*") if p.suffix in (".cpp", ".hpp"))
     run([formatter, "--dry-run", "--Werror", *sources], env=env)
     for path in sources:
@@ -51,8 +51,8 @@ def main():
                 if token == "yaml-cpp" and "config/src" in path.as_posix():
                     continue
                 raise RuntimeError(f"Forbidden dependency in {path}: {line}")
-    for folder in ("tools", "tests"):
-        for path in (ROOT / folder).glob("*.py"):
+    for folder in ("tools", "tests", "python", "examples/python"):
+        for path in (ROOT / folder).rglob("*.py"):
             ast.parse(path.read_text(), filename=str(path))
     run([cmake, "--preset", args.preset, "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF"], env=env)
     run([cmake, "--build", "--preset", args.preset], env=env)

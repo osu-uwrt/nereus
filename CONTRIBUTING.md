@@ -49,6 +49,17 @@ unrelated workspace edits out of the repository. Record unfinished capabilities
 honestly in docs/STATUS.md. Work remains local; do not configure a remote or push
 without an explicit request from the project owner.
 
+## Python binding checks
+
+Use a virtual environment and `pip install '.[dev]'` for the binding development
+tools. The optional extension is built by the wheel backend; C++-only builds remain
+unchanged. Run `tools/check_python.py` with that environment's Python to verify an
+sdist-built wheel outside the source tree. Pass `--reference-runner
+build/release/robotics-sim` for cross-language comparisons and `--sanitizers` for
+ASan/UBSan under CPython. See [Python verification](docs/PYTHON.md) for commands,
+system prerequisites, and sanitizer limitations. Keep public stubs aligned with
+bindings; observation buffers must never alias live native state.
+
 ## Review and releases
 
 The project owner acts as maintainer until named owners are established. Public

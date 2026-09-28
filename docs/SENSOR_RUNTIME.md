@@ -4,8 +4,8 @@ The `RoboticsPlatform::sensors` C++17 library composes the plant with IMU, FOG,
 pressure/depth, and ideal bottom-track DVL models. It requires Eigen and the simulation library;
 no ROS, rendering, viewer, YAML, wall clock, or worker thread is involved. These
 are synthetic measurement models, not calibrated device emulators. Cameras,
-stereo capture and Python bindings are future work. Native sensor-profile loading
-is available in the optional [configuration library](PROFILES.md).
+stereo capture are future work. A [Python API](PYTHON.md) wraps the native runtime;
+native sensor-profile loading is available in the optional [configuration library](PROFILES.md).
 
 ## Ownership and extension
 

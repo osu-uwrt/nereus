@@ -2,6 +2,11 @@
 
 ## 0.1.0 — unreleased
 
+- Optional installed Python API for profile/programmatic construction, commands,
+  stepping/reset, typed sensor streams, copied NumPy observations, and integer time.
+- Wheel/sdist packaging, public type hints, standalone Python example, numerical
+  comparisons to the C++ runner, and installed sanitizer/lifetime checks.
+
 - Versioned reusable robot/world/sensor profiles and resolved runtime construction,
   checked typed stream lookup, full physical matrix configuration, and sensor CSV.
 

@@ -146,7 +146,7 @@ rejects unknown IDs or mismatches, including after configuration-based construct
 Native YAML decoders and CSV exporters currently register the four built-in families
 at the configuration/application edges. Extending YAML support requires a compiled
 decoder in that edge layer; there is no public dynamic plugin loader or Python model
-registration yet. The model label selects decoding/export only, not acquisition or
+registration yet. The [Python API](PYTHON.md) can construct and use the built-in runtime. The model label selects decoding/export only, not acquisition or
 physics. Public payloads remain typed. The internal `std::any` holds typed stream
 handles for checked lookup, never measurement values or arbitrary parameter maps.
 

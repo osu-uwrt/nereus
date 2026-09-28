@@ -6,3 +6,6 @@ __pycache__/
 *.pyc
 CMakeUserPresets.json
 compile_commands.json
+/.venv/
+/.mypy_cache/
+/.ruff_cache/
