@@ -20,6 +20,9 @@ commits only; the original workspace remains the reference, not a runtime depend
   floating-point/image differences. Existing approximation limits remain explicit.
 - Legacy incidental package names/APIs are not core contracts. Required existing
   robot-stack interfaces belong in separately built ROS/UWRT adapters.
+- Robot, pool/environment, task instances and scoring rules remain independent
+  compositions as specified in ARCHITECTURE_PLAN.md. Talos mission completion is
+  the final integration gate, not a substitute for the generic extension gates.
 - Architectural corrections (independent acquisition, explicit clocks, coordinated
   ownership) must retain physical/rendering behavior at equivalent inputs. No
   unreviewed fidelity change should be hidden as cleanup.
@@ -51,8 +54,10 @@ Current physics uses a spherical pool contact proxy; the viewer draws line geome
 
 ## B. Simulation and viewer connection
 
-- [ ] Separate read-only simulation source adapter with bounded delivery/history.
-- [ ] Prove attached/detached/slow viewer leaves trajectories and sensor samples equal.
+- [x] Separate read-only simulation source adapter with bounded delivery/history.
+- [x] Prove attached/detached/slow pose transport leaves trajectories and noisy IMU
+  samples equal through reset/reconnect (see LIVE_VISUALIZATION.md). Camera/other
+  future payload transport requires the corresponding acquisition comparisons.
 - [ ] Application composition connects runtime and viewer without inward dependencies.
 - [ ] Optional simulation control provider: pause/resume, full reset, task reset,
   placement, acknowledged state; separate from playback and live robot commands.
@@ -82,6 +87,10 @@ Current physics uses a spherical pool contact proxy; the viewer draws line geome
 ## E. Mechanisms, props, tasks and scoring
 
 - [ ] Node-free example mechanism/task extensions and capability validation.
+- [ ] Robot mechanisms work without competition tasks; tasks declare required
+  capabilities and reject incompatible bindings without robot-name dispatch.
+- [ ] Pool/environment packs load independently of robots and task selections;
+  task instances and scoring rules can be selected/replaced independently.
 - [ ] Talos arm/disarm/kill/cooldown/ammunition, torpedo/dropper launch state.
 - [ ] Payload trajectories, swept contacts, loaded/released visual continuity.
 - [ ] Claw actuation, grasp/release, attachments, table props and magnet-light behavior.
@@ -115,6 +124,8 @@ Current physics uses a spherical pool contact proxy; the viewer draws line geome
 ## H. External reuse and distribution readiness
 
 - [ ] External robot/content/task/source/display examples using installed public APIs.
+- [ ] Two distinct robot definitions exercise the example task capability contracts;
+  empty-pool, selected-task, and alternative-scoring compositions run standalone.
 - [ ] Standalone, viewer-only, camera-only, generic ROS and Talos build/run matrix.
 - [ ] Original behavior/visual/performance comparisons accepted with recorded limits.
 - [ ] Resolve source/asset licenses, dependency inventory and maintenance contacts
@@ -127,8 +138,9 @@ selected live-robot workflows required here.
 
 ## Current next increment and review loop
 
-1. Finish the source-linked acceptance inventory from independent reviews.
-2. Implement and verify the read-only simulation-to-viewer source boundary.
+1. Source-linked review matrix is recorded; full reference capture remains open.
+2. Read-only pose transport is validated; next connect it through application
+   composition, then add explicit simulation controls independently of playback.
 3. Capture/port Talos numerical behavior and neutral scene/assets in bounded slices.
 4. Re-evaluate this order after each validated commit against concrete dependencies.
 

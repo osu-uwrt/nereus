@@ -28,7 +28,7 @@ def clean_environment():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--preset", choices=("release", "dev", "asan", "viewer", "viewer-asan"), default="release")
+    parser.add_argument("--preset", choices=("release", "dev", "asan", "viewer", "viewer-asan", "simulation-view", "simulation-view-asan"), default="release")
     parser.add_argument("--install-check", action="store_true")
     parser.add_argument("--tidy", action="store_true")
     args = parser.parse_args()
@@ -39,7 +39,7 @@ def main():
     formatter = shutil.which("clang-format")
     if not all((cmake, ctest, formatter)):
         parser.error("cmake, ctest, and clang-format are required (see CONTRIBUTING.md)")
-    sources = sorted(p for folder in ("libraries", "applications", "bindings", "examples", "tests")
+    sources = sorted(p for folder in ("libraries", "applications", "bindings", "integrations/simulation_view", "examples", "tests")
                      for p in (ROOT / folder).rglob("*") if p.suffix in (".cpp", ".hpp"))
     run([formatter, "--dry-run", "--Werror", *sources], env=env)
     for path in sources:
@@ -125,6 +125,13 @@ def main():
                                 str(installed / "share/robotics_platform/examples/profile_pool.yaml"),
                                 "--sensors", str(temp / "profile-sensors.csv")],
                                cwd=temp, env=env, stdout=output, check=True)
+            if args.preset.startswith("simulation-view"):
+                adapter_consumer = temp / "simulation-view"
+                shutil.copytree(ROOT / "examples/simulation_view", adapter_consumer)
+                run([cmake, "-S", adapter_consumer, "-B", temp / "adapter-build",
+                     f"-DCMAKE_PREFIX_PATH={installed}", "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF"], env=env)
+                run([cmake, "--build", temp / "adapter-build", "--parallel", "2"], env=env)
+                run([temp / "adapter-build/simulation_view_demo"], cwd=temp, env=env)
     print("All requested checks passed.")
 
 

@@ -244,3 +244,23 @@ OpenGL driver process globals; CPU tests and installed extensions retain it.
 Remote CI/Xvfb/Mesa jobs are configured but have not run remotely. This is local
 hardware and synthetic-data validation, not full RViz workflow parity or a
 cross-platform graphics-support claim. Nothing has been published.
+
+## Read-only live visualization transport
+
+Implemented a neutral bounded live-pose source and an optional simulation adapter
+that consumes snapshots without owning or advancing a runtime. Producer/reset
+identity, stale rejection, queue/history loss, immutable retained observations,
+disconnect, and reconnect are explicit. See [LIVE_VISUALIZATION.md](LIVE_VISUALIZATION.md).
+
+Locally validated: all 90 combined native tests passed in Release and ASan/UBSan;
+formatting/dependency scans, configured clang-tidy, and relocated installed
+consumers (including the new adapter) passed. All 20 viewer contracts and an
+isolated relocated viewer install also passed without simulation source files.
+The new comparisons require exact matching trajectory states and noisy IMU samples
+across viewer polling, overflow, disconnect, reset and reconnect. A concurrent
+producer/consumer functional test and locking review passed; this is not a
+ThreadSanitizer or hard-real-time guarantee. No sanitizer diagnostics were reported.
+
+This increment is pose transport, not a connected simulation application or Talos
+fidelity. Application composition is next; physics, scene rendering, mechanisms,
+independent task/scoring composition and full-stack gates remain open in the ledger.

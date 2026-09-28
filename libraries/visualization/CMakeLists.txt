@@ -1,10 +1,11 @@
-add_library(rp_visualization src/frames.cpp src/source.cpp src/display.cpp src/camera.cpp)
+add_library(rp_visualization src/frames.cpp src/source.cpp src/live_source.cpp src/display.cpp src/camera.cpp)
 add_library(RoboticsPlatform::visualization ALIAS rp_visualization)
 set_target_properties(rp_visualization PROPERTIES EXPORT_NAME visualization)
 target_include_directories(rp_visualization PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-target_link_libraries(rp_visualization PUBLIC Eigen3::Eigen)
+find_package(Threads REQUIRED)
+target_link_libraries(rp_visualization PUBLIC Eigen3::Eigen Threads::Threads)
 rp_project_options(rp_visualization)
 
 find_package(yaml-cpp REQUIRED CONFIG)
@@ -53,7 +54,7 @@ endif()
 if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
-  add_executable(visualization_tests tests/visualization_test.cpp)
+  add_executable(visualization_tests tests/visualization_test.cpp tests/live_source_test.cpp)
   target_link_libraries(visualization_tests PRIVATE rp_viewer_io GTest::gtest_main)
   target_compile_definitions(visualization_tests PRIVATE RP_WORKSPACES="${PROJECT_SOURCE_DIR}/workspaces")
   rp_project_options(visualization_tests)

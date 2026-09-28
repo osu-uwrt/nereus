@@ -47,12 +47,19 @@ void Interface::controls() {
     if (snapshot && snapshot->data) {
         ImGui::TextWrapped("Clock: %s", snapshot->data->clock.c_str());
         ImGui::Text("Generation: %llu", static_cast<unsigned long long>(snapshot->generation));
+        const auto &delivery = snapshot->delivery;
+        if (delivery.dropped_queue || delivery.trimmed_history || delivery.rejected_stale)
+            ImGui::TextWrapped(
+                "Display delivery: %llu dropped, %llu history trimmed, %llu stale rejected",
+                static_cast<unsigned long long>(delivery.dropped_queue),
+                static_cast<unsigned long long>(delivery.trimmed_history),
+                static_cast<unsigned long long>(delivery.rejected_stale));
         if (ImGui::Button("Disconnect")) {
             session_.disconnect();
             playing_ = false;
         }
     } else if (snapshot) {
-        ImGui::TextDisabled("Disconnected");
+        ImGui::TextDisabled("No active source data");
         if (ImGui::Button("Reconnect"))
             session_.reconnect();
     } else {

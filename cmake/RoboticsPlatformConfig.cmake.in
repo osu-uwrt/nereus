@@ -1,6 +1,9 @@
 @PACKAGE_INIT@
 include(CMakeFindDependencyMacro)
 find_dependency(Eigen3 3.3 NO_MODULE)
+if(@RP_BUILD_VISUALIZATION@ OR @RP_BUILD_VIEWER@ OR @RP_BUILD_SIMULATION_VIEW@)
+  find_dependency(Threads)
+endif()
 if(@RP_NEEDS_YAML@)
   find_dependency(yaml-cpp CONFIG)
 endif()

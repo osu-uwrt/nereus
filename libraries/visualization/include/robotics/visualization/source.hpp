@@ -24,8 +24,14 @@ struct SourceSnapshot {
     std::string id;
     std::uint64_t generation{0};
     Time time_ns{0};
-    // Null means disconnected. Retained snapshots own immutable data.
+    // Null means no active data (disconnected or awaiting the first update).
+    // Retained snapshots own immutable data.
     std::shared_ptr<const SourceData> data;
+    struct Delivery {
+        std::uint64_t dropped_queue{0};
+        std::uint64_t trimmed_history{0};
+        std::uint64_t rejected_stale{0};
+    } delivery{};
 };
 class Source {
   public:
