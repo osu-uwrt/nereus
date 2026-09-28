@@ -3,6 +3,16 @@
 from pathlib import Path
 
 from ._native import (
+    Ahrs,
+    AhrsParameters,
+    AhrsReading,
+    AhrsSample,
+    AhrsStream,
+    Attitude,
+    AttitudeParameters,
+    AttitudeReading,
+    AttitudeSample,
+    AttitudeStream,
     BodyParameters,
     BodyState,
     BoxProxy,
@@ -56,6 +66,16 @@ def example_scenario() -> Path:
 
 
 __all__ = [
+    "Attitude",
+    "AttitudeParameters",
+    "AttitudeReading",
+    "AttitudeSample",
+    "AttitudeStream",
+    "Ahrs",
+    "AhrsParameters",
+    "AhrsReading",
+    "AhrsSample",
+    "AhrsStream",
     "Pose",
     "FixedFrame",
     "FixedFrames",

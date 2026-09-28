@@ -259,6 +259,46 @@ class RuntimeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rp.Imu(reporting=reporting)
 
+    def test_ahrs_composes_copied_attitude_and_raw_measurements_with_reset(self) -> None:
+        attitude = rp.AttitudeParameters()
+        attitude.angle_stddev = 0.01
+        attitude.heading_drift_rate = 0.02
+        attitude.reported_variance = [0.00005, 0.00001, 0.01]
+        parameters = rp.AhrsParameters()
+        parameters.attitude = attitude
+        reporting = rp.ImuReporting()
+        reporting.gravity_magnitude = 9.755455
+        parameters.inertial_reporting = reporting
+        runtime = passive()
+        independent = passive()
+        combined = runtime.add(rp.Device("imu", "imu"), rp.Ahrs(parameters=parameters))
+        separate = independent.add(rp.Device("imu", "imu"), rp.Attitude(parameters=attitude))
+        attitude.heading_drift_rate = 999
+        parameters.attitude = attitude
+        runtime.advance(10)
+        independent.advance(10)
+        sample = combined.latest()
+        single = separate.latest()
+        assert sample and sample.value and single and single.value
+        self.assertEqual(sample.header.acquired_ns, single.header.acquired_ns)
+        expected = sample.value.attitude.orientation_wxyz
+        np.testing.assert_array_equal(expected, single.value.orientation_wxyz)
+        np.testing.assert_allclose(
+            sample.value.inertial.specific_force, [0, 0, 9.755455], atol=1e-12
+        )
+        copy = sample.value.attitude.orientation_wxyz
+        copy[:] = 0
+        np.testing.assert_array_equal(sample.value.attitude.orientation_wxyz, expected)
+        self.assertIsNotNone(runtime.ahrs_stream("imu").latest())
+        self.assertIsNotNone(independent.attitude_stream("imu").latest())
+        runtime.reset(initial(), 42)
+        self.assertIsNone(combined.latest())
+        runtime.advance(10)
+        replay = combined.latest()
+        assert replay and replay.value
+        self.assertEqual(replay.header.generation, 1)
+        np.testing.assert_array_equal(replay.value.attitude.orientation_wxyz, expected)
+
     def test_quaternion_order_and_mount_rotation_cross_the_binding_correctly(self) -> None:
         state = initial()
         state.orientation_wxyz = [math.sqrt(0.5), 0, math.sqrt(0.5), 0]

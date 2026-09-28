@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Eigen/Core>
+#include <Eigen/Geometry>
 
 namespace robotics::sensors {
 // Data-only contracts: no simulation, model, middleware, or viewer dependencies.
@@ -8,6 +9,15 @@ struct ImuReading {
     Eigen::Vector3d specific_force;   // Sensor frame, m/s^2; no orientation estimate.
     Eigen::Vector3d angular_velocity; // Sensor frame, rad/s.
     Eigen::Matrix3d force_covariance, angular_covariance;
+};
+
+struct AttitudeReading {
+    Eigen::Quaterniond sensor_to_world;
+    Eigen::Matrix3d covariance; // Sensor-axis small-angle uncertainty, rad^2.
+};
+struct AhrsReading {
+    ImuReading inertial;
+    AttitudeReading attitude; // Acquired with inertial at the same state/time.
 };
 
 struct FogReading {

@@ -32,23 +32,61 @@ sensors::Nanoseconds duration(const YAML::Node &node, const char *key, const std
     }
     return sensors::Nanoseconds(value);
 }
+sensors::ImuReporting imuReporting(const YAML::Node &r, const std::string &path) {
+    sensors::ImuReporting reporting;
+    if (!r.IsDefined())
+        return reporting;
+    keys(r, {"gravity_magnitude_m_s2", "force_variance", "angular_variance"}, path);
+    if (r["gravity_magnitude_m_s2"])
+        reporting.gravity_magnitude = number(r, "gravity_magnitude_m_s2", path);
+    if (r["force_variance"])
+        reporting.force_variance = vector(r, "force_variance", 3, path);
+    if (r["angular_variance"])
+        reporting.angular_variance = vector(r, "angular_variance", 3, path);
+    return reporting;
+}
+sensors::AttitudeParameters attitudeParameters(const YAML::Node &node, const std::string &field) {
+    keys(node,
+         {"angle_stddev_rad", "heading_drift_rad_s", "heading_axis_world", "reported_variance"},
+         field);
+    sensors::AttitudeParameters result;
+    if (node["angle_stddev_rad"])
+        result.angle_stddev = number(node, "angle_stddev_rad", field);
+    if (node["heading_drift_rad_s"])
+        result.heading_drift_rate = number(node, "heading_drift_rad_s", field);
+    if (node["heading_axis_world"])
+        result.heading_axis_world = vector(node, "heading_axis_world", 3, field);
+    if (node["reported_variance"])
+        result.reported_variance = vector(node, "reported_variance", 3, field);
+    return result;
+}
 Attach imu(const sensors::Mount &mount, const YAML::Node &node, const std::string &field) {
     keys(node, {"acceleration_noise", "gyro_noise", "reporting"}, field);
-    sensors::ImuReporting reporting;
-    if (node["reporting"]) {
-        const auto r = node["reporting"];
-        const auto path = field + ".reporting";
-        keys(r, {"gravity_magnitude_m_s2", "force_variance", "angular_variance"}, path);
-        if (r["gravity_magnitude_m_s2"])
-            reporting.gravity_magnitude = number(r, "gravity_magnitude_m_s2", path);
-        if (r["force_variance"])
-            reporting.force_variance = vector(r, "force_variance", 3, path);
-        if (r["angular_variance"])
-            reporting.angular_variance = vector(r, "angular_variance", 3, path);
-    }
     const sensors::Imu model(mount,
                              noise(node["acceleration_noise"], field + ".acceleration_noise"),
-                             noise(node["gyro_noise"], field + ".gyro_noise"), reporting);
+                             noise(node["gyro_noise"], field + ".gyro_noise"),
+                             imuReporting(node["reporting"], field + ".reporting"));
+    return [model](auto &runtime, const auto &device, const auto &, double) {
+        runtime.add(device, model);
+    };
+}
+Attach attitude(const sensors::Mount &mount, const YAML::Node &node, const std::string &field) {
+    const sensors::Attitude model(mount, attitudeParameters(node, field));
+    return [model](auto &runtime, const auto &device, const auto &, double) {
+        runtime.add(device, model);
+    };
+}
+Attach ahrs(const sensors::Mount &mount, const YAML::Node &node, const std::string &field) {
+    keys(node, {"inertial", "attitude"}, field);
+    const auto inertial = node["inertial"];
+    const auto path = field + ".inertial";
+    keys(inertial, {"acceleration_noise", "gyro_noise", "reporting"}, path);
+    sensors::AhrsParameters p;
+    p.acceleration_noise = noise(inertial["acceleration_noise"], path + ".acceleration_noise");
+    p.gyro_noise = noise(inertial["gyro_noise"], path + ".gyro_noise");
+    p.inertial_reporting = imuReporting(inertial["reporting"], path + ".reporting");
+    p.attitude = attitudeParameters(node["attitude"], field + ".attitude");
+    const sensors::Ahrs model(mount, p);
     return [model](auto &runtime, const auto &device, const auto &, double) {
         runtime.add(device, model);
     };
@@ -195,8 +233,9 @@ SensorPlan parseSensor(const YAML::Node &node, const std::filesystem::path &decl
     const auto model = text(definition, "model", definition_field);
     result.model = model;
     // Configuration-edge registry only; no family enum or branch in the runtime.
-    const std::map<std::string, Decode> decoders{
-        {"imu", imu}, {"fog", fog}, {"dvl", dvl}, {"pressure", pressure}};
+    const std::map<std::string, Decode> decoders{{"imu", imu},   {"attitude", attitude},
+                                                 {"ahrs", ahrs}, {"fog", fog},
+                                                 {"dvl", dvl},   {"pressure", pressure}};
     const auto decoder = decoders.find(model);
     if (decoder == decoders.end()) {
         throw std::invalid_argument(definition_field + ": unsupported sensor model " + model);

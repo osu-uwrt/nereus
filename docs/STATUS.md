@@ -524,3 +524,25 @@ The [Talos sensor conversion map](reference/TALOS_SENSOR_CONVERSION.md) records
 remaining attitude composition, DVL validity, FOG uncertainty and pressure/base-link
 depth policies. Native Talos still has no instantiated devices; full sensor products,
 original visuals/LEDs/mechanisms and mission/stack acceptance remain open.
+
+## Separate attitude and composed AHRS acquisition
+
+The explicit `Attitude` model now reports sensor-to-world orientation using the
+original random-axis/scalar-angle noise order and world-axis heading drift. `Ahrs`
+composes it with raw IMU using one mount, one acquisition state and one header.
+Independent random streams preserve the inertial sequence; both components advance
+even when the composite is unavailable. C++, native profiles, typed CSV telemetry,
+installed Python and downstream C++ consumers expose the owned typed contracts.
+
+All 106 Release tests and installed C++ consumers passed. The full 106-test
+ASan/UBSan suite passed without diagnostics. The installed Python wheel passed
+19 tests, Ruff and strict mypy. Targeted clang-tidy reported no user-code warnings.
+Independent review found no blocker and prompted a radial fourth-moment noise test
+that distinguishes the original scalar-angle distribution from Gaussian-vector
+noise. The strengthened distribution check and all six attitude/composition
+checks passed again under ASan/UBSan after the test was added.
+
+Raw IMU remains orientation-free, and no estimator or ROS dependency was introduced.
+The next increment assembles the pinned native Talos inertial devices. Remaining
+DVL/pressure reporting, cameras, original visuals/LEDs, mechanisms and full-stack
+mission acceptance remain open.

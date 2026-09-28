@@ -83,6 +83,19 @@ void bindSensors(py::module_ &m) {
     valueProperty(reporting, "gravity_magnitude", &ImuReporting::gravity_magnitude);
     valueProperty(reporting, "force_variance", &ImuReporting::force_variance);
     valueProperty(reporting, "angular_variance", &ImuReporting::angular_variance);
+    auto attitude_parameters =
+        py::class_<AttitudeParameters>(m, "AttitudeParameters")
+            .def(py::init<>())
+            .def_readwrite("angle_stddev", &AttitudeParameters::angle_stddev)
+            .def_readwrite("heading_drift_rate", &AttitudeParameters::heading_drift_rate);
+    valueProperty(attitude_parameters, "heading_axis_world",
+                  &AttitudeParameters::heading_axis_world);
+    valueProperty(attitude_parameters, "reported_variance", &AttitudeParameters::reported_variance);
+    auto ahrs_parameters = py::class_<AhrsParameters>(m, "AhrsParameters").def(py::init<>());
+    valueProperty(ahrs_parameters, "acceleration_noise", &AhrsParameters::acceleration_noise);
+    valueProperty(ahrs_parameters, "gyro_noise", &AhrsParameters::gyro_noise);
+    valueProperty(ahrs_parameters, "inertial_reporting", &AhrsParameters::inertial_reporting);
+    valueProperty(ahrs_parameters, "attitude", &AhrsParameters::attitude);
     py::class_<ScalarNoiseParameters>(m, "ScalarNoiseParameters")
         .def(py::init<>())
         .def_readwrite("bias", &ScalarNoiseParameters::bias)
@@ -112,6 +125,11 @@ void bindSensors(py::module_ &m) {
         py::init<Mount, NoiseParameters, NoiseParameters, ImuReporting>(),
         py::arg("mount") = Mount{}, py::arg("acceleration_noise") = NoiseParameters{},
         py::arg("gyro_noise") = NoiseParameters{}, py::arg("reporting") = ImuReporting{});
+    py::class_<Attitude>(m, "Attitude")
+        .def(py::init<Mount, AttitudeParameters>(), py::arg("mount") = Mount{},
+             py::arg("parameters") = AttitudeParameters{});
+    py::class_<Ahrs>(m, "Ahrs").def(py::init<Mount, AhrsParameters>(), py::arg("mount") = Mount{},
+                                    py::arg("parameters") = AhrsParameters{});
     py::class_<Fog>(m, "Fog").def(py::init<Mount, std::vector<Eigen::Vector3d>, NoiseParameters>(),
                                   py::arg("mount") = Mount{},
                                   py::arg("axes") =
@@ -133,6 +151,15 @@ void bindSensors(py::module_ &m) {
     readCopy(imu_reading, "angular_velocity", &ImuReading::angular_velocity);
     readCopy(imu_reading, "force_covariance", &ImuReading::force_covariance);
     readCopy(imu_reading, "angular_covariance", &ImuReading::angular_covariance);
+    auto attitude_reading = py::class_<AttitudeReading>(m, "AttitudeReading");
+    attitude_reading.def_property_readonly("orientation_wxyz", [](const AttitudeReading &self) {
+        const auto &q = self.sensor_to_world;
+        return Eigen::Vector4d(q.w(), q.x(), q.y(), q.z());
+    });
+    readCopy(attitude_reading, "covariance", &AttitudeReading::covariance);
+    auto ahrs_reading = py::class_<AhrsReading>(m, "AhrsReading");
+    readCopy(ahrs_reading, "inertial", &AhrsReading::inertial);
+    readCopy(ahrs_reading, "attitude", &AhrsReading::attitude);
     auto fog_reading = py::class_<FogReading>(m, "FogReading");
     readCopy(fog_reading, "angular_rates", &FogReading::angular_rates);
     readCopy(fog_reading, "covariance", &FogReading::covariance);
@@ -146,6 +173,8 @@ void bindSensors(py::module_ &m) {
         .def_readonly("depth", &PressureReading::depth)
         .def_readonly("depth_variance", &PressureReading::depth_variance);
     bindStream<ImuReading>(m, "ImuSample", "ImuStream");
+    bindStream<AttitudeReading>(m, "AttitudeSample", "AttitudeStream");
+    bindStream<AhrsReading>(m, "AhrsSample", "AhrsStream");
     bindStream<FogReading>(m, "FogSample", "FogStream");
     bindStream<DvlReading>(m, "DvlSample", "DvlStream");
     bindStream<PressureReading>(m, "PressureSample", "PressureStream");

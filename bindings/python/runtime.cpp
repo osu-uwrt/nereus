@@ -31,10 +31,14 @@ void bindRuntime(py::module_ &m) {
                        .def("reset", &Runtime::reset, py::arg("initial"), py::arg("seed"))
                        .def_property_readonly("faulted", &Runtime::faulted)
                        .def("imu_stream", &Runtime::stream<ImuReading>, py::arg("id"))
+                       .def("attitude_stream", &Runtime::stream<AttitudeReading>, py::arg("id"))
+                       .def("ahrs_stream", &Runtime::stream<AhrsReading>, py::arg("id"))
                        .def("fog_stream", &Runtime::stream<FogReading>, py::arg("id"))
                        .def("dvl_stream", &Runtime::stream<DvlReading>, py::arg("id"))
                        .def("pressure_stream", &Runtime::stream<PressureReading>, py::arg("id"));
     addModel<Imu>(runtime);
+    addModel<Attitude>(runtime);
+    addModel<Ahrs>(runtime);
     addModel<Fog>(runtime);
     addModel<Dvl>(runtime);
     addModel<Pressure>(runtime);

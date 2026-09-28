@@ -57,6 +57,18 @@ void fields(const Row &row, const sensors::ImuReading &reading) {
     row.matrix("force_covariance", "m^2/s^4", reading.force_covariance);
     row.matrix("angular_covariance", "rad^2/s^2", reading.angular_covariance);
 }
+void fields(const Row &row, const sensors::AttitudeReading &reading) {
+    const auto &q = reading.sensor_to_world;
+    row.field("orientation.w", "1", q.w());
+    row.field("orientation.x", "1", q.x());
+    row.field("orientation.y", "1", q.y());
+    row.field("orientation.z", "1", q.z());
+    row.matrix("orientation_covariance", "rad^2", reading.covariance);
+}
+void fields(const Row &row, const sensors::AhrsReading &reading) {
+    fields(row, reading.inertial);
+    fields(row, reading.attitude);
+}
 void fields(const Row &row, const sensors::FogReading &reading) {
     for (Eigen::Index i = 0; i < reading.angular_rates.size(); ++i) {
         row.field("angular_rate." + std::to_string(i), "rad/s", reading.angular_rates[i]);
@@ -106,10 +118,10 @@ std::vector<std::function<void()>> telemetry(sensors::Runtime &runtime,
                                              std::ostream *output) {
     using Factory = std::function<std::function<void()>(sensors::Runtime &, const std::string &,
                                                         std::ostream *)>;
-    const std::map<std::string, Factory> factories{{"imu", watch<sensors::ImuReading>},
-                                                   {"fog", watch<sensors::FogReading>},
-                                                   {"dvl", watch<sensors::DvlReading>},
-                                                   {"pressure", watch<sensors::PressureReading>}};
+    const std::map<std::string, Factory> factories{
+        {"imu", watch<sensors::ImuReading>},   {"attitude", watch<sensors::AttitudeReading>},
+        {"ahrs", watch<sensors::AhrsReading>}, {"fog", watch<sensors::FogReading>},
+        {"dvl", watch<sensors::DvlReading>},   {"pressure", watch<sensors::PressureReading>}};
     std::vector<std::function<void()>> observers;
     for (const auto &plan : plans) {
         const auto factory = factories.find(plan.model);

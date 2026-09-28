@@ -55,6 +55,46 @@ class Imu {
     ImuReporting reporting_;
 };
 
+struct AttitudeParameters {
+    double angle_stddev = 0;       // rad, normally distributed angle about an isotropic axis.
+    double heading_drift_rate = 0; // rad/s, deterministic rotation about heading_axis_world.
+    Eigen::Vector3d heading_axis_world = Eigen::Vector3d::UnitZ();
+    std::optional<Eigen::Vector3d> reported_variance; // Sensor-axis diagonal rad^2.
+};
+
+// Explicit simulated attitude observation, not an estimator driven by raw IMU data.
+class Attitude {
+  public:
+    using Reading = AttitudeReading;
+    explicit Attitude(Mount mount = {}, AttitudeParameters parameters = {});
+    void reset(std::uint64_t seed, const std::string &id);
+    Measurement<Reading> sample(const simulation::MotionSample &, double elapsed_seconds);
+
+  private:
+    Mount mount_;
+    AttitudeParameters parameters_;
+    std::mt19937_64 random_;
+    std::normal_distribution<double> normal_;
+};
+
+struct AhrsParameters {
+    NoiseParameters acceleration_noise, gyro_noise;
+    ImuReporting inertial_reporting;
+    AttitudeParameters attitude;
+};
+// Composes two independent models using one mount and one scheduled acquisition.
+class Ahrs {
+  public:
+    using Reading = AhrsReading;
+    explicit Ahrs(Mount mount = {}, AhrsParameters parameters = {});
+    void reset(std::uint64_t seed, const std::string &id);
+    Measurement<Reading> sample(const simulation::MotionSample &, double elapsed_seconds);
+
+  private:
+    Imu inertial_;
+    Attitude attitude_;
+};
+
 class Fog {
   public:
     using Reading = FogReading;

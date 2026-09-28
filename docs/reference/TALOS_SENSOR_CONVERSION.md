@@ -31,15 +31,19 @@ gyro noise standard deviation 0.01 degree/s (convert to radians), and reported v
 present with sampling noise disabled. Sensor mount uses the original CAD-relative
 pose minus COM, with original RPY values unchanged.
 
-## Remaining device and adapter work
+## Device and adapter conversion status
 
-- Attitude is a separately declared simulated output. Original orientation is
+- Attitude and AHRS composition are implemented as separately declared models. Original orientation is
   body orientation times sensor mount orientation, with isotropic random-axis
   angle noise (standard deviation 0.5 degree), and optional world-Z heading drift.
   Resolved Talos yaw drift is 0 degree/minute. Reported orientation diagonal variance
   is [0.00005, 0.00001, 0.01]. Compose attitude and raw inertial acquisition at one
-  scheduled state for the eventual full IMU product; do not fabricate orientation
+  scheduled state for the full IMU product; do not fabricate orientation
   in raw inertial observations or drive acquisitions from subscriber activity.
+  The native model defaults to small-angle variance sigma²/3; conversion must select
+  original reported variances (including sigma² when the old override is absent).
+  Original noise-disabled mode disables heading drift too. Native Talos device
+  profiles and independent original output capture remain to be connected.
 - DVL runs at 8 Hz with default noise standard deviation 0.001 m/s and independently
   reported variance 0.000001. Original velocity includes `omega × r` and sensor
   rotation. Default `dvl_max_tilt=0` disables lock loss entirely: the original

@@ -435,3 +435,44 @@ TEST_F(Profiles, NativeTalosPhysicsLoadsWithoutLegacyWorkspaceAndReplays) {
     b->reset(config.initial, config.seed);
     EXPECT_EQ(a->advance().body.position, b->advance().body.position);
 }
+
+TEST_F(Profiles, ComposedAndStandaloneAttitudeShareAcquisitionAndSurviveSourceRemoval) {
+    write("sensors/imu.yaml", "schema_version: 1\nkind: sensor\nmodel: ahrs\nparameters:\n"
+                              "  inertial: {reporting: {gravity_magnitude_m_s2: 9.755455}}\n"
+                              "  attitude: {heading_drift_rad_s: 0.2}\n");
+    const auto combined_config = robotics::config::loadScenario(scenario());
+    write("sensors/imu.yaml", "schema_version: 1\nkind: sensor\nmodel: attitude\n"
+                              "parameters: {heading_drift_rad_s: 0.2}\n");
+    const auto attitude_config = robotics::config::loadScenario(scenario());
+    std::filesystem::remove_all(root);
+    auto combined = robotics::config::makeRuntime(combined_config);
+    auto standalone = robotics::config::makeRuntime(attitude_config);
+    combined->advance(60);
+    standalone->advance(60);
+    const auto a = combined->stream<robotics::sensors::AhrsReading>("imu")->latest();
+    const auto b = standalone->stream<robotics::sensors::AttitudeReading>("imu")->latest();
+    ASSERT_TRUE(a && b && a->measurement.value && b->measurement.value);
+    EXPECT_EQ(a->header.acquired, b->header.acquired);
+    EXPECT_EQ(a->header.acquired.count(), 120000000);
+    EXPECT_EQ(a->measurement.value->attitude.sensor_to_world.coeffs(),
+              b->measurement.value->sensor_to_world.coeffs());
+    EXPECT_NEAR(a->measurement.value->attitude.sensor_to_world.z(), std::sin(.012), 1e-12);
+    combined->reset(combined_config.initial, combined_config.seed);
+    EXPECT_FALSE(combined->stream<robotics::sensors::AhrsReading>("imu")->latest());
+    combined->advance(60);
+    EXPECT_EQ(combined->stream<robotics::sensors::AhrsReading>("imu")
+                  ->latest()
+                  ->measurement.value->attitude.sensor_to_world.coeffs(),
+              a->measurement.value->attitude.sensor_to_world.coeffs());
+}
+
+TEST_F(Profiles, RejectsInvalidAttitudeConfigurationBeforeRuntime) {
+    for (const std::string invalid : {"angle_stddev_rad: -1", "reported_variance: [0, -1, 0]",
+                                      "heading_axis_world: [0, 0, 0]", "unknown: 1"}) {
+        write("sensors/imu.yaml",
+              "schema_version: 1\nkind: sensor\nmodel: attitude\nparameters: {" + invalid + "}\n");
+        EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
+    }
+    write("sensors/imu.yaml", "schema_version: 1\nkind: sensor\nmodel: ahrs\nparameters: {}\n");
+    EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
+}

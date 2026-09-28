@@ -52,6 +52,22 @@ class ProfileRunnerTests(unittest.TestCase):
         self.assertAlmostEqual(depths[0], 2.1, delta=0.01)
         self.assertEqual(len(list(csv.DictReader(io.StringIO(first.stdout)))), 1501)
 
+    def test_composed_attitude_csv_uses_one_acquisition_header(self):
+        profile = self.root / "content/sensors/imu.yaml"
+        profile.write_text("schema_version: 1\nkind: sensor\nmodel: ahrs\nparameters:\n"
+                           "  inertial: {}\n  attitude: {heading_drift_rad_s: 0.2}\n")
+        output = self.root / "sensors.csv"
+        result = self.run_profile(output)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = [r for r in csv.DictReader(io.StringIO(output.read_text())) if r["device"] == "imu"]
+        first = [r for r in rows if r["sequence"] == "0"]
+        self.assertEqual(len(first), 37)
+        self.assertEqual({r["acquired_ns"] for r in first}, {"10000000"})
+        self.assertEqual({r["tick"] for r in first}, {"5"})
+        self.assertIn("orientation.w", {r["field"] for r in first})
+        self.assertIn("specific_force.z", {r["field"] for r in first})
+        self.assertEqual(self.run_profile().returncode, 0)
+
     def test_invalid_nested_profile_fails_before_creating_output(self):
         profile = self.root / "content/sensors/imu.yaml"
         profile.write_text(profile.read_text().replace("white_stddev:", "unknown:", 1))

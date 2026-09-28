@@ -1,7 +1,7 @@
 # Standalone sensor runtime
 
-The `RoboticsPlatform::sensors` C++17 library composes the plant with IMU, FOG,
-pressure/depth, and ideal bottom-track DVL models. It requires Eigen and the simulation library;
+The `RoboticsPlatform::sensors` C++17 library composes the plant with raw IMU,
+attitude/AHRS, FOG, pressure/depth, and ideal bottom-track DVL models. It requires Eigen and the simulation library;
 no ROS, rendering, viewer, YAML, wall clock, or worker thread is involved. These
 are synthetic measurement models, not calibrated device emulators. Cameras,
 stereo capture are future work. A [Python API](PYTHON.md) wraps the native runtime;
@@ -115,8 +115,37 @@ variances in sensor axes. They override reported covariance independently of noi
 amplitude and random-walk state. Zero variance is valid; absent values retain noise
 covariance behavior. Model construction owns the settings; reset preserves them
 while restarting random streams. Python `ImuReporting` exposes the same optional
-values (`None` means absent), with copied arrays. Original attitude estimates/yaw
-drift remain a separate future output rather than being attached to raw IMU data.
+values (`None` means absent), with copied arrays. Attitude and heading drift use the separately declared output below; raw IMU data
+remains orientation-free.
+
+**Attitude:** an explicitly selected simulated orientation observation, separate
+from raw IMU measurements and not a filter estimating attitude from them. Output
+`sensor_to_world` maps sensor axes into world axes. The model composes
+`heading_drift * random_rotation * body_orientation * sensor_mount_orientation`.
+Noise is a normally distributed scalar angle about an isotropic random axis, with
+per-acquisition standard deviation `angle_stddev` in radians. Heading drift uses
+a unit world axis and signed radians/second times authoritative elapsed simulation
+time, not wall time or acquisition interval. Reset clears the independent seeded
+random stream; resetting the runtime also returns elapsed time to zero.
+
+Default reported covariance is isotropic `angle_stddev² / 3` in sensor-axis
+small-angle coordinates. This is a small-angle uncertainty model, not a global
+orientation distribution or covariance for arbitrarily large rotations. Deterministic
+heading drift is bias and is not included in that covariance. Optional nonnegative
+finite `reported_variance` overrides its diagonal independently of noise. Original
+Talos selects explicit orientation variances; the old fallback `sigma² I` is also
+representable as an explicit override. Native noise and drift are independent
+settings; converting the old noise-disabled mode must zero both to match it.
+
+**AHRS:** composes owned `Imu` and `Attitude` models with one shared mount, one
+schedule and one sample header. `AhrsReading` contains typed `inertial` and `attitude`
+fields. Both models acquire from the same motion snapshot and elapsed interval.
+The composite is wholly unavailable if either component is unavailable, while both
+noise histories continue; consumers needing attitude during unavailable acceleration
+can select standalone `Attitude`. Model-specific seed domains ensure that adding
+attitude never changes raw inertial noise. No scheduler enum, ROS dependency or
+estimator algorithm is introduced. Sampling statistics and native replay are
+preserved; sample-by-sample equality with the original shared RNG is not claimed.
 
 **FOG:** projects angular rate and its covariance onto one to three configured unit
 axes in the sensor frame. Axes can be nonorthogonal, with corresponding covariance.

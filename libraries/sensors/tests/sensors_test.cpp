@@ -184,6 +184,130 @@ TEST(Imu, RejectsInvalidReportingAndUndefinedGravityDirection) {
     EXPECT_EQ(physical.sample(input, .01).value->specific_force, Eigen::Vector3d::Zero());
 }
 
+TEST(Attitude, UsesAbsoluteTimeAndOriginalWorldNoiseMountOrder) {
+    Mount mount;
+    mount.sensor_to_body = Eigen::AngleAxisd(.7, Eigen::Vector3d::UnitX());
+    AttitudeParameters parameters;
+    parameters.angle_stddev = .1;
+    parameters.heading_drift_rate = -.3;
+    parameters.heading_axis_world = Eigen::Vector3d(1, 1, 0).normalized();
+    parameters.reported_variance = Eigen::Vector3d(.01, .02, .03);
+    Attitude model(mount, parameters);
+    auto noise_parameters = parameters;
+    noise_parameters.heading_drift_rate = 0;
+    Attitude noise({}, noise_parameters);
+    model.reset(7, "attitude");
+    noise.reset(7, "attitude");
+    auto input = motion();
+    input.state.elapsed = 2400ms;
+    input.state.body.orientation = Eigen::AngleAxisd(.4, Eigen::Vector3d::UnitY());
+    input.acceleration_valid = false; // Attitude doesn't require acceleration.
+    const auto random_rotation = noise.sample(motion(), .01).value->sensor_to_world;
+    const Eigen::Quaterniond expected = Eigen::AngleAxisd(-.72, parameters.heading_axis_world) *
+                                        random_rotation * input.state.body.orientation *
+                                        mount.sensor_to_body;
+    const auto actual = model.sample(input, .01).value.value();
+    EXPECT_LT(actual.sensor_to_world.angularDistance(expected), 1e-12);
+    EXPECT_NEAR(actual.sensor_to_world.norm(), 1, 1e-15);
+    EXPECT_EQ(actual.covariance, Eigen::Matrix3d(parameters.reported_variance->asDiagonal()));
+    model.reset(7, "attitude");
+    EXPECT_EQ(model.sample(input, .04).value->sensor_to_world.coeffs(),
+              actual.sensor_to_world.coeffs());
+}
+
+TEST(Attitude, IsotropicAngleNoiseHasDeclaredSmallAngleCovariance) {
+    AttitudeParameters parameters;
+    parameters.angle_stddev = .01;
+    Attitude model({}, parameters);
+    model.reset(18, "orientation");
+    Eigen::Vector3d mean = Eigen::Vector3d::Zero();
+    Eigen::Matrix3d second = Eigen::Matrix3d::Zero();
+    double fourth_moment = 0;
+    constexpr int count = 20000;
+    for (int i = 0; i < count; ++i) {
+        const auto value = model.sample(motion(), .02).value.value();
+        const Eigen::AngleAxisd rotation(value.sensor_to_world);
+        const Eigen::Vector3d error = rotation.axis() * rotation.angle();
+        mean += error;
+        second += error * error.transpose();
+        fourth_moment += std::pow(error.norm(), 4);
+        EXPECT_DOUBLE_EQ(value.covariance(0, 0), .0001 / 3);
+    }
+    // Scalar Gaussian angle has E[angle^4] = 3 sigma^4; Gaussian-vector noise does not.
+    EXPECT_NEAR(fourth_moment / count, 3e-8, .4e-8);
+    mean /= count;
+    second = second / count - mean * mean.transpose();
+    EXPECT_LT(mean.norm(), .0002);
+    EXPECT_LT((second - Eigen::Matrix3d::Identity() * (.0001 / 3)).norm(), .000004);
+}
+
+TEST(Ahrs, CompositionKeepsIndependentNoiseAcrossUnavailableAcquisitionsAndReset) {
+    AhrsParameters parameters;
+    parameters.acceleration_noise = noisy();
+    parameters.gyro_noise = noisy();
+    parameters.attitude.angle_stddev = .01;
+    parameters.attitude.heading_drift_rate = .02;
+    Ahrs combined({}, parameters);
+    Imu raw({}, parameters.acceleration_noise, parameters.gyro_noise);
+    Attitude attitude({}, parameters.attitude);
+    std::vector<Eigen::Vector4d> first;
+    for (int replay = 0; replay < 2; ++replay) {
+        combined.reset(42, "imu");
+        raw.reset(42, "imu");
+        attitude.reset(42, "imu");
+        for (int i = 0; i < 10; ++i) {
+            auto input = motion();
+            input.state.elapsed = (i + 1) * 20ms;
+            input.acceleration_valid = i != 3;
+            const auto actual = combined.sample(input, .02);
+            const auto inertial = raw.sample(input, .02);
+            const auto orientation = attitude.sample(input, .02);
+            if (!inertial.value) {
+                EXPECT_FALSE(actual.value);
+                EXPECT_EQ(actual.unavailable_reason, inertial.unavailable_reason);
+                continue;
+            }
+            ASSERT_TRUE(actual.value);
+            EXPECT_EQ(actual.value->inertial.specific_force, inertial.value->specific_force);
+            EXPECT_EQ(actual.value->inertial.angular_velocity, inertial.value->angular_velocity);
+            EXPECT_EQ(actual.value->attitude.sensor_to_world.coeffs(),
+                      orientation.value->sensor_to_world.coeffs());
+            if (replay == 0)
+                first.push_back(actual.value->attitude.sensor_to_world.coeffs());
+            else
+                EXPECT_EQ(actual.value->attitude.sensor_to_world.coeffs(),
+                          first[i > 3 ? i - 1 : i]);
+        }
+    }
+}
+
+TEST(Attitude, RejectsInvalidParametersAndTimeOverflow) {
+    AttitudeParameters p;
+    for (const double invalid : {-1., std::numeric_limits<double>::infinity(),
+                                 std::numeric_limits<double>::quiet_NaN(), 1e200}) {
+        p.angle_stddev = invalid;
+        EXPECT_THROW((Attitude({}, p)), std::invalid_argument);
+    }
+    p = {};
+    p.heading_axis_world = Eigen::Vector3d(0, 0, 2);
+    EXPECT_THROW((Attitude({}, p)), std::invalid_argument);
+    p.heading_axis_world = Eigen::Vector3d(0, 0, 1 + 1e-10);
+    EXPECT_NO_THROW((Attitude({}, p)));
+    p.reported_variance = Eigen::Vector3d(0, -1, 0);
+    EXPECT_THROW((Attitude({}, p)), std::invalid_argument);
+    p.reported_variance.reset();
+    p.heading_drift_rate = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_THROW((Attitude({}, p)), std::invalid_argument);
+    p.heading_drift_rate = std::numeric_limits<double>::max();
+    Attitude model({}, p);
+    auto input = motion();
+    input.state.elapsed = 10s;
+    EXPECT_THROW(model.sample(input, .01), std::overflow_error);
+    input.state.elapsed = -1ns;
+    EXPECT_THROW(model.sample(input, .01), std::invalid_argument);
+    EXPECT_THROW(model.sample(motion(), 0), std::invalid_argument);
+}
+
 TEST(Fog, ProjectsSignedRatesAndCovarianceOntoConfiguredAxes) {
     Mount mount;
     mount.sensor_to_body = Eigen::AngleAxisd(std::acos(-1.0) / 2, Eigen::Vector3d::UnitZ());

@@ -2,7 +2,7 @@
 
 The optional `robotics-platform` wheel exposes the existing C++ plant/sensor runtime
 as `robotics_platform`. It supports profile loading and programmatic construction,
-explicit commands/stepping/reset, typed IMU/FOG/DVL/pressure streams, and NumPy values.
+explicit commands/stepping/reset, typed IMU/attitude/AHRS/FOG/DVL/pressure streams, and NumPy values.
 It does not implement training, rewards, vectorized environments, Python model
 callbacks, or a viewer. The C++ libraries still build without Python.
 
@@ -200,3 +200,12 @@ its finite footprint. `water_level` stays world Z. Sphere contacts and the DVL p
 provider use that same placement; fluid current vectors remain world-frame.
 Native scenarios can resolve the placement through `world_placement` as documented
 in [PROFILES.md](PROFILES.md).
+
+`Attitude(mount, parameters)` is a separately declared simulated orientation model.
+`Ahrs(mount, parameters)` composes it with raw inertial sensing at one acquisition.
+Configure `AttitudeParameters` or `AhrsParameters`, then use `attitude_stream(id)`
+or `ahrs_stream(id)`. AHRS samples expose copied `value.inertial` and
+`value.attitude`; orientation arrays use WXYZ and map sensor axes into world axes.
+Nested `AhrsParameters` fields are copied on read/write: edit a local child value
+and assign it back. Models own their settings after construction. No estimator or
+ROS message is hidden in these contracts.

@@ -1,6 +1,7 @@
 # Sensor scope and contracts
 
-Status: the C++ runtime, IMU, FOG, pressure/depth, and ideal bottom-track DVL are implemented.
+Status: the C++ runtime, raw IMU, explicit simulated attitude/AHRS, FOG, pressure/depth,
+and ideal bottom-track DVL are implemented.
 See [delivered runtime contracts and limitations](SENSOR_RUNTIME.md). This document
 retains the broader requirements for subsequent phases, including cameras/stereo.
 It refines the [architecture plan](ARCHITECTURE_PLAN.md); it does not add an RL interface.
@@ -12,6 +13,7 @@ It refines the [architecture plan](ARCHITECTURE_PLAN.md); it does not add an RL 
 | Camera | Images, calibration, optical frame, resolution, field of view, acquisition rate, mount, and configured image effects. | Optional render backend; usable without the viewer. |
 | Stereo camera rig | Identified left/right images, individual calibration/frames, relative extrinsics/baseline, shared acquisition time and pair ID. | Compose camera models with a rig coordinator; no vendor-specific stereo layout in the runtime. |
 | IMU | Sensor-frame angular velocity and specific force, with uncertainty, bias/noise, and configured mount. | Raw inertial observations; any attitude estimate is a separately declared model/output. |
+| Attitude/AHRS | Explicit simulated sensor-to-world orientation with angular noise, heading drift and reported uncertainty; optionally composed with raw IMU at one acquisition. | Separately selected observation model; not an estimator hidden inside raw IMU. |
 | DVL | Sensor-frame velocity with a declared tracking reference, validity/lock state, uncertainty, and supported range/altitude information. | Start with a documented bottom-track model and explicit loss of lock; do not silently substitute ground truth or a water-track estimate. |
 | Pressure/depth | Absolute pressure and calibrated pressure-derived depth, mounting position, noise/drift, operating range, and uncertainty. | Hydrostatic environment is separate from sensor calibration; depth is derived from measured pressure, not privileged position. |
 | FOG | Angular rate for configured measurement axis/axes, with uncertainty and bias/drift settings. | Independent gyro model; not hardcoded to Talos yaw or a particular ROS message. |

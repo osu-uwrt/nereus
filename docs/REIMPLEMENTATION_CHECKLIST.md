@@ -103,8 +103,10 @@ the viewer still draws line geometry.
 - [ ] Distinct placement, task reset and full reset semantics, plus ROS clock mapping.
 - [ ] Match required Talos sensor products/calibration through declared models/adapters.
 - [x] Raw IMU supports explicit measurement-only gravity calibration and independently
-  reported sensor-axis variances through C++/profiles/Python. Attitude, complete
-  Talos device composition and ROS products remain open.
+  reported sensor-axis variances through C++/profiles/Python.
+- [x] Separate simulated attitude and composed AHRS outputs with shared acquisition,
+  independent noise, copied C++/profile/Python contracts and CSV telemetry. Native
+  Talos device composition, original output captures and ROS products remain open.
 - [ ] Native assets and reproducible resolved configuration load outside old workspace.
 
 ## D. Renderer and UI fidelity
@@ -187,7 +189,7 @@ selected live-robot workflows required here.
 3. Stage forcing and actuator calibration/stop interfaces are verified in their
    bounded reference/contracts. Static compound contacts are integrated and validated.
    Named body mounts are now resolved for sensors and live visualization. Next:
-   separately declared attitude output and remaining sensor reporting/device
+   native Talos inertial device assembly and remaining sensor reporting/device
    composition (reference/TALOS_SENSOR_CONVERSION.md), then original neutral
    scene/assets. The original Talos
    dynamics capture now covers every tick of the three bounded physics cases;

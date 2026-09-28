@@ -93,6 +93,8 @@ rules or overrides. All models require a parameters mapping, even when it is `{}
 | Model | Parameters (optional unless stated otherwise) |
 | --- | --- |
 | `imu` | `acceleration_noise`, `gyro_noise`, `reporting` |
+| `attitude` | `angle_stddev_rad`, `heading_drift_rad_s`, `heading_axis_world` (unit +Z), `reported_variance` |
+| `ahrs` | Required `inertial` mapping (raw IMU settings) and `attitude` mapping (attitude settings); each may be `{}` |
 | `fog` | Required `axes`: one to three unit vectors in sensor coordinates; `gyro_noise` |
 | `dvl` | `bottom_axis` (default sensor −Z), `minimum_range_m` (0.1), `maximum_range_m` (50), `velocity_noise` |
 | `pressure` | `noise`, `reference_pressure_pa` (101325), `reference_density_kg_m3` (1000), `reference_gravity_m_s2` (9.80665), `minimum_pressure_pa` (0), `maximum_pressure_pa` (10000000) |
@@ -120,7 +122,27 @@ reporting:
   angular_variance: [0.01, 0.01, 0.01]
 ```
 
-This does not add an attitude estimate or configure a complete Talos device.
+Raw IMU does not include orientation. Select `attitude` for a separate simulated
+orientation observation, or `ahrs` to compose both at one acquisition with a shared
+mount. Example AHRS parameters:
+
+```yaml
+inertial:
+  reporting:
+    gravity_magnitude_m_s2: 9.755455
+    force_variance: [0.01, 0.01, 0.01]
+    angular_variance: [0.01, 0.01, 0.01]
+attitude:
+  angle_stddev_rad: 0.008726646259971648
+  reported_variance: [0.00005, 0.00001, 0.01]
+```
+
+Attitude noise is an isotropic random-axis rotation with normally distributed angle.
+Signed heading drift defaults to zero and uses elapsed simulation time. Default
+covariance is the small-angle `angle_stddev_rad² / 3` diagonal; an explicit
+`reported_variance` overrides it in sensor axes. See [SENSOR_RUNTIME.md](SENSOR_RUNTIME.md)
+for composition, validity and reset semantics. This example alone does not configure
+the complete Talos device suite.
 
 Camera/stereo/sonar model names are currently rejected as unsupported. Their future
 adapters must register concrete decoders and model factories rather than create

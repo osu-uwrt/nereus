@@ -142,6 +142,75 @@ Measurement<Imu::Reading> Imu::sample(const simulation::MotionSample &motion,
     return {std::move(result), {}};
 }
 
+Attitude::Attitude(Mount mount, AttitudeParameters parameters)
+    : mount_(std::move(mount)), parameters_(std::move(parameters)) {
+    normalizeMount(mount_);
+    validateAxis(parameters_.heading_axis_world);
+    parameters_.heading_axis_world.normalize();
+    if (!std::isfinite(parameters_.angle_stddev) || parameters_.angle_stddev < 0 ||
+        !std::isfinite(parameters_.angle_stddev * parameters_.angle_stddev) ||
+        !std::isfinite(parameters_.heading_drift_rate))
+        throw std::invalid_argument(
+            "attitude requires finite drift and nonnegative finite angle variance");
+    if (parameters_.reported_variance && (!parameters_.reported_variance->allFinite() ||
+                                          (parameters_.reported_variance->array() < 0).any()))
+        throw std::invalid_argument("attitude reported variances must be finite and nonnegative");
+}
+void Attitude::reset(std::uint64_t seed, const std::string &id) {
+    random_.seed(noiseSeed(seed, id, "attitude.orientation"));
+    normal_.reset();
+}
+Measurement<Attitude::Reading> Attitude::sample(const simulation::MotionSample &motion,
+                                                double elapsed_seconds) {
+    validateMotion(motion);
+    if (!std::isfinite(elapsed_seconds) || elapsed_seconds <= 0 || motion.state.elapsed.count() < 0)
+        throw std::invalid_argument(
+            "attitude requires positive acquisition interval and nonnegative time");
+    Eigen::Vector3d axis;
+    for (auto &component : axis)
+        component = normal_(random_);
+    if (axis.isZero(0))
+        axis = Eigen::Vector3d::UnitX();
+    else
+        axis /= axis.stableNorm();
+    const double angle = parameters_.angle_stddev * normal_(random_);
+    const double drift = parameters_.heading_drift_rate *
+                         std::chrono::duration<double>(motion.state.elapsed).count();
+    if (!std::isfinite(angle) || !std::isfinite(drift))
+        throw std::overflow_error("attitude rotation overflow");
+    Reading result;
+    result.sensor_to_world = Eigen::AngleAxisd(drift, parameters_.heading_axis_world) *
+                             Eigen::AngleAxisd(angle, axis) * motion.state.body.orientation *
+                             mount_.sensor_to_body;
+    result.sensor_to_world.normalize();
+    result.covariance =
+        Eigen::Matrix3d::Identity() * (parameters_.angle_stddev * parameters_.angle_stddev / 3);
+    if (parameters_.reported_variance)
+        result.covariance = parameters_.reported_variance->asDiagonal();
+    if (!result.sensor_to_world.coeffs().allFinite())
+        throw std::overflow_error("attitude measurement overflow");
+    return {std::move(result), {}};
+}
+
+Ahrs::Ahrs(Mount mount, AhrsParameters parameters)
+    : inertial_(mount, std::move(parameters.acceleration_noise), std::move(parameters.gyro_noise),
+                std::move(parameters.inertial_reporting)),
+      attitude_(mount, std::move(parameters.attitude)) {}
+void Ahrs::reset(std::uint64_t seed, const std::string &id) {
+    inertial_.reset(seed, id);
+    attitude_.reset(seed, id);
+}
+Measurement<Ahrs::Reading> Ahrs::sample(const simulation::MotionSample &motion,
+                                        double elapsed_seconds) {
+    auto inertial = inertial_.sample(motion, elapsed_seconds);
+    auto attitude = attitude_.sample(motion, elapsed_seconds);
+    if (!inertial.value)
+        return {std::nullopt, std::move(inertial.unavailable_reason)};
+    if (!attitude.value)
+        return {std::nullopt, std::move(attitude.unavailable_reason)};
+    return {Reading{std::move(*inertial.value), std::move(*attitude.value)}, {}};
+}
+
 Fog::Fog(Mount mount, std::vector<Eigen::Vector3d> axes, NoiseParameters gyro)
     : mount_(std::move(mount)), gyro_(std::move(gyro)) {
     normalizeMount(mount_);
