@@ -29,14 +29,17 @@ void bindPlant(py::module_ &m) {
     valueProperty(bp, "damping_center", &BodyParameters::damping_center);
     valueProperty(bp, "buoyancy_center", &BodyParameters::buoyancy_center);
     valueProperty(bp, "buoyancy_radii", &BodyParameters::buoyancy_radii);
-    auto pool = py::class_<Pool>(m, "Pool")
-                    .def(py::init<>())
-                    .def_readwrite("length", &Pool::length)
-                    .def_readwrite("width", &Pool::width)
-                    .def_readwrite("depth", &Pool::depth)
-                    .def_readwrite("water_level", &Pool::water_level)
-                    .def_readwrite("water_density", &Pool::water_density);
+    auto pool =
+        py::class_<Pool>(m, "Pool")
+            .def(py::init<>())
+            .def_readwrite("length", &Pool::length)
+            .def_readwrite("width", &Pool::width)
+            .def_readwrite("depth", &Pool::depth)
+            .def_readwrite("water_level", &Pool::water_level)
+            .def_readwrite("water_density", &Pool::water_density)
+            .def_readwrite("current_oscillation_frequency", &Pool::current_oscillation_frequency);
     valueProperty(pool, "current_velocity", &Pool::current_velocity);
+    valueProperty(pool, "current_oscillation_amplitude", &Pool::current_oscillation_amplitude);
     auto thruster = py::class_<Thruster>(m, "Thruster")
                         .def(py::init<>())
                         .def_readwrite("id", &Thruster::id)
@@ -45,7 +48,8 @@ void bindPlant(py::module_ &m) {
                         .def_readwrite("fall_time", &Thruster::fall_time)
                         .def_readwrite("slew_rate", &Thruster::slew_rate)
                         .def_readwrite("forward_limit", &Thruster::forward_limit)
-                        .def_readwrite("reverse_limit", &Thruster::reverse_limit);
+                        .def_readwrite("reverse_limit", &Thruster::reverse_limit)
+                        .def_readwrite("propeller_radius", &Thruster::propeller_radius);
     valueProperty(thruster, "position", &Thruster::position);
     valueProperty(thruster, "direction", &Thruster::direction);
     auto parameters =

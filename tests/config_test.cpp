@@ -181,3 +181,19 @@ TEST_F(Profiles, NestedProfileFailuresIdentifyTheirSource) {
     std::filesystem::remove(root / "sensors/imu.yaml");
     EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
 }
+
+TEST_F(Profiles, NativeWorldAndRobotDeclareFlowAndImmersionIndependently) {
+    replace("worlds/empty_pool.yaml", "current_m_s: [0, 0, 0]",
+            "current_m_s: [0, 0, 0]\n  current_oscillation_amplitude_m_s: [0.2, 0.1, 0.04]\n"
+            "  current_oscillation_frequency_hz: 0.7");
+    replace("robots/synthetic_auv.yaml", "reverse_limit_n: 28",
+            "reverse_limit_n: 28\n      propeller_radius_m: 0.05");
+    const auto config = robotics::config::loadScenario(scenario());
+    EXPECT_EQ(config.plant.pool.current_oscillation_amplitude, Eigen::Vector3d(.2, .1, .04));
+    EXPECT_DOUBLE_EQ(config.plant.pool.current_oscillation_frequency, .7);
+    ASSERT_TRUE(config.plant.thrusters.front().propeller_radius);
+    EXPECT_DOUBLE_EQ(*config.plant.thrusters.front().propeller_radius, .05);
+    EXPECT_NO_THROW(robotics::config::makeRuntime(config)->advance());
+    replace("robots/synthetic_auv.yaml", "propeller_radius_m: 0.05", "propeller_radius_m: -1");
+    EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
+}

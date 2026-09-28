@@ -1,5 +1,6 @@
 // Adapted from OSU UWRT riptide_simulator. See docs/PROVENANCE.md.
 #include "detail/marine_dynamics.hpp"
+#include "detail/rk4.hpp"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -156,15 +157,8 @@ State13d MarineDynamics::derivative(const State13d &x, const Vector6d &propulsio
 }
 State13d MarineDynamics::step(const State13d &x, const Vector6d &tau, double dt,
                               const Eigen::Vector3d &water, const Eigen::Vector3d &dw) const {
-    if (!std::isfinite(dt) || dt <= 0 || dt > .1)
-        throw std::invalid_argument("RK4 step must be in (0,0.1] seconds");
-    const State13d k1 = derivative(x, tau, water, dw);
-    const State13d k2 = derivative(x + dt * .5 * k1, tau, water + dt * .5 * dw, dw);
-    const State13d k3 = derivative(x + dt * .5 * k2, tau, water + dt * .5 * dw, dw);
-    const State13d k4 = derivative(x + dt * k3, tau, water + dt * dw, dw);
-    State13d next = x + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4);
-    validateState(next);
-    next.segment<4>(3).normalize();
-    return next;
+    return integrateBodyRk4(x, dt, [&](const State13d &stage, double offset) {
+        return derivative(stage, tau, water + offset * dw, dw);
+    });
 }
 } // namespace robotics::simulation::detail

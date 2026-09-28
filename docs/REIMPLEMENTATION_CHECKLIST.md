@@ -47,6 +47,8 @@ Current physics uses a spherical pool contact proxy; the viewer draws line geome
 - [ ] Finish capability/interface matrix for old simulator, viewer, and robot stack.
 - [ ] Record pinned revisions/configuration/resource hashes for Talos and 2026 pack.
 - [ ] Capture deterministic numerical reference fixtures and physical-frame mapping.
+- [x] Capture pinned original free-motion equations/kernels and compare 753 synthetic
+  submerged/surface/entry states; see reference/STAGE_DYNAMICS.md for limits.
 - [ ] Capture fixed-camera, fixed-time renderer reference images (above/below water,
   indoor/outdoor, reflections, shadows, tags/holes, props, payloads, sensor cameras).
 - [ ] Record representative physics/contact/camera/UI rates and startup/resource use.
@@ -68,8 +70,10 @@ Current physics uses a spherical pool contact proxy; the viewer draws line geome
 
 - [ ] Standalone Talos physical parameters, frames/mounts, thrusters and device models.
 - [ ] Preserve COM/base_link/CAD frame conversions and offset velocity/acceleration.
-- [ ] Preserve stage-dependent thruster submersion, water current evolution,
-  actuator response/scales/deadbands, partial buoyancy and hydrodynamic behavior.
+- [x] Stage-dependent thruster submersion and water current evolution match the
+  pinned synthetic free-motion fixture through native C++/profile/Python interfaces.
+- [ ] Preserve actuator response/scales/deadbands, partial buoyancy and hydrodynamic
+  behavior under native Talos configuration and longer reference rollouts.
 - [ ] Hull/course collisions with required friction/restitution and prop coupling.
 - [ ] Distinct placement, task reset and full reset semantics, plus ROS clock mapping.
 - [ ] Match required Talos sensor products/calibration through declared models/adapters.
@@ -142,8 +146,9 @@ selected live-robot workflows required here.
 1. Source-linked review matrix is recorded; full reference capture remains open.
 2. Read-only pose transport and application composition are validated. Explicit
    simulation controls remain open and separate from recording playback.
-3. Next capture/port stage-dependent wet-thruster/current behavior, followed by
-   actuator/frame/contact parity and native content; then neutral scene/assets.
+3. Stage-dependent wet-thruster/current behavior is verified for the pinned synthetic
+   fixture. Next expose actuator calibration/stop semantics, then frame/contact
+   parity and native Talos content; neutral scene/assets follow.
 4. Re-evaluate this order after each validated commit against concrete dependencies.
 
 For every increment: state its acceptance target, implement, test appropriate

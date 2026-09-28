@@ -62,6 +62,11 @@ class BodyParameters:
     def buoyancy_radii(self, value: ArrayLike) -> None: ...
 
 class Pool:
+    current_oscillation_frequency: float
+    @property
+    def current_oscillation_amplitude(self) -> FloatArray: ...
+    @current_oscillation_amplitude.setter
+    def current_oscillation_amplitude(self, value: ArrayLike) -> None: ...
     def __init__(self) -> None: ...
     length: float
     width: float
@@ -74,6 +79,7 @@ class Pool:
     def current_velocity(self, value: ArrayLike) -> None: ...
 
 class Thruster:
+    propeller_radius: float | None
     def __init__(self) -> None: ...
     delay: float
     rise_time: float

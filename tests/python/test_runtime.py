@@ -22,6 +22,31 @@ def passive(seed: int = 42) -> rp.Runtime:
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_optional_wet_propeller_and_current_configuration(self) -> None:
+        params = rp.PlantParameters()
+        thruster = rp.Thruster()
+        thruster.id = "propeller"
+        thruster.delay = thruster.rise_time = thruster.fall_time = thruster.slew_rate = 0
+        self.assertIsNone(thruster.propeller_radius)
+        params.thrusters = [thruster]
+        state = initial()
+        state.position = [5, 5, 1]
+        unmodulated = rp.Runtime(params, state)
+        thruster.propeller_radius = 0.05
+        params.thrusters = [thruster]
+        immersed = rp.Runtime(params, state)
+        for runtime in (unmodulated, immersed):
+            runtime.command([10])
+            runtime.advance(5)
+        self.assertAlmostEqual(unmodulated.observe().body.linear_velocity[0], 0.01, places=12)
+        self.assertEqual(immersed.observe().body.linear_velocity[0], 0)
+        params.pool.current_oscillation_amplitude = [0.2, 0, 0]
+        params.pool.current_oscillation_frequency = 0.7
+        moving_water = rp.Runtime(params, initial())
+        self.assertGreater(moving_water.advance().body.linear_velocity[0], 0)
+        moving_water.reset(initial(), 0)
+        self.assertEqual(moving_water.observe().elapsed_ns, 0)
+
     def test_programmatic_force_matches_analytical_motion(self) -> None:
         params = rp.PlantParameters()
         thruster = rp.Thruster()

@@ -289,3 +289,30 @@ This remains a finite scenario pose viewer. Simulation controls, Talos physics,
 water/assets, independent mechanisms/tasks/scoring, camera acquisition, and ROS
 integrations are still open. Next is fixed-input reference capture and stage-dependent
 thruster submersion/current fidelity, not a claim of original simulator equivalence.
+
+## Stage-dependent propulsion and current fidelity
+
+Optional robot propeller disk immersion and world sinusoidal current now feed every
+RK4 stage; endpoint kinematics use the same forcing. The numerical integrator is
+shared with fixed-input model tests. Native profiles and Python expose the model
+choices; absence of immersion keeps generic thrust unmodulated. Full reset restarts
+current phase and batch advancement matches individual steps exactly.
+
+The offline capture tool compiled pinned original kernels and extracted original
+propulsion/current/RK4 expressions. All 753 fixture states (surface, submerged, and
+above-water entry with rotating body and force reversal) match 20 numerical fields
+within 2e-12 absolute tolerance. Original source, driver and fixture hashes are
+recorded. See [reference/STAGE_DYNAMICS.md](reference/STAGE_DYNAMICS.md).
+
+Validation: all 72 Release tests, formatting/dependency checks, configured static
+analysis and relocated installed consumers passed. ASan/UBSan passed the 71-test
+suite and relocated consumers, then all three stage tests after the added batching/
+reset regression. The isolated installed Python wheel passed all 12 tests plus Ruff
+and strict mypy, including the new optional-immersion/current behavior. No sanitizer
+diagnostics were reported. Independent read-only review approved the reference
+capture and port for this bounded scope.
+
+This does not establish full Talos fidelity. The original's accumulated floating
+clock may diverge slightly from tick-based flow phase on long runs; preserving that
+incidental drift is not the new clock contract. Actuator calibration/stop interfaces,
+COM/base/CAD conversions, contacts and native Talos configuration are next.

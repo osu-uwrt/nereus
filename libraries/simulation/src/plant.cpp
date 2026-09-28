@@ -1,5 +1,6 @@
 #include "robotics/simulation/plant.hpp"
 #include "detail/marine_dynamics.hpp"
+#include "detail/rk4.hpp"
 #include "detail/thruster_dynamics.hpp"
 
 #include <algorithm>
@@ -26,6 +27,14 @@ void validate(const PlantParameters &p) {
     }
     require(std::isfinite(p.pool.water_level) && p.pool.current_velocity.allFinite(),
             "pool level and current must be finite");
+    const double frequency = p.pool.current_oscillation_frequency;
+    const double omega = 2 * std::acos(-1.0) * frequency;
+    require(std::isfinite(frequency) && frequency >= 0 &&
+                p.pool.current_oscillation_amplitude.allFinite() &&
+                (omega * p.pool.current_oscillation_amplitude).allFinite() &&
+                std::isfinite(
+                    omega * (static_cast<double>(std::numeric_limits<std::int64_t>::max()) / 1e9)),
+            "current oscillation must have finite amplitude and nonnegative frequency");
     require(std::isfinite(p.pool.water_level - p.pool.depth), "pool floor must be finite");
     require(2 * p.body.collision_radius < std::min({p.pool.length, p.pool.width, p.pool.depth}),
             "collision sphere must fit in the pool");
@@ -37,6 +46,9 @@ void validate(const PlantParameters &p) {
                     std::abs(t.direction.norm() - 1.0) < 1e-9,
                 "thruster " + t.id +
                     ": position must be finite and direction must be a unit vector");
+        require(!t.propeller_radius ||
+                    (std::isfinite(*t.propeller_radius) && *t.propeller_radius > 0),
+                "propeller radius must be positive and finite when configured");
     }
 }
 
@@ -147,6 +159,35 @@ struct Plant::Impl {
         committed_forces = actuators.forces();
     }
 
+    Vector6 propulsion(const detail::State13d &stage, Eigen::VectorXd forces) const {
+        const Eigen::Quaterniond q =
+            Eigen::Quaterniond(stage[3], stage[4], stage[5], stage[6]).normalized();
+        const double pi = std::acos(-1.0);
+        for (std::size_t i = 0; i < parameters.thrusters.size(); ++i) {
+            const auto &thruster = parameters.thrusters[i];
+            if (!thruster.propeller_radius)
+                continue;
+            const double z = (stage.head<3>() + q * thruster.position).z();
+            const double axis_z = (q * thruster.direction).z();
+            const double extent = std::max(.001, *thruster.propeller_radius *
+                                                     std::sqrt(std::max(0.0, 1 - axis_z * axis_z)));
+            const double c = std::clamp((parameters.pool.water_level - z) / extent, -1.0, 1.0);
+            forces[static_cast<Eigen::Index>(i)] *=
+                (std::acos(-c) + c * std::sqrt(std::max(0.0, 1 - c * c))) / pi;
+        }
+        return allocation * forces;
+    }
+    detail::State13d derivative(const detail::State13d &stage, const Eigen::VectorXd &forces,
+                                double time) const {
+        const auto &pool = parameters.pool;
+        const double omega = 2 * std::acos(-1.0) * pool.current_oscillation_frequency;
+        const double phase = omega * time;
+        return dynamics.derivative(stage, propulsion(stage, forces),
+                                   pool.current_velocity +
+                                       pool.current_oscillation_amplitude * std::sin(phase),
+                                   pool.current_oscillation_amplitude * (omega * std::cos(phase)));
+    }
+
     PlantParameters parameters;
     detail::MarineDynamics dynamics;
     detail::ThrusterDynamics actuators;
@@ -184,9 +225,8 @@ MotionSample Plant::motion() const {
     }
     MotionSample sample;
     sample.state = observe();
-    const Vector6 wrench = p.allocation * p.committed_forces;
-    const auto derivative =
-        p.dynamics.derivative(p.state, wrench, p.parameters.pool.current_velocity);
+    const auto derivative = p.derivative(
+        p.state, p.committed_forces, std::chrono::duration<double>(sample.state.elapsed).count());
     const auto &body = sample.state.body;
     sample.acceleration_body =
         derivative.segment<3>(7) + body.angular_velocity.cross(body.linear_velocity);
@@ -214,8 +254,11 @@ Snapshot Plant::advance(std::uint64_t ticks) {
             // Midpoint actuator force held during the RK4 body step (operator splitting).
             // One authoritative state commit per integer tick.
             p.actuators.advance(dt / 2);
-            const Vector6 wrench = p.allocation * p.actuators.forces();
-            auto next = p.dynamics.step(p.state, wrench, dt, p.parameters.pool.current_velocity);
+            const double time = static_cast<double>(p.tick) * dt;
+            auto next =
+                detail::integrateBodyRk4(p.state, dt, [&](const auto &stage, double offset) {
+                    return p.derivative(stage, p.actuators.forces(), time + offset);
+                });
             p.contacts.resolve(next, p.dynamics.inverseMass());
             detail::MarineDynamics::validateState(next);
             p.actuators.advance(dt / 2);

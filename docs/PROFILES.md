@@ -170,3 +170,15 @@ replace an existing CSV, but cannot overwrite a source profile (including aliase
 
 This CSV is a diagnostic export, not a general recording/playback protocol, frame
 graph, or viewer transport. It does not replace direct typed API access.
+
+### Optional flow and propeller immersion
+
+The world `pool` may add `current_oscillation_amplitude_m_s: [x, y, z]` and
+`current_oscillation_frequency_hz`. Defaults are zero. These augment `current_m_s`
+with a spatially uniform sinusoidal flow and its physical acceleration.
+
+A robot thruster may add a positive `propeller_radius_m`. It selects the immersed
+disk-area thrust model against the world's water surface, recalculated at every
+integration stage. Without it, actuator thrust is unmodulated. Geometry remains
+robot-owned and water/flow remain world-owned. This is not a ventilation/cavitation
+model. See [the numerical reference](reference/STAGE_DYNAMICS.md).

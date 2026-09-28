@@ -35,7 +35,7 @@ void parseVehicle(const YAML::Node &v, simulation::PlantParameters &plant,
         const std::string field = path + ".thrusters[" + std::to_string(i) + "]";
         keys(t,
              {"id", "position_m", "direction", "delay_s", "rise_time_s", "fall_time_s",
-              "slew_rate_n_s", "forward_limit_n", "reverse_limit_n"},
+              "slew_rate_n_s", "forward_limit_n", "reverse_limit_n", "propeller_radius_m"},
              field);
         simulation::Thruster thruster;
         thruster.id = text(t, "id", field);
@@ -47,12 +47,15 @@ void parseVehicle(const YAML::Node &v, simulation::PlantParameters &plant,
         thruster.slew_rate = number(t, "slew_rate_n_s", field);
         thruster.forward_limit = number(t, "forward_limit_n", field);
         thruster.reverse_limit = number(t, "reverse_limit_n", field);
+        if (t["propeller_radius_m"])
+            thruster.propeller_radius = number(t, "propeller_radius_m", field);
         plant.thrusters.push_back(thruster);
     }
 }
 void parsePool(const YAML::Node &pool, simulation::Pool &result, const std::string &path) {
     keys(pool,
-         {"length_m", "width_m", "depth_m", "water_level_m", "water_density_kg_m3", "current_m_s"},
+         {"length_m", "width_m", "depth_m", "water_level_m", "water_density_kg_m3", "current_m_s",
+          "current_oscillation_amplitude_m_s", "current_oscillation_frequency_hz"},
          path);
     auto &p = result;
     p.length = number(pool, "length_m", path);
@@ -61,6 +64,11 @@ void parsePool(const YAML::Node &pool, simulation::Pool &result, const std::stri
     p.water_level = number(pool, "water_level_m", path);
     p.water_density = number(pool, "water_density_kg_m3", path);
     p.current_velocity = vector(pool, "current_m_s", 3, path);
+    if (pool["current_oscillation_amplitude_m_s"])
+        p.current_oscillation_amplitude =
+            vector(pool, "current_oscillation_amplitude_m_s", 3, path);
+    if (pool["current_oscillation_frequency_hz"])
+        p.current_oscillation_frequency = number(pool, "current_oscillation_frequency_hz", path);
 }
 void parseInitial(const YAML::Node &initial, simulation::BodyState &result,
                   const std::string &path) {

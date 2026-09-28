@@ -40,3 +40,20 @@ The viewer links system GLFW, GLEW, and OpenGL in addition to Eigen/yaml-cpp.
 It optionally loads a system DejaVu font, falling back to ImGui's default; no font
 file is redistributed separately. Linux system library packaging supplies those
 third-party notices. Inventory dependencies again before any public distribution.
+
+## Stage-dependent physical reference
+
+The immersed propeller/current expressions in `libraries/simulation/src/plant.cpp`
+and RK4 sequencing in `detail/rk4.hpp` are adapted from original revision
+`07647eebe706f96ea7b76db3cc9802735a146698`, specifically
+`c_simulator/src/robot_class.cpp` and `c_simulator/src/physics_simulator.cpp`.
+They retain the legacy disk-area fraction, 1 mm minimum projected extent, sinusoidal
+current derivative, stage forcing and midpoint actuator split. New configuration
+is neutral, immersion is optional, and environment time uses authoritative ticks.
+The original unresolved license metadata described above applies to these ports too.
+
+`tools/capture_stage_reference.py` reads that pinned revision only when explicitly
+invoked. Its test driver extracts original expressions into a temporary build with
+the original pure numerical kernels, then records checked fixture data. The driver
+and all inputs/results are hashed in `tests/fixtures/legacy_stage_dynamics.json`.
+See `reference/STAGE_DYNAMICS.md` for reproduction and the bounded comparison scope.

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -43,6 +44,9 @@ struct Thruster {
     double slew_rate = 300.0; // N/s; zero disables rate limiting.
     double forward_limit = 28.0;
     double reverse_limit = 28.0;
+    // If present, scale thrust by the immersed fraction of this disk (metres).
+    // Absence leaves actuator force unmodulated for other propulsion models.
+    std::optional<double> propeller_radius = std::nullopt;
 };
 
 struct Pool {
@@ -51,7 +55,9 @@ struct Pool {
     double depth = 5.0;
     double water_level = 0.0; // Free surface, not a collision ceiling.
     double water_density = 1000.0;
-    Eigen::Vector3d current_velocity = Eigen::Vector3d::Zero(); // Constant in world frame.
+    Eigen::Vector3d current_velocity = Eigen::Vector3d::Zero();              // Mean, world frame.
+    Eigen::Vector3d current_oscillation_amplitude = Eigen::Vector3d::Zero(); // m/s.
+    double current_oscillation_frequency = 0; // Hz; zero disables oscillation.
 };
 
 struct PlantParameters {
