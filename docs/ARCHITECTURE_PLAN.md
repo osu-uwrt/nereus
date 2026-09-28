@@ -15,6 +15,27 @@ This strengthens the reference-validation target; it does not relax dependency
 boundaries. ROS/UWRT interfaces remain optional outer adapters. The standalone
 viewer must also support live robot/RViz-style use without simulation.
 
+Delivery priority, clarified by the user: **replace the existing simulator first**,
+then expand the RViz replacement workflows, then broaden reuse across teams and
+industry. Generalized architecture and dependency boundaries apply throughout;
+they must not displace the first priority with speculative platform work.
+
+Replacement means using the old simulator's functionality and visuals as the
+reference: the same Talos 3D model, animated thrusters/rotors, LEDs and other
+status/mechanism visuals, the same RoboSub 2026 pool, course/task models, props,
+materials and water rendering, plus closely matching UI workflows. Port the
+assets and behavior into explicit robot/world/task content and neutral rendering
+components; do not treat substitute primitives or a successful tree root as parity.
+LED states, animation direction/speed, visibility and mechanism state transitions
+need reference checks alongside static images and physics. Record any remaining
+observable differences explicitly instead of silently redesigning the workflow.
+
+Retain the Fossen-style six-degree-of-freedom dynamics as the vehicle foundation
+and verify sufficient performance on mid-grade hardware. The current machine is
+the user-approved provisional benchmark baseline. Measure headless dynamics,
+contacts, sensors and full graphics separately, then the complete stack together;
+do not infer full-scene performance from simple physics throughput.
+
 The checked implementation ledger is [REIMPLEMENTATION_CHECKLIST.md](REIMPLEMENTATION_CHECKLIST.md).
 Use its baseline, capability evidence, and per-increment validation when deciding
 whether work is complete. Simplified initial models and line rendering are

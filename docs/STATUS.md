@@ -339,3 +339,13 @@ startup-versus-placement frame conventions. Compound box contacts and world/body
 frames remain prerequisites for a faithful competition profile. The user's added
 performance constraint uses the current machine as a provisional baseline; collect
 headless costs now and repeat for contacts, Talos and the full renderer as delivered.
+
+## Replacement priority and visual acceptance clarification
+
+The user explicitly prioritizes replacing the old simulator, then expanding RViz
+replacement use, then broader team/industry reuse. Existing general dependency and
+ownership constraints remain mandatory. The acceptance target includes the exact
+Talos mesh/materials, moving thrusters/rotors, LEDs and other status/mechanism visuals,
+and the same RoboSub 2026 pool/task/prop models and water/UI behavior. These are
+recorded as open checks, not implemented features. Subsequent work should close
+those concrete replacement gaps rather than add unrelated generic viewer features.

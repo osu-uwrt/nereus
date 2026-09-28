@@ -6,6 +6,11 @@ props/tasks, operator panels, and the complete RepairCompTree work on the new
 platform. Check a box only after its acceptance evidence is recorded. Local Git
 commits only; the original workspace remains the reference, not a runtime dependency.
 
+Delivery priority: original simulator replacement first, RViz replacement expansion
+second, broader team/industry reuse third. Generalized ownership/dependency contracts
+remain mandatory through every increment. Prefer work that closes concrete original
+simulator gaps over unrelated viewer/platform expansion.
+
 ## Reference and fidelity policy
 
 - Original simulator baseline: `riptide_simulator` commit
@@ -86,10 +91,17 @@ Current physics uses a spherical pool contact proxy; the viewer draws line geome
 - [ ] Neutral scene/asset/material/light descriptors with no robot/year dispatch.
 - [ ] Original scene/shadow/water/reflection/bloom/post shaders and pass semantics.
 - [ ] Same meshes/textures/material corrections and task cutouts through content data.
+- [ ] Same Talos 3D mesh/materials with thruster/rotor motion, direction and speed
+  driven by explicit state; LEDs and all other status/mechanism visuals reproduce
+  the original observable state transitions without robot-name logic in the renderer.
+- [ ] Same RoboSub 2026 pool and task/prop models, placements, dimensions, textures
+  and visual interactions through independently composed world/task/robot content.
 - [ ] Preserve observer lighting/water controls without modifying sensor appearance.
 - [ ] Matching camera projection/optical conventions and image/depth registration.
 - [ ] Talos-style observer, follow/focus, sidebars, camera views, map and inspection UI.
 - [ ] Visual comparisons and representative full-scene performance checks.
+- [ ] Reference old simulator workflows and animated/stateful visuals as well as
+  fixed screenshots: LEDs, thrusters, claw, payloads, task feedback and operator panels.
 
 ## E. Mechanisms, props, tasks and scoring
 
@@ -135,6 +147,9 @@ Current physics uses a spherical pool contact proxy; the viewer draws line geome
   empty-pool, selected-task, and alternative-scoring compositions run standalone.
 - [ ] Standalone, viewer-only, camera-only, generic ROS and Talos build/run matrix.
 - [ ] Original behavior/visual/performance comparisons accepted with recorded limits.
+- [ ] Record current-machine provisional performance baseline; repeat headless and
+  full-scene/stack measurements as Talos, contacts, cameras and original rendering
+  arrive. Demonstrate real-time operation at the declared physics/sensor settings.
 - [ ] Resolve source/asset licenses, dependency inventory and maintenance contacts
   before public distribution; documentation and packaging reflect actual support.
 
