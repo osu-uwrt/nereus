@@ -34,6 +34,15 @@ target_include_directories(rp_simulation PUBLIC
 target_link_libraries(rp_simulation PUBLIC Eigen3::Eigen)
 rp_project_options(rp_simulation)
 
+add_library(rp_sensors libraries/sensors/src/runtime.cpp libraries/sensors/src/models.cpp)
+add_library(RoboticsPlatform::sensors ALIAS rp_sensors)
+set_target_properties(rp_sensors PROPERTIES EXPORT_NAME sensors)
+target_include_directories(rp_sensors PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libraries/sensors/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_link_libraries(rp_sensors PUBLIC rp_simulation)
+rp_project_options(rp_sensors)
+
 if(RP_BUILD_CLI)
   find_package(yaml-cpp REQUIRED CONFIG)
   add_library(rp_config libraries/config/src/scenario.cpp)
@@ -53,9 +62,10 @@ if(RP_BUILD_CLI)
   install(DIRECTORY libraries/config/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 
-install(TARGETS rp_simulation EXPORT RoboticsPlatformTargets
+install(TARGETS rp_simulation rp_sensors EXPORT RoboticsPlatformTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(DIRECTORY libraries/simulation/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY libraries/sensors/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(DIRECTORY content/ DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform)
 install(FILES LICENSE.md docs/PROVENANCE.md DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform/legal)
 install(EXPORT RoboticsPlatformTargets NAMESPACE RoboticsPlatform::
@@ -78,6 +88,10 @@ if(BUILD_TESTING)
   target_link_libraries(plant_tests PRIVATE rp_simulation GTest::gtest_main)
   rp_project_options(plant_tests)
   gtest_discover_tests(plant_tests DISCOVERY_MODE PRE_TEST)
+  add_executable(sensor_tests libraries/sensors/tests/sensors_test.cpp)
+  target_link_libraries(sensor_tests PRIVATE rp_sensors GTest::gtest_main)
+  rp_project_options(sensor_tests)
+  gtest_discover_tests(sensor_tests DISCOVERY_MODE PRE_TEST)
   if(RP_BUILD_CLI)
     add_executable(config_tests tests/config_test.cpp)
     target_link_libraries(config_tests PRIVATE rp_config GTest::gtest_main)

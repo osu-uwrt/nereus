@@ -1,8 +1,9 @@
 # Sensor scope and contracts
 
-Status: requirements for the next implementation phases. No sensor models are
-implemented in the initial standalone plant. This document refines the
-[architecture plan](ARCHITECTURE_PLAN.md); it does not add an RL interface.
+Status: the C++ runtime, IMU, FOG, and ideal bottom-track DVL are implemented.
+See [delivered runtime contracts and limitations](SENSOR_RUNTIME.md). This document
+retains the broader requirements for subsequent phases, including cameras/stereo.
+It refines the [architecture plan](ARCHITECTURE_PLAN.md); it does not add an RL interface.
 
 ## Supported families
 

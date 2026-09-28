@@ -45,8 +45,11 @@ physical constraints, and unordered/out-of-range command ticks fail before outpu
 - Methods are not concurrently callable. Own separate instances or synchronize
   outside the library. Instances have independent state, queues, and time.
 
-No randomness is used in this slice, so no artificial seed argument is exposed.
-Sensor noise and seed-stream contracts belong to the subsequent runtime work.
+The plant itself has no randomness or seed argument. The composed
+[sensor runtime](SENSOR_RUNTIME.md) owns sensor noise and seed streams.
+`motion()` exposes read-only endpoint kinematics for acquisition; its acceleration
+is explicitly unavailable at contact boundaries. See the sensor runtime document
+for the derivative and contact contracts.
 There is no task-only reset until task models exist.
 
 ## Numerical model and limitations

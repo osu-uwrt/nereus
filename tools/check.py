@@ -82,6 +82,14 @@ def main():
                  f"-DCMAKE_PREFIX_PATH={installed}", "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF"], env=env)
             run([cmake, "--build", temp / "build", "--parallel", "2"], env=env)
             run([temp / "build/consumer"], cwd=temp, env=env)
+            sensor_consumer = temp / "sensors"
+            shutil.copytree(ROOT / "examples/sensors", sensor_consumer)
+            run([cmake, "-S", sensor_consumer, "-B", temp / "sensor-build",
+                 f"-DCMAKE_PREFIX_PATH={installed}", "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF"], env=env)
+            run([cmake, "--build", temp / "sensor-build", "--parallel", "2"], env=env)
+            with (temp / "sensors.csv").open("w") as output:
+                subprocess.run([str(temp / "sensor-build/sensor_demo")], cwd=temp,
+                               env=env, stdout=output, check=True)
             with (temp / "trajectory.csv").open("w") as output:
                 subprocess.run([str(installed / "bin/robotics-sim"),
                                 str(installed / "share/robotics_platform/examples/empty_pool.yaml")],
