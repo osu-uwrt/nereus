@@ -1,0 +1,2 @@
+# Preserve verified upstream bytes, including whitespace in third-party notices.
+third_party/imgui/** -whitespace
