@@ -17,7 +17,7 @@ void Runtime::validateDevice(const Device &device) const {
         throw std::logic_error("sensor registration is closed after first advancement");
     }
     if (device.id.empty() || device.frame.empty() || device.id.find('\0') != std::string::npos ||
-        device.frame.find('\0') != std::string::npos || ids_.count(device.id) ||
+        device.frame.find('\0') != std::string::npos || streams_.count(device.id) ||
         device.period < timestep_ || device.latency.count() < 0 || device.capacity == 0 ||
         (device.overflow != OverflowPolicy::Fail &&
          device.overflow != OverflowPolicy::DropOldest)) {

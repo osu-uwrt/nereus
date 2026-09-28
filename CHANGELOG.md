@@ -2,6 +2,9 @@
 
 ## 0.1.0 — unreleased
 
+- Versioned reusable robot/world/sensor profiles and resolved runtime construction,
+  checked typed stream lookup, full physical matrix configuration, and sensor CSV.
+
 - Pressure/depth sensor with mounted hydrostatic sampling, separate calibration,
   seeded noise, operating limits, and propagated depth uncertainty.
 

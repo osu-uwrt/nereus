@@ -39,20 +39,37 @@ This is part of phase 2, not completion of the full runtime/configuration phase.
 [SENSOR_RUNTIME.md](SENSOR_RUNTIME.md) describes the delivered API; the broader
 [SENSORS.md](SENSORS.md) requirements still include future camera/stereo work.
 
+## Native profile composition increment
+
+Implemented:
+
+- Versioned scenario/robot/world/sensor documents, declaring-file-relative paths,
+  strict validation, full physical matrices, and resolved native model factories.
+- Robot-owned sensor mounts/schedules, world-owned pressure conditions, and
+  independent pressure-to-depth calibration. Empty sensor lists remain valid.
+- Checked typed stream lookup after configuration-based runtime construction.
+- Runner execution through the composed runtime, optional named-field sensor CSV,
+  and installed reusable robot/world/sensor examples.
+
+[PROFILES.md](PROFILES.md) defines the delivered schema and extension boundaries.
+This remains single-vehicle/pool composition; serialized resolved manifests,
+content hashes, search roots, visual assets, task packs, and public dynamic plugin
+loading are not delivered. Python access is the next runtime increment.
+
 ## Next increments
 
 1. Complete the behavior/workflow inventory and establish Talos/reference timing
    fixtures, keeping intentional model differences explicit.
-2. Extend native robot/world/sensor profile composition and add the Python binding
-   over the explicit runtime lifecycle (remaining phase 2). Refine executable
-   camera/stereo contracts when rendering integration begins.
+2. Add the Python binding over the explicit runtime lifecycle (remaining phase 2).
+   Extend profile composition with assets/tasks when their implementations exist;
+   refine executable camera/stereo contracts when rendering integration begins.
 3. Build the independent viewer/source/display contracts and a minimal local-data
    viewer (phase 5A), without waiting for ROS or competition tasks.
 4. Add optional ROS/UWRT integration, task/mechanism ownership, coordinated general
    contacts, and camera/stereo rendering in their planned phases.
 
 The viewer, rendering, ROS adapters, full hull/prop contacts, competition scoring,
-native sensor YAML loading, and Python simulation API are not implemented. RL
+and Python simulation API are not implemented. RL
 implementation remains out of scope. The plant remains deterministic without a
 seed API; the composed sensor runtime owns seeded measurement noise. Cameras and
 stereo cameras are planned; sonar implementation is deferred.
@@ -102,8 +119,8 @@ Locally verified on 2026-09-28 in the same Ubuntu 22.04 / aarch64 environment:
   without adding the simulation include directory.
 
 These checks establish the documented synthetic-model behavior and package
-boundaries. They do not establish hardware fidelity or implement camera/stereo
-rendering, Python access, native sensor-profile loading, or the independent viewer.
+boundaries, not hardware fidelity. At that milestone camera/stereo rendering,
+Python access, native sensor-profile loading, and the viewer were not implemented.
 
 ## Pressure/depth sensor addition
 
@@ -112,3 +129,22 @@ provider, separate pressure-to-depth calibration, scalar noise/drift, operating 
 and pressure/depth uncertainty. The installed sensor example includes it. All 60
 Release tests, formatting, configured static analysis, and relocated install checks
 passed locally for this addition. The model's limits are in SENSOR_RUNTIME.md.
+
+## Verification of native profile composition
+
+Locally verified on 2026-09-28 on Ubuntu 22.04 / aarch64:
+
+- All 68 CTest entries passed in Release and Address/UndefinedBehaviorSanitizer
+  builds, including pressure tests, profile construction/replay, malformed input,
+  and the full CLI trajectory/sensor CSV contracts.
+- Formatting, dependency checks, and configured clang-tidy analysis passed.
+- Relocated installed plant/sensor consumers and both runner scenarios passed
+  with the ROS overlay removed. The new external C++ profile consumer also built
+  and ran against relocated Release and sanitizer installations.
+- The composed three-second example delivered 300 IMU, 150 FOG, 29 DVL, and 60
+  pressure readings. Repeated recording produced identical measurements; disabling
+  recording preserved the trajectory. Pending final DVL data was not mislabeled
+  as delivered after the configured run ended.
+
+Remote CI has not run. These remain synthetic-model and local packaging checks,
+not hardware calibration or full phase-2 completion.

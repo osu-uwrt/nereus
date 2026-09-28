@@ -2,11 +2,12 @@
 
 #include "robotics/sensors/types.hpp"
 #include "robotics/simulation/plant.hpp"
+#include <any>
 #include <deque>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
-#include <set>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -176,14 +177,26 @@ class Runtime {
             std::make_unique<detail::ScheduledSensor<Model>>(device, std::move(model), seed_);
         auto stream = entry->stream();
         // Roll back ID reservation if registration allocation fails.
-        auto inserted = ids_.insert(device.id);
+        auto inserted = streams_.emplace(device.id, stream);
         try {
             devices_.push_back(std::move(entry));
         } catch (...) {
-            ids_.erase(inserted.first);
+            streams_.erase(inserted.first);
             throw;
         }
         return stream;
+    }
+    template <class Reading>
+    std::shared_ptr<SensorStream<Reading>> stream(const std::string &id) const {
+        const auto found = streams_.find(id);
+        if (found == streams_.end()) {
+            throw std::invalid_argument("unknown sensor: " + id);
+        }
+        const auto *typed = std::any_cast<std::shared_ptr<SensorStream<Reading>>>(&found->second);
+        if (!typed) {
+            throw std::invalid_argument("sensor reading type mismatch: " + id);
+        }
+        return *typed;
     }
     void command(const Eigen::VectorXd &forces);
     simulation::Snapshot advance(std::uint64_t ticks = 1);
@@ -199,7 +212,7 @@ class Runtime {
     simulation::Plant plant_;
     Nanoseconds timestep_;
     std::uint64_t seed_;
-    std::set<std::string> ids_;
+    std::map<std::string, std::any> streams_;
     std::vector<std::unique_ptr<detail::ScheduledDevice>> devices_;
     bool sealed_ = false, faulted_ = false;
 };

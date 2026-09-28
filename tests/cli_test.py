@@ -36,7 +36,7 @@ class RunnerTests(unittest.TestCase):
     def test_invalid_scenarios_fail_before_output(self):
         original = Path(SCENARIO).read_text()
         mutations = [
-            ("schema_version: 1", "schema_version: 2", "schema_version"),
+            ("schema_version: 1", "schema_version: 99", "schema_version"),
             ("ticks: 1500", "ticks: -1", "ticks"),
             ("ticks: 1500", "ticks: 18446744073709551616", "ticks"),
             ("timestep_ns: 2000000", "timestep_ns: 0", "timestep_ns"),

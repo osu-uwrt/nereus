@@ -1,4 +1,6 @@
 #include "robotics/config/scenario.hpp"
+#include "telemetry.hpp"
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <string>
@@ -24,17 +26,36 @@ void print(const robotics::simulation::Snapshot &s) {
 
 int main(int argc, char **argv) {
     if (argc == 2 && std::string(argv[1]) == "--help") {
-        std::cout << "Usage: robotics-sim SCENARIO.yaml\n"
+        std::cout << "Usage: robotics-sim SCENARIO.yaml [--sensors OUTPUT.csv]\n"
                      "Run fixed simulation ticks without ROS or graphics; write CSV to stdout.\n";
         return 0;
     }
-    if (argc != 2) {
-        std::cerr << "Usage: robotics-sim SCENARIO.yaml\n";
+    if (argc != 2 && (argc != 4 || std::string(argv[2]) != "--sensors")) {
+        std::cerr << "Usage: robotics-sim SCENARIO.yaml [--sensors OUTPUT.csv]\n";
         return 2;
     }
     try {
         const auto scenario = robotics::config::loadScenario(argv[1]);
-        robotics::simulation::Plant plant(scenario.plant, scenario.initial);
+        auto runtime = robotics::config::makeRuntime(scenario);
+        std::ofstream sensor_output;
+        const auto observers = robotics::runner::telemetry(*runtime, scenario.sensors,
+                                                           argc == 4 ? &sensor_output : nullptr);
+        if (argc == 4) {
+            const auto destination = std::filesystem::weakly_canonical(argv[3]);
+            for (const auto &source : scenario.sources) {
+                if (destination == std::filesystem::weakly_canonical(source) ||
+                    (std::filesystem::exists(destination) &&
+                     std::filesystem::equivalent(destination, source))) {
+                    throw std::invalid_argument(
+                        "sensor output must not overwrite an input profile");
+                }
+            }
+            sensor_output.open(argv[3]);
+            if (!sensor_output) {
+                throw std::runtime_error("cannot open sensor output file");
+            }
+            robotics::runner::sensorHeader(sensor_output);
+        }
         std::cout << std::setprecision(17)
                   << "generation,tick,time_ns,x_m,y_m,z_m,qw,qx,qy,qz,u_m_s,v_m_s,w_m_s,p_rad_s,q_"
                      "rad_s,r_rad_s";
@@ -42,15 +63,24 @@ int main(int argc, char **argv) {
             std::cout << ",thrust_" << i << "_n";
         }
         std::cout << '\n';
-        print(plant.observe());
+        print(runtime->observe());
         std::size_t command = 0;
         for (std::uint64_t tick = 0; tick < scenario.ticks; ++tick) {
             if (command < scenario.commands.size() && scenario.commands[command].tick == tick) {
-                plant.command(scenario.commands[command++].forces);
+                runtime->command(scenario.commands[command++].forces);
             }
-            print(plant.advance());
+            print(runtime->advance());
+            for (const auto &observe : observers) {
+                observe();
+            }
             if (!std::cout) {
                 throw std::runtime_error("failed to write trajectory");
+            }
+        }
+        if (argc == 4) {
+            sensor_output.flush();
+            if (!sensor_output) {
+                throw std::runtime_error("failed to flush sensor observations");
             }
         }
         std::cout.flush();

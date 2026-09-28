@@ -94,6 +94,18 @@ def main():
                 subprocess.run([str(installed / "bin/robotics-sim"),
                                 str(installed / "share/robotics_platform/examples/empty_pool.yaml")],
                                cwd=temp, env=env, stdout=output, check=True)
+            profile_consumer = temp / "profiles"
+            shutil.copytree(ROOT / "examples/profiles", profile_consumer)
+            run([cmake, "-S", profile_consumer, "-B", temp / "profile-build",
+                 f"-DCMAKE_PREFIX_PATH={installed}", "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF"], env=env)
+            run([cmake, "--build", temp / "profile-build", "--parallel", "2"], env=env)
+            run([temp / "profile-build/profile_demo",
+                 installed / "share/robotics_platform/examples/profile_pool.yaml"], cwd=temp, env=env)
+            with (temp / "profile-trajectory.csv").open("w") as output:
+                subprocess.run([str(installed / "bin/robotics-sim"),
+                                str(installed / "share/robotics_platform/examples/profile_pool.yaml"),
+                                "--sensors", str(temp / "profile-sensors.csv")],
+                               cwd=temp, env=env, stdout=output, check=True)
     print("All requested checks passed.")
 
 

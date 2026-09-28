@@ -45,15 +45,15 @@ rp_project_options(rp_sensors)
 
 if(RP_BUILD_CLI)
   find_package(yaml-cpp REQUIRED CONFIG)
-  add_library(rp_config libraries/config/src/scenario.cpp)
+  add_library(rp_config libraries/config/src/scenario.cpp libraries/config/src/sensor_profiles.cpp)
   add_library(RoboticsPlatform::config ALIAS rp_config)
   set_target_properties(rp_config PROPERTIES EXPORT_NAME config)
   target_include_directories(rp_config PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libraries/config/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-  target_link_libraries(rp_config PUBLIC rp_simulation PRIVATE yaml-cpp)
+  target_link_libraries(rp_config PUBLIC rp_sensors PRIVATE yaml-cpp)
   rp_project_options(rp_config)
-  add_executable(robotics-sim applications/simulator/main.cpp)
+  add_executable(robotics-sim applications/simulator/main.cpp applications/simulator/telemetry.cpp)
   target_link_libraries(robotics-sim PRIVATE rp_config)
   rp_project_options(robotics-sim)
   install(TARGETS rp_config EXPORT RoboticsPlatformTargets
@@ -94,10 +94,13 @@ if(BUILD_TESTING)
   gtest_discover_tests(sensor_tests DISCOVERY_MODE PRE_TEST)
   if(RP_BUILD_CLI)
     add_executable(config_tests tests/config_test.cpp)
+    target_compile_definitions(config_tests PRIVATE RP_TEST_CONTENT="${CMAKE_CURRENT_SOURCE_DIR}/content")
     target_link_libraries(config_tests PRIVATE rp_config GTest::gtest_main)
     rp_project_options(config_tests)
     gtest_discover_tests(config_tests DISCOVERY_MODE PRE_TEST)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME profile_cli_contract COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/profile_cli_test.py
+      $<TARGET_FILE:robotics-sim> ${CMAKE_CURRENT_SOURCE_DIR}/content)
     add_test(NAME cli_contract COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_test.py
       $<TARGET_FILE:robotics-sim> ${CMAKE_CURRENT_SOURCE_DIR}/content/examples/empty_pool.yaml)
   endif()

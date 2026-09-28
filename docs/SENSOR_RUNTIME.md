@@ -4,7 +4,8 @@ The `RoboticsPlatform::sensors` C++17 library composes the plant with IMU, FOG,
 pressure/depth, and ideal bottom-track DVL models. It requires Eigen and the simulation library;
 no ROS, rendering, viewer, YAML, wall clock, or worker thread is involved. These
 are synthetic measurement models, not calibrated device emulators. Cameras,
-stereo capture, native sensor-profile loading, and Python bindings are future work.
+stereo capture and Python bindings are future work. Native sensor-profile loading
+is available in the optional [configuration library](PROFILES.md).
 
 ## Ownership and extension
 
@@ -28,7 +29,8 @@ ROS, or viewer imports. Future live/recorded sources can reuse these payloads
 without constructing a plant or linking the sensor model implementation. These
 are version-0.1 in-process C++ contracts, not a serialized wire format or stable ABI.
 
-`add` returns a typed stream handle. `latest()` and `stats()` return copies;
+`add` returns a typed stream handle. `stream<Reading>(id)` retrieves that same
+handle with checked ID/type lookup, including for profile-created sensors. `latest()` and `stats()` return copies;
 `drain()` consumes delivered samples. None of these methods advances physics,
 acquires a sample, or consumes random numbers. Independent consumers should use
 an adapter that fans out values: a stream has one shared consumption queue, not

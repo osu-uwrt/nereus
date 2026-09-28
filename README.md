@@ -10,10 +10,11 @@ marine dynamics, delayed thrusters, and simple pool contacts behind explicit
 `command`, `advance`, `observe`, and `reset` operations.
 
 A second library adds deterministic sensor scheduling, seeded noise, IMU, FOG,
-and ideal bottom-track DVL models. See the [sensor API and example](docs/SENSOR_RUNTIME.md).
+pressure/depth, and ideal bottom-track DVL models. Native robot/world/sensor
+[profiles](docs/PROFILES.md) compose these into standalone runs. See the [sensor API and example](docs/SENSOR_RUNTIME.md).
 The viewer, ROS integrations, cameras/stereo, Python interface, task interactions,
 and training integrations are not implemented. See [status](docs/STATUS.md) and the
-[architecture plan](docs/ARCHITECTURE_PLAN.md). Planned [sensor support](docs/SENSORS.md)
+[architecture plan](docs/ARCHITECTURE_PLAN.md). [Sensor scope](docs/SENSORS.md)
 covers cameras, stereo cameras, IMUs, DVLs, FOGs, and pressure/depth sensors; sonar is deferred.
 The current example parameters
 are synthetic, not a calibrated prediction for any team's robot.
@@ -28,11 +29,13 @@ sudo apt-get install cmake g++ libeigen3-dev libyaml-cpp-dev libgtest-dev
 cmake --preset release
 cmake --build --preset release
 ctest --preset release
-./build/release/robotics-sim content/examples/empty_pool.yaml > build/trajectory.csv
+./build/release/robotics-sim content/examples/profile_pool.yaml \
+  --sensors build/sensors.csv > build/trajectory.csv
 ```
 
 The example advances three simulated seconds and emits one CSV row per tick,
-including the initial state. Commands are scheduled in the YAML. There is no
+including the initial state, plus timestamped sensor observations in a separate CSV.
+Commands are scheduled in the YAML. There is no
 wall-time pacing, ROS clock, background thread, or GUI process.
 
 For the numerical and sensor libraries without YAML, tests, or Python:

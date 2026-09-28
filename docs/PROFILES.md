@@ -1,0 +1,172 @@
+# Native robot, world, and sensor profiles
+
+Scenario schema 2 composes local robot/world files and a deterministic run. Robot
+and world files use profile schema 1, distinguished by `kind`. Robot sensor entries
+can contain model parameters or reference a reusable sensor profile. All formats
+reject unknown and duplicate keys, malformed numbers, unsupported versions/kinds,
+and invalid physical/model settings before the runner emits trajectory output.
+
+This increment describes one rigid vehicle in a pool. It does not yet load meshes,
+multiple bodies, mechanisms, task/competition packs, or viewer workspaces. There
+are no inheritance chains, overlays, implicit environment expansion, ROS package
+lookups, or network resources. Existing inline scenario schema 1 remains a small
+plant-only run format. This is unrelated to compatibility with the old simulator.
+
+## Run the composed example
+
+```sh
+./build/release/robotics-sim content/examples/profile_pool.yaml \
+  --sensors build/observations.csv > build/trajectory.csv
+```
+
+The synthetic robot includes IMU, FOG, bottom-track DVL, and pressure/depth sensors.
+Its robot and world files are reusable in another scenario. The example's noise
+values are illustrative, not manufacturer calibration. The entire `content/` tree
+is installed under `share/robotics_platform`; the same relative references work
+when the installation is moved.
+
+## File responsibilities and resolution
+
+| Document | Required fields | Responsibility |
+| --- | --- | --- |
+| Scenario | `schema_version: 2`, `robot`, `world`, `seed`, `timestep_ns`, `ticks`, `initial`, `commands` | Choose profiles, initial conditions, seed, and run schedule. |
+| Robot | `schema_version: 1`, `kind: robot`, `vehicle`, `sensors` | Physical body, thrusters, device identities, mounts, and schedules. Empty sensor/thruster lists are valid. |
+| World | `schema_version: 1`, `kind: world`, `pool`, `surface_pressure_pa` | Pool geometry, fluid density/current/level, and atmospheric pressure. |
+| Sensor | `schema_version: 1`, `kind: sensor`, `model`, `parameters` | Reusable measurement/noise/calibration settings; no robot-specific ID, frame, mount, or schedule. |
+
+Each reference resolves relative to its declaring file, independent of working
+directory. Absolute filesystem paths are accepted but reduce portability. URI
+schemes such as `package://` are rejected. References are explicit and shallow:
+scenario to robot/world, robot to sensor. Sensor profiles cannot recursively include
+other profiles. Symlinks follow filesystem semantics; this is not a filesystem sandbox.
+
+`loadScenario` records resolved source paths in first-use order. It returns native
+parameters and model factories, with no retained YAML nodes, file handles, or source
+references needed for execution. Tests remove the files after loading and then
+construct/run multiple instances. Source content hashes, installed resource search
+roots, and a portable serialized resolved manifest remain future work.
+
+## Physical and run fields
+
+`vehicle` uses the field names shown in `content/robots/synthetic_auv.yaml`:
+`mass_kg`, inertia/added-mass/damping, `quadratic_damping`, `displaced_volume_m3`,
+`buoyancy_center_m`, `buoyancy_radii_m`, `collision_radius_m`, `command_timeout_s`,
+and `thrusters`. Every thruster declares its ID, position/direction, delay, rise/fall,
+slew rate, and forward/reverse limits. Offsets are from COM in body coordinates.
+
+For each matrix choose exactly one representation:
+
+| Diagonal vector | Full matrix (sequence of rows) | Size |
+| --- | --- | --- |
+| `inertia_diagonal` | `inertia_matrix` | 3 × 3 |
+| `added_mass_diagonal` | `added_mass_matrix` | 6 × 6 |
+| `linear_damping_diagonal` | `linear_damping_matrix` | 6 × 6 |
+
+Optional `damping_center_m` defaults to zero. Physical invariants, including matrix
+symmetry/definiteness requirements, are validated by the plant constructors rather
+than duplicated in the loader. `pool` declares `length_m`, `width_m`, `depth_m`,
+`water_level_m`, `water_density_kg_m3`, and `current_m_s`. Surface pressure must be
+positive; it affects the pressure environment, not sensor calibration.
+
+`initial` contains position, body-to-world `orientation_wxyz`, and body-frame linear
+and angular velocity. Commands use strictly increasing integer `tick` and `forces_n`
+in robot thruster order; their ticks must precede `ticks`. `seed` is an unsigned
+64-bit decimal integer. Periods and elapsed time use integer nanoseconds; the loader
+rejects duration/elapsed-time overflow. The existing [plant contracts](PLANT.md)
+and [sensor runtime contracts](SENSOR_RUNTIME.md) define numerical behavior.
+
+## Device declaration
+
+Every robot sensor entry requires `id`, `frame`, `period_ns`, and `mount`. Mounts
+contain `position_m` and sensor-to-body `orientation_wxyz`. Device IDs are unique;
+frames are nonempty labels, not resolved transform graph nodes.
+
+Optional schedule fields are `latency_ns` (default 0), `capacity` (64 entries in each
+queue), and `overflow` (`fail` by default, or explicit `drop_oldest`). Periods must
+be at least one physics timestep. See the runtime document for quantization and
+queue behavior.
+
+Choose either `profile: ../sensors/imu.yaml` or inline `model` plus `parameters`.
+Combining a reference with inline parameters is rejected; there are no hidden merge
+rules or overrides. All models require a parameters mapping, even when it is `{}`.
+
+| Model | Parameters (optional unless stated otherwise) |
+| --- | --- |
+| `imu` | `acceleration_noise`, `gyro_noise` |
+| `fog` | Required `axes`: one to three unit vectors in sensor coordinates; `gyro_noise` |
+| `dvl` | `bottom_axis` (default sensor −Z), `minimum_range_m` (0.1), `maximum_range_m` (50), `velocity_noise` |
+| `pressure` | `noise`, `reference_pressure_pa` (101325), `reference_density_kg_m3` (1000), `reference_gravity_m_s2` (9.80665), `minimum_pressure_pa` (0), `maximum_pressure_pa` (10000000) |
+
+Noise mappings allow `bias`, `white_stddev`, and `walk_stddev`, defaulting to zero.
+Use three-element vectors for IMU/FOG/DVL and scalars for pressure. Units are the
+measurement's units, per-acquisition standard deviation, and standard deviation per
+sqrt(second), respectively. Pressure calibration intentionally remains independent
+of the world's density and atmospheric pressure. DVL uses the resolved world's
+finite pool-floor query; pressure uses its planar hydrostatic environment.
+
+Camera/stereo/sonar model names are currently rejected as unsupported. Their future
+adapters must register concrete decoders and model factories rather than create
+nonfunctional entries that appear to be supported.
+
+## C++ construction and extensions
+
+```cpp
+#include <robotics/config/scenario.hpp>
+#include <robotics/sensors/readings.hpp>
+
+auto scenario = robotics::config::loadScenario("content/examples/profile_pool.yaml");
+auto runtime = robotics::config::makeRuntime(scenario);
+auto pressure = runtime->stream<robotics::sensors::PressureReading>("pressure");
+runtime->advance(25);
+auto samples = pressure->drain();
+runtime->reset(scenario.initial, scenario.seed);
+```
+
+The complete installed consumer is in `examples/profiles`:
+
+```sh
+cmake -S examples/profiles -B build/profile-demo -DCMAKE_PREFIX_PATH="$PWD/install"
+cmake --build build/profile-demo
+./build/profile-demo/profile_demo install/share/robotics_platform/examples/profile_pool.yaml
+```
+
+Link `RoboticsPlatform::config`. The optional config library depends on sensors
+and privately on yaml-cpp; numerical/sensor libraries still require neither YAML
+nor ROS. `RP_BUILD_CLI=OFF` omits the loader and runner.
+
+A resolved `SensorPlan` contains a device, model label, and a typed attachment
+factory. `makeRuntime` supplies the authoritative device and resolved world values;
+the factory owns typed model configuration and attaches its device to the runtime.
+Factories must register their declared device once and must not retain references
+to constructor arguments or reenter the runtime. Every runtime owns freshly reset
+models. Applications can compose their own C++ factories/models without changing
+a sensor-kind enum. Typed `stream<Reading>(id)` lookup checks the stored type and
+rejects unknown IDs or mismatches, including after configuration-based construction.
+
+Native YAML decoders and CSV exporters currently register the four built-in families
+at the configuration/application edges. Extending YAML support requires a compiled
+decoder in that edge layer; there is no public dynamic plugin loader or Python model
+registration yet. The model label selects decoding/export only, not acquisition or
+physics. Public payloads remain typed. The internal `std::any` holds typed stream
+handles for checked lookup, never measurement values or arbitrary parameter maps.
+
+## Sensor CSV
+
+`--sensors PATH` writes a long-form CSV alongside trajectory stdout. Each delivered
+sample generates named field rows containing generation, device/frame, sequence,
+physics tick, scheduled/acquired/delivered nanoseconds, validity/reason, field, unit,
+and value. IMU/DVL vectors use `.x/.y/.z`; covariance fields use `.row.column`.
+FOG rates use configured axis indices. Pressure exports absolute pressure, depth,
+and both variances. An unavailable reading produces one row with its reason and
+an empty field/unit/value, not valid zeros. Strings are CSV-escaped.
+
+The runner drains every device each tick whether recording is enabled or not.
+This keeps observer choice from affecting acquisition/noise and bounds ready queues.
+Pending queues still obey their configured capacity and overflow policy. At run
+end, samples awaiting latency remain pending; the runner does not advance extra
+time to flush them. The shipped example ends with 300 IMU, 150 FOG, 29 delivered DVL,
+and 60 pressure acquisitions. Output writes/flushes are checked. The output may
+replace an existing CSV, but cannot overwrite a source profile (including aliases).
+
+This CSV is a diagnostic export, not a general recording/playback protocol, frame
+graph, or viewer transport. It does not replace direct typed API access.

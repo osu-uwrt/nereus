@@ -1,0 +1,10 @@
+schema_version: 1
+kind: world
+surface_pressure_pa: 101325
+pool:
+  length_m: 20
+  width_m: 10
+  depth_m: 5
+  water_level_m: 0
+  water_density_kg_m3: 1000
+  current_m_s: [0, 0, 0]

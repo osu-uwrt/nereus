@@ -17,7 +17,7 @@ It refines the [architecture plan](ARCHITECTURE_PLAN.md); it does not add an RL 
 | FOG | Angular rate for configured measurement axis/axes, with uncertainty and bias/drift settings. | Independent gyro model; not hardcoded to Talos yaw or a particular ROS message. |
 
 Every family supports independently identified instances. Zero sensors is valid;
-no robot is required to have a particular camera name, IMU, DVL, or FOG. Device
+no robot is required to have a particular camera name, IMU, DVL, FOG, or pressure sensor. Device
 calibration and noise settings belong to profiles; manufacturer protocols belong
 to optional adapters. Synthetic defaults must be labeled as estimates and should
 not be described as calibrated hardware fidelity.
@@ -88,7 +88,7 @@ camera models or loading the physics runtime.
 
 ## Acceptance checks and sequence
 
-Phase 2 implements scheduling, sample contracts, seeded state, IMU, DVL, and FOG
+Phase 2 implements scheduling, sample contracts, seeded state, IMU, DVL, FOG, and pressure/depth
 models. Define camera/stereo contracts in that phase; actual camera acquisition
 arrives with offscreen rendering in phase 5B. Basic DVL geometry queries must work
 against the standalone world, including explicit out-of-range/no-bottom results.
@@ -97,6 +97,7 @@ against the standalone world, including explicit out-of-range/no-bottom results.
 | --- | --- |
 | IMU | At-rest gravity convention, known translation/rotation, mounting rotation and offset effects, uncertainty, and reproducible noise/bias reset. |
 | DVL | Known motion relative to a stationary bottom, sensor mount/rotation, configured operating range and lock loss, invalid samples, and uncertainty. |
+| Pressure/depth | Hydrostatic pressure and mounted depth, atmospheric/surface behavior, separate calibration, noise/reset, uncertainty propagation, operating limits, and unavailable environment. |
 | FOG | Known positive/negative rotation projected onto configured axes, independent instance rates, bias/drift/reset, and no privileged attitude substitution. |
 | Camera | Calibration/projection and optical-frame checks, acquisition timestamps, offscreen output independent of viewer appearance and subscribers. |
 | Stereo | Baseline/extrinsic and disparity geometry, pair identity/timing under delayed completion, dropped-member handling, and clear ideal-versus-derived outputs. |
