@@ -57,6 +57,8 @@ Current physics uses a spherical pool contact proxy; the viewer draws line geome
 - [ ] Capture fixed-camera, fixed-time renderer reference images (above/below water,
   indoor/outdoor, reflections, shadows, tags/holes, props, payloads, sensor cameras).
 - [ ] Record representative physics/contact/camera/UI rates and startup/resource use.
+- [x] Record a repeatable current-machine synthetic headless baseline with machine,
+  build and content identity (PERFORMANCE.md); full Talos/graphics baseline remains open.
 - [ ] Inventory all reachable RepairCompTree descendants and their success evidence.
 
 ## B. Simulation and viewer connection

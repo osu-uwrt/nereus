@@ -1,0 +1,77 @@
+{
+  "scope": "Bundled headless scenario; no renderer/cameras/ROS/tasks. Construction excluded; 3 warmup runs per mode.",
+  "machine": {
+    "platform": "Linux-6.5.0-1013-apple-arm-aarch64-with-glibc2.35",
+    "cpu": [
+      {
+        "field": "Architecture:",
+        "data": "aarch64"
+      },
+      {
+        "field": "CPU(s):",
+        "data": "10"
+      },
+      {
+        "field": "Vendor ID:",
+        "data": "Apple"
+      },
+      {
+        "field": "CPU max MHz:",
+        "data": "2064.0000"
+      },
+      {
+        "field": "CPU max MHz:",
+        "data": "3228.0000"
+      }
+    ]
+  },
+  "build": {
+    "CMAKE_BUILD_TYPE": "Release",
+    "CMAKE_CXX_COMPILER": "/usr/bin/c++",
+    "CMAKE_CXX_FLAGS": "",
+    "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG"
+  },
+  "revision": "dd3b14131482cb4a2226d8ebb334447cdbc18d56",
+  "worktree_diff_sha256": "7582cc2ed10c76fe6a35c7f37385da4be80ca9be6a5c39e402d571caba8cf441",
+  "executable_sha256": "aea387c26b7f9370386a82ee4df772deda85759b1fa37d7cf7dd0953914f635f",
+  "benchmark_driver_sha256": "09be54f1e0dcb8484676365dce7bb232d78093193f9a2e456ab4f2895fec55a1",
+  "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "build_cache_sha256": "9984dfbf4737c8ba6e217c7172521284902772d0d9e6a19b7c1f913dcd2b4eab",
+  "content_sha256": {
+    "content/examples/empty_pool.yaml": "3485ad548ce7499106e1958abba3fa53f7970b9232e82680ce3b1c6603bf96df",
+    "content/examples/profile_pool.yaml": "cfe9f1b83b0d52ccffddf9de742d1fc795ec0bc39f764edd47471c9984e16248",
+    "content/robots/synthetic_auv.yaml": "daee52e1d17abc1859ecb62e78dd321f17ed30b5a6bd0fee56feda10457110d4",
+    "content/sensors/imu.yaml": "35bb652b181bfab9a7c07c55ddced8923d002fe696859ef9c5c9986bd4ff8aaf",
+    "content/worlds/empty_pool.yaml": "2337b1d3c72714fa38b4841354dcecb0d743ee3e1779f5aa00c0629ee464d824"
+  },
+  "scenario": "content/examples/profile_pool.yaml",
+  "iterations": 1000,
+  "measurements": [
+    {
+      "mode": "plant",
+      "measured_ticks": 1500000,
+      "mean_us": 1.291332403,
+      "p50_us": 1.25,
+      "p95_us": 1.292,
+      "p99_us": 1.334,
+      "max_us": 52.083,
+      "wall_seconds": 1.981259014,
+      "simulated_seconds": 3000,
+      "real_time_factor": 1514.188695,
+      "final_position_checksum": 7616.478333
+    },
+    {
+      "mode": "plant_and_scheduled_sensors",
+      "measured_ticks": 1500000,
+      "mean_us": 1.871162621,
+      "p50_us": 1.708,
+      "p95_us": 2.459,
+      "p99_us": 2.917,
+      "max_us": 43.125,
+      "wall_seconds": 2.850678342,
+      "simulated_seconds": 3000,
+      "real_time_factor": 1052.381097,
+      "final_position_checksum": 7616.478333
+    }
+  ]
+}

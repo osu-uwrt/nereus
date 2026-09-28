@@ -349,3 +349,18 @@ Talos mesh/materials, moving thrusters/rotors, LEDs and other status/mechanism v
 and the same RoboSub 2026 pool/task/prop models and water/UI behavior. These are
 recorded as open checks, not implemented features. Subsequent work should close
 those concrete replacement gaps rather than add unrelated generic viewer features.
+
+## Provisional headless performance baseline
+
+An optional Release benchmark now measures plant and plant-plus-scheduled-sensor
+cost independently of rendering, output and ROS. The recording tool retains
+machine/build/content/executable identity and rejects mismatched final trajectory
+checksums. See [PERFORMANCE.md](PERFORMANCE.md) and its checked JSON record.
+
+On this Apple/aarch64 machine, 1.5 million measured ticks per mode gave plant p99
+1.334 microseconds and plant+IMU/FOG/DVL/pressure p99 2.917 microseconds. The latter
+completed 3,000 simulated seconds in 2.851 measured seconds. These are repeated
+synthetic scenarios with construction excluded, not Talos/contact/task/camera or
+full-stack results. Maximum observed tick latency was also recorded; no hard-real-time
+or other-hardware guarantee is implied. Release compilation, configured static
+analysis, formatting and the recording tool's lint/checksum checks passed.
