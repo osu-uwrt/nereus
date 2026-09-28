@@ -483,3 +483,23 @@ A same-machine1.5-million-tick benchmark measured plant p99 6.791 microseconds;
 the runtime-wrapper mode p99 was5.5 microseconds with zero scheduled devices.
 The wrapper completed3000 simulated seconds in6.872 measured seconds. This excludes
 camera/renderer/task/ROS costs and does not establish full-stack performance.
+
+## Independent original Talos dynamics reference
+
+The native Talos pack now matches an independently built pinned-original reference
+at every tick of three 1500-step cases: startup pool contact, moving partial
+immersion and floor approach. All 4503 states compare 27 values, including the
+eight realized thruster forces and COM/angular accelerations, with a maximum
+absolute error tolerance of1e-9 against one complete original compiler candidate.
+The capture reads original Git objects independently of the native importer. See
+[TALOS_DYNAMICS.md](reference/TALOS_DYNAMICS.md) for reproduction and scope.
+
+All95 Release tests, formatting and dependency checks passed. The expanded
+Talos comparison also passed under ASan/UBSan without diagnostics. Independent
+read-only review verified the every-tick coverage, complete-candidate comparison,
+finite values and recorded source/driver/capture/fixture hashes. No production
+or binding code changed in this increment.
+
+This closes the bounded assembled-physics comparison, not full simulator parity.
+Sensor reporting, original rendered assets/animation (including LEDs), mechanisms,
+tasks and full-stack operation remain open, in that simulator-first order.

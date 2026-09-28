@@ -88,3 +88,15 @@ source/output/importer hashes are in `reference/talos_physics_sources.json`.
 See `reference/TALOS_PHYSICS_PACK.md` for reproduction and limits. These project
 sources retain the unresolved source/asset license review requirement before public
 redistribution; local implementation continues under the user's authorization.
+
+## Independent Talos trajectory reference
+
+`tools/capture_talos_reference.py` and `tools/reference/talos_driver.cpp` build the
+pinned original pure numerical kernels with extracted stage forcing, RK4 and
+static-box collision methods. Physical inputs come independently from original
+vehicle/hydrodynamics/world/mapping/URDF Git objects; the native importer and its
+outputs are not reference inputs. Source, driver, capture script and fixture hashes
+are recorded in `tests/fixtures/legacy_talos{,_unoptimized}.json`, alongside compiler
+identity and flags. The fixtures contain every tick of three scripted trajectories.
+See [TALOS_DYNAMICS.md](reference/TALOS_DYNAMICS.md) for scope and reproduction.
+Original source license status remains as described above.

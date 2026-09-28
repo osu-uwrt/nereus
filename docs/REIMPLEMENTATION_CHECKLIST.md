@@ -78,8 +78,10 @@ the viewer still draws line geometry.
 
 - [ ] Standalone Talos physical parameters, frames/mounts, thrusters and device models.
 - [x] Pinned native Talos dynamics/mount pack, eight thrusters and original hull/pool
-  proxies load independently (reference/TALOS_PHYSICS_PACK.md). Devices and original
-  full-Talos trajectory comparisons remain open.
+  proxies load independently (reference/TALOS_PHYSICS_PACK.md). Devices remain open.
+- [x] Independent original Talos dynamics capture: startup contact, partial immersion
+  and floor approach, every tick of three 1500-step runs, including realized forces
+  and accelerations (reference/TALOS_DYNAMICS.md). Full mission parity remains open.
 - [ ] Preserve COM/base_link/CAD frame conversions and offset velocity/acceleration.
 - [x] Shared rigid transforms, named native sensor mounts and immutable live viewer
   mounts; rotated mount equivalence and Talos COM/CAD/base offset algebra verified.
@@ -182,8 +184,9 @@ selected live-robot workflows required here.
 3. Stage forcing and actuator calibration/stop interfaces are verified in their
    bounded reference/contracts. Static compound contacts are integrated and validated.
    Named body mounts are now resolved for sensors and live visualization. Next:
-   original whole-Talos trajectory capture against the delivered physics/mount pack,
-   sensor reporting fidelity, then original neutral scene/assets.
+   sensor reporting fidelity, then original neutral scene/assets. The original Talos
+   dynamics capture now covers every tick of the three bounded physics cases;
+   task/prop contacts and full mission references remain open.
 4. Re-evaluate this order after each validated commit against concrete dependencies.
 
 For every increment: state its acceptance target, implement, test appropriate

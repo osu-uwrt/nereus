@@ -35,8 +35,11 @@ This is a physics/mount slice, not the complete Talos simulator replacement:
 Native tests verify selected source values, full thruster ordering, original source
 angle conventions, COM/CAD/base/device offsets, raw effective collision origins,
 pool geometry and independent deterministic execution after source removal. The
-1500-step example produces finite states. These checks do not establish complete
-Talos numerical parity; an independent pinned-original trajectory capture is next.
+1500-step example produces finite states. An independent pinned-original capture now
+compares every tick of three three-second trajectories (4503 states, including the
+initial states). See [TALOS_DYNAMICS.md](TALOS_DYNAMICS.md) for reproduction,
+optimization sensitivity and the bounded numerical acceptance scope. Sensors, course
+contacts and mechanisms remain outside this comparison.
 
 ## Reproduce the offline conversion
 
