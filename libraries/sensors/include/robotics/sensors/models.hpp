@@ -34,16 +34,25 @@ class Noise3 {
     std::normal_distribution<double> normal_;
 };
 
+struct ImuReporting {
+    // Measurement-only gravity calibration; direction still comes from the environment.
+    std::optional<double> gravity_magnitude; // m/s^2; absent uses physical gravity unchanged.
+    // Optional sensor-frame diagonal variances, independent of generated noise.
+    std::optional<Eigen::Vector3d> force_variance, angular_variance;
+};
+
 class Imu {
   public:
     using Reading = ImuReading;
-    explicit Imu(Mount mount = {}, NoiseParameters acceleration = {}, NoiseParameters gyro = {});
+    explicit Imu(Mount mount = {}, NoiseParameters acceleration = {}, NoiseParameters gyro = {},
+                 ImuReporting reporting = {});
     void reset(std::uint64_t seed, const std::string &id);
     Measurement<Reading> sample(const simulation::MotionSample &, double elapsed_seconds);
 
   private:
     Mount mount_;
     Noise3 acceleration_, gyro_;
+    ImuReporting reporting_;
 };
 
 class Fog {

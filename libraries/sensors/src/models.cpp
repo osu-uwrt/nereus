@@ -86,9 +86,16 @@ Eigen::Matrix3d Noise3::covariance() const {
         .asDiagonal();
 }
 
-Imu::Imu(Mount mount, NoiseParameters acceleration, NoiseParameters gyro)
-    : mount_(std::move(mount)), acceleration_(std::move(acceleration)), gyro_(std::move(gyro)) {
+Imu::Imu(Mount mount, NoiseParameters acceleration, NoiseParameters gyro, ImuReporting reporting)
+    : mount_(std::move(mount)), acceleration_(std::move(acceleration)), gyro_(std::move(gyro)),
+      reporting_(std::move(reporting)) {
     normalizeMount(mount_);
+    if (reporting_.gravity_magnitude &&
+        (!std::isfinite(*reporting_.gravity_magnitude) || *reporting_.gravity_magnitude <= 0))
+        throw std::invalid_argument("IMU reported gravity magnitude must be positive and finite");
+    for (const auto *variance : {&reporting_.force_variance, &reporting_.angular_variance})
+        if (*variance && (!(**variance).allFinite() || ((**variance).array() < 0).any()))
+            throw std::invalid_argument("IMU reported variances must be finite and nonnegative");
 }
 void Imu::reset(std::uint64_t seed, const std::string &id) {
     acceleration_.reset(seed, id, "imu.acceleration");
@@ -107,18 +114,28 @@ Measurement<Imu::Reading> Imu::sample(const simulation::MotionSample &motion,
         throw std::invalid_argument("IMU requires finite acceleration and gravity");
     }
     const auto &body = motion.state.body;
+    Eigen::Vector3d gravity = motion.gravity_world;
+    if (reporting_.gravity_magnitude) {
+        const double magnitude = gravity.stableNorm();
+        if (!std::isfinite(magnitude) || magnitude <= 0)
+            throw std::invalid_argument("IMU gravity calibration requires a gravity direction");
+        gravity = (gravity / magnitude) * *reporting_.gravity_magnitude;
+    }
     const Eigen::Vector3d acceleration =
         motion.acceleration_body + motion.angular_acceleration_body.cross(mount_.position_body) +
         body.angular_velocity.cross(body.angular_velocity.cross(mount_.position_body));
     Reading result;
-    result.specific_force =
-        mount_.sensor_to_body.conjugate() *
-            (acceleration - body.orientation.conjugate() * motion.gravity_world) +
-        acceleration_noise;
+    result.specific_force = mount_.sensor_to_body.conjugate() *
+                                (acceleration - body.orientation.conjugate() * gravity) +
+                            acceleration_noise;
     result.angular_velocity =
         mount_.sensor_to_body.conjugate() * body.angular_velocity + gyro_noise;
     result.force_covariance = acceleration_.covariance();
     result.angular_covariance = gyro_.covariance();
+    if (reporting_.force_variance)
+        result.force_covariance = reporting_.force_variance->asDiagonal();
+    if (reporting_.angular_variance)
+        result.angular_covariance = reporting_.angular_variance->asDiagonal();
     if (!result.specific_force.allFinite() || !result.angular_velocity.allFinite()) {
         throw std::overflow_error("IMU measurement overflow");
     }

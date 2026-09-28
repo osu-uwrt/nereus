@@ -33,10 +33,22 @@ sensors::Nanoseconds duration(const YAML::Node &node, const char *key, const std
     return sensors::Nanoseconds(value);
 }
 Attach imu(const sensors::Mount &mount, const YAML::Node &node, const std::string &field) {
-    keys(node, {"acceleration_noise", "gyro_noise"}, field);
+    keys(node, {"acceleration_noise", "gyro_noise", "reporting"}, field);
+    sensors::ImuReporting reporting;
+    if (node["reporting"]) {
+        const auto r = node["reporting"];
+        const auto path = field + ".reporting";
+        keys(r, {"gravity_magnitude_m_s2", "force_variance", "angular_variance"}, path);
+        if (r["gravity_magnitude_m_s2"])
+            reporting.gravity_magnitude = number(r, "gravity_magnitude_m_s2", path);
+        if (r["force_variance"])
+            reporting.force_variance = vector(r, "force_variance", 3, path);
+        if (r["angular_variance"])
+            reporting.angular_variance = vector(r, "angular_variance", 3, path);
+    }
     const sensors::Imu model(mount,
                              noise(node["acceleration_noise"], field + ".acceleration_noise"),
-                             noise(node["gyro_noise"], field + ".gyro_noise"));
+                             noise(node["gyro_noise"], field + ".gyro_noise"), reporting);
     return [model](auto &runtime, const auto &device, const auto &, double) {
         runtime.add(device, model);
     };

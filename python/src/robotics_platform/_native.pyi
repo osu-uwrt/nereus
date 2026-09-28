@@ -311,12 +311,25 @@ class HydrostaticPressure:
         gravity: float = ...,
     ) -> None: ...
 
+class ImuReporting:
+    def __init__(self) -> None: ...
+    gravity_magnitude: float | None
+    @property
+    def force_variance(self) -> FloatArray | None: ...
+    @force_variance.setter
+    def force_variance(self, value: ArrayLike | None) -> None: ...
+    @property
+    def angular_variance(self) -> FloatArray | None: ...
+    @angular_variance.setter
+    def angular_variance(self, value: ArrayLike | None) -> None: ...
+
 class Imu:
     def __init__(
         self,
         mount: Mount = ...,
         acceleration_noise: NoiseParameters = ...,
         gyro_noise: NoiseParameters = ...,
+        reporting: ImuReporting = ...,
     ) -> None: ...
 
 class Fog:

@@ -94,11 +94,29 @@ motion sampling until reset.
 **IMU:** reports sensor-frame angular velocity and specific force. For offset `r`,
 point acceleration is `a_COM + alpha × r + omega × (omega × r)`; specific force
 subtracts gravity before rotating to the sensor frame and applying sensor noise.
-An aligned supported body at rest reads +9.80665 m/s² on Z; free fall reads zero.
+With default reporting, an aligned supported body at rest reads +9.80665 m/s²
+on Z; free fall reads zero.
 This follows the raw measurement convention described in
 [REP-145](https://raw.githubusercontent.com/ros-infrastructure/rep/master/rep-0145.rst),
 without depending on ROS. No orientation estimate is fabricated. When acceleration
 is unavailable, the whole IMU reading is unavailable; noise history still advances.
+
+`ImuReporting` optionally replaces only the gravity magnitude used in the
+specific-force calculation; its direction comes from the environment. It never
+scales inertial acceleration, lever-arm terms or noise, and never changes physical
+gravity. Calibration requires a positive finite magnitude and a nonzero finite
+environmental gravity direction. Without calibration, zero-gravity input remains
+valid. Original Talos calibration 9.755455 gives that value at upright rest and
+−0.051195 m/s² in physical free fall under 9.80665 gravity: an intentional reporting
+residual, not a change to vehicle motion.
+
+Optional `force_variance` and `angular_variance` are nonnegative finite diagonal
+variances in sensor axes. They override reported covariance independently of noise
+amplitude and random-walk state. Zero variance is valid; absent values retain noise
+covariance behavior. Model construction owns the settings; reset preserves them
+while restarting random streams. Python `ImuReporting` exposes the same optional
+values (`None` means absent), with copied arrays. Original attitude estimates/yaw
+drift remain a separate future output rather than being attached to raw IMU data.
 
 **FOG:** projects angular rate and its covariance onto one to three configured unit
 axes in the sensor frame. Axes can be nonorthogonal, with corresponding covariance.

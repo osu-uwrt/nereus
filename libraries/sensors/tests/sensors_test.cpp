@@ -98,6 +98,92 @@ TEST(Imu, ContactIsUnavailableWithoutFreezingNoiseHistory) {
               continuous.sample(motion(), 0.1).value->specific_force);
 }
 
+TEST(Imu, ReportedGravityPreservesInertialAccelerationAndMountGeometry) {
+    ImuReporting reporting;
+    reporting.gravity_magnitude = 9.755455;
+    auto input = motion();
+    Imu upright({}, {}, {}, reporting);
+    EXPECT_DOUBLE_EQ(upright.sample(input, .01).value->specific_force.z(), 9.755455);
+    input.acceleration_body = input.gravity_world;
+    EXPECT_NEAR(upright.sample(input, .01).value->specific_force.z(), -.051195, 1e-12);
+    Mount mount;
+    mount.position_body = {.2, -.1, .3};
+    mount.sensor_to_body = Eigen::AngleAxisd(.7, Eigen::Vector3d::UnitX());
+    input.state.body.orientation = Eigen::AngleAxisd(-.9, Eigen::Vector3d::UnitY());
+    input.acceleration_body = {1, 2, 3};
+    input.angular_acceleration_body = {.3, .4, -.1};
+    input.state.body.angular_velocity = {2, -3, 4};
+    Imu calibrated(mount, {}, {}, reporting), physical(mount);
+    const auto actual = calibrated.sample(input, .01).value.value();
+    const auto original = physical.sample(input, .01).value.value();
+    const Eigen::Vector3d expected_correction =
+        mount.sensor_to_body.conjugate() *
+        (input.state.body.orientation.conjugate() * Eigen::Vector3d(0, 0, -.051195));
+    EXPECT_TRUE(
+        (actual.specific_force - original.specific_force).isApprox(expected_correction, 1e-11));
+    EXPECT_EQ(actual.angular_velocity, original.angular_velocity);
+    // Calibration follows environmental direction, not a hardcoded world Z axis.
+    input = motion();
+    input.gravity_world = {-3, 0, 0};
+    EXPECT_EQ(upright.sample(input, .01).value->specific_force, Eigen::Vector3d(9.755455, 0, 0));
+}
+
+TEST(Imu, ReportedVariancesDoNotChangeNoiseHistoryOrReset) {
+    ImuReporting reporting;
+    reporting.force_variance = Eigen::Vector3d(.01, .02, .03);
+    reporting.angular_variance = Eigen::Vector3d(0, .04, .05);
+    Mount mount;
+    mount.sensor_to_body = Eigen::AngleAxisd(.7, Eigen::Vector3d::UnitX());
+    Imu reported(mount, noisy(), noisy(), reporting), generated(mount, noisy(), noisy());
+    std::vector<Eigen::Vector3d> first;
+    for (int replay = 0; replay < 2; ++replay) {
+        reported.reset(42, "device");
+        generated.reset(42, "device");
+        for (int i = 0; i < 20; ++i) {
+            const auto a = reported.sample(motion(), .02).value.value();
+            const auto b = generated.sample(motion(), .02).value.value();
+            EXPECT_EQ(a.specific_force, b.specific_force);
+            EXPECT_EQ(a.angular_velocity, b.angular_velocity);
+            EXPECT_EQ(a.force_covariance, Eigen::Matrix3d(reporting.force_variance->asDiagonal()));
+            EXPECT_EQ(a.angular_covariance,
+                      Eigen::Matrix3d(reporting.angular_variance->asDiagonal()));
+            EXPECT_NE(a.force_covariance, b.force_covariance);
+            if (replay == 0)
+                first.push_back(a.specific_force);
+            else
+                EXPECT_EQ(a.specific_force, first[i]);
+        }
+    }
+    // Reported uncertainty also survives noise-disabled acquisition.
+    Imu noiseless({}, {}, {}, reporting);
+    EXPECT_EQ(noiseless.sample(motion(), .01).value->force_covariance,
+              Eigen::Matrix3d(reporting.force_variance->asDiagonal()));
+}
+
+TEST(Imu, RejectsInvalidReportingAndUndefinedGravityDirection) {
+    ImuReporting reporting;
+    for (const double invalid : {0., -1., std::numeric_limits<double>::infinity(),
+                                 std::numeric_limits<double>::quiet_NaN()}) {
+        reporting.gravity_magnitude = invalid;
+        EXPECT_THROW((Imu({}, {}, {}, reporting)), std::invalid_argument);
+    }
+    reporting.gravity_magnitude = 9.755455;
+    for (const double invalid :
+         {-1., std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()}) {
+        reporting.force_variance = Eigen::Vector3d(0, invalid, 0);
+        EXPECT_THROW((Imu({}, {}, {}, reporting)), std::invalid_argument);
+        reporting.force_variance.reset();
+        reporting.angular_variance = Eigen::Vector3d(0, 0, invalid);
+        EXPECT_THROW((Imu({}, {}, {}, reporting)), std::invalid_argument);
+        reporting.angular_variance.reset();
+    }
+    auto input = motion();
+    input.gravity_world.setZero();
+    Imu calibrated({}, {}, {}, reporting), physical;
+    EXPECT_THROW(calibrated.sample(input, .01), std::invalid_argument);
+    EXPECT_EQ(physical.sample(input, .01).value->specific_force, Eigen::Vector3d::Zero());
+}
+
 TEST(Fog, ProjectsSignedRatesAndCovarianceOntoConfiguredAxes) {
     Mount mount;
     mount.sensor_to_body = Eigen::AngleAxisd(std::acos(-1.0) / 2, Eigen::Vector3d::UnitZ());

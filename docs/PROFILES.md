@@ -92,7 +92,7 @@ rules or overrides. All models require a parameters mapping, even when it is `{}
 
 | Model | Parameters (optional unless stated otherwise) |
 | --- | --- |
-| `imu` | `acceleration_noise`, `gyro_noise` |
+| `imu` | `acceleration_noise`, `gyro_noise`, `reporting` |
 | `fog` | Required `axes`: one to three unit vectors in sensor coordinates; `gyro_noise` |
 | `dvl` | `bottom_axis` (default sensor −Z), `minimum_range_m` (0.1), `maximum_range_m` (50), `velocity_noise` |
 | `pressure` | `noise`, `reference_pressure_pa` (101325), `reference_density_kg_m3` (1000), `reference_gravity_m_s2` (9.80665), `minimum_pressure_pa` (0), `maximum_pressure_pa` (10000000) |
@@ -103,6 +103,24 @@ measurement's units, per-acquisition standard deviation, and standard deviation 
 sqrt(second), respectively. Pressure calibration intentionally remains independent
 of the world's density and atmospheric pressure. DVL uses the resolved world's
 finite pool-floor query; pressure uses its planar hydrostatic environment.
+
+IMU `reporting` optionally contains `gravity_magnitude_m_s2` (positive finite scalar),
+`force_variance` (three nonnegative finite variances in (m/s²)²), and
+`angular_variance` (three nonnegative finite variances in (rad/s)²). These are
+measurement settings: gravity calibration preserves the environment's gravity
+direction and never modifies plant dynamics. Reported variances are diagonal in
+sensor axes and independent of generated noise; omitted variances use the noise
+model's evolving covariance. For example, the original Talos raw inertial reporting
+can be expressed as:
+
+```yaml
+reporting:
+  gravity_magnitude_m_s2: 9.755455
+  force_variance: [0.01, 0.01, 0.01]
+  angular_variance: [0.01, 0.01, 0.01]
+```
+
+This does not add an attitude estimate or configure a complete Talos device.
 
 Camera/stereo/sonar model names are currently rejected as unsupported. Their future
 adapters must register concrete decoders and model factories rather than create

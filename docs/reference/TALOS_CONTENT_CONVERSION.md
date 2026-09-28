@@ -93,3 +93,6 @@ It cannot stand in for the default competition configuration or its acceptance t
 The companion [visual content audit](VISUAL_CONTENT_CONVERSION.md) identifies the
 exact body/rotor/LED/mechanism/course resources, transform equivalence, import
 repairs and provenance requirements for replacing the original appearance.
+
+The [sensor reporting map](TALOS_SENSOR_CONVERSION.md) records resolved calibration,
+noise/covariance distinctions and remaining declared model/adapter conversions.

@@ -79,6 +79,10 @@ void bindSensors(py::module_ &m) {
     valueProperty(noise, "bias", &NoiseParameters::bias);
     valueProperty(noise, "white_stddev", &NoiseParameters::white_stddev);
     valueProperty(noise, "walk_stddev", &NoiseParameters::walk_stddev);
+    auto reporting = py::class_<ImuReporting>(m, "ImuReporting").def(py::init<>());
+    valueProperty(reporting, "gravity_magnitude", &ImuReporting::gravity_magnitude);
+    valueProperty(reporting, "force_variance", &ImuReporting::force_variance);
+    valueProperty(reporting, "angular_variance", &ImuReporting::angular_variance);
     py::class_<ScalarNoiseParameters>(m, "ScalarNoiseParameters")
         .def(py::init<>())
         .def_readwrite("bias", &ScalarNoiseParameters::bias)
@@ -104,10 +108,10 @@ void bindSensors(py::module_ &m) {
         .def(py::init<double, double, double, double>(), py::arg("water_level"),
              py::arg("density") = 1000, py::arg("surface_pressure") = 101325,
              py::arg("gravity") = 9.80665);
-    py::class_<Imu>(m, "Imu").def(py::init<Mount, NoiseParameters, NoiseParameters>(),
-                                  py::arg("mount") = Mount{},
-                                  py::arg("acceleration_noise") = NoiseParameters{},
-                                  py::arg("gyro_noise") = NoiseParameters{});
+    py::class_<Imu>(m, "Imu").def(
+        py::init<Mount, NoiseParameters, NoiseParameters, ImuReporting>(),
+        py::arg("mount") = Mount{}, py::arg("acceleration_noise") = NoiseParameters{},
+        py::arg("gyro_noise") = NoiseParameters{}, py::arg("reporting") = ImuReporting{});
     py::class_<Fog>(m, "Fog").def(py::init<Mount, std::vector<Eigen::Vector3d>, NoiseParameters>(),
                                   py::arg("mount") = Mount{},
                                   py::arg("axes") =

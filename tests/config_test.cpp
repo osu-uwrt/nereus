@@ -103,6 +103,40 @@ TEST_F(Profiles, ResolvedConfigurationSurvivesSourceRemovalAndInstancesReplayInd
     EXPECT_EQ(b->latest()->header.generation, 0U);
 }
 
+TEST_F(Profiles, ImuReportingChangesOnlyMeasurementsAndPreservesOwnedConfiguration) {
+    const auto defaults = robotics::config::loadScenario(scenario());
+    replace("sensors/imu.yaml", "parameters:",
+            "parameters:\n  reporting:\n    gravity_magnitude_m_s2: 9.755455\n"
+            "    force_variance: [0.01, 0.02, 0.03]\n"
+            "    angular_variance: [0.04, 0.05, 0.06]");
+    const auto configured = robotics::config::loadScenario(scenario());
+    std::filesystem::remove_all(root);
+    auto physical = robotics::config::makeRuntime(defaults);
+    auto calibrated = robotics::config::makeRuntime(configured);
+    physical->advance(60);
+    calibrated->advance(60);
+    const auto a = physical->stream<robotics::sensors::ImuReading>("imu")->latest();
+    const auto b = calibrated->stream<robotics::sensors::ImuReading>("imu")->latest();
+    ASSERT_TRUE(a && b && a->measurement.value && b->measurement.value);
+    EXPECT_NEAR(b->measurement.value->specific_force.z() - a->measurement.value->specific_force.z(),
+                -.051195, 1e-12);
+    EXPECT_EQ(b->measurement.value->angular_velocity, a->measurement.value->angular_velocity);
+    EXPECT_EQ(b->measurement.value->force_covariance.diagonal(), Eigen::Vector3d(.01, .02, .03));
+    EXPECT_EQ(b->measurement.value->angular_covariance.diagonal(), Eigen::Vector3d(.04, .05, .06));
+    EXPECT_EQ(physical->observe().body.position, calibrated->observe().body.position);
+    EXPECT_EQ(physical->observe().body.linear_velocity, calibrated->observe().body.linear_velocity);
+}
+
+TEST_F(Profiles, RejectsMalformedImuReporting) {
+    const auto original = read("sensors/imu.yaml");
+    for (const std::string invalid : {"force_variance: [0, -1, 0]", "angular_variance: [0, 1]",
+                                      "gravity_magnitude_m_s2: 0", "unknown: 1"}) {
+        write("sensors/imu.yaml", original);
+        replace("sensors/imu.yaml", "parameters:", "parameters:\n  reporting:\n    " + invalid);
+        EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument) << invalid;
+    }
+}
+
 TEST_F(Profiles, WorldPressureEnvironmentDoesNotOverwriteSensorCalibration) {
     auto low = robotics::config::makeRuntime(robotics::config::loadScenario(scenario()));
     replace("worlds/empty_pool.yaml", "water_level_m: 0", "water_level_m: 1");

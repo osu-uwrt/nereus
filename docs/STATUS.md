@@ -503,3 +503,24 @@ or binding code changed in this increment.
 This closes the bounded assembled-physics comparison, not full simulator parity.
 Sensor reporting, original rendered assets/animation (including LEDs), mechanisms,
 tasks and full-stack operation remain open, in that simulator-first order.
+
+## Explicit raw IMU reporting calibration
+
+`ImuReporting` now provides optional measurement-only gravity magnitude and
+independent sensor-axis acceleration/angular variances through C++, native sensor
+profiles and Python. This expresses the original Talos gravity calibration and
+noise/covariance distinction without changing physical gravity or inventing an
+attitude estimate. Omitted settings preserve existing raw IMU behavior.
+
+All 100 Release tests, installed C++ consumers and all 100 ASan/UBSan tests passed
+without sanitizer diagnostics. The installed Python wheel passed 18 tests, Ruff
+and strict mypy after deleting its build/source copies. Tests cover rotated mounts,
+lever-arm acceleration, calibrated freefall residual, non-Z gravity, independent
+reported covariance, unchanged noise/reset sequences, validation and copied
+configuration ownership. Independent read-only implementation review found no
+blocking issues.
+
+The [Talos sensor conversion map](reference/TALOS_SENSOR_CONVERSION.md) records
+remaining attitude composition, DVL validity, FOG uncertainty and pressure/base-link
+depth policies. Native Talos still has no instantiated devices; full sensor products,
+original visuals/LEDs/mechanisms and mission/stack acceptance remain open.

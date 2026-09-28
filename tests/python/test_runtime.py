@@ -232,6 +232,33 @@ class RuntimeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             runtime.imu_stream("missing")
 
+    def test_imu_reporting_owns_optional_calibration_and_covariance(self) -> None:
+        reporting = rp.ImuReporting()
+        self.assertIsNone(reporting.gravity_magnitude)
+        self.assertIsNone(reporting.force_variance)
+        reporting.gravity_magnitude = 9.755455
+        reporting.force_variance = [0.01, 0.02, 0.03]
+        reporting.angular_variance = [0.04, 0.05, 0.06]
+        copy = reporting.force_variance
+        assert copy is not None
+        copy[:] = 99
+        np.testing.assert_array_equal(reporting.force_variance, [0.01, 0.02, 0.03])
+        runtime = passive()
+        stream = runtime.add(rp.Device("imu", "imu"), rp.Imu(reporting=reporting))
+        reporting.gravity_magnitude = 1
+        reporting.force_variance = None
+        reporting.angular_variance = None
+        self.assertIsNone(reporting.force_variance)
+        runtime.advance(5)
+        sample = stream.latest()
+        assert sample and sample.value
+        np.testing.assert_allclose(sample.value.specific_force, [0, 0, 9.755455], atol=1e-12)
+        np.testing.assert_array_equal(sample.value.force_covariance, np.diag([0.01, 0.02, 0.03]))
+        np.testing.assert_array_equal(sample.value.angular_covariance, np.diag([0.04, 0.05, 0.06]))
+        reporting.angular_variance = [0, -1, 0]
+        with self.assertRaises(ValueError):
+            rp.Imu(reporting=reporting)
+
     def test_quaternion_order_and_mount_rotation_cross_the_binding_correctly(self) -> None:
         state = initial()
         state.orientation_wxyz = [math.sqrt(0.5), 0, math.sqrt(0.5), 0]
