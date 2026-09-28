@@ -194,3 +194,9 @@ has `parent`, `child`, and `pose`. Set whole nested values/arrays, as with other
 copied configuration properties. `from_root(frame)` and `lookup(target, from_frame)`
 return detached poses; `edges` returns a detached list. `scenario.body_frames`
 returns the resolved robot tree whose root denotes COM. See [FRAMES.md](FRAMES.md).
+
+`Pool.origin_xy_world` (a copied two-element array) and `yaw_world` (radians) place
+its finite footprint. `water_level` stays world Z. Sphere contacts and the DVL pool
+provider use that same placement; fluid current vectors remain world-frame.
+Native scenarios can resolve the placement through `world_placement` as documented
+in [PROFILES.md](PROFILES.md).

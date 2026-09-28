@@ -55,7 +55,7 @@ remain separate runtime-owned work and are not established by these fixtures.
 
 BoxScene kinematics expose the post-impulse free-motion acceleration, not impact
 acceleration integrated over a sensor interval. The existing DVL floor query still
-uses axis-aligned Pool geometry: arbitrary collision boxes do not automatically
+uses the separately placed finite Pool floor: arbitrary collision boxes do not automatically
 become sensor-query geometry.
 
 Work remains proportional to body-proxy count times world-proxy count. The 4,096

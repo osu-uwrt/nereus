@@ -81,6 +81,8 @@ the viewer still draws line geometry.
 - [x] Shared rigid transforms, named native sensor mounts and immutable live viewer
   mounts; rotated mount equivalence and Talos COM/CAD/base offset algebra verified.
   Actual native Talos assembly and sensor reporting remain open.
+- [x] Scenario-owned upright pool/static-world placement shared by collision and
+  finite-floor queries, without transforming robot mounts or world current vectors.
 - [x] Stage-dependent thruster submersion and water current evolution match the
   pinned synthetic free-motion fixture through native C++/profile/Python interfaces.
 - [x] Expose actuator response/scales/deadbands/efficiency and immediate queue-clearing
@@ -177,7 +179,7 @@ selected live-robot workflows required here.
 3. Stage forcing and actuator calibration/stop interfaces are verified in their
    bounded reference/contracts. Static compound contacts are integrated and validated.
    Named body mounts are now resolved for sensors and live visualization. Next:
-   transformed pool queries and native Talos content; neutral scene/assets follow.
+   native Talos content using the delivered pool placement; neutral scene/assets follow.
 4. Re-evaluate this order after each validated commit against concrete dependencies.
 
 For every increment: state its acceptance target, implement, test appropriate

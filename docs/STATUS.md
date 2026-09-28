@@ -435,3 +435,26 @@ reset/reconnect, and Talos CAD/base/COM offset algebra. Actual Talos content/ren
 is still open. See [FRAMES.md](FRAMES.md) for the current graph limits. Next: scenario
 placement of reusable pool geometry and its sensor queries, then native Talos
 physical content and the audited original visual resources.
+
+## Reusable world placement and consistent pool queries
+
+Schema2 scenarios now place world geometry through an upright position/yaw,
+independently of robot content and reusable pool files. Resolution transforms static
+boxes once and moves water level once; world current vectors retain their declared
+world axes. The same resolved footprint drives sphere containment/contacts and DVL
+floor queries. C++/Python expose pool corner and heading directly.
+
+All93 Release tests passed with configured static analysis, formatting/dependency
+checks and relocated installed consumers. The91-test ASan/UBSan suite passed,
+followed by allfive placement tests after exact-boundary regressions were added.
+The final installed Python wheel passed16 tests, Ruff and strict mypy. No sanitizer
+diagnostics were reported.
+
+Independent review caught inverse-transform roundoff at legal wall/floor edges;
+scale-aware rounding tolerance now preserves those boundaries while tests reject
+meaningfully exterior origins and projected ray hits. Additional checks compare
+rotated corner dynamics, finite ray availability/range, pressure under Z translation,
+static-box composition and independent loading without robot/current mutation.
+This enables the original competition pool-to-map placement without embedding2026
+layout into reusable pool data. Native Talos content and its original sensor/reporting
+policies remain the next fidelity work; full-stack/rendering gates remain open.

@@ -184,7 +184,7 @@ Scenario parse(const Document &document, std::vector<std::filesystem::path> sour
     } else if (version == 2) {
         keys(root,
              {"schema_version", "timestep_ns", "ticks", "seed", "robot", "world", "initial",
-              "commands", "contacts"},
+              "commands", "contacts", "world_placement"},
              "scenario");
         s.seed = integer(root, "seed", "scenario");
         const auto robot = reference(root, "robot", document.path, "robot", s.sources);
@@ -205,6 +205,24 @@ Scenario parse(const Document &document, std::vector<std::filesystem::path> sour
         if (s.surface_pressure <= 0) {
             throw std::invalid_argument(world.path.string() +
                                         ": surface_pressure_pa must be positive");
+        }
+        if (root["world_placement"]) {
+            const auto placement = root["world_placement"];
+            keys(placement, {"position_m", "yaw_rad"}, "world_placement");
+            const Eigen::Vector3d translation =
+                vector(placement, "position_m", 3, "world_placement");
+            const double yaw = number(placement, "yaw_rad", "world_placement");
+            const Eigen::Quaterniond rotation(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
+            const spatial::Pose pose{translation, rotation};
+            spatial::validate(pose);
+            s.plant.pool.origin_xy_world = translation.head<2>();
+            s.plant.pool.yaw_world = yaw;
+            s.plant.pool.water_level += translation.z();
+            for (auto &box : s.plant.contacts.world_boxes) {
+                box.center = spatial::apply(pose, box.center);
+                box.orientation = rotation * box.orientation;
+            }
+            // Fluid velocity vectors remain in the simulation-world frame.
         }
         const auto devices = robot.root["sensors"];
         if (!devices.IsSequence()) {

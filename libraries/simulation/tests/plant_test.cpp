@@ -328,3 +328,49 @@ TEST(Plant, BoxScenePermitsInitialDepenetrationAndResetWithoutHiddenState) {
     plant.reset(state);
     same(first, plant.advance(10));
 }
+
+TEST(Plant, PlacedSpherePoolMatchesTransformedCornerContactAndHydrostatics) {
+    PlantParameters local;
+    local.body.added_mass = Matrix6::Identity();
+    local.body.added_mass(0, 4) = local.body.added_mass(4, 0) = .2;
+    BodyState start;
+    start.position = {.201, .201, -4.79};
+    start.linear_velocity = {-.4, -.3, -.2};
+    auto placed = local;
+    placed.pool.origin_xy_world = {-10, -12};
+    placed.pool.yaw_world = .7;
+    placed.pool.water_level = 3;
+    const Eigen::Quaterniond rotation(Eigen::AngleAxisd(.7, Eigen::Vector3d::UnitZ()));
+    const Eigen::Vector3d translation(-10, -12, 3);
+    auto transformed = start;
+    transformed.position = translation + rotation * start.position;
+    transformed.orientation = rotation * start.orientation;
+    Plant a(local, start), b(placed, transformed);
+    for (int i = 0; i < 200; ++i) {
+        const auto x = a.advance(), y = b.advance();
+        EXPECT_TRUE(y.body.position.isApprox(translation + rotation * x.body.position, 1e-11));
+        EXPECT_TRUE(
+            y.body.orientation.coeffs().isApprox((rotation * x.body.orientation).coeffs(), 1e-11));
+        EXPECT_NEAR((y.body.linear_velocity - x.body.linear_velocity).norm(), 0, 1e-10);
+        EXPECT_NEAR((y.body.angular_velocity - x.body.angular_velocity).norm(), 0, 1e-10);
+        EXPECT_EQ(a.motion().acceleration_valid, b.motion().acceleration_valid);
+    }
+    EXPECT_NO_THROW(b.reset(transformed));
+    EXPECT_THROW(b.reset(start), std::invalid_argument);
+    placed.pool.yaw_world = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_THROW((Plant(placed, transformed)), std::invalid_argument);
+}
+
+TEST(Plant, PlacedPoolKeepsExactBoundaryLegalAndRejectsExterior) {
+    for (double yaw : {.3, .7, 1.1}) {
+        PlantParameters params;
+        params.pool.origin_xy_world = {-10, -12};
+        params.pool.yaw_world = yaw;
+        const Eigen::Quaterniond rotation(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
+        auto state = initial();
+        state.position = Eigen::Vector3d(-10, -12, 0) + rotation * Eigen::Vector3d(.2, .2, -2);
+        EXPECT_NO_THROW((Plant(params, state)));
+        state.position -= rotation * Eigen::Vector3d(1e-8, 0, 0);
+        EXPECT_THROW((Plant(params, state)), std::invalid_argument);
+    }
+}

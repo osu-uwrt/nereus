@@ -26,6 +26,8 @@ void validate(const PlantParameters &p) {
     }
     require(std::isfinite(p.pool.water_level) && p.pool.current_velocity.allFinite(),
             "pool level and current must be finite");
+    require(p.pool.origin_xy_world.allFinite() && std::isfinite(p.pool.yaw_world),
+            "pool placement must be finite");
     const double frequency = p.pool.current_oscillation_frequency;
     const double omega = 2 * std::acos(-1.0) * frequency;
     require(std::isfinite(frequency) && frequency >= 0 &&
@@ -77,7 +79,15 @@ class PoolContacts {
         : lower_(p.body.collision_radius, p.body.collision_radius,
                  p.pool.water_level - p.pool.depth + p.body.collision_radius),
           upper_(p.pool.length - p.body.collision_radius, p.pool.width - p.body.collision_radius,
-                 std::numeric_limits<double>::infinity()) {
+                 std::numeric_limits<double>::infinity()),
+          origin_(p.pool.origin_xy_world.x(), p.pool.origin_xy_world.y(), 0),
+          rotation_(
+              Eigen::AngleAxisd(p.pool.yaw_world, Eigen::Vector3d::UnitZ()).toRotationMatrix()) {
+        if (!p.pool.origin_xy_world.isZero(0) || p.pool.yaw_world != 0)
+            boundary_tolerance_ =
+                16 * std::numeric_limits<double>::epsilon() *
+                std::max({1.0, origin_.cwiseAbs().maxCoeff(), p.pool.length, p.pool.width,
+                          std::abs(p.pool.water_level), p.pool.depth});
         require(std::isfinite(p.body.collision_radius) && p.body.collision_radius > 0 &&
                     2 * p.body.collision_radius <
                         std::min({p.pool.length, p.pool.width, p.pool.depth}),
@@ -85,33 +95,36 @@ class PoolContacts {
     }
 
     void validateInitial(const detail::State13d &x) const {
-        require((x.head<3>().array() >= lower_.array()).all() &&
-                    (x.head<3>().array() <= upper_.array()).all(),
+        const auto position = local(x.head<3>());
+        require((position.array() >= lower_.array()).all() &&
+                    (position.array() <= upper_.array()).all(),
                 "initial collision sphere must be inside the pool walls and above the floor");
     }
 
     bool touching(const detail::State13d &x) const {
-        return (x.head<3>().array() <= lower_.array() + 1e-9).any() ||
-               (x.head<3>().array() >= upper_.array() - 1e-9).any();
+        const auto position = local(x.head<3>());
+        return (position.array() <= lower_.array() + 1e-9).any() ||
+               (position.array() >= upper_.array() - 1e-9).any();
     }
 
     void resolve(detail::State13d &x, const Matrix6 &inverse_mass) const {
         const Eigen::Quaterniond q(x[3], x[4], x[5], x[6]);
-        x.head<3>() = x.head<3>().cwiseMax(lower_).cwiseMin(upper_);
+        const Eigen::Vector3d position = local(x.head<3>()).cwiseMax(lower_).cwiseMin(upper_);
+        x.head<3>() = origin_ + rotation_ * position;
         // Coupled added mass can reintroduce another normal velocity at corners.
         for (int pass = 0; pass < 32; ++pass) {
             bool corrected = false;
             for (int axis = 0; axis < 3; ++axis) {
                 Eigen::Vector3d normal = Eigen::Vector3d::Zero();
-                if (x[axis] <= lower_[axis]) {
+                if (position[axis] <= lower_[axis]) {
                     normal[axis] = 1;
-                } else if (axis < 2 && x[axis] >= upper_[axis]) {
+                } else if (axis < 2 && position[axis] >= upper_[axis]) {
                     normal[axis] = -1;
                 } else {
                     continue;
                 }
                 Vector6 jacobian = Vector6::Zero();
-                jacobian.head<3>() = q.conjugate() * normal;
+                jacobian.head<3>() = q.conjugate() * (rotation_ * normal);
                 const double speed = jacobian.dot(x.tail<6>());
                 if (speed < -1e-10) {
                     const Vector6 response = inverse_mass * jacobian;
@@ -127,7 +140,20 @@ class PoolContacts {
     }
 
   private:
-    Eigen::Vector3d lower_, upper_;
+    Eigen::Vector3d local(const Eigen::Vector3d &position) const {
+        Eigen::Vector3d result = rotation_.transpose() * (position - origin_);
+        // Preserve exact legal boundaries through finite-precision rigid transforms.
+        for (int axis = 0; axis < 3; ++axis) {
+            if (std::abs(result[axis] - lower_[axis]) <= boundary_tolerance_)
+                result[axis] = lower_[axis];
+            else if (std::abs(result[axis] - upper_[axis]) <= boundary_tolerance_)
+                result[axis] = upper_[axis];
+        }
+        return result;
+    }
+    double boundary_tolerance_{0};
+    Eigen::Vector3d lower_, upper_, origin_;
+    Eigen::Matrix3d rotation_;
 };
 } // namespace
 

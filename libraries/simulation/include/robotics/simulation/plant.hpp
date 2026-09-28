@@ -54,6 +54,8 @@ struct Thruster {
 };
 
 struct Pool {
+    Eigen::Vector2d origin_xy_world = Eigen::Vector2d::Zero(); // Pool corner in world XY.
+    double yaw_world = 0; // Pool-local XY axes rotated into world, radians.
     double length = 20.0;
     double width = 10.0;
     double depth = 5.0;

@@ -525,3 +525,53 @@ TEST(Scheduler, StopCoastsPropulsionWithoutResettingClockOrSensorSchedule) {
     EXPECT_EQ(stream->stats().acquired, 24U); // Original 5ms schedule, no restart on stop.
     EXPECT_EQ(stream->latest()->header.generation, before.generation);
 }
+
+TEST(Dvl, PlacedPoolPreservesFiniteRayQueriesAndWaterLevel) {
+    sim::Pool local, placed;
+    placed.origin_xy_world = {-10, -12};
+    placed.yaw_world = .7;
+    placed.water_level = 3;
+    const Eigen::Quaterniond rotation(Eigen::AngleAxisd(.7, Eigen::Vector3d::UnitZ()));
+    const Eigen::Vector3d translation(-10, -12, 3);
+    PoolBottom a(local), b(placed);
+    for (const Eigen::Vector3d &origin :
+         {Eigen::Vector3d(2, 1, -2), Eigen::Vector3d(-1, 1, -2), Eigen::Vector3d(19, 5, -2),
+          Eigen::Vector3d(2, 1, 1), Eigen::Vector3d(2, 1, -5)}) {
+        for (const Eigen::Vector3d &direction :
+             {Eigen::Vector3d(0, 0, -1), Eigen::Vector3d(0, 0, 1),
+              Eigen::Vector3d(1, 0, -1).normalized().eval()}) {
+            const auto first = a(origin, direction);
+            const auto second = b(translation + rotation * origin, rotation * direction);
+            ASSERT_EQ(first.has_value(), second.has_value());
+            if (first) {
+                EXPECT_NEAR(first->distance, second->distance, 1e-12);
+                EXPECT_TRUE(second->velocity_world.isZero());
+            }
+        }
+    }
+    HydrostaticPressure pressure_a(local.water_level), pressure_b(placed.water_level);
+    EXPECT_DOUBLE_EQ(*pressure_a({2, 1, -2}),
+                     *pressure_b(translation + rotation * Eigen::Vector3d(2, 1, -2)));
+    placed.origin_xy_world.x() = std::numeric_limits<double>::infinity();
+    EXPECT_THROW((PoolBottom(placed)), std::invalid_argument);
+}
+
+TEST(Dvl, PlacedFloorIncludesBoundaryOriginsAndHitsWithoutExtendingItsFootprint) {
+    for (double yaw : {.3, .7, 1.1}) {
+        sim::Pool pool;
+        pool.origin_xy_world = {-10, -12};
+        pool.yaw_world = yaw;
+        PoolBottom bottom(pool);
+        const Eigen::Quaterniond rotation(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
+        const Eigen::Vector3d translation(-10, -12, 0);
+        for (const Eigen::Vector3d &origin :
+             {Eigen::Vector3d(0, 5, -2), Eigen::Vector3d(5, 10, -2)})
+            EXPECT_TRUE(bottom(translation + rotation * origin, -Eigen::Vector3d::UnitZ()));
+        EXPECT_FALSE(bottom(translation + rotation * Eigen::Vector3d(-1e-8, 5, -2),
+                            -Eigen::Vector3d::UnitZ()));
+        EXPECT_TRUE(bottom(translation + rotation * Eigen::Vector3d(5, 5, -2),
+                           rotation * Eigen::Vector3d(0, 5, -3).normalized()));
+        EXPECT_FALSE(bottom(translation + rotation * Eigen::Vector3d(5, 5, -2),
+                            rotation * Eigen::Vector3d(0, 5.000001, -3).normalized()));
+    }
+}

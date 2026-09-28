@@ -223,3 +223,37 @@ child poses map into parents. A sensor may use `mount_frame` instead of an expli
 `mount`. Resolution and validation finish during loading; factories retain model
 values, not tree/file references. `Scenario::body_frames` exposes the immutable tree.
 See [FRAMES.md](FRAMES.md) for units, limits, Python access and viewer composition.
+
+### Scenario world placement
+
+Schema2 scenarios may add an upright placement for reusable world geometry:
+
+```yaml
+world_placement:
+  position_m: [0, 19.5136, 0]
+  yaw_rad: -1.5707963267948966
+```
+
+This is the original competition pool-to-map placement, kept outside the pool
+profile. Omission is identity. The loader moves/rotates world-owned collision
+boxes, sets the pool corner/heading, and adds translation Z to water level once.
+Pool dimensions, density and atmospheric pressure remain unchanged. Both sphere
+pool contacts and DVL finite-floor queries use the same footprint placement.
+Only yaw is supported: the fluid model requires a horizontal free surface.
+
+Initial robot state is already simulation-world-relative; body proxies and mounts
+remain COM-relative. None is transformed by world placement. Future task/course
+placement is separately composed and must not receive this transform twice.
+World profile box poses are local before resolution; resolved `BoxProxy` poses
+are simulation-world-relative.
+
+`current_m_s` and oscillation amplitude are explicitly simulation-world vectors,
+as in the original model. Placement does not rotate them. Water-level Z translation
+affects buoyancy, propeller immersion, pressure and floor queries consistently.
+Programmatic C++/Python Pool values expose `origin_xy_world` and `yaw_world`;
+`water_level` is already world Z and must not receive another origin offset.
+
+Placed footprint boundaries allow only a scale-aware floating-point rounding
+tolerance (16 double epsilons times the coordinate/extent scale). This keeps exact
+rotated edge positions legal; it is not a physical collision margin. Identity
+footprint queries retain their original strict bounds.

@@ -56,12 +56,14 @@ void bindPlant(py::module_ &m) {
     auto pool =
         py::class_<Pool>(m, "Pool")
             .def(py::init<>())
+            .def_readwrite("yaw_world", &Pool::yaw_world)
             .def_readwrite("length", &Pool::length)
             .def_readwrite("width", &Pool::width)
             .def_readwrite("depth", &Pool::depth)
             .def_readwrite("water_level", &Pool::water_level)
             .def_readwrite("water_density", &Pool::water_density)
             .def_readwrite("current_oscillation_frequency", &Pool::current_oscillation_frequency);
+    valueProperty(pool, "origin_xy_world", &Pool::origin_xy_world);
     valueProperty(pool, "current_velocity", &Pool::current_velocity);
     valueProperty(pool, "current_oscillation_amplitude", &Pool::current_oscillation_amplitude);
     auto thruster = py::class_<Thruster>(m, "Thruster")

@@ -22,6 +22,34 @@ def passive(seed: int = 42) -> rp.Runtime:
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_placed_pool_queries_match_local_geometry(self) -> None:
+        params = rp.PlantParameters()
+        params.pool.origin_xy_world = [-10, -12]
+        params.pool.yaw_world = math.pi / 2
+        params.pool.water_level = 3
+        state = rp.BodyState()
+        state.position = [-15, -7, 1]
+        state.orientation_wxyz = [math.sqrt(0.5), 0, 0, math.sqrt(0.5)]
+        placed = rp.Runtime(params, state, 42)
+        local = passive()
+        a = local.add(
+            rp.Device("dvl", "sensor", period_ns=100_000_000), rp.Dvl(rp.DvlParameters(), rp.Pool())
+        )
+        b = placed.add(
+            rp.Device("dvl", "sensor", period_ns=100_000_000),
+            rp.Dvl(rp.DvlParameters(), params.pool),
+        )
+        local.advance(50)
+        placed.advance(50)
+        av, bv = a.latest(), b.latest()
+        assert av is not None and bv is not None and av.value is not None and bv.value is not None
+        self.assertAlmostEqual(av.value.bottom_distance, bv.value.bottom_distance, places=12)
+        np.testing.assert_allclose(
+            av.value.bottom_relative_velocity, bv.value.bottom_relative_velocity, atol=1e-12
+        )
+        params.pool.origin_xy_world[0] = 99
+        np.testing.assert_array_equal(params.pool.origin_xy_world, [-10, -12])
+
     def test_fixed_frame_values_are_detached_and_scenario_frames_survive_loading(self) -> None:
         pose = rp.Pose()
         pose.translation = [0.2, 0.3, -0.1]

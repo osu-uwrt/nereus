@@ -75,6 +75,9 @@ class PoolBottom {
 
   private:
     double length_, width_, floor_, surface_;
+    Eigen::Vector2d origin_xy_;
+    Eigen::Matrix2d world_to_pool_;
+    double boundary_tolerance_{0};
 };
 struct DvlParameters {
     Mount mount;

@@ -306,3 +306,42 @@ TEST(ConfigurationFrames, TalosCadAndBaseRenderingAgreeWithComPose) {
     }
 }
 } // namespace
+
+TEST_F(Profiles, ScenarioPlacesWorldGeometryWithoutChangingRobotOrCurrentVectors) {
+    replace("examples/profile_pool.yaml", "world: ../worlds/empty_pool.yaml",
+            "world: ../worlds/box_pool.yaml");
+    replace("worlds/box_pool.yaml", "current_m_s: [0, 0, 0]",
+            "current_m_s: [0.1, 0.2, 0.3]\n  current_oscillation_amplitude_m_s: [0.01, -0.02, "
+            "0.03]\n  current_oscillation_frequency_hz: 0.1");
+    const auto original = read("examples/profile_pool.yaml");
+    write("examples/profile_pool.yaml", original + "\ncontacts: {model: box_scene}\n");
+    const auto baseline = robotics::config::loadScenario(scenario());
+    write("examples/profile_pool.yaml", original + R"(
+contacts: {model: box_scene}
+world_placement: {position_m: [0, 19.5136, 3], yaw_rad: -1.5707963267948966}
+)");
+    const auto placed = robotics::config::loadScenario(scenario());
+    const Eigen::Quaterniond rotation(
+        Eigen::AngleAxisd(-std::acos(-1.0) / 2, Eigen::Vector3d::UnitZ()));
+    const Eigen::Vector3d translation(0, 19.5136, 3);
+    EXPECT_EQ(placed.initial.position, baseline.initial.position);
+    EXPECT_EQ(placed.plant.thrusters.front().position, baseline.plant.thrusters.front().position);
+    EXPECT_EQ(placed.plant.contacts.body_boxes.front().center,
+              baseline.plant.contacts.body_boxes.front().center);
+    EXPECT_EQ(placed.plant.pool.origin_xy_world, translation.head<2>());
+    EXPECT_DOUBLE_EQ(placed.plant.pool.water_level, baseline.plant.pool.water_level + 3);
+    EXPECT_EQ(placed.plant.pool.current_velocity, baseline.plant.pool.current_velocity);
+    EXPECT_EQ(placed.plant.pool.current_oscillation_amplitude,
+              baseline.plant.pool.current_oscillation_amplitude);
+    ASSERT_EQ(placed.plant.contacts.world_boxes.size(), baseline.plant.contacts.world_boxes.size());
+    for (std::size_t i = 0; i < placed.plant.contacts.world_boxes.size(); ++i) {
+        const auto &a = baseline.plant.contacts.world_boxes[i],
+                   &b = placed.plant.contacts.world_boxes[i];
+        EXPECT_TRUE(b.center.isApprox(translation + rotation * a.center, 1e-13));
+        EXPECT_TRUE(b.orientation.coeffs().isApprox((rotation * a.orientation).coeffs(), 1e-13));
+        EXPECT_EQ(a.size, b.size);
+    }
+    EXPECT_TRUE(baseline.plant.pool.origin_xy_world.isZero());
+    replace("examples/profile_pool.yaml", "yaw_rad: -1.5707963267948966", "roll_rad: 0.2");
+    EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
+}

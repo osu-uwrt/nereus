@@ -1,5 +1,7 @@
 #include "robotics/sensors/models.hpp"
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -153,28 +155,37 @@ Measurement<Fog::Reading> Fog::sample(const simulation::MotionSample &motion,
 
 PoolBottom::PoolBottom(const simulation::Pool &pool)
     : length_(pool.length), width_(pool.width), floor_(pool.water_level - pool.depth),
-      surface_(pool.water_level) {
+      surface_(pool.water_level), origin_xy_(pool.origin_xy_world),
+      world_to_pool_(Eigen::Rotation2Dd(-pool.yaw_world).toRotationMatrix()) {
     if (!std::isfinite(length_) || length_ <= 0 || !std::isfinite(width_) || width_ <= 0 ||
         !std::isfinite(pool.depth) || pool.depth <= 0 || !std::isfinite(surface_) ||
-        !std::isfinite(floor_)) {
+        !std::isfinite(floor_) || !origin_xy_.allFinite() || !std::isfinite(pool.yaw_world)) {
         throw std::invalid_argument(
             "pool bottom requires positive finite dimensions and finite level");
     }
+    if (!origin_xy_.isZero(0) || pool.yaw_world != 0)
+        boundary_tolerance_ = 16 * std::numeric_limits<double>::epsilon() *
+                              std::max({1.0, origin_xy_.cwiseAbs().maxCoeff(), length_, width_});
 }
-std::optional<BottomHit> PoolBottom::operator()(const Eigen::Vector3d &origin,
-                                                const Eigen::Vector3d &direction) const {
-    validateAxis(direction);
-    if (!origin.allFinite()) {
+std::optional<BottomHit> PoolBottom::operator()(const Eigen::Vector3d &origin_world,
+                                                const Eigen::Vector3d &direction_world) const {
+    validateAxis(direction_world);
+    if (!origin_world.allFinite()) {
         throw std::invalid_argument("bottom query requires a finite origin");
     }
-    if (origin.x() < 0 || origin.x() > length_ || origin.y() < 0 || origin.y() > width_ ||
-        origin.z() <= floor_ || origin.z() > surface_ || direction.z() >= 0) {
+    Eigen::Vector3d origin = origin_world, direction = direction_world;
+    origin.head<2>() = world_to_pool_ * (origin_world.head<2>() - origin_xy_);
+    direction.head<2>() = world_to_pool_ * direction_world.head<2>();
+    const auto inside = [this](const Eigen::Vector3d &point) {
+        return point.x() >= -boundary_tolerance_ && point.x() <= length_ + boundary_tolerance_ &&
+               point.y() >= -boundary_tolerance_ && point.y() <= width_ + boundary_tolerance_;
+    };
+    if (!inside(origin) || origin.z() <= floor_ || origin.z() > surface_ || direction.z() >= 0) {
         return std::nullopt;
     }
     const double distance = (floor_ - origin.z()) / direction.z();
     const Eigen::Vector3d hit = origin + distance * direction;
-    if (!std::isfinite(distance) || !hit.allFinite() || hit.x() < 0 || hit.x() > length_ ||
-        hit.y() < 0 || hit.y() > width_) {
+    if (!std::isfinite(distance) || !hit.allFinite() || !inside(hit)) {
         return std::nullopt;
     }
     return BottomHit{distance, Eigen::Vector3d::Zero()};
