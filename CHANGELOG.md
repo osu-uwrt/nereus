@@ -2,6 +2,9 @@
 
 ## 0.1.0 — unreleased
 
+- Pressure/depth sensor with mounted hydrostatic sampling, separate calibration,
+  seeded noise, operating limits, and propagated depth uncertainty.
+
 - New standalone C++ plant with explicit ticks, value snapshots, reset, thruster
   delays/limits, marine dynamics, and simple sphere-to-pool contacts.
 - Standalone typed sensor scheduling, bounded delivery queues, deterministic reset

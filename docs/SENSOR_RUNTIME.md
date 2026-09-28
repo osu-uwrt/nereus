@@ -1,7 +1,7 @@
 # Standalone sensor runtime
 
 The `RoboticsPlatform::sensors` C++17 library composes the plant with IMU, FOG,
-and ideal bottom-track DVL models. It requires Eigen and the simulation library;
+pressure/depth, and ideal bottom-track DVL models. It requires Eigen and the simulation library;
 no ROS, rendering, viewer, YAML, wall clock, or worker thread is involved. These
 are synthetic measurement models, not calibrated device emulators. Cameras,
 stereo capture, native sensor-profile loading, and Python bindings are future work.
@@ -115,6 +115,25 @@ vertical altitude or a noisy acoustic measurement. This single-ray lock model do
 not simulate beam geometry, partial beam lock, reflectivity, sound speed, or noise
 in range. Replacing its provider does not require changing the scheduler.
 
+**Pressure/depth:** reports absolute pressure (Pa), its variance, and depth (m,
+positive down) derived from that same measured pressure. A narrow environment
+query receives the mounted point in world coordinates. The supplied hydrostatic
+provider uses constant density and gravity below a horizontal surface and constant
+atmospheric pressure above it: `P = P_surface + rho*g*max(depth, 0)`. This is the
+constant-density specialization of the [hydrostatic relation](https://www.gfdl.noaa.gov/wp-content/uploads/files/model_development/ocean/guide4p1.pdf).
+It does not model waves, flow-induced pressure, compressibility, or temperature.
+The planar provider does not resolve pool walls or finite fluid volumes.
+
+Depth conversion has independent reference pressure, density, and gravity. Noise
+and bias affect pressure before depth conversion; depth is never substituted from
+world position or clamped to zero. This permits negative estimated depth near the
+surface and calibration error. Pressure/depth uncertainty is fully correlated,
+not two independent observations. Scalar pressure noise reuses one component of
+the shared noise process. Missing environment and out-of-range pressure are
+unavailable results; invalid provider values are errors. Both ideal and measured
+pressure must fit the inclusive configured range. Mount rotation affects the
+world position of the offset through body attitude; pressure itself is scalar.
+
 ## Noise and reproducibility
 
 Each three-axis noise component combines configured fixed bias, independent Gaussian
@@ -146,7 +165,7 @@ cmake --build build/sensor-demo
 ```
 
 The example composes a passive moving body with a 100 Hz IMU, 50 Hz FOG, and 10 Hz
-DVL with 20 ms latency. It drains queues during stepping and verifies delivery counts
+DVL with 20 ms latency, plus a 20 Hz pressure sensor. It drains queues during stepping and verifies delivery counts
 and reset clearing. Public-contract tests cover frame/lever-arm equations, specific
 force, bottom lock, noise replay, independent schedules, queue policies, and failure
 recovery. The install check copies and builds this example against a relocated prefix.

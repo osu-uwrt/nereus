@@ -427,3 +427,68 @@ TEST(Dvl, AcceptedMountRoundoffDoesNotInvalidateBottomQuery) {
     ASSERT_TRUE(result.value);
     EXPECT_NEAR(result.value->bottom_distance, 3.0 / std::cos(0.5), 1e-12);
 }
+
+TEST(Pressure, HydrostaticDepthUsesMountedPositionAndMeasuredPressure) {
+    PressureParameters parameters;
+    parameters.mount.position_body.x() = 0.5;
+    Pressure pressure(parameters, HydrostaticPressure(1));
+    auto input = motion();
+    input.state.body.orientation = Eigen::AngleAxisd(std::acos(-1.0) / 2, Eigen::Vector3d::UnitY());
+    const auto sample = pressure.sample(input, 0.1).value.value();
+    EXPECT_NEAR(sample.absolute_pressure, 101325 + 1000 * 9.80665 * 3.5, 1e-9);
+    EXPECT_NEAR(sample.depth, 3.5, 1e-12);
+    EXPECT_DOUBLE_EQ(sample.depth_variance, 0);
+    parameters.noise.bias = 9806.65;
+    Pressure biased(parameters, HydrostaticPressure(1));
+    EXPECT_NEAR(biased.sample(input, 0.1).value->depth, 4.5, 1e-12);
+    parameters.reference_density = 2000;
+    Pressure calibrated(parameters, HydrostaticPressure(1));
+    EXPECT_NEAR(calibrated.sample(input, 0.1).value->depth, 2.25, 1e-12);
+}
+
+TEST(Pressure, SurfaceAndAirReturnAtmosphericPressureWithoutClampingEstimatedDepth) {
+    PressureParameters parameters;
+    parameters.reference_pressure = 102325;
+    Pressure pressure(parameters, HydrostaticPressure(0));
+    auto input = motion();
+    for (double height : {0.0, 2.0}) {
+        input.state.body.position.z() = height;
+        const auto result = pressure.sample(input, 0.1).value.value();
+        EXPECT_DOUBLE_EQ(result.absolute_pressure, 101325);
+        EXPECT_NEAR(result.depth, -1000.0 / 9806.65, 1e-12);
+    }
+}
+
+TEST(Pressure, NoiseVarianceAndRuntimeResetAreReproducible) {
+    PressureParameters parameters;
+    parameters.noise = {2, 3, 4};
+    Runtime runtime({}, initial(), 42);
+    auto stream = runtime.add(device("pressure"), Pressure(parameters, HydrostaticPressure(0)));
+    runtime.advance(5);
+    auto first = stream->drain();
+    ASSERT_EQ(first.size(), 1U);
+    const auto expected = first[0].measurement.value.value();
+    EXPECT_NEAR(expected.pressure_variance, 9 + 16 * 0.006, 1e-12);
+    EXPECT_NEAR(expected.depth_variance, expected.pressure_variance / (9806.65 * 9806.65), 1e-16);
+    runtime.reset(initial(), 42);
+    EXPECT_FALSE(stream->latest());
+    runtime.advance(5);
+    EXPECT_DOUBLE_EQ(stream->latest()->measurement.value->absolute_pressure,
+                     expected.absolute_pressure);
+    EXPECT_EQ(stream->latest()->header.generation, 1U);
+}
+
+TEST(Pressure, MissingEnvironmentRangeAndInvalidProviderAreDistinct) {
+    PressureParameters parameters;
+    parameters.maximum_pressure = 110000;
+    Pressure outside(parameters, HydrostaticPressure(0));
+    EXPECT_EQ(outside.sample(motion(), 0.1).unavailable_reason, "pressure out of range");
+    Pressure missing({}, [](const auto &) -> std::optional<double> { return std::nullopt; });
+    EXPECT_EQ(missing.sample(motion(), 0.1).unavailable_reason, "pressure environment unavailable");
+    Pressure broken({}, [](const auto &) { return std::optional<double>(-1); });
+    EXPECT_THROW(broken.sample(motion(), 0.1), std::runtime_error);
+    EXPECT_THROW((Pressure{{}, {}}), std::invalid_argument);
+    parameters.reference_density = 0;
+    EXPECT_THROW((Pressure{parameters, HydrostaticPressure(0)}), std::invalid_argument);
+    EXPECT_THROW((HydrostaticPressure{0, -1}), std::invalid_argument);
+}

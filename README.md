@@ -14,7 +14,7 @@ and ideal bottom-track DVL models. See the [sensor API and example](docs/SENSOR_
 The viewer, ROS integrations, cameras/stereo, Python interface, task interactions,
 and training integrations are not implemented. See [status](docs/STATUS.md) and the
 [architecture plan](docs/ARCHITECTURE_PLAN.md). Planned [sensor support](docs/SENSORS.md)
-covers cameras, stereo cameras, IMUs, DVLs, and FOGs; sonar is deferred.
+covers cameras, stereo cameras, IMUs, DVLs, FOGs, and pressure/depth sensors; sonar is deferred.
 The current example parameters
 are synthetic, not a calibrated prediction for any team's robot.
 

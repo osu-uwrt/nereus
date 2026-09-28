@@ -20,4 +20,10 @@ struct DvlReading {
     Eigen::Matrix3d covariance;
     double bottom_distance; // Ideal slant range along bottom_axis; not noisy altitude.
 };
+struct PressureReading {
+    double absolute_pressure; // Pa, including surface atmospheric pressure.
+    double pressure_variance; // Pa^2.
+    double depth;             // m, positive down; derived from measured pressure and calibration.
+    double depth_variance;    // m^2; correlated with pressure, not an independent observation.
+};
 } // namespace robotics::sensors

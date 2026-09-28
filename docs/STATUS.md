@@ -104,3 +104,11 @@ Locally verified on 2026-09-28 in the same Ubuntu 22.04 / aarch64 environment:
 These checks establish the documented synthetic-model behavior and package
 boundaries. They do not establish hardware fidelity or implement camera/stereo
 rendering, Python access, native sensor-profile loading, or the independent viewer.
+
+## Pressure/depth sensor addition
+
+The sensor library now includes a mounted pressure sensor, a hydrostatic environment
+provider, separate pressure-to-depth calibration, scalar noise/drift, operating limits,
+and pressure/depth uncertainty. The installed sensor example includes it. All 60
+Release tests, formatting, configured static analysis, and relocated install checks
+passed locally for this addition. The model's limits are in SENSOR_RUNTIME.md.

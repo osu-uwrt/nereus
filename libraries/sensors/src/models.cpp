@@ -226,4 +226,78 @@ Measurement<Dvl::Reading> Dvl::sample(const simulation::MotionSample &motion,
     }
     return {std::move(result), {}};
 }
+HydrostaticPressure::HydrostaticPressure(double water_level, double density,
+                                         double surface_pressure, double gravity)
+    : level_(water_level), surface_pressure_(surface_pressure), gradient_(density * gravity) {
+    if (!std::isfinite(level_) || !std::isfinite(surface_pressure_) || surface_pressure_ <= 0 ||
+        !std::isfinite(density) || density <= 0 || !std::isfinite(gravity) || gravity <= 0 ||
+        !std::isfinite(gradient_) || gradient_ <= 0) {
+        throw std::invalid_argument(
+            "hydrostatic environment requires finite level and positive pressure/density/gravity");
+    }
+}
+std::optional<double> HydrostaticPressure::operator()(const Eigen::Vector3d &position) const {
+    if (!position.allFinite()) {
+        throw std::invalid_argument("pressure query requires a finite position");
+    }
+    const double pressure = surface_pressure_ + gradient_ * std::max(0.0, level_ - position.z());
+    if (!std::isfinite(pressure)) {
+        throw std::overflow_error("hydrostatic pressure overflow");
+    }
+    return pressure;
+}
+Pressure::Pressure(PressureParameters parameters, PressureQuery environment)
+    : parameters_(std::move(parameters)), environment_(std::move(environment)),
+      noise_(NoiseParameters{{parameters_.noise.bias, 0, 0},
+                             {parameters_.noise.white_stddev, 0, 0},
+                             {parameters_.noise.walk_stddev, 0, 0}}),
+      depth_scale_(1.0 / (parameters_.reference_density * parameters_.reference_gravity)) {
+    normalizeMount(parameters_.mount);
+    if (!environment_ || !std::isfinite(parameters_.reference_pressure) ||
+        parameters_.reference_pressure <= 0 || !std::isfinite(parameters_.reference_density) ||
+        parameters_.reference_density <= 0 || !std::isfinite(parameters_.reference_gravity) ||
+        parameters_.reference_gravity <= 0 || !std::isfinite(depth_scale_) || depth_scale_ <= 0 ||
+        !std::isfinite(parameters_.minimum_pressure) || parameters_.minimum_pressure < 0 ||
+        !std::isfinite(parameters_.maximum_pressure) ||
+        parameters_.maximum_pressure <= parameters_.minimum_pressure) {
+        throw std::invalid_argument(
+            "pressure sensor requires a provider, positive calibration and ordered finite limits");
+    }
+}
+void Pressure::reset(std::uint64_t seed, const std::string &id) {
+    noise_.reset(seed, id, "pressure");
+}
+Measurement<Pressure::Reading> Pressure::sample(const simulation::MotionSample &motion,
+                                                double elapsed_seconds) {
+    validateMotion(motion);
+    const double noise = noise_.sample(elapsed_seconds).x();
+    const Eigen::Vector3d position =
+        motion.state.body.position +
+        motion.state.body.orientation * parameters_.mount.position_body;
+    if (!position.allFinite()) {
+        throw std::overflow_error("pressure mount position overflow");
+    }
+    const auto ideal = environment_(position);
+    if (!ideal) {
+        return {std::nullopt, "pressure environment unavailable"};
+    }
+    if (!std::isfinite(*ideal) || *ideal < 0) {
+        throw std::runtime_error("pressure provider returned invalid pressure");
+    }
+    const double measured = *ideal + noise;
+    if (!std::isfinite(measured)) {
+        throw std::overflow_error("pressure measurement overflow");
+    }
+    if (*ideal < parameters_.minimum_pressure || *ideal > parameters_.maximum_pressure ||
+        measured < parameters_.minimum_pressure || measured > parameters_.maximum_pressure) {
+        return {std::nullopt, "pressure out of range"};
+    }
+    const double variance = noise_.covariance()(0, 0);
+    Reading reading{measured, variance, (measured - parameters_.reference_pressure) * depth_scale_,
+                    variance * depth_scale_ * depth_scale_};
+    if (!std::isfinite(reading.depth) || !std::isfinite(reading.depth_variance)) {
+        throw std::overflow_error("pressure-derived depth overflow");
+    }
+    return {reading, {}};
+}
 } // namespace robotics::sensors

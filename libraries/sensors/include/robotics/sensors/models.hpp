@@ -95,4 +95,40 @@ class Dvl {
     BottomQuery bottom_;
     Noise3 velocity_;
 };
+
+struct ScalarNoiseParameters {
+    double bias = 0, white_stddev = 0, walk_stddev = 0;
+};
+struct PressureParameters {
+    Mount mount;
+    ScalarNoiseParameters noise;                         // Pa, Pa per acquisition, Pa/sqrt(s).
+    double reference_pressure = 101325;                  // Depth conversion calibration, Pa.
+    double reference_density = 1000;                     // kg/m^3.
+    double reference_gravity = 9.80665;                  // m/s^2.
+    double minimum_pressure = 0, maximum_pressure = 1e7; // Inclusive operating range, Pa.
+};
+using PressureQuery = std::function<std::optional<double>(const Eigen::Vector3d &position_world)>;
+// Constant-density fluid below a horizontal surface; constant atmospheric pressure above it.
+class HydrostaticPressure {
+  public:
+    HydrostaticPressure(double water_level, double density = 1000, double surface_pressure = 101325,
+                        double gravity = 9.80665);
+    std::optional<double> operator()(const Eigen::Vector3d &position_world) const;
+
+  private:
+    double level_, surface_pressure_, gradient_;
+};
+class Pressure {
+  public:
+    using Reading = PressureReading;
+    Pressure(PressureParameters parameters, PressureQuery environment);
+    void reset(std::uint64_t seed, const std::string &id);
+    Measurement<Reading> sample(const simulation::MotionSample &, double elapsed_seconds);
+
+  private:
+    PressureParameters parameters_;
+    PressureQuery environment_;
+    Noise3 noise_; // Reuse the scalar X component of the shared noise process.
+    double depth_scale_;
+};
 } // namespace robotics::sensors
