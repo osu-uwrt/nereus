@@ -43,9 +43,14 @@ if(RP_BUILD_VIEWER)
     ${imgui}/backends/imgui_impl_glfw.cpp ${imgui}/backends/imgui_impl_opengl3.cpp)
   target_include_directories(rp_imgui SYSTEM PUBLIC ${imgui})
   target_link_libraries(rp_imgui PRIVATE glfw ${CMAKE_DL_LIBS})
-  add_executable(robotics-viewer ${PROJECT_SOURCE_DIR}/applications/viewer/main.cpp
-    ${PROJECT_SOURCE_DIR}/applications/viewer/desktop.cpp ${PROJECT_SOURCE_DIR}/applications/viewer/interface.cpp)
-  target_link_libraries(robotics-viewer PRIVATE rp_viewer_io rp_rendering rp_imgui glfw OpenGL::GL GLEW::GLEW)
+  add_library(rp_viewer_desktop STATIC ${PROJECT_SOURCE_DIR}/applications/viewer/desktop.cpp
+    ${PROJECT_SOURCE_DIR}/applications/viewer/interface.cpp)
+  target_include_directories(rp_viewer_desktop PUBLIC ${PROJECT_SOURCE_DIR}/applications/viewer)
+  target_link_libraries(rp_viewer_desktop PUBLIC rp_viewer_io rp_rendering
+    PRIVATE rp_imgui glfw OpenGL::GL GLEW::GLEW)
+  rp_project_options(rp_viewer_desktop)
+  add_executable(robotics-viewer ${PROJECT_SOURCE_DIR}/applications/viewer/main.cpp)
+  target_link_libraries(robotics-viewer PRIVATE rp_viewer_desktop)
   set_target_properties(robotics-viewer PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
   rp_project_options(robotics-viewer)
   install(TARGETS robotics-viewer RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

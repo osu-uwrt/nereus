@@ -41,3 +41,30 @@ contracts compare every trajectory state and noisy IMU reading with and without
 publication across fast/slow polling, dropped updates, disconnect, reset, and
 reconnect. This proves transport independence for those exercised cases; it does
 not establish Talos physics fidelity or provide a connected simulation application.
+
+## Composed simulation application
+
+```sh
+cmake --preset simulator-viewer
+cmake --build --preset simulator-viewer
+build/simulator-viewer/robotics-sim-view content/examples/profile_pool.yaml
+```
+
+The optional `robotics-sim-view` application composes the same desktop interface
+with a live source and a worker-owned scenario runtime. It runs the configured
+finite command schedule at wall-paced fixed steps, consumes sensor samples every
+tick, and retains the completed state for inspection. Falling behind wall time
+never drops physics steps. Closing the application cancels and joins execution;
+worker exceptions reach the owner and result in a failed exit status.
+
+The viewer can disconnect/reconnect, change displays, save/reopen its workspace,
+or open a local recording while the scenario runs. Playback affects recordings
+only. Simulation pause/reset/placement controls are a future separate provider.
+Saved simulation bindings refer to the startup scenario and reopen in the composed
+application started with that same scenario. The standalone viewer reports an
+unregistered simulation source rather than loading simulator code implicitly.
+
+`--hidden --frames N --screenshot OUTPUT.ppm` exercises the desktop path for
+validation. It requires a graphics display/context; this is not the future
+headless camera-rendering backend. The application currently displays pose/lines;
+water rendering, robot meshes, and task content are separate outstanding work.

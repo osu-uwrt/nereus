@@ -11,11 +11,15 @@
 namespace robotics::viewer {
 namespace v = visualization;
 Interface::Interface(const std::filesystem::path &workspace)
-    : session_(localSources(), v::standardDisplays()) {
+    : Interface(workspace.empty() ? emptyWorkspace() : loadWorkspace(workspace), localSources(),
+                v::standardDisplays()) {
     if (!workspace.empty()) {
-        session_.open(loadWorkspace(workspace));
         std::snprintf(path_.data(), path_.size(), "%s", workspace.c_str());
     }
+}
+Interface::Interface(Workspace workspace, Sources sources, v::Displays displays)
+    : session_(std::move(sources), std::move(displays)) {
+    session_.open(std::move(workspace));
     std::snprintf(frame_.data(), frame_.size(), "%s", session_.workspace().fixed_frame.c_str());
 }
 void Interface::seek(v::Time time_ns) {
@@ -161,7 +165,10 @@ void Interface::playback() {
     }
     editing_time_ = ImGui::IsItemActive();
     ImGui::SameLine();
-    ImGui::Text("/ %.3f s", static_cast<double>(duration) / 1e9);
+    if (session_.canSeek())
+        ImGui::Text("/ %.3f s", static_cast<double>(duration) / 1e9);
+    else
+        ImGui::TextUnformatted("Source time; playback unavailable");
     ImGui::EndDisabled();
 }
 void Interface::view() {
@@ -219,7 +226,7 @@ void Interface::draw() {
                      ImGuiWindowFlags_NoSavedSettings);
     ImGui::TextUnformatted("ROBOTICS VIEWER");
     ImGui::SameLine();
-    ImGui::TextDisabled("Local data workspace");
+    ImGui::TextDisabled("Data workspace");
     ImGui::SetNextItemWidth(std::max(200.0F, ImGui::GetContentRegionAvail().x - 235));
     ImGui::InputText("##workspace", path_.data(), path_.size());
     ImGui::SameLine();

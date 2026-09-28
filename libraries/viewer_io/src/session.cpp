@@ -33,7 +33,12 @@ void Session::open(Workspace workspace) {
     }
     for (auto &[id, connection] : connections_) {
         (void)id;
-        connection.source->disconnect();
+        const auto source = connection.source;
+        const bool retained =
+            std::any_of(connections.begin(), connections.end(),
+                        [source](const auto &entry) { return entry.second.source == source; });
+        if (!retained)
+            connection.source->disconnect();
     }
     connections_ = std::move(connections);
     errors_ = std::move(errors);

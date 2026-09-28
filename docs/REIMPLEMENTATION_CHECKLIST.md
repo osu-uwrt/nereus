@@ -58,7 +58,8 @@ Current physics uses a spherical pool contact proxy; the viewer draws line geome
 - [x] Prove attached/detached/slow pose transport leaves trajectories and noisy IMU
   samples equal through reset/reconnect (see LIVE_VISUALIZATION.md). Camera/other
   future payload transport requires the corresponding acquisition comparisons.
-- [ ] Application composition connects runtime and viewer without inward dependencies.
+- [x] Application composition connects runtime and viewer without inward dependencies
+  (finite scenario worker, pose/trajectory, sensor draining independent of display).
 - [ ] Optional simulation control provider: pause/resume, full reset, task reset,
   placement, acknowledged state; separate from playback and live robot commands.
 - [ ] Rewinds, resets, reconnects and source changes invalidate incompatible visuals.
@@ -139,9 +140,10 @@ selected live-robot workflows required here.
 ## Current next increment and review loop
 
 1. Source-linked review matrix is recorded; full reference capture remains open.
-2. Read-only pose transport is validated; next connect it through application
-   composition, then add explicit simulation controls independently of playback.
-3. Capture/port Talos numerical behavior and neutral scene/assets in bounded slices.
+2. Read-only pose transport and application composition are validated. Explicit
+   simulation controls remain open and separate from recording playback.
+3. Next capture/port stage-dependent wet-thruster/current behavior, followed by
+   actuator/frame/contact parity and native content; then neutral scene/assets.
 4. Re-evaluate this order after each validated commit against concrete dependencies.
 
 For every increment: state its acceptance target, implement, test appropriate

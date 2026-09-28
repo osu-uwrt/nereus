@@ -8,6 +8,7 @@ namespace robotics::viewer {
 class Interface {
   public:
     explicit Interface(const std::filesystem::path &workspace);
+    Interface(Workspace workspace, Sources sources, visualization::Displays displays);
     void draw();
     void advance(visualization::Time elapsed_ns);
     void seek(visualization::Time time_ns);

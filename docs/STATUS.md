@@ -264,3 +264,28 @@ ThreadSanitizer or hard-real-time guarantee. No sanitizer diagnostics were repor
 This increment is pose transport, not a connected simulation application or Talos
 fidelity. Application composition is next; physics, scene rendering, mechanisms,
 independent task/scoring composition and full-stack gates remain open in the ledger.
+
+## Composed simulation viewer application
+
+`robotics-sim-view` now composes the standalone desktop with an independent,
+wall-paced scenario worker and read-only pose source. Sensors drain on the worker
+regardless of display state; normal close cancels/joins; worker failures propagate.
+The shared desktop accepts explicit source/display/workspace composition and still
+builds without simulation. Reopening a retained endpoint preserves its connection;
+removing it disconnects presentation. Recordings retain their own playback clock.
+
+Validation: all 93 combined Release tests passed; eight changed live-source/worker
+contracts passed under ASan/UBSan. The synthetic configured scenario's final state
+matched synchronous execution exactly despite unpolled bounded delivery. Cancellation
+and error propagation passed. Configured static analysis and formatting/dependency
+checks passed; static analysis caught and corrected a C++17 lambda portability issue.
+The isolated viewer install and its graphics captures passed. The composed application
+ran and captured its body/trajectory through a relocated installation with the ROS
+environment removed. Its sanitizer graphics run reported no diagnostics (driver leak
+checking disabled, as for the standalone viewer). Screenshots were inspected; an
+initial missing display-source binding was corrected before final verification.
+
+This remains a finite scenario pose viewer. Simulation controls, Talos physics,
+water/assets, independent mechanisms/tasks/scoring, camera acquisition, and ROS
+integrations are still open. Next is fixed-input reference capture and stage-dependent
+thruster submersion/current fidelity, not a claim of original simulator equivalence.

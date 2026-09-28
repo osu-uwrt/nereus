@@ -28,7 +28,7 @@ def clean_environment():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--preset", choices=("release", "dev", "asan", "viewer", "viewer-asan", "simulation-view", "simulation-view-asan"), default="release")
+    parser.add_argument("--preset", choices=("release", "dev", "asan", "viewer", "viewer-asan", "simulation-view", "simulation-view-asan", "simulator-viewer", "simulator-viewer-asan"), default="release")
     parser.add_argument("--install-check", action="store_true")
     parser.add_argument("--tidy", action="store_true")
     args = parser.parse_args()

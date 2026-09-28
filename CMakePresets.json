@@ -16,6 +16,10 @@
       "cacheVariables": {"RP_BUILD_SIMULATION_VIEW": "ON"}},
     {"name": "simulation-view-asan", "inherits": "simulation-view", "binaryDir": "${sourceDir}/build/simulation-view-asan",
       "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug", "RP_ENABLE_SANITIZERS": "ON"}},
+    {"name": "simulator-viewer", "inherits": "simulation-view", "binaryDir": "${sourceDir}/build/simulator-viewer",
+      "cacheVariables": {"RP_BUILD_VIEWER": "ON", "RP_BUILD_SIMULATOR_VIEWER": "ON"}},
+    {"name": "simulator-viewer-asan", "inherits": "simulator-viewer", "binaryDir": "${sourceDir}/build/simulator-viewer-asan",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug", "RP_ENABLE_SANITIZERS": "ON"}},
     {"name": "viewer-asan", "inherits": "viewer", "binaryDir": "${sourceDir}/build/viewer-asan",
       "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug", "RP_ENABLE_SANITIZERS": "ON"}}
   ],
@@ -27,6 +31,8 @@
     {"name": "viewer", "configurePreset": "viewer", "jobs": 2},
     {"name": "viewer-asan", "configurePreset": "viewer-asan", "jobs": 2},
     {"name": "simulation-view", "configurePreset": "simulation-view", "jobs": 2},
+    {"name": "simulator-viewer", "configurePreset": "simulator-viewer", "jobs": 2},
+    {"name": "simulator-viewer-asan", "configurePreset": "simulator-viewer-asan", "jobs": 2},
     {"name": "simulation-view-asan", "configurePreset": "simulation-view-asan", "jobs": 2}
   ],
   "testPresets": [
@@ -36,6 +42,8 @@
     {"name": "viewer", "configurePreset": "viewer", "output": {"outputOnFailure": true}},
     {"name": "viewer-asan", "configurePreset": "viewer-asan", "output": {"outputOnFailure": true}},
     {"name": "simulation-view", "configurePreset": "simulation-view", "output": {"outputOnFailure": true}},
+    {"name": "simulator-viewer", "configurePreset": "simulator-viewer", "output": {"outputOnFailure": true}},
+    {"name": "simulator-viewer-asan", "configurePreset": "simulator-viewer-asan", "output": {"outputOnFailure": true}},
     {"name": "simulation-view-asan", "configurePreset": "simulation-view-asan", "output": {"outputOnFailure": true}}
   ]
 }

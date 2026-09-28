@@ -83,6 +83,10 @@ TEST(LiveSource, PendingOldEpochIsDiscardedAndSessionCannotAdvanceLiveClock) {
     EXPECT_THROW(session.seek(100), std::logic_error);
     session.advance(100);
     EXPECT_EQ(session.snapshot()->time_ns, 0);
+    session.open(session.workspace());
+    EXPECT_TRUE(session.snapshot()->data); // Reopening a retained endpoint does not disconnect it.
+    session.open(robotics::viewer::emptyWorkspace());
+    EXPECT_FALSE(source->snapshot().data); // Removing it does disconnect presentation.
 }
 
 TEST(LiveSource, ConcurrentProducerAndConsumerRetainNewestValue) {
