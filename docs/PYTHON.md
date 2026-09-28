@@ -134,7 +134,7 @@ this binding does not advertise free-threaded Python or concurrent shared-instan
 access. Use bounded advances for responsive orchestration. Parallel training workers,
 GIL release with per-instance synchronization, and async rendering are future work,
 not implicit behavior. Native model objects contain no Python callbacks or ownership
-cycles. The future standalone viewer must not import this simulation wheel merely
+cycles. The standalone viewer does not import this simulation wheel merely
 to use live/recorded visualization contracts.
 
 ## Verification and development

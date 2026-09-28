@@ -2,6 +2,13 @@
 
 ## 0.1.0 — unreleased
 
+- Independent ImGui/GLFW/OpenGL viewer with grid, frame axes, pose glyphs, trajectories,
+  local playback, camera navigation, and versioned workspace save/reopen.
+- Neutral source/display/frame contracts, optional playback capabilities, source
+  generations, bounded histories, measured-time placement, and missing/stale status.
+- Viewer-only and graphics-free visualization builds, installed extension example,
+  isolated packaging and graphics smoke checks; no simulation or ROS dependency.
+
 - Optional installed Python API for profile/programmatic construction, commands,
   stepping/reset, typed sensor streams, copied NumPy observations, and integer time.
 - Wheel/sdist packaging, public type hints, standalone Python example, numerical

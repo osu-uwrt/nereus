@@ -2,6 +2,7 @@
 """Run the contributor checks without inheriting a sourced ROS workspace."""
 import argparse
 import ast
+import json
 import os
 from pathlib import Path
 import shutil
@@ -27,7 +28,7 @@ def clean_environment():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--preset", choices=("release", "dev", "asan"), default="release")
+    parser.add_argument("--preset", choices=("release", "dev", "asan", "viewer", "viewer-asan"), default="release")
     parser.add_argument("--install-check", action="store_true")
     parser.add_argument("--tidy", action="store_true")
     args = parser.parse_args()
@@ -48,9 +49,21 @@ def main():
             for token in ("rclcpp", "rclpy", "tf2", "riptide", "c_simulator", "GLFW", "yaml-cpp"):
                 if token not in line:
                     continue
-                if token == "yaml-cpp" and "config/src" in path.as_posix():
+                if token == "yaml-cpp" and any(part in path.as_posix() for part in ("config/src", "viewer_io/src")):
+                    continue
+                if token == "GLFW" and "applications/viewer" in path.as_posix():
                     continue
                 raise RuntimeError(f"Forbidden dependency in {path}: {line}")
+    for path in sources:
+        relative = path.relative_to(ROOT).as_posix()
+        if relative.startswith(("libraries/visualization/", "libraries/viewer_io/", "libraries/rendering/", "applications/viewer/")):
+            for line in path.read_text().splitlines():
+                if line.startswith("#include") and any(token in line for token in ("robotics/simulation", "robotics/sensors", "robotics/config", "pybind11")):
+                    raise RuntimeError(f"Viewer depends on simulation: {path}: {line}")
+        if relative.startswith(("libraries/visualization/", "libraries/viewer_io/")):
+            for line in path.read_text().splitlines():
+                if line.startswith("#include") and any(token in line for token in ("GL/", "GLFW/", "imgui")):
+                    raise RuntimeError(f"Neutral viewer library depends on graphics: {path}: {line}")
     for folder in ("tools", "tests", "python", "examples/python"):
         for path in (ROOT / folder).rglob("*.py"):
             ast.parse(path.read_text(), filename=str(path))
@@ -61,9 +74,15 @@ def main():
         tidy = shutil.which("clang-tidy")
         if not tidy:
             parser.error("--tidy requires clang-tidy")
+        database = json.loads((ROOT / "build" / args.preset / "compile_commands.json").read_text())
+        compiled = {Path(entry["file"]).resolve() for entry in database}
         for path in sources:
+            if path.resolve() not in compiled:
+                continue
             if path.suffix == ".cpp" and ("/src/" in path.as_posix() or "/applications/" in path.as_posix()):
                 run([tidy, path, "-p", ROOT / "build" / args.preset], env=env)
+    if args.install_check and args.preset.startswith("viewer"):
+        parser.error("Use tools/check_viewer.py for viewer installation checks")
     if args.install_check:
         # Relocate the installed prefix and copy the downstream example. The exported
         # build graph must refer only to installed artifacts and system dependencies.

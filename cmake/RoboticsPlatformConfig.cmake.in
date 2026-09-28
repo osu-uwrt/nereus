@@ -1,8 +1,12 @@
 @PACKAGE_INIT@
 include(CMakeFindDependencyMacro)
 find_dependency(Eigen3 3.3 NO_MODULE)
-if(@RP_BUILD_CLI@ OR @RP_BUILD_PYTHON@)
+if(@RP_NEEDS_YAML@)
   find_dependency(yaml-cpp CONFIG)
+endif()
+if(@RP_BUILD_VIEWER@)
+  find_dependency(OpenGL)
+  find_dependency(GLEW)
 endif()
 include("${CMAKE_CURRENT_LIST_DIR}/RoboticsPlatformTargets.cmake")
 check_required_components(RoboticsPlatform)

@@ -4,6 +4,9 @@ project(RoboticsPlatform VERSION 0.1.0 LANGUAGES CXX)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(CTest)
+option(RP_BUILD_SIMULATION "Build simulation libraries" ON)
+option(RP_BUILD_VISUALIZATION "Build neutral visualization and viewer IO libraries" OFF)
+option(RP_BUILD_VIEWER "Build the standalone desktop viewer" OFF)
 option(RP_BUILD_CLI "Build the YAML scenario loader and standalone runner" ON)
 option(RP_BUILD_PYTHON "Build the optional Python extension and package" OFF)
 if(RP_BUILD_PYTHON)
@@ -13,6 +16,14 @@ if(RP_BUILD_PYTHON)
   set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 option(RP_ENABLE_SANITIZERS "Enable address and undefined-behavior sanitizers" OFF)
+
+if(NOT RP_BUILD_SIMULATION AND (RP_BUILD_CLI OR RP_BUILD_PYTHON))
+  message(FATAL_ERROR "CLI/Python require RP_BUILD_SIMULATION; disable them for viewer-only builds")
+endif()
+set(RP_NEEDS_YAML OFF)
+if(RP_BUILD_CLI OR RP_BUILD_PYTHON OR RP_BUILD_VISUALIZATION OR RP_BUILD_VIEWER)
+  set(RP_NEEDS_YAML ON)
+endif()
 
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
@@ -28,6 +39,7 @@ function(rp_project_options target)
   endif()
 endfunction()
 
+if(RP_BUILD_SIMULATION)
 add_library(rp_simulation
   libraries/simulation/src/marine_dynamics.cpp
   libraries/simulation/src/thruster_dynamics.cpp
@@ -90,6 +102,12 @@ install(TARGETS rp_simulation rp_sensors EXPORT RoboticsPlatformTargets
 install(DIRECTORY libraries/simulation/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(DIRECTORY libraries/sensors/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(DIRECTORY content/ DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform)
+endif()
+
+if(RP_BUILD_VISUALIZATION OR RP_BUILD_VIEWER)
+  add_subdirectory(libraries/visualization)
+endif()
+
 install(FILES LICENSE.md docs/PROVENANCE.md DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform/legal)
 install(EXPORT RoboticsPlatformTargets NAMESPACE RoboticsPlatform::
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/RoboticsPlatform)
@@ -102,7 +120,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/RoboticsPlatformConfig.cmake
   ${CMAKE_CURRENT_BINARY_DIR}/RoboticsPlatformConfigVersion.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/RoboticsPlatform)
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND RP_BUILD_SIMULATION)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
   add_executable(plant_tests libraries/simulation/tests/plant_test.cpp

@@ -72,3 +72,22 @@ The API is experimental in 0.x. Record breaking changes in CHANGELOG.md. Before
 1.0, define the stable surface and deprecation policy; internal kernel headers are
 never part of that surface. Code releases, content schemas, and eventual extension
 contracts have explicit versions. No compatibility to the old simulator is promised.
+
+## Viewer development
+
+The native viewer uses the same C++ formatting/static-analysis rules. Install the
+optional dependencies in [VIEWER.md](docs/VIEWER.md), then run:
+
+```sh
+python3 tools/check_viewer.py --tidy --graphics
+python3 tools/check_viewer.py --preset viewer-asan --graphics
+```
+
+Omit `--graphics` if no desktop is available; this is not a graphics test pass.
+The check copies only viewer-related sources, builds and relocates an install,
+removes the copy, and builds an external source/display consumer. Vendored ImGui
+is deliberately excluded from project formatting/static analysis; retain its
+license/notices and verify upstream identity when updating it. Dependency checks
+prevent simulation/ROS imports in viewer layers and graphics imports in neutral
+visualization/IO layers. CI uses Xvfb/Mesa for its explicit graphics jobs; supported
+hardware/backend claims also require hardware testing.

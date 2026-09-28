@@ -9,17 +9,25 @@
     {"name": "asan", "inherits": "dev", "binaryDir": "${sourceDir}/build/asan",
       "cacheVariables": {"RP_ENABLE_SANITIZERS": "ON"}},
     {"name": "plant-only", "inherits": "release", "binaryDir": "${sourceDir}/build/plant-only",
-      "cacheVariables": {"RP_BUILD_CLI": "OFF", "BUILD_TESTING": "OFF"}}
+      "cacheVariables": {"RP_BUILD_CLI": "OFF", "BUILD_TESTING": "OFF"}},
+    {"name": "viewer", "inherits": "release", "binaryDir": "${sourceDir}/build/viewer",
+      "cacheVariables": {"RP_BUILD_SIMULATION": "OFF", "RP_BUILD_CLI": "OFF", "RP_BUILD_VIEWER": "ON"}},
+    {"name": "viewer-asan", "inherits": "viewer", "binaryDir": "${sourceDir}/build/viewer-asan",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug", "RP_ENABLE_SANITIZERS": "ON"}}
   ],
   "buildPresets": [
     {"name": "dev", "configurePreset": "dev", "jobs": 2},
     {"name": "release", "configurePreset": "release", "jobs": 2},
     {"name": "asan", "configurePreset": "asan", "jobs": 2},
-    {"name": "plant-only", "configurePreset": "plant-only", "jobs": 2}
+    {"name": "plant-only", "configurePreset": "plant-only", "jobs": 2},
+    {"name": "viewer", "configurePreset": "viewer", "jobs": 2},
+    {"name": "viewer-asan", "configurePreset": "viewer-asan", "jobs": 2}
   ],
   "testPresets": [
     {"name": "dev", "configurePreset": "dev", "output": {"outputOnFailure": true}},
     {"name": "release", "configurePreset": "release", "output": {"outputOnFailure": true}},
-    {"name": "asan", "configurePreset": "asan", "output": {"outputOnFailure": true}}
+    {"name": "asan", "configurePreset": "asan", "output": {"outputOnFailure": true}},
+    {"name": "viewer", "configurePreset": "viewer", "output": {"outputOnFailure": true}},
+    {"name": "viewer-asan", "configurePreset": "viewer-asan", "output": {"outputOnFailure": true}}
   ]
 }

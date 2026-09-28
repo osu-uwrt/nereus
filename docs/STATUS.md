@@ -74,19 +74,41 @@ This is direct simulation access, not a training environment or complete phase 2
 Python callbacks/plugins, concurrent shared-instance calls, checkpoints, and batched
 training environments are not implemented. Calls retain the GIL.
 
+## Standalone viewer foundation increment
+
+Implemented:
+
+- Optional native ImGui/GLFW/OpenGL viewer, independently built and installed with
+  no simulation, Python, ROS, robot-profile, or course-content dependency.
+- Neutral geometry, exact source-clock time, immutable frame histories, checked
+  frame trees, interpolation, and explicit missing/out-of-range diagnostics.
+- Composed source factories and display functions, separate optional playback,
+  generation-aware local rewind/disconnect/reconnect, and independent source state.
+- GPU line rendering for grid/frame axes/pose glyphs/trajectories, orbit/pan/zoom,
+  fixed-frame selection, local playback controls, display status, and workspace saves.
+- Versioned bounded local recordings/workspaces and an installed external source
+  and display example. The viewer can also start with an empty workspace.
+
+[VIEWER.md](VIEWER.md) defines delivered contracts, limits, controls, and checks.
+This begins phase 5A. The live ROS gate, meshes/joints, images/clouds/markers,
+async queues, source overlay alignment, dynamic plugin loading, and arbitrary
+workspace layouts are not delivered. Simulation attachment remains a separate
+adapter; the viewer has no simulation or robot control capabilities.
+
 ## Next increments
 
 1. Complete the behavior/workflow inventory and establish Talos/reference timing
    fixtures, keeping intentional model differences explicit.
-2. Build independent viewer/source/display/frame contracts and a minimal local-data
-   viewer (phase 5A), without waiting for ROS or competition tasks.
+2. Connect simulation observations through a separate viewer adapter using the
+   delivered neutral contracts. Continue the live-viewer workflow inventory and
+   add displays/live transport against explicit requirements.
 3. Extend native profile composition with assets/tasks when their implementations
    exist; refine executable camera/stereo contracts when rendering begins.
 4. Add optional ROS/UWRT integration, task/mechanism ownership, coordinated general
    contacts, and camera/stereo rendering in their planned phases.
 
-The viewer, rendering, ROS adapters, full hull/prop contacts, and competition scoring
-are not implemented. RL implementation remains out of scope. The plant is deterministic;
+ROS adapters, mesh/sensor rendering, full hull/prop contacts, and competition
+scoring are not implemented. RL implementation remains out of scope. The plant is deterministic;
 the composed sensor runtime owns seeded measurement noise. Cameras/stereo are planned;
 sonar implementation is deferred.
 
@@ -186,3 +208,38 @@ pybind11 3.1.0, and scikit-build-core 1.0.3:
 
 CI jobs are configured but have not run remotely. Python wheels remain local,
 platform-specific artifacts with system yaml-cpp linkage; nothing was published.
+
+## Verification of the viewer foundation
+
+Locally verified on 2026-09-28 on Ubuntu 22.04 / aarch64, GCC 11.4, GLFW 3.3.6,
+GLEW 2.2.0, Dear ImGui 1.91.9b, and the Apple M1 Pro (G13S C0) graphics driver:
+
+- All 15 viewer contract tests passed in Release and ASan/UBSan builds. Coverage
+  includes transform composition/interpolation, exact large integer times, tree
+  validation, history limits, missing/stale data, source isolation, rewind/removal,
+  extension errors/budgets, relative paths, atomic save failure, and camera math.
+- Release and sanitizer installations built from copies physically omitting all
+  simulation/Python sources and robot/world content. After removal of copied
+  source/build trees, relocated libraries compiled and ran an external source and
+  display consumer; installed GUI runs captured empty, initial, and advanced views.
+- Configured clang-tidy, formatting/dependency scans, and the viewer checker's Ruff
+  checks passed. All 68 existing simulation tests and relocated simulation/sensor/
+  profile consumers passed in Release after the optional build-graph changes.
+- Neutral visualization/IO libraries built with OpenGL, GLFW, and GLEW discovery
+  explicitly disabled. The normal simulation build still requires no graphics.
+- A desktop interaction check exercised exact nanosecond entry, play/pause, camera
+  keyboard controls, display visibility, and Save as. Inspection of the saved file
+  confirmed camera/display changes and correctly rebased source paths.
+- A local Release CPU-only scene-construction measurement (100 iterations, one
+  root frame and one trajectory) averaged about 0.011 ms for 61 samples and 1.61 ms
+  for 10,000 samples. This excludes graphics/UI work and is not a frame-rate or
+  general workload guarantee; the UI currently constructs the scene twice per frame.
+- All 16 vendored ImGui files were byte-compared to the upstream v1.91.9b archive;
+  its archive checksum is recorded in third_party/imgui/README.md.
+
+No sanitizer diagnostics were reported in the final runs. The debug graphics run
+also exercises ImGui assertions. GUI checks disable LeakSanitizer for external
+OpenGL driver process globals; CPU tests and installed extensions retain it.
+Remote CI/Xvfb/Mesa jobs are configured but have not run remotely. This is local
+hardware and synthetic-data validation, not full RViz workflow parity or a
+cross-platform graphics-support claim. Nothing has been published.

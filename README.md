@@ -1,8 +1,9 @@
 # Robotics Platform
 
-A standalone underwater simulation library and, eventually, an independent
-robotics viewer. This is a new local project; it does not depend on the old
-Riptide simulator, ROS, UWRT packages, a display, or GPU drivers.
+A standalone underwater simulation library and an independent robotics viewer.
+This is a new local project with no dependency on the old Riptide simulator, ROS,
+or UWRT packages. Simulation runs headlessly; the optional desktop viewer uses
+ImGui, GLFW, and OpenGL and can be built without the simulation libraries.
 
 The first working slice provides a C++ plant, a strict YAML scenario loader,
 a command-line runner, and an installed-library example. The plant composes
@@ -13,8 +14,9 @@ A second library adds deterministic sensor scheduling, seeded noise, IMU, FOG,
 pressure/depth, and ideal bottom-track DVL models. Native robot/world/sensor
 [profiles](docs/PROFILES.md) compose these into standalone runs. See the [sensor API and example](docs/SENSOR_RUNTIME.md).
 An optional [Python API](docs/PYTHON.md) exposes profile loading, programmatic
-configuration, stepping/reset, and typed sensor streams. The viewer, ROS integrations,
-cameras/stereo, task interactions, and training integrations are not implemented. See [status](docs/STATUS.md) and the
+configuration, stepping/reset, and typed sensor streams. The [standalone viewer](docs/VIEWER.md)
+now supports local-data playback, frame axes, pose glyphs, and trajectories. ROS integrations,
+meshes/images/clouds, cameras/stereo, task interactions, and training integrations remain future work. See [status](docs/STATUS.md) and the
 [architecture plan](docs/ARCHITECTURE_PLAN.md). [Sensor scope](docs/SENSORS.md)
 covers cameras, stereo cameras, IMUs, DVLs, FOGs, and pressure/depth sensors; sonar is deferred.
 The current example parameters
@@ -48,6 +50,18 @@ cmake --build --preset plant-only
 
 `COLCON_IGNORE` keeps this project out of automatic recursive workspace discovery.
 Build it directly; all generated files stay in this project's `build/` directory.
+
+## Standalone viewer
+
+```sh
+sudo apt-get install libglfw3-dev libglew-dev libgl1-mesa-dev
+cmake --preset viewer
+cmake --build --preset viewer
+./build/viewer/robotics-viewer workspaces/local_demo.yaml
+```
+
+This preset builds without simulation or Python. Omit the workspace argument to
+start empty. See [viewer installation, controls, schemas, and extension contracts](docs/VIEWER.md).
 
 ## Python
 
