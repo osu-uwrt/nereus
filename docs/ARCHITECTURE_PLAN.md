@@ -6,6 +6,21 @@ remain required. Implementation is a complete refactor in a new folder. It does 
 claim that the architecture below is implemented. The old implementation remains a separate reference. See STATUS.md for the
 implementation progress in this repository.
 
+## Fidelity clarification (2026-09-28)
+
+The user requires the completed Talos integration to preserve the original
+simulator's physical/water behavior, water renderer appearance, and a very similar
+UI, with the full robot stack executing RepairCompTree and its physical tasks.
+This strengthens the reference-validation target; it does not relax dependency
+boundaries. ROS/UWRT interfaces remain optional outer adapters. The standalone
+viewer must also support live robot/RViz-style use without simulation.
+
+The checked implementation ledger is [REIMPLEMENTATION_CHECKLIST.md](REIMPLEMENTATION_CHECKLIST.md).
+Use its baseline, capability evidence, and per-increment validation when deciding
+whether work is complete. Simplified initial models and line rendering are
+scaffolding, not substitutes for original fidelity. Full mission success must
+include descendant/task outcomes rather than only the behavior-tree root result.
+
 ## 1. Goal and scope
 
 Make the simulator usable by other RoboSub teams through robot configuration and

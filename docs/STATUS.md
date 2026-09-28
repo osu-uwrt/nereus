@@ -1,6 +1,7 @@
 # Implementation status
 
 This file distinguishes delivered code from the architecture's future work.
+The active full-refactor ledger is [REIMPLEMENTATION_CHECKLIST.md](REIMPLEMENTATION_CHECKLIST.md).
 
 ## Initial standalone slice
 
