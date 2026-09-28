@@ -384,3 +384,30 @@ Next: expose explicit disabled/sphere-pool/compound-box contact selection, keep 
 and world geometry in their owning profiles, and validate original pre/post-RK4
 ordering through whole-step comparisons. Dynamic task/prop contacts remain later
 runtime-owned work, and full-scene performance still requires measurement.
+
+## Selectable contacts through the public runtime
+
+Plant, native profiles and Python now select disabled, sphere-pool or static
+compound-box contacts. Robot/world content owns ordered proxies. Box scenes allow
+initial depenetration, skip unrelated sphere containment constraints, and preserve
+original pre/post-RK4 resolution and quaternion-normalization timing. The new
+`contact_pool.yaml` exercises a hull against finite pool boxes with four sensors.
+
+Validation: all 82 native tests passed in Release and ASan/UBSan, plus relocated
+installed consumers in both builds. Release configured static analysis and
+formatting/dependency checks passed; the installed Python wheel passed all14 tests,
+Ruff and strict mypy. After adding the unoptimized reference variant, the four
+changed Release contracts passed again. No sanitizer diagnostics were reported.
+
+Eleven single-contact responses match within2e-12 and550 whole-step states match
+one complete original trajectory within1e-9. Independent review reproduced the
+original's own optimization-dependent divergence in one late repeated-contact case;
+the new debug trajectory equals the original unoptimized trajectory exactly.
+Both original captures are retained with flags/hashes; tolerance was not widened.
+See [BOX_CONTACTS.md](reference/BOX_CONTACTS.md) for scope and acceleration semantics.
+
+The same-machine contact benchmark recorded plant p99 3.25 microseconds and
+plant-plus-sensors p99 4.75 microseconds over1.5 million ticks each. This synthetic
+one-hull/five-box scene is not full Talos/task/graphics performance acceptance.
+Dynamic prop contacts, transformed sensor-query geometry, named body frames,
+native Talos content and original rendering remain open and drive the next steps.

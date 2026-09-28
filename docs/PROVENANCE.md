@@ -71,5 +71,6 @@ The original license metadata remains unresolved as described above.
 
 The offline contact capture extracts original method bodies, disables logging,
 and excludes the separate optional task-contact hook. It does not build a ROS node.
-All source/driver/fixture hashes are in `tests/fixtures/legacy_box_contacts.json`;
-see `reference/BOX_CONTACTS.md` for scope and reproduction.
+Source/driver/fixture hashes and compiler flags accompany the single-response and
+whole-step optimized/unoptimized captures in `tests/fixtures/legacy_box_*.json`.
+See `reference/BOX_CONTACTS.md` for scope, optimization sensitivity and reproduction.

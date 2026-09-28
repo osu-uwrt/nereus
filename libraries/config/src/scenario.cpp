@@ -3,13 +3,47 @@
 namespace robotics::config {
 namespace {
 using namespace detail;
+std::vector<simulation::BoxProxy> parseBoxes(const YAML::Node &node, const std::string &path) {
+    if (!node.IsSequence() || node.size() > 4096)
+        throw std::invalid_argument(path + " must be a sequence of at most 4096 boxes");
+    std::vector<simulation::BoxProxy> result;
+    for (std::size_t i = 0; i < node.size(); ++i) {
+        const auto item = node[i];
+        const auto field = path + "[" + std::to_string(i) + "]";
+        keys(item, {"id", "size_m", "center_m", "orientation_wxyz"}, field);
+        simulation::BoxProxy box;
+        box.id = text(item, "id", field);
+        box.size = vector(item, "size_m", 3, field);
+        box.center = vector(item, "center_m", 3, field);
+        const auto q = vector(item, "orientation_wxyz", 4, field);
+        box.orientation = Eigen::Quaterniond(q[0], q[1], q[2], q[3]);
+        result.push_back(std::move(box));
+    }
+    return result;
+}
+void parseContacts(const YAML::Node &node, simulation::ContactParameters &result) {
+    keys(node, {"model", "restitution", "friction"}, "contacts");
+    const auto model = text(node, "model", "contacts");
+    if (model == "disabled")
+        result.model = simulation::ContactModel::Disabled;
+    else if (model == "sphere_pool")
+        result.model = simulation::ContactModel::SpherePool;
+    else if (model == "box_scene")
+        result.model = simulation::ContactModel::BoxScene;
+    else
+        throw std::invalid_argument("unknown contacts.model: " + model);
+    if (node["restitution"])
+        result.restitution = number(node, "restitution", "contacts");
+    if (node["friction"])
+        result.friction = number(node, "friction", "contacts");
+}
 void parseVehicle(const YAML::Node &v, simulation::PlantParameters &plant,
                   const std::string &path) {
     keys(v,
          {"mass_kg", "inertia_diagonal", "added_mass_diagonal", "linear_damping_diagonal",
           "quadratic_damping", "displaced_volume_m3", "buoyancy_center_m", "buoyancy_radii_m",
           "collision_radius_m", "command_timeout_s", "thrusters", "inertia_matrix",
-          "added_mass_matrix", "linear_damping_matrix", "damping_center_m"},
+          "added_mass_matrix", "linear_damping_matrix", "damping_center_m", "collision_boxes"},
          path);
     auto &b = plant.body;
     b.mass = number(v, "mass_kg", path);
@@ -24,7 +58,10 @@ void parseVehicle(const YAML::Node &v, simulation::PlantParameters &plant,
     b.displaced_volume = number(v, "displaced_volume_m3", path);
     b.buoyancy_center = vector(v, "buoyancy_center_m", 3, path);
     b.buoyancy_radii = vector(v, "buoyancy_radii_m", 3, path);
-    b.collision_radius = number(v, "collision_radius_m", path);
+    if (v["collision_radius_m"])
+        b.collision_radius = number(v, "collision_radius_m", path);
+    if (v["collision_boxes"])
+        plant.contacts.body_boxes = parseBoxes(v["collision_boxes"], path + ".collision_boxes");
     plant.command_timeout = number(v, "command_timeout_s", path);
     const auto thrusters = v["thrusters"];
     if (!thrusters.IsSequence()) {
@@ -115,23 +152,30 @@ Scenario parse(const Document &document, std::vector<std::filesystem::path> sour
     s.sources = std::move(sources);
     if (version == 1) {
         keys(root,
-             {"schema_version", "timestep_ns", "ticks", "vehicle", "pool", "initial", "commands"},
+             {"schema_version", "timestep_ns", "ticks", "vehicle", "pool", "initial", "commands",
+              "contacts", "collision_boxes"},
              "scenario");
         parseVehicle(root["vehicle"], s.plant, "vehicle");
         parsePool(root["pool"], s.plant.pool, "pool");
+        if (root["collision_boxes"])
+            s.plant.contacts.world_boxes = parseBoxes(root["collision_boxes"], "collision_boxes");
     } else if (version == 2) {
         keys(root,
              {"schema_version", "timestep_ns", "ticks", "seed", "robot", "world", "initial",
-              "commands"},
+              "commands", "contacts"},
              "scenario");
         s.seed = integer(root, "seed", "scenario");
         const auto robot = reference(root, "robot", document.path, "robot", s.sources);
         keys(robot.root, {"schema_version", "kind", "vehicle", "sensors"}, robot.path.string());
         parseVehicle(robot.root["vehicle"], s.plant, robot.path.string() + ": vehicle");
         const auto world = reference(root, "world", document.path, "world", s.sources);
-        keys(world.root, {"schema_version", "kind", "pool", "surface_pressure_pa"},
+        keys(world.root,
+             {"schema_version", "kind", "pool", "surface_pressure_pa", "collision_boxes"},
              world.path.string());
         parsePool(world.root["pool"], s.plant.pool, world.path.string() + ": pool");
+        if (world.root["collision_boxes"])
+            s.plant.contacts.world_boxes = parseBoxes(world.root["collision_boxes"],
+                                                      world.path.string() + ": collision_boxes");
         s.surface_pressure = number(world.root, "surface_pressure_pa", world.path.string());
         if (s.surface_pressure <= 0) {
             throw std::invalid_argument(world.path.string() +
@@ -150,6 +194,8 @@ Scenario parse(const Document &document, std::vector<std::filesystem::path> sour
     } else {
         throw std::invalid_argument("scenario.schema_version must be 1 or 2");
     }
+    if (root["contacts"])
+        parseContacts(root["contacts"], s.plant.contacts);
     const auto step = integer(root, "timestep_ns", "scenario");
     if (step == 0 || step > 100'000'000) {
         throw std::invalid_argument("scenario.timestep_ns must be in [1, 100000000]");

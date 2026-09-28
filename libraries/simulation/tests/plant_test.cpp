@@ -292,3 +292,39 @@ TEST(Plant, StopCancelsDelayedCommandsAndAllowsSubsequentExplicitCommands) {
     plant.command(force(4));
     EXPECT_DOUBLE_EQ(plant.advance(50).thruster_forces[0], 4);
 }
+
+TEST(Plant, ContactSelectionDoesNotImposeUnselectedSphereConstraints) {
+    auto p = ideal();
+    p.body.collision_radius = -1; // Irrelevant to explicitly disabled or box contacts.
+    auto state = initial();
+    state.position = {-2, -2, -10};
+    p.contacts.model = ContactModel::Disabled;
+    Plant disabled(p, state);
+    EXPECT_EQ(disabled.advance().body.position, state.position);
+    p.contacts.model = ContactModel::BoxScene;
+    Plant empty_scene(p, state);
+    EXPECT_EQ(empty_scene.advance().body.position, state.position);
+    EXPECT_NO_THROW(empty_scene.reset(state));
+    p.contacts.model = ContactModel::SpherePool;
+    EXPECT_THROW(Plant(p, state), std::invalid_argument);
+    p.contacts.model = static_cast<ContactModel>(-1);
+    EXPECT_THROW(Plant(p, state), std::invalid_argument);
+}
+
+TEST(Plant, BoxScenePermitsInitialDepenetrationAndResetWithoutHiddenState) {
+    auto p = ideal();
+    p.contacts.model = ContactModel::BoxScene;
+    p.contacts.body_boxes = {{"hull", {.4, .4, .4}, {0, 0, 0}}};
+    p.contacts.world_boxes = {{"floor", {10, 10, 1}, {0, 0, -.5}}};
+    auto state = initial();
+    state.position = {0, 0, .1};
+    state.linear_velocity = {.1, .2, -.3};
+    Plant plant(p, state);
+    EXPECT_EQ(plant.observe().body.position, state.position); // Correction belongs to stepping.
+    const auto first = plant.advance(10);
+    EXPECT_GT(first.body.position.z(), state.position.z());
+    EXPECT_NEAR(first.body.orientation.norm(), 1, 1e-14);
+    EXPECT_TRUE(plant.motion().acceleration_valid); // Post-impulse derivative; excludes impulse.
+    plant.reset(state);
+    same(first, plant.advance(10));
+}

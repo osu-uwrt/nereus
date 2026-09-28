@@ -1,4 +1,5 @@
 #include "robotics/simulation/plant.hpp"
+#include "detail/box_contacts.hpp"
 #include "detail/marine_dynamics.hpp"
 #include "detail/rk4.hpp"
 #include "detail/thruster_dynamics.hpp"
@@ -20,10 +21,8 @@ void require(bool condition, const std::string &message) {
 void validate(const PlantParameters &p) {
     require(p.timestep.count() > 0 && p.timestep <= std::chrono::milliseconds(100),
             "timestep must be in (0, 100ms]");
-    for (double value : {p.pool.length, p.pool.width, p.pool.depth, p.pool.water_density,
-                         p.body.collision_radius}) {
-        require(std::isfinite(value) && value > 0,
-                "pool dimensions, density, radius must be positive");
+    for (double value : {p.pool.length, p.pool.width, p.pool.depth, p.pool.water_density}) {
+        require(std::isfinite(value) && value > 0, "pool dimensions and density must be positive");
     }
     require(std::isfinite(p.pool.water_level) && p.pool.current_velocity.allFinite(),
             "pool level and current must be finite");
@@ -36,8 +35,6 @@ void validate(const PlantParameters &p) {
                     omega * (static_cast<double>(std::numeric_limits<std::int64_t>::max()) / 1e9)),
             "current oscillation must have finite amplitude and nonnegative frequency");
     require(std::isfinite(p.pool.water_level - p.pool.depth), "pool floor must be finite");
-    require(2 * p.body.collision_radius < std::min({p.pool.length, p.pool.width, p.pool.depth}),
-            "collision sphere must fit in the pool");
     std::set<std::string> ids;
     for (const auto &t : p.thrusters) {
         require(!t.id.empty() && ids.insert(t.id).second,
@@ -80,7 +77,12 @@ class PoolContacts {
         : lower_(p.body.collision_radius, p.body.collision_radius,
                  p.pool.water_level - p.pool.depth + p.body.collision_radius),
           upper_(p.pool.length - p.body.collision_radius, p.pool.width - p.body.collision_radius,
-                 std::numeric_limits<double>::infinity()) {}
+                 std::numeric_limits<double>::infinity()) {
+        require(std::isfinite(p.body.collision_radius) && p.body.collision_radius > 0 &&
+                    2 * p.body.collision_radius <
+                        std::min({p.pool.length, p.pool.width, p.pool.depth}),
+                "positive finite collision sphere must fit in the pool");
+    }
 
     void validateInitial(const detail::State13d &x) const {
         require((x.head<3>().array() >= lower_.array()).all() &&
@@ -131,9 +133,23 @@ class PoolContacts {
 
 struct Plant::Impl {
     explicit Impl(const PlantParameters &p, const BodyState &initial)
-        : parameters(p), contacts(p), state(pack(initial)) {
+        : parameters(p), state(pack(initial)) {
         validate(p);
-        contacts.validateInitial(state);
+        switch (p.contacts.model) {
+        case ContactModel::Disabled:
+            break;
+        case ContactModel::SpherePool:
+            pool_contacts = std::make_unique<PoolContacts>(p);
+            pool_contacts->validateInitial(state);
+            break;
+        case ContactModel::BoxScene:
+            box_contacts =
+                std::make_unique<detail::BoxContacts>(p.contacts.body_boxes, p.contacts.world_boxes,
+                                                      p.contacts.restitution, p.contacts.friction);
+            break;
+        default:
+            throw std::invalid_argument("unknown contact model");
+        }
         const auto &b = p.body;
         dynamics.configure(b.mass, b.inertia, b.added_mass);
         dynamics.configureDamping(b.linear_damping, b.quadratic_damping, b.damping_center);
@@ -195,7 +211,8 @@ struct Plant::Impl {
     PlantParameters parameters;
     detail::MarineDynamics dynamics;
     detail::ThrusterDynamics actuators;
-    PoolContacts contacts;
+    std::unique_ptr<PoolContacts> pool_contacts;
+    std::unique_ptr<detail::BoxContacts> box_contacts;
     Eigen::Matrix<double, 6, Eigen::Dynamic> allocation;
     detail::State13d state;
     Eigen::VectorXd committed_forces;
@@ -240,7 +257,9 @@ MotionSample Plant::motion() const {
     sample.acceleration_body =
         derivative.segment<3>(7) + body.angular_velocity.cross(body.linear_velocity);
     sample.angular_acceleration_body = derivative.tail<3>();
-    sample.acceleration_valid = !p.contacts.touching(p.state);
+    // Box contacts expose post-impulse free-motion derivatives, excluding the
+    // impulse itself, as in the reference. Sphere contacts retain their policy.
+    sample.acceleration_valid = !p.pool_contacts || !p.pool_contacts->touching(p.state);
     if (!sample.acceleration_body.allFinite() || !sample.angular_acceleration_body.allFinite()) {
         throw std::runtime_error("nonfinite motion derivative");
     }
@@ -263,12 +282,23 @@ Snapshot Plant::advance(std::uint64_t ticks) {
             // Midpoint actuator force held during the RK4 body step (operator splitting).
             // One authoritative state commit per integer tick.
             p.actuators.advance(dt / 2);
+            auto start = p.state;
+            if (p.box_contacts)
+                start = p.box_contacts->resolve(start, p.dynamics.inverseMass());
             const double time = static_cast<double>(p.tick) * dt;
-            auto next =
-                detail::integrateBodyRk4(p.state, dt, [&](const auto &stage, double offset) {
-                    return p.derivative(stage, p.actuators.forces(), time + offset);
-                });
-            p.contacts.resolve(next, p.dynamics.inverseMass());
+            auto next = detail::integrateBodyRk4(start, dt, [&](const auto &stage, double offset) {
+                return p.derivative(stage, p.actuators.forces(), time + offset);
+            });
+            if (p.box_contacts) {
+                next = p.box_contacts->resolve(next, p.dynamics.inverseMass());
+                const auto q = Eigen::Quaterniond(next[3], next[4], next[5], next[6]).normalized();
+                next[3] = q.w();
+                next.segment<3>(4) = q.vec();
+            } else {
+                next.segment<4>(3).normalize();
+            }
+            if (p.pool_contacts)
+                p.pool_contacts->resolve(next, p.dynamics.inverseMass());
             detail::MarineDynamics::validateState(next);
             p.actuators.advance(dt / 2);
             p.state = next;
@@ -284,7 +314,8 @@ Snapshot Plant::advance(std::uint64_t ticks) {
 
 Snapshot Plant::reset(const BodyState &initial) {
     auto next = pack(initial);
-    impl_->contacts.validateInitial(next);
+    if (impl_->pool_contacts)
+        impl_->pool_contacts->validateInitial(next);
     if (impl_->generation == std::numeric_limits<std::uint64_t>::max()) {
         throw std::overflow_error("reset generation overflow");
     }

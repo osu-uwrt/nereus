@@ -126,11 +126,11 @@ BoxContacts::BoxContacts(std::vector<BoxProxy> body, std::vector<BoxProxy> world
 }
 BoxContacts::~BoxContacts() = default;
 State13d BoxContacts::resolve(State13d state, const Matrix6d &inverse_mass) const {
-    const Eigen::Quaterniond q =
-        Eigen::Quaterniond(state[3], state[4], state[5], state[6]).normalized();
+    const Eigen::Quaterniond raw_orientation(state[3], state[4], state[5], state[6]);
+    const Eigen::Quaterniond q = raw_orientation.normalized();
     for (const auto &proxy : impl_->body) {
         for (const auto &obstacle : impl_->world) {
-            const auto contact = collide(Box(proxy, state.head<3>(), q), obstacle);
+            const auto contact = collide(Box(proxy, state.head<3>(), raw_orientation), obstacle);
             if (!contact.collided)
                 continue;
             const Eigen::Vector3d offset = contact.point - state.head<3>();

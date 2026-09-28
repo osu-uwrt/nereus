@@ -196,3 +196,21 @@ queued commands and targets immediately. Realized force coasts down during later
 steps; time, generation and sensor schedules remain unchanged. A later explicit
 command is accepted normally. Stop is not a latched kill/arming policy: optional
 robot mechanism/integration components own that policy and command authorization.
+
+### Contact selection and geometry
+
+Scenario `contacts` accepts `model: disabled`, `sphere_pool` (default), or `box_scene`,
+plus `restitution` (default 0.1) and `friction` (default 0.4) for box response. Robot
+`vehicle.collision_boxes` and world root `collision_boxes` are ordered lists of
+`{id, size_m, center_m, orientation_wxyz}`. Centers/orientations are COM-local for
+body proxies and world-frame for static geometry. IDs must be unique per list;
+box dimensions must be positive and orientations valid when box contacts are selected.
+
+The loader validates schema regardless of selection; the plant validates the
+selected numerical model. `collision_radius_m` is optional (default 0.2) and only
+applies to `sphere_pool`. Disabled/box scenes impose no sphere containment test.
+Box intersections are allowed initially and depenetrated when stepped. Geometry
+order affects sequential resolution and is preserved. Lists are limited to 4,096
+proxies each; that storage limit is not a workload guarantee. See
+[BOX_CONTACTS.md](reference/BOX_CONTACTS.md) and `content/examples/contact_pool.yaml`.
+Collision geometry does not replace the separate DVL floor-query provider.

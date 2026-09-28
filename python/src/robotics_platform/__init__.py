@@ -5,6 +5,9 @@ from pathlib import Path
 from ._native import (
     BodyParameters,
     BodyState,
+    BoxProxy,
+    ContactModel,
+    ContactParameters,
     Device,
     Dvl,
     DvlParameters,
@@ -49,6 +52,9 @@ def example_scenario() -> Path:
 
 
 __all__ = [
+    "BoxProxy",
+    "ContactModel",
+    "ContactParameters",
     "BodyState",
     "BodyParameters",
     "Pool",

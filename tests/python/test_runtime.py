@@ -22,6 +22,32 @@ def passive(seed: int = 42) -> rp.Runtime:
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_explicit_box_contacts_and_disabled_contact_world(self) -> None:
+        params = rp.PlantParameters()
+        params.contacts.model = rp.ContactModel.BOX_SCENE
+        hull = rp.BoxProxy()
+        hull.id = "hull"
+        hull.size = [0.4, 0.4, 0.4]
+        floor = rp.BoxProxy()
+        floor.id = "floor"
+        floor.size = [10, 10, 1]
+        floor.center = [0, 0, -0.5]
+        params.contacts.body_boxes = [hull]
+        params.contacts.world_boxes = [floor]
+        state = initial()
+        state.position = [0, 0, 0.1]
+        state.linear_velocity = [0.1, 0.2, -0.3]
+        runtime = rp.Runtime(params, state)
+        result = runtime.advance(10)
+        self.assertGreater(result.body.position[2], 0.1)
+        runtime.reset(state, 0)
+        np.testing.assert_array_equal(runtime.advance(10).body.position, result.body.position)
+        params.contacts.model = rp.ContactModel.DISABLED
+        params.body.collision_radius = -1
+        state.position = [-2, -2, -10]
+        runtime = rp.Runtime(params, state)
+        self.assertEqual(runtime.advance().elapsed_ns, 2_000_000)
+
     def test_calibrated_thruster_stop_clears_delay_without_rewinding(self) -> None:
         params = rp.PlantParameters()
         thruster = rp.Thruster()

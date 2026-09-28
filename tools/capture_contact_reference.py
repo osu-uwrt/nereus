@@ -48,44 +48,65 @@ def main():
         start = physics.index("    collisionResult computeCollision(")
         end = physics.index("\n    /**", start)
         (temporary / "legacy_contacts.inc").write_text(response + "\n" + physics[start:end])
-        subprocess.run(
-            [
-                "c++",
-                "-std=c++17",
-                "-O2",
-                "-I/usr/include/eigen3",
-                f"-I{temporary / 'c_simulator/include'}",
-                f"-I{temporary}",
-                str(driver),
-                str(temporary / "c_simulator/src/marine_dynamics.cpp"),
-                str(temporary / "c_simulator/src/collisionBox_class.cpp"),
-                "-o",
-                str(temporary / "capture"),
-            ],
-            check=True,
+        start = physics.index("const vXd K1 = calcStateDot(")
+        end = physics.index("vXd advanced = state + stateDelta;", start) + len(
+            "vXd advanced = state + stateDelta;"
         )
-        output = subprocess.check_output([str(temporary / "capture")])
-    destination = ROOT / "tests/fixtures/legacy_box_contacts.csv"
-    destination.write_bytes(output)
-    destination.with_suffix(".json").write_text(
-        json.dumps(
-            {
-                "revision": REVISION,
-                "sources_sha256": {
-                    name: hashlib.sha256(data).hexdigest() for name, data in sources.items()
-                },
-                "driver_sha256": hashlib.sha256(driver.read_bytes()).hexdigest(),
-                "fixture_sha256": hashlib.sha256(output).hexdigest(),
-                "compiler": subprocess.check_output(["c++", "--version"], text=True).splitlines()[
-                    0
+        (temporary / "legacy_rk4.inc").write_text(physics[start:end])
+        outputs = {}
+        for optimization in ("-O2", "-O0"):
+            flags = ["-std=c++17", optimization]
+            subprocess.run(
+                [
+                    "c++",
+                    *flags,
+                    "-I/usr/include/eigen3",
+                    f"-I{temporary / 'c_simulator/include'}",
+                    f"-I{temporary}",
+                    str(driver),
+                    str(temporary / "c_simulator/src/marine_dynamics.cpp"),
+                    str(temporary / "c_simulator/src/collisionBox_class.cpp"),
+                    "-o",
+                    str(temporary / "capture"),
                 ],
-                "scope": "Single static-box contact resolution at supplied states; original SAT/contact point/impulse/friction. Logging disabled; optional task-contact hook omitted. No integration, Talos content, sensors or ROS.",
-            },
-            indent=2,
+                check=True,
+            )
+            if optimization == "-O2":
+                outputs["legacy_box_contacts"] = (
+                    subprocess.check_output([str(temporary / "capture")]),
+                    flags,
+                )
+            name = "legacy_box_steps" + ("_unoptimized" if optimization == "-O0" else "")
+            outputs[name] = (subprocess.check_output([str(temporary / "capture"), "steps"]), flags)
+    for name, (output, flags) in outputs.items():
+        destination = ROOT / "tests/fixtures" / (name + ".csv")
+        destination.write_bytes(output)
+        scope = (
+            "Single static-box contact resolution."
+            if name.endswith("contacts")
+            else "50 RK4 steps per case, with pre/post static contact resolution; zero propulsion/current/volume."
         )
-        + "\n"
-    )
-    print(f"Captured {len(output.splitlines()) - 1} static-box contact cases")
+        destination.with_suffix(".json").write_text(
+            json.dumps(
+                {
+                    "revision": REVISION,
+                    "sources_sha256": {
+                        name: hashlib.sha256(data).hexdigest() for name, data in sources.items()
+                    },
+                    "driver_sha256": hashlib.sha256(driver.read_bytes()).hexdigest(),
+                    "fixture_sha256": hashlib.sha256(output).hexdigest(),
+                    "compiler": subprocess.check_output(
+                        ["c++", "--version"], text=True
+                    ).splitlines()[0],
+                    "compiler_flags": flags,
+                    "scope": scope
+                    + " Original SAT/contact point/impulse/friction. Logging disabled; optional task-contact hook omitted. No Talos content, sensors or ROS.",
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        print(f"Captured {len(output.splitlines()) - 1} rows to {destination.name}")
 
 
 if __name__ == "__main__":

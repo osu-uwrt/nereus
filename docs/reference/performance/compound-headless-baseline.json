@@ -1,0 +1,79 @@
+{
+  "scope": "Bundled headless scenario; no renderer/cameras/ROS/tasks. Construction excluded; 3 warmup runs per mode.",
+  "machine": {
+    "platform": "Linux-6.5.0-1013-apple-arm-aarch64-with-glibc2.35",
+    "cpu": [
+      {
+        "field": "Architecture:",
+        "data": "aarch64"
+      },
+      {
+        "field": "CPU(s):",
+        "data": "10"
+      },
+      {
+        "field": "Vendor ID:",
+        "data": "Apple"
+      },
+      {
+        "field": "CPU max MHz:",
+        "data": "2064.0000"
+      },
+      {
+        "field": "CPU max MHz:",
+        "data": "3228.0000"
+      }
+    ]
+  },
+  "build": {
+    "CMAKE_BUILD_TYPE": "Release",
+    "CMAKE_CXX_COMPILER": "/usr/bin/c++",
+    "CMAKE_CXX_FLAGS": "",
+    "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG"
+  },
+  "revision": "87a09716fdc58e229e852e8b01f7f68c709ceb44",
+  "worktree_diff_sha256": "8d17b9e0dc3b343c0a5bc624e4a773775753dd8898f2b013807ca93eab31ec45",
+  "executable_sha256": "b6172c40727e32a13fbd6317310d19c6075f0391415c51ae56464a5a3c6fbbfa",
+  "benchmark_driver_sha256": "09be54f1e0dcb8484676365dce7bb232d78093193f9a2e456ab4f2895fec55a1",
+  "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "build_cache_sha256": "9984dfbf4737c8ba6e217c7172521284902772d0d9e6a19b7c1f913dcd2b4eab",
+  "content_sha256": {
+    "content/examples/contact_pool.yaml": "f5e0ba6302167b2f588e422b9cdf14a3fb9c0485d3ad55a9736375e524ff0690",
+    "content/examples/empty_pool.yaml": "3485ad548ce7499106e1958abba3fa53f7970b9232e82680ce3b1c6603bf96df",
+    "content/examples/profile_pool.yaml": "cfe9f1b83b0d52ccffddf9de742d1fc795ec0bc39f764edd47471c9984e16248",
+    "content/robots/synthetic_auv.yaml": "5c70947c7f537dc19bbf60b548791c96980387cf1dbe4020d5bb8411e25c5cd9",
+    "content/sensors/imu.yaml": "35bb652b181bfab9a7c07c55ddced8923d002fe696859ef9c5c9986bd4ff8aaf",
+    "content/worlds/box_pool.yaml": "7df8ce04feb6591bdb9b4a2d88e87fa2ee6415481f48205e2e7edf8be5acd8a0",
+    "content/worlds/empty_pool.yaml": "2337b1d3c72714fa38b4841354dcecb0d743ee3e1779f5aa00c0629ee464d824"
+  },
+  "scenario": "content/examples/contact_pool.yaml",
+  "iterations": 1000,
+  "measurements": [
+    {
+      "mode": "plant",
+      "measured_ticks": 1500000,
+      "mean_us": 2.891820051,
+      "p50_us": 2.958,
+      "p95_us": 3.25,
+      "p99_us": 3.25,
+      "max_us": 68.792,
+      "wall_seconds": 4.381108706,
+      "simulated_seconds": 3000,
+      "real_time_factor": 684.7581745,
+      "final_position_checksum": 22843.24151
+    },
+    {
+      "mode": "plant_and_scheduled_sensors",
+      "measured_ticks": 1500000,
+      "mean_us": 3.479399027,
+      "p50_us": 3.583,
+      "p95_us": 4.25,
+      "p99_us": 4.75,
+      "max_us": 26.125,
+      "wall_seconds": 5.262482703,
+      "simulated_seconds": 3000,
+      "real_time_factor": 570.0731326,
+      "final_position_checksum": 22843.24151
+    }
+  ]
+}

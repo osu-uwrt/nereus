@@ -4,6 +4,30 @@
 namespace robotics::python {
 using namespace simulation;
 void bindPlant(py::module_ &m) {
+    py::enum_<ContactModel>(m, "ContactModel")
+        .value("DISABLED", ContactModel::Disabled)
+        .value("SPHERE_POOL", ContactModel::SpherePool)
+        .value("BOX_SCENE", ContactModel::BoxScene);
+    auto box =
+        py::class_<BoxProxy>(m, "BoxProxy").def(py::init<>()).def_readwrite("id", &BoxProxy::id);
+    valueProperty(box, "size", &BoxProxy::size);
+    valueProperty(box, "center", &BoxProxy::center);
+    box.def_property(
+        "orientation_wxyz",
+        [](const BoxProxy &self) {
+            return Eigen::Vector4d(self.orientation.w(), self.orientation.x(), self.orientation.y(),
+                                   self.orientation.z());
+        },
+        [](BoxProxy &self, const Eigen::Vector4d &q) {
+            self.orientation = Eigen::Quaterniond(q[0], q[1], q[2], q[3]);
+        });
+    auto contacts = py::class_<ContactParameters>(m, "ContactParameters")
+                        .def(py::init<>())
+                        .def_readwrite("model", &ContactParameters::model)
+                        .def_readwrite("restitution", &ContactParameters::restitution)
+                        .def_readwrite("friction", &ContactParameters::friction);
+    valueProperty(contacts, "body_boxes", &ContactParameters::body_boxes);
+    valueProperty(contacts, "world_boxes", &ContactParameters::world_boxes);
     auto body = py::class_<BodyState>(m, "BodyState").def(py::init<>());
     valueProperty(body, "position", &BodyState::position);
     valueProperty(body, "linear_velocity", &BodyState::linear_velocity);
@@ -61,6 +85,7 @@ void bindPlant(py::module_ &m) {
             .def(py::init<>())
             .def_readwrite("body", &PlantParameters::body)
             .def_readwrite("pool", &PlantParameters::pool)
+            .def_readwrite("contacts", &PlantParameters::contacts)
             .def_readwrite("command_timeout", &PlantParameters::command_timeout)
             .def_property(
                 "timestep_ns", [](const PlantParameters &self) { return self.timestep.count(); },

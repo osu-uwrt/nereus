@@ -45,7 +45,8 @@ simulator gaps over unrelated viewer/platform expansion.
 - [x] Viewer-only install and neutral libraries without graphics discovery verified.
 
 These are foundation checks, not Talos fidelity or full platform acceptance.
-Current physics uses a spherical pool contact proxy; the viewer draws line geometry.
+Current physics offers disabled, sphere-pool and static compound-box contacts;
+the viewer still draws line geometry.
 
 ## A. Capture and lock the acceptance baseline
 
@@ -85,7 +86,10 @@ Current physics uses a spherical pool contact proxy; the viewer draws line geome
   configuration and longer reference rollouts, including stop/watchdog response.
 - [ ] Hull/course collisions with required friction/restitution and prop coupling.
 - [x] Extract private static compound-box response and match 11 pinned original
-  contact cases (reference/BOX_CONTACTS.md); Plant/profile integration remains open.
+  contact cases (reference/BOX_CONTACTS.md).
+- [x] Select contacts through C++/native profiles/Python, with robot/world-owned
+  proxies and 550 original whole-step states covering pre/post-RK4 ordering.
+  Dynamic prop contacts and full Talos/course acceptance remain open.
 - [ ] Distinct placement, task reset and full reset semantics, plus ROS clock mapping.
 - [ ] Match required Talos sensor products/calibration through declared models/adapters.
 - [ ] Native assets and reproducible resolved configuration load outside old workspace.
@@ -168,8 +172,8 @@ selected live-robot workflows required here.
 2. Read-only pose transport and application composition are validated. Explicit
    simulation controls remain open and separate from recording playback.
 3. Stage forcing and actuator calibration/stop interfaces are verified in their
-   bounded reference/contracts. Next capture and port compound box contact behavior,
-   named body/world frame support and native Talos content; neutral scene/assets follow.
+   bounded reference/contracts. Static compound contacts are integrated and validated.
+   Next: named body/world frame support and native Talos content; neutral scene/assets follow.
 4. Re-evaluate this order after each validated commit against concrete dependencies.
 
 For every increment: state its acceptance target, implement, test appropriate

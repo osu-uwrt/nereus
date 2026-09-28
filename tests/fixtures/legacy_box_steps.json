@@ -9,11 +9,11 @@
     "c_simulator/src/physics_simulator.cpp": "d4b05d378425bfdb59773ba6b20f0db44f14469c2be4eb0ccdfb69824ff05e14"
   },
   "driver_sha256": "7a751445a8055c72279ffdc98010a88a0d4bb64552459e37019c910bc45b9432",
-  "fixture_sha256": "3d579b657eb5af75d49bbf82f52df764c800a8f67b2f018900631f0a086a3752",
+  "fixture_sha256": "c02e969160ff113a61dbb42c63fa6b210695bfb06a35a18f928f99ec8dcfd3de",
   "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
   "compiler_flags": [
     "-std=c++17",
     "-O2"
   ],
-  "scope": "Single static-box contact resolution. Original SAT/contact point/impulse/friction. Logging disabled; optional task-contact hook omitted. No Talos content, sensors or ROS."
+  "scope": "50 RK4 steps per case, with pre/post static contact resolution; zero propulsion/current/volume. Original SAT/contact point/impulse/friction. Logging disabled; optional task-contact hook omitted. No Talos content, sensors or ROS."
 }

@@ -174,3 +174,14 @@ A local release-build smoke measurement of a passive body took about 10 ms for
 granularity only: it is not a throughput guarantee, sensor workload benchmark, or
 claim of training-scale performance. Physics substeps and sensor scheduling remain
 in C++; Python controls when to command, advance, consume, and reset.
+
+## Contact models
+
+`parameters.contacts` exposes `ContactParameters`: `model`, `body_boxes`,
+`world_boxes`, `restitution`, and `friction`. Choose `ContactModel.DISABLED`,
+`SPHERE_POOL` (default), or `BOX_SCENE`. Each `BoxProxy` exposes `id`, `size`,
+`center`, and `orientation_wxyz`; assign complete box lists because getters return
+copies. Body proxy poses are COM-local; static proxy poses are world-frame.
+Box scenes allow initial overlap and resolve it on advancement. Unselected sphere
+radius/containment constraints do not apply. See the [contact contract](reference/BOX_CONTACTS.md)
+for ordering, sensor-acceleration semantics and current limitations.

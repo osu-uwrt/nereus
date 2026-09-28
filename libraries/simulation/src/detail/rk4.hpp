@@ -16,7 +16,8 @@ State13d integrateBodyRk4(const State13d &state, double dt, Derivative derivativ
     const State13d k4 = derivative(state + dt * k3, dt);
     State13d next = state + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4);
     MarineDynamics::validateState(next);
-    next.segment<4>(3).normalize();
+    // Caller normalizes after its selected contact phase. The original box
+    // contact solver consumes the raw RK4 endpoint before state commit.
     return next;
 }
 } // namespace robotics::simulation::detail

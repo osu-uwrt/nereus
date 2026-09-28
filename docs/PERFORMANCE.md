@@ -43,6 +43,13 @@ The initial record is
 It is evidence for the synthetic headless slice only. It must not be advertised as
 Talos/full-stack throughput or cross-hardware performance.
 
+The [compound contact record](reference/performance/compound-headless-baseline.json)
+uses `content/examples/contact_pool.yaml`: one hull proxy, five finite pool boxes,
+wall contact, and four sensor families. On the same machine, plant p99 was 3.25
+microseconds; plant plus sensors p99 was 4.75 microseconds and completed 3,000
+simulated seconds in 5.262 measured seconds. This is still a synthetic workload,
+not Talos, dynamic props, rendering or full-stack acceptance.
+
 ## Repeat as the replacement grows
 
 - Compound contacts: representative floor/wall/corner impacts and task geometry;

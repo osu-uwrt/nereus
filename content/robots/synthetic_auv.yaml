@@ -12,6 +12,8 @@ vehicle:
   buoyancy_radii_m: [0.2, 0.2, 0.2]
   collision_radius_m: 0.25
   command_timeout_s: 0.5
+  collision_boxes:
+    - {id: hull, size_m: [0.6, 0.4, 0.3], center_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
   thrusters:
     - id: horizontal_port
       position_m: [0, 0.2, 0]

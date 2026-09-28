@@ -1,0 +1,17 @@
+schema_version: 1
+kind: world
+surface_pressure_pa: 101325
+pool:
+  length_m: 20
+  width_m: 10
+  depth_m: 5
+  water_level_m: 0
+  water_density_kg_m3: 1000
+  current_m_s: [0, 0, 0]
+# Finite pool walls/deck; geometry is world-owned and independent of task selection.
+collision_boxes:
+  - {id: floor, size_m: [20, 10, 1], center_m: [10, 5, -5.5], orientation_wxyz: [1, 0, 0, 0]}
+  - {id: west, size_m: [1, 12, 6.3], center_m: [-0.5, 5, -2.35], orientation_wxyz: [1, 0, 0, 0]}
+  - {id: east, size_m: [1, 12, 6.3], center_m: [20.5, 5, -2.35], orientation_wxyz: [1, 0, 0, 0]}
+  - {id: south, size_m: [20, 1, 6.3], center_m: [10, -0.5, -2.35], orientation_wxyz: [1, 0, 0, 0]}
+  - {id: north, size_m: [20, 1, 6.3], center_m: [10, 10.5, -2.35], orientation_wxyz: [1, 0, 0, 0]}

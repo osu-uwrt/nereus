@@ -8,6 +8,41 @@ from numpy.typing import ArrayLike, NDArray
 
 FloatArray = NDArray[np.float64]
 
+class ContactModel:
+    DISABLED: ClassVar[ContactModel]
+    SPHERE_POOL: ClassVar[ContactModel]
+    BOX_SCENE: ClassVar[ContactModel]
+
+class BoxProxy:
+    def __init__(self) -> None: ...
+    id: str
+    @property
+    def size(self) -> FloatArray: ...
+    @size.setter
+    def size(self, value: ArrayLike) -> None: ...
+    @property
+    def center(self) -> FloatArray: ...
+    @center.setter
+    def center(self, value: ArrayLike) -> None: ...
+    @property
+    def orientation_wxyz(self) -> FloatArray: ...
+    @orientation_wxyz.setter
+    def orientation_wxyz(self, value: ArrayLike) -> None: ...
+
+class ContactParameters:
+    def __init__(self) -> None: ...
+    model: ContactModel
+    restitution: float
+    friction: float
+    @property
+    def body_boxes(self) -> list[BoxProxy]: ...
+    @body_boxes.setter
+    def body_boxes(self, value: Sequence[BoxProxy]) -> None: ...
+    @property
+    def world_boxes(self) -> list[BoxProxy]: ...
+    @world_boxes.setter
+    def world_boxes(self, value: Sequence[BoxProxy]) -> None: ...
+
 class BodyState:
     def __init__(self) -> None: ...
     @property
@@ -106,6 +141,7 @@ class PlantParameters:
     command_timeout: float
     body: BodyParameters
     pool: Pool
+    contacts: ContactParameters
     timestep_ns: int
     @property
     def thrusters(self) -> list[Thruster]: ...

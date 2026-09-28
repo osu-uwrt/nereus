@@ -1,4 +1,5 @@
 #pragma once
+#include <robotics/simulation/contacts.hpp>
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -31,7 +32,7 @@ struct BodyParameters {
     double displaced_volume = 0.01;
     Eigen::Vector3d buoyancy_center = Eigen::Vector3d::Zero();
     Eigen::Vector3d buoyancy_radii{0.2, 0.2, 0.2};
-    double collision_radius = 0.2; // COM-centered sphere; independent of buoyancy geometry.
+    double collision_radius = 0.2; // SpherePool only; independent of buoyancy/box geometry.
 };
 
 struct Thruster {
@@ -66,6 +67,7 @@ struct Pool {
 struct PlantParameters {
     BodyParameters body;
     Pool pool;
+    ContactParameters contacts;
     std::vector<Thruster> thrusters;
     std::chrono::nanoseconds timestep{2'000'000};
     double command_timeout = 0.5; // Simulated seconds; zero holds commands indefinitely.

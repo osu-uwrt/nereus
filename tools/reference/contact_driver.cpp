@@ -17,15 +17,31 @@ struct Reference {
             return inverse;
         }
     } robot;
+    c_simulator::MarineDynamics dynamics;
     std::vector<collisionBox> robotBoxes, obstacleBoxes;
     double restitution = .1, contactFriction = .4;
 #include "legacy_contacts.inc"
+    vXd calcStateDot(const vXd &state, double = 0) const {
+        return dynamics.derivative(state, c_simulator::Vector6d::Zero());
+    }
+    vXd step(vXd state) {
+        constexpr double physicsStep = .002;
+        state = handleCollisions(state);
+#include "legacy_rk4.inc"
+        advanced = handleCollisions(advanced);
+        const quat q = state2quat(advanced);
+        advanced[3] = q.w();
+        advanced.segment<3>(4) = q.vec();
+        return advanced;
+    }
 };
-int main() {
-    std::cout << std::setprecision(17) << "case,x,y,z,qw,qx,qy,qz,u,v,w,p,q,r\n";
+int main(int argc, char **) {
+    const bool integrate = argc > 1;
+    std::cout << std::setprecision(17) << (integrate ? "case,tick," : "case,")
+              << "x,y,z,qw,qx,qy,qz,u,v,w,p,q,r\n";
     for (int scenario = 0; scenario < 11; ++scenario) {
         Reference reference;
-        c_simulator::MarineDynamics dynamics;
+        auto &dynamics = reference.dynamics;
         c_simulator::Matrix6d added = c_simulator::Matrix6d::Identity();
         added(0, 4) = added(4, 0) = .2;
         dynamics.configure(10, Eigen::Vector3d(.3, .4, .5).asDiagonal(), added);
@@ -62,10 +78,19 @@ int main() {
             reference.obstacleBoxes.emplace_back("tilted", 1, 3, 3, v3d(1, 0, 1), v3d::Zero(),
                                                  quat(Eigen::AngleAxisd(.4, v3d::UnitZ())));
         }
-        const auto result = reference.handleCollisions(state);
-        std::cout << scenario;
-        for (int i = 0; i < 13; ++i)
-            std::cout << ',' << result[i];
-        std::cout << '\n';
+        if (integrate) {
+            const auto normalized = state2quat(state);
+            state[3] = normalized.w();
+            state.segment<3>(4) = normalized.vec();
+        }
+        for (int tick = 1; tick <= (integrate ? 50 : 1); ++tick) {
+            state = integrate ? reference.step(state) : reference.handleCollisions(state);
+            std::cout << scenario;
+            if (integrate)
+                std::cout << ',' << tick;
+            for (int i = 0; i < 13; ++i)
+                std::cout << ',' << state[i];
+            std::cout << '\n';
+        }
     }
 }

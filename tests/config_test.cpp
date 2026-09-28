@@ -156,7 +156,8 @@ TEST_F(Profiles, RejectsMalformedSensorDeclarationsBeforeReturningConfiguration)
         {"white_stddev: 10", "white_stddev: .nan"},
         {"profile: ../sensors/imu.yaml", "profile: ../sensors/imu.yaml\n    model: imu"},
         {"profile: ../sensors/imu.yaml", "profile: package://robot/imu.yaml"},
-        {"orientation_wxyz: [1, 0, 0, 0]", "orientation_wxyz: [0, 0, 0, 0]"},
+        {"mount: {position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}",
+         "mount: {position_m: [0, 0, 0], orientation_wxyz: [0, 0, 0, 0]}"},
         {"minimum_range_m: 0.1", "minimum_range_m: 20"},
     };
     for (const auto &change : changes) {
@@ -209,5 +210,25 @@ TEST_F(Profiles, RobotActuatorCalibrationReachesNativeRuntime) {
     EXPECT_DOUBLE_EQ(thruster.reverse_scale, .8);
     EXPECT_DOUBLE_EQ(thruster.efficiency, .7);
     replace("robots/synthetic_auv.yaml", "efficiency: 0.7", "efficiency: 1.01");
+    EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
+}
+
+TEST_F(Profiles, ContactPolicyComposesRobotAndWorldGeometryIndependently) {
+    replace("examples/profile_pool.yaml", "schema_version: 2",
+            "schema_version: 2\ncontacts: {model: box_scene, restitution: 0.2, friction: 0.3}");
+    write("worlds/empty_pool.yaml",
+          read("worlds/empty_pool.yaml") +
+              "\ncollision_boxes:\n  - {id: floor, size_m: [20, 10, 1], center_m: [10, 5, -3.5], "
+              "orientation_wxyz: [1, 0, 0, 0]}\n");
+    const auto config = robotics::config::loadScenario(scenario());
+    EXPECT_EQ(config.plant.contacts.model, robotics::simulation::ContactModel::BoxScene);
+    ASSERT_EQ(config.plant.contacts.body_boxes.size(), 1U);
+    ASSERT_EQ(config.plant.contacts.world_boxes.size(), 1U);
+    EXPECT_EQ(config.plant.contacts.body_boxes[0].id, "hull");
+    EXPECT_EQ(config.plant.contacts.world_boxes[0].center, Eigen::Vector3d(10, 5, -3.5));
+    EXPECT_DOUBLE_EQ(config.plant.contacts.restitution, .2);
+    EXPECT_DOUBLE_EQ(config.plant.contacts.friction, .3);
+    EXPECT_NO_THROW(robotics::config::makeRuntime(config)->advance());
+    replace("examples/profile_pool.yaml", "model: box_scene", "model: typo");
     EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
 }

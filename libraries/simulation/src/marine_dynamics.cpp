@@ -157,8 +157,10 @@ State13d MarineDynamics::derivative(const State13d &x, const Vector6d &propulsio
 }
 State13d MarineDynamics::step(const State13d &x, const Vector6d &tau, double dt,
                               const Eigen::Vector3d &water, const Eigen::Vector3d &dw) const {
-    return integrateBodyRk4(x, dt, [&](const State13d &stage, double offset) {
+    auto next = integrateBodyRk4(x, dt, [&](const State13d &stage, double offset) {
         return derivative(stage, tau, water + offset * dw, dw);
     });
+    next.segment<4>(3).normalize();
+    return next;
 }
 } // namespace robotics::simulation::detail
