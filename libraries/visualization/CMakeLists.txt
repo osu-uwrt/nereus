@@ -5,7 +5,7 @@ target_include_directories(rp_visualization PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 find_package(Threads REQUIRED)
-target_link_libraries(rp_visualization PUBLIC Eigen3::Eigen Threads::Threads)
+target_link_libraries(rp_visualization PUBLIC rp_spatial Threads::Threads)
 rp_project_options(rp_visualization)
 
 find_package(yaml-cpp REQUIRED CONFIG)

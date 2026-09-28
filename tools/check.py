@@ -56,11 +56,11 @@ def main():
                 raise RuntimeError(f"Forbidden dependency in {path}: {line}")
     for path in sources:
         relative = path.relative_to(ROOT).as_posix()
-        if relative.startswith(("libraries/visualization/", "libraries/viewer_io/", "libraries/rendering/", "applications/viewer/")):
+        if relative.startswith(("libraries/spatial/", "libraries/visualization/", "libraries/viewer_io/", "libraries/rendering/", "applications/viewer/")):
             for line in path.read_text().splitlines():
                 if line.startswith("#include") and any(token in line for token in ("robotics/simulation", "robotics/sensors", "robotics/config", "pybind11")):
                     raise RuntimeError(f"Viewer depends on simulation: {path}: {line}")
-        if relative.startswith(("libraries/visualization/", "libraries/viewer_io/")):
+        if relative.startswith(("libraries/spatial/", "libraries/visualization/", "libraries/viewer_io/")):
             for line in path.read_text().splitlines():
                 if line.startswith("#include") and any(token in line for token in ("GL/", "GLFW/", "imgui")):
                     raise RuntimeError(f"Neutral viewer library depends on graphics: {path}: {line}")

@@ -214,3 +214,12 @@ order affects sequential resolution and is preserved. Lists are limited to 4,096
 proxies each; that storage limit is not a workload guarantee. See
 [BOX_CONTACTS.md](reference/BOX_CONTACTS.md) and `content/examples/contact_pool.yaml`.
 Collision geometry does not replace the separate DVL floor-query provider.
+
+### Named rigid frames
+
+Robot root `frames` optionally declares `{root, transforms}`. Each transform has
+`parent`, `child`, `position_m`, and `orientation_wxyz`. The root denotes COM;
+child poses map into parents. A sensor may use `mount_frame` instead of an explicit
+`mount`. Resolution and validation finish during loading; factories retain model
+values, not tree/file references. `Scenario::body_frames` exposes the immutable tree.
+See [FRAMES.md](FRAMES.md) for units, limits, Python access and viewer composition.

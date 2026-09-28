@@ -141,5 +141,6 @@ inline Document reference(const YAML::Node &node, const char *key,
     return doc;
 }
 SensorPlan parseSensor(const YAML::Node &node, const std::filesystem::path &declaring,
-                       const std::string &field, std::vector<std::filesystem::path> &sources);
+                       const std::string &field, std::vector<std::filesystem::path> &sources,
+                       const spatial::FixedFrames &frames);
 } // namespace robotics::config::detail

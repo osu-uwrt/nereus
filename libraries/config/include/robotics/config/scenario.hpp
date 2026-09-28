@@ -2,6 +2,7 @@
 #include "robotics/sensors/runtime.hpp"
 #include <filesystem>
 #include <functional>
+#include <robotics/spatial/frames.hpp>
 #include <vector>
 
 namespace robotics::config {
@@ -20,6 +21,8 @@ struct SensorPlan {
 };
 struct Scenario {
     simulation::PlantParameters plant;
+    // Root is the simulated COM; names and static mount geometry are content-owned.
+    spatial::FixedFrames body_frames{"com", {}};
     simulation::BodyState initial;
     std::uint64_t ticks = 0;
     std::vector<ScheduledCommand> commands;

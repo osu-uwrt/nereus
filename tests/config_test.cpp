@@ -232,3 +232,77 @@ TEST_F(Profiles, ContactPolicyComposesRobotAndWorldGeometryIndependently) {
     replace("examples/profile_pool.yaml", "model: box_scene", "model: typo");
     EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
 }
+
+TEST_F(Profiles, NamedMountsMatchExplicitSensorGeometryAndSurviveSourceRemoval) {
+    replace("examples/profile_pool.yaml", "linear_velocity_m_s: [0, 0, 0]",
+            "linear_velocity_m_s: [0.3, -0.2, 0.1]");
+    const std::string simple_mount =
+        "mount: {position_m: [0, 0, -0.1], orientation_wxyz: [1, 0, 0, 0]}";
+    const std::string inline_mount = "mount: {position_m: [0, 0, -0.1], orientation_wxyz: "
+                                     "[0.7071067811865476, 0, 0, 0.7071067811865476]}";
+    replace("robots/synthetic_auv.yaml", simple_mount, inline_mount);
+    replace("robots/synthetic_auv.yaml", simple_mount, inline_mount);
+    const auto baseline = robotics::config::loadScenario(scenario());
+    const auto original = read("robots/synthetic_auv.yaml");
+    const std::string frames = R"(
+frames:
+  root: center
+  transforms:
+    - {parent: offset, child: mount, position_m: [0, 0.2, -0.3], orientation_wxyz: [1, 0, 0, 0]}
+    - {parent: center, child: offset, position_m: [0.2, 0, 0.2], orientation_wxyz: [0.7071067811865476, 0, 0, 0.7071067811865476]}
+)";
+    write("robots/synthetic_auv.yaml", original + frames);
+    replace("robots/synthetic_auv.yaml", inline_mount, "mount_frame: mount"); // DVL
+    replace("robots/synthetic_auv.yaml", inline_mount, "mount_frame: mount"); // Pressure
+    const auto named = robotics::config::loadScenario(scenario());
+    EXPECT_EQ(named.body_frames.root(), "center");
+    EXPECT_TRUE(named.body_frames.fromRoot("mount").translation.isApprox(Eigen::Vector3d(0, 0, -.1),
+                                                                         1e-14));
+    std::filesystem::remove_all(root);
+    auto a = robotics::config::makeRuntime(baseline);
+    auto b = robotics::config::makeRuntime(named);
+    a->advance(60);
+    b->advance(60);
+    const auto ap = a->stream<robotics::sensors::PressureReading>("pressure")->latest();
+    const auto bp = b->stream<robotics::sensors::PressureReading>("pressure")->latest();
+    ASSERT_TRUE(ap && bp && ap->measurement.value && bp->measurement.value);
+    EXPECT_DOUBLE_EQ(ap->measurement.value->absolute_pressure,
+                     bp->measurement.value->absolute_pressure);
+    const auto ad = a->stream<robotics::sensors::DvlReading>("dvl")->latest();
+    const auto bd = b->stream<robotics::sensors::DvlReading>("dvl")->latest();
+    ASSERT_TRUE(ad && bd && ad->measurement.value && bd->measurement.value);
+    EXPECT_TRUE(ad->measurement.value->bottom_relative_velocity.isApprox(
+        bd->measurement.value->bottom_relative_velocity, 1e-14));
+}
+TEST_F(Profiles, RejectsMissingOrAmbiguousNamedMounts) {
+    const auto original = read("robots/synthetic_auv.yaml");
+    replace("robots/synthetic_auv.yaml", "id: imu", "id: imu\n    mount_frame: absent");
+    EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
+    write("robots/synthetic_auv.yaml", original);
+    replace("robots/synthetic_auv.yaml",
+            "mount: {position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}",
+            "mount_frame: absent");
+    EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
+    write("robots/synthetic_auv.yaml",
+          original + "\nframes: {root: center, transforms: [{parent: unknown, child: mount, "
+                     "position_m: [0,0,0], orientation_wxyz: [1,0,0,0]}]}\n");
+    EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
+}
+
+namespace {
+using namespace robotics::spatial;
+TEST(ConfigurationFrames, TalosCadAndBaseRenderingAgreeWithComPose) {
+    const Eigen::Vector3d cad_com(-.157, .040, -.048), cad_base(-.140, .030, -.090);
+    FixedFrames frames("com", {{"com", "cad", {-cad_com, Eigen::Quaterniond::Identity()}},
+                               {"cad", "base", {cad_base, Eigen::Quaterniond::Identity()}}});
+    const Pose world_com{
+        {-2, 5, -.4},
+        Eigen::Quaterniond(Eigen::AngleAxisd(1.2, Eigen::Vector3d(1, 2, 3).normalized()))};
+    const auto world_base = compose(world_com, frames.fromRoot("base"));
+    const auto world_cad = compose(world_base, frames.lookup("base", "cad"));
+    for (const Eigen::Vector3d &point :
+         {Eigen::Vector3d(-.181, .1573, .094), Eigen::Vector3d(-.134, -.369, .242)}) {
+        EXPECT_TRUE(apply(world_cad, point).isApprox(apply(world_com, point - cad_com), 1e-14));
+    }
+}
+} // namespace

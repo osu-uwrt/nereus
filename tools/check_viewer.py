@@ -32,6 +32,7 @@ def main():
         # Deliberately omit plant, sensors, configuration, Python, and robot/world content.
         for folder in (
             "cmake",
+            "libraries/spatial",
             "libraries/visualization",
             "libraries/viewer_io",
             "libraries/rendering",

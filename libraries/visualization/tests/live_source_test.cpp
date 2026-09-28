@@ -109,3 +109,30 @@ TEST(LiveSource, ConcurrentProducerAndConsumerRetainNewestValue) {
     producer.join();
     EXPECT_EQ(source.snapshot().time_ns, 9999);
 }
+
+TEST(LiveSource, FixedMountsFollowTheSameBodyHistoryAndSurviveReconnect) {
+    LivePoseOptions options{"live", "clock"};
+    options.fixed_frames = {{"body", "sensor", {{.2, -.1, .3}, Eigen::Quaterniond::Identity()}}};
+    LivePoseSource source(options);
+    options.fixed_frames.front().pose.translation.setZero(); // Construction owns its copy.
+    const Pose body{{4, 5, -2},
+                    Eigen::Quaterniond(Eigen::AngleAxisd(.8, Eigen::Vector3d::UnitZ()))};
+    source.publish({0, 10, body});
+    const auto before = source.snapshot();
+    const auto world_sensor = before.data->frames->lookup("world", "sensor", 10);
+    ASSERT_TRUE(world_sensor.pose);
+    EXPECT_TRUE(world_sensor.pose->translation.isApprox(apply(body, {.2, -.1, .3}), 1e-14));
+    source.disconnect();
+    source.publish({1, 0, {}});
+    source.reconnect();
+    const auto after = source.snapshot();
+    EXPECT_TRUE(after.data->frames->lookup("world", "sensor", 0)
+                    .pose->translation.isApprox(Eigen::Vector3d(.2, -.1, .3)));
+    EXPECT_TRUE(before.data->frames->lookup("world", "sensor", 10)
+                    .pose->translation.isApprox(world_sensor.pose->translation));
+    options.fixed_frames.front().child = "world";
+    EXPECT_THROW((LivePoseSource(options)), std::invalid_argument);
+    options.fixed_frames.front().child = "sensor";
+    options.fixed_frames.front().parent = "missing";
+    EXPECT_THROW((LivePoseSource(options)), std::invalid_argument);
+}

@@ -1,22 +1,19 @@
 #pragma once
 
-#include <Eigen/Geometry>
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <robotics/spatial/frames.hpp>
 #include <string>
 #include <vector>
 
 namespace robotics::visualization {
 using Time = std::int64_t; // Nonnegative nanoseconds in an explicitly named source clock.
-struct Pose {
-    Eigen::Vector3d translation{Eigen::Vector3d::Zero()};
-    Eigen::Quaterniond rotation{Eigen::Quaterniond::Identity()};
-};
-void validate(const Pose &pose);
-Pose compose(const Pose &parent, const Pose &child);
-Pose inverse(const Pose &pose);
-Eigen::Vector3d apply(const Pose &pose, const Eigen::Vector3d &point);
+using spatial::apply;
+using spatial::compose;
+using spatial::inverse;
+using spatial::Pose;
+using spatial::validate;
 
 struct TransformSample {
     Time time_ns{0};

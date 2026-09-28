@@ -185,3 +185,12 @@ copies. Body proxy poses are COM-local; static proxy poses are world-frame.
 Box scenes allow initial overlap and resolve it on advancement. Unselected sphere
 radius/containment constraints do not apply. See the [contact contract](reference/BOX_CONTACTS.md)
 for ordering, sensor-acceleration semantics and current limitations.
+
+## Named frames
+
+`Pose`, `FixedFrame`, and immutable `FixedFrames(root, edges)` expose shared rigid
+transforms. Pose properties are `translation` and `orientation_wxyz`; a FixedFrame
+has `parent`, `child`, and `pose`. Set whole nested values/arrays, as with other
+copied configuration properties. `from_root(frame)` and `lookup(target, from_frame)`
+return detached poses; `edges` returns a detached list. `scenario.body_frames`
+returns the resolved robot tree whose root denotes COM. See [FRAMES.md](FRAMES.md).

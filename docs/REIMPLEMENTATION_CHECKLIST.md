@@ -78,6 +78,9 @@ the viewer still draws line geometry.
 
 - [ ] Standalone Talos physical parameters, frames/mounts, thrusters and device models.
 - [ ] Preserve COM/base_link/CAD frame conversions and offset velocity/acceleration.
+- [x] Shared rigid transforms, named native sensor mounts and immutable live viewer
+  mounts; rotated mount equivalence and Talos COM/CAD/base offset algebra verified.
+  Actual native Talos assembly and sensor reporting remain open.
 - [x] Stage-dependent thruster submersion and water current evolution match the
   pinned synthetic free-motion fixture through native C++/profile/Python interfaces.
 - [x] Expose actuator response/scales/deadbands/efficiency and immediate queue-clearing
@@ -173,7 +176,8 @@ selected live-robot workflows required here.
    simulation controls remain open and separate from recording playback.
 3. Stage forcing and actuator calibration/stop interfaces are verified in their
    bounded reference/contracts. Static compound contacts are integrated and validated.
-   Next: named body/world frame support and native Talos content; neutral scene/assets follow.
+   Named body mounts are now resolved for sensors and live visualization. Next:
+   transformed pool queries and native Talos content; neutral scene/assets follow.
 4. Re-evaluate this order after each validated commit against concrete dependencies.
 
 For every increment: state its acceptance target, implement, test appropriate

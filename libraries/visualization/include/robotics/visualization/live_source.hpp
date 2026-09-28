@@ -15,6 +15,7 @@ struct LivePoseOptions {
     std::string stream{"pose"};
     std::size_t queue_capacity{64};
     std::size_t history_capacity{1000};
+    std::vector<spatial::FixedFrame> fixed_frames{}; // Immutable source-owned mount/world frames.
 };
 // One producer calls publish; one presentation thread calls snapshot/disconnect/reconnect.
 // Join both callers before destruction.

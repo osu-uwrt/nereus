@@ -16,6 +16,7 @@ template <class T, class Value>
 void readCopy(py::class_<T> &type, const char *name, Value T::*member) {
     type.def_property_readonly(name, [member](const T &self) -> Value { return self.*member; });
 }
+void bindSpatial(py::module_ &);
 void bindPlant(py::module_ &);
 void bindSensors(py::module_ &);
 void bindRuntime(py::module_ &);

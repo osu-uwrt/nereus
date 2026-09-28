@@ -411,3 +411,27 @@ plant-plus-sensors p99 4.75 microseconds over1.5 million ticks each. This synthe
 one-hull/five-box scene is not full Talos/task/graphics performance acceptance.
 Dynamic prop contacts, transformed sensor-query geometry, named body frames,
 native Talos content and original rendering remain open and drive the next steps.
+
+## Shared rigid frames and resolved sensor mounts
+
+A small Eigen-only spatial library now supplies poses and immutable named rigid
+frames to configuration and visualization independently. Robot profiles can resolve
+sensor `mount_frame` references from a COM-rooted tree, including CAD/base/device
+chains. Python exposes detached values. Live pose sources carry immutable static
+mounts with the same body history; the simulation viewer supplies resolved robot
+frames. No simulator or robot-specific dependency enters spatial/viewer libraries.
+
+Validation: all114 combined Release tests and111 simulation-view ASan/UBSan tests
+passed. Installed Python checks passed all15 tests plus Ruff/strict mypy. Configured
+native static analysis, formatting/dependency checks and relocated installed
+consumers passed. The24-test isolated viewer build/install and graphics captures
+passed with simulation sources absent; the composed viewer also ran with an
+explicit frame tree and its screenshot was inspected. No sanitizer diagnostics
+were reported.
+
+Review corrected accepted quaternion rounding before sensor attachment. Tests cover
+rotated chained mount equivalence, source deletion, invalid trees, detached ownership,
+reset/reconnect, and Talos CAD/base/COM offset algebra. Actual Talos content/rendering
+is still open. See [FRAMES.md](FRAMES.md) for the current graph limits. Next: scenario
+placement of reusable pool geometry and its sensor queries, then native Talos
+physical content and the audited original visual resources.

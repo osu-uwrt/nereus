@@ -22,6 +22,31 @@ def passive(seed: int = 42) -> rp.Runtime:
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_fixed_frame_values_are_detached_and_scenario_frames_survive_loading(self) -> None:
+        pose = rp.Pose()
+        pose.translation = [0.2, 0.3, -0.1]
+        edge = rp.FixedFrame()
+        edge.parent = "center"
+        edge.child = "sensor"
+        edge.pose = pose
+        frames = rp.FixedFrames("center", [edge])
+        pose.translation = [10, 20, 30]
+        edge.pose = pose
+        np.testing.assert_array_equal(frames.from_root("sensor").translation, [0.2, 0.3, -0.1])
+        frames.edges[0].pose = pose
+        detached = frames.from_root("sensor")
+        detached.translation = [5, 5, 5]
+        np.testing.assert_array_equal(
+            frames.lookup("sensor", "center").translation, [-0.2, -0.3, 0.1]
+        )
+        with self.assertRaises(ValueError):
+            frames.from_root("missing")
+        with self.assertRaises(ValueError):
+            rp.FixedFrames("center", [edge, edge])
+        scenario = rp.load_scenario(rp.example_scenario())
+        self.assertEqual(scenario.body_frames.root, "com")
+        np.testing.assert_array_equal(scenario.body_frames.from_root("com").translation, [0, 0, 0])
+
     def test_explicit_box_contacts_and_disabled_contact_world(self) -> None:
         params = rp.PlantParameters()
         params.contacts.model = rp.ContactModel.BOX_SCENE

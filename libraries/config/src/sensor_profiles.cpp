@@ -120,10 +120,11 @@ Attach pressure(const sensors::Mount &mount, const YAML::Node &node, const std::
 } // namespace
 
 SensorPlan parseSensor(const YAML::Node &node, const std::filesystem::path &declaring,
-                       const std::string &field, std::vector<std::filesystem::path> &sources) {
+                       const std::string &field, std::vector<std::filesystem::path> &sources,
+                       const spatial::FixedFrames &frames) {
     keys(node,
          {"id", "frame", "period_ns", "latency_ns", "capacity", "overflow", "mount", "profile",
-          "model", "parameters"},
+          "model", "parameters", "mount_frame"},
          field);
     SensorPlan result;
     auto &device = result.device;
@@ -148,12 +149,24 @@ SensorPlan parseSensor(const YAML::Node &node, const std::filesystem::path &decl
             throw std::invalid_argument(field + ".overflow must be fail or drop_oldest");
         }
     }
-    const auto m = node["mount"];
-    keys(m, {"position_m", "orientation_wxyz"}, field + ".mount");
     sensors::Mount mount;
-    mount.position_body = vector(m, "position_m", 3, field + ".mount");
-    const auto q = vector(m, "orientation_wxyz", 4, field + ".mount");
-    mount.sensor_to_body = Eigen::Quaterniond(q[0], q[1], q[2], q[3]);
+    if (node["mount_frame"]) {
+        if (node["mount"])
+            throw std::invalid_argument(field + ": choose mount or mount_frame, not both");
+        try {
+            const auto &pose = frames.fromRoot(text(node, "mount_frame", field));
+            mount.position_body = pose.translation;
+            mount.sensor_to_body = pose.rotation;
+        } catch (const std::exception &error) {
+            throw std::invalid_argument(field + ".mount_frame: " + error.what());
+        }
+    } else {
+        const auto m = node["mount"];
+        keys(m, {"position_m", "orientation_wxyz"}, field + ".mount");
+        mount.position_body = vector(m, "position_m", 3, field + ".mount");
+        const auto q = vector(m, "orientation_wxyz", 4, field + ".mount");
+        mount.sensor_to_body = Eigen::Quaterniond(q[0], q[1], q[2], q[3]);
+    }
     YAML::Node definition = node;
     std::string definition_field = field;
     if (node["profile"]) {

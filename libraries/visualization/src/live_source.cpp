@@ -13,6 +13,11 @@ struct LivePoseSource::Impl {
             options.stream.empty() || options.queue_capacity < 1 || options.queue_capacity > 4096 ||
             options.history_capacity < 1 || options.history_capacity > 10000)
             throw std::invalid_argument("invalid live source identity, frames, or capacities");
+        std::vector<FrameEdge> edges{{options.world_frame, options.body_frame, false, {{0, {}}}}};
+        for (const auto &frame : options.fixed_frames)
+            edges.push_back({frame.parent, frame.child, true, {{0, frame.pose}}});
+        (void)FrameGraph(options.world_frame,
+                         std::move(edges)); // Validate before accepting updates.
         pending.resize(options.queue_capacity);
         drained.reserve(options.queue_capacity);
     }
@@ -110,8 +115,11 @@ SourceSnapshot LivePoseSource::snapshot() const {
             poses.push_back({update.time_ns, state.options.world_frame, update.pose});
             body.samples.push_back({update.time_ns, update.pose});
         }
-        data.frames = std::make_shared<const FrameGraph>(state.options.world_frame,
-                                                         std::vector<FrameEdge>{std::move(body)});
+        std::vector<FrameEdge> edges{std::move(body)};
+        for (const auto &frame : state.options.fixed_frames)
+            edges.push_back({frame.parent, frame.child, true, {{0, frame.pose}}});
+        data.frames =
+            std::make_shared<const FrameGraph>(state.options.world_frame, std::move(edges));
         state.data = std::make_shared<const SourceData>(std::move(data));
         state.time_ns = updates.back().time_ns;
         const std::lock_guard<std::mutex> lock(state.mutex);

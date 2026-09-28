@@ -68,3 +68,8 @@ unregistered simulation source rather than loading simulator code implicitly.
 validation. It requires a graphics display/context; this is not the future
 headless camera-rendering backend. The application currently displays pose/lines;
 water rendering, robot meshes, and task content are separate outstanding work.
+
+Static source-owned frames can now accompany the live body history through
+`LivePoseOptions.fixed_frames`. The simulation application passes the scenario's
+resolved COM-rooted mounts; neither the live source nor the shared spatial library
+requires simulation. See [FRAMES.md](FRAMES.md) for construction and reset semantics.

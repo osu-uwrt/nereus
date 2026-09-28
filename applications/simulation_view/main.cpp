@@ -42,8 +42,11 @@ int main(int argc, char **argv) {
         if ((hidden || !screenshot.empty()) && frames == 0)
             throw std::invalid_argument("--hidden/--screenshot require --frames");
         const auto scenario = robotics::config::loadScenario(scenario_path);
-        auto source = std::make_shared<robotics::visualization::LivePoseSource>(
-            robotics::visualization::LivePoseOptions{"simulation", "simulation_clock"});
+        robotics::visualization::LivePoseOptions pose_options{"simulation", "simulation_clock"};
+        pose_options.body_frame = scenario.body_frames.root();
+        pose_options.fixed_frames = scenario.body_frames.edges();
+        auto source =
+            std::make_shared<robotics::visualization::LivePoseSource>(std::move(pose_options));
         auto workspace = robotics::viewer::emptyWorkspace();
         workspace.sources.push_back({"simulation", "simulation", scenario_path});
         workspace.selected_source = "simulation";

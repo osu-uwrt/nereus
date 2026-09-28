@@ -7,21 +7,6 @@
 #include <utility>
 
 namespace robotics::visualization {
-void validate(const Pose &pose) {
-    if (!pose.translation.allFinite() || pose.translation.cwiseAbs().maxCoeff() > 1e12 ||
-        !pose.rotation.coeffs().allFinite() || std::abs(pose.rotation.norm() - 1.0) > 1e-8)
-        throw std::invalid_argument("pose requires finite translation and a unit quaternion");
-}
-Pose compose(const Pose &parent, const Pose &child) {
-    return {apply(parent, child.translation), parent.rotation * child.rotation};
-}
-Pose inverse(const Pose &pose) {
-    const auto rotation = pose.rotation.conjugate();
-    return {rotation * -pose.translation, rotation};
-}
-Eigen::Vector3d apply(const Pose &pose, const Eigen::Vector3d &point) {
-    return pose.translation + pose.rotation * point;
-}
 FrameGraph::FrameGraph(std::string root, std::vector<FrameEdge> edges) : root_(std::move(root)) {
     if (root_.empty() || edges.size() > 128)
         throw std::invalid_argument("frame tree requires a root and at most 128 edges");

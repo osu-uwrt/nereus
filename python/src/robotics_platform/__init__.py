@@ -14,6 +14,8 @@ from ._native import (
     DvlReading,
     DvlSample,
     DvlStream,
+    FixedFrame,
+    FixedFrames,
     Fog,
     FogReading,
     FogSample,
@@ -28,6 +30,7 @@ from ._native import (
     OverflowPolicy,
     PlantParameters,
     Pool,
+    Pose,
     Pressure,
     PressureParameters,
     PressureReading,
@@ -52,6 +55,9 @@ def example_scenario() -> Path:
 
 
 __all__ = [
+    "Pose",
+    "FixedFrame",
+    "FixedFrames",
     "BoxProxy",
     "ContactModel",
     "ContactParameters",

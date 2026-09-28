@@ -48,6 +48,8 @@ function(rp_project_options target)
   endif()
 endfunction()
 
+add_subdirectory(libraries/spatial)
+
 if(RP_BUILD_SIMULATION)
 add_library(rp_simulation
   libraries/simulation/src/marine_dynamics.cpp
@@ -80,7 +82,7 @@ if(RP_BUILD_CLI OR RP_BUILD_PYTHON)
   target_include_directories(rp_config PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libraries/config/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-  target_link_libraries(rp_config PUBLIC rp_sensors PRIVATE yaml-cpp)
+  target_link_libraries(rp_config PUBLIC rp_sensors rp_spatial PRIVATE yaml-cpp)
   rp_project_options(rp_config)
   if(RP_BUILD_CLI)
     add_executable(robotics-sim applications/simulator/main.cpp applications/simulator/telemetry.cpp)
@@ -104,7 +106,7 @@ if(RP_BUILD_PYTHON)
   find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
   find_package(pybind11 2.13 REQUIRED CONFIG)
   pybind11_add_module(_native NO_EXTRAS bindings/python/module.cpp
-    bindings/python/plant.cpp bindings/python/sensors.cpp bindings/python/runtime.cpp)
+    bindings/python/spatial.cpp bindings/python/plant.cpp bindings/python/sensors.cpp bindings/python/runtime.cpp)
   target_link_libraries(_native PRIVATE rp_config)
   rp_project_options(_native)
   install(TARGETS _native LIBRARY DESTINATION robotics_platform COMPONENT python)

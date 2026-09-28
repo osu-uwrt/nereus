@@ -70,6 +70,7 @@ void bindRuntime(py::module_ &m) {
                     return config::makeRuntime(configured);
                 },
                 py::arg("initial") = py::none(), py::arg("seed") = py::none());
+    readCopy(scenario, "body_frames", &config::Scenario::body_frames);
     readCopy(scenario, "plant", &config::Scenario::plant);
     readCopy(scenario, "initial", &config::Scenario::initial);
     readCopy(scenario, "commands", &config::Scenario::commands);

@@ -145,6 +145,28 @@ void parseCommands(const YAML::Node &root, Scenario &s) {
                           field)});
     }
 }
+spatial::FixedFrames parseFrames(const YAML::Node &node, const std::string &field) {
+    keys(node, {"root", "transforms"}, field);
+    const auto list = node["transforms"];
+    if (!list.IsSequence() || list.size() > 4096)
+        throw std::invalid_argument(field + ".transforms must contain at most 4096 frames");
+    std::vector<spatial::FixedFrame> edges;
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        const auto entry = list[i];
+        const auto path = field + ".transforms[" + std::to_string(i) + "]";
+        keys(entry, {"parent", "child", "position_m", "orientation_wxyz"}, path);
+        const auto q = vector(entry, "orientation_wxyz", 4, path);
+        edges.push_back(
+            {text(entry, "parent", path),
+             text(entry, "child", path),
+             {vector(entry, "position_m", 3, path), Eigen::Quaterniond(q[0], q[1], q[2], q[3])}});
+    }
+    try {
+        return spatial::FixedFrames(text(node, "root", field), std::move(edges));
+    } catch (const std::exception &error) {
+        throw std::invalid_argument(field + ": " + error.what());
+    }
+}
 Scenario parse(const Document &document, std::vector<std::filesystem::path> sources) {
     const auto &root = document.root;
     const auto version = integer(root, "schema_version", "scenario");
@@ -166,8 +188,11 @@ Scenario parse(const Document &document, std::vector<std::filesystem::path> sour
              "scenario");
         s.seed = integer(root, "seed", "scenario");
         const auto robot = reference(root, "robot", document.path, "robot", s.sources);
-        keys(robot.root, {"schema_version", "kind", "vehicle", "sensors"}, robot.path.string());
+        keys(robot.root, {"schema_version", "kind", "vehicle", "sensors", "frames"},
+             robot.path.string());
         parseVehicle(robot.root["vehicle"], s.plant, robot.path.string() + ": vehicle");
+        if (robot.root["frames"])
+            s.body_frames = parseFrames(robot.root["frames"], robot.path.string() + ": frames");
         const auto world = reference(root, "world", document.path, "world", s.sources);
         keys(world.root,
              {"schema_version", "kind", "pool", "surface_pressure_pa", "collision_boxes"},
@@ -187,9 +212,10 @@ Scenario parse(const Document &document, std::vector<std::filesystem::path> sour
                                         ": sensors must be a sequence (may be empty)");
         }
         for (std::size_t index = 0; index < devices.size(); ++index) {
-            s.sensors.push_back(parseSensor(
-                devices[index], robot.path,
-                robot.path.string() + ": sensors[" + std::to_string(index) + "]", s.sources));
+            s.sensors.push_back(
+                parseSensor(devices[index], robot.path,
+                            robot.path.string() + ": sensors[" + std::to_string(index) + "]",
+                            s.sources, s.body_frames));
         }
     } else {
         throw std::invalid_argument("scenario.schema_version must be 1 or 2");
