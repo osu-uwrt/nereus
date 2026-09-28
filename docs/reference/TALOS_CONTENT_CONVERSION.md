@@ -87,3 +87,7 @@ chassis size `[.35,.83,.55]`, center `[0,0,.07]`; poker size `[.2,.05,.05]`, cen
 
 A coefficients-only Talos example with reduced contacts must be labeled as such.
 It cannot stand in for the default competition configuration or its acceptance test.
+
+The companion [visual content audit](VISUAL_CONTENT_CONVERSION.md) identifies the
+exact body/rotor/LED/mechanism/course resources, transform equivalence, import
+repairs and provenance requirements for replacing the original appearance.
