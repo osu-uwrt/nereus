@@ -1,0 +1,97 @@
+# Generated from pinned original content; see docs/reference/TALOS_PHYSICS_PACK.md.
+# Scripted physics example, not the competition mission.
+schema_version: 2
+robot: ../robots/talos_dynamics.yaml
+world: ../worlds/competition_pool.yaml
+seed: 7
+timestep_ns: 2000000
+ticks: 1500
+world_placement:
+  position_m:
+  - -1.1948633889920896e-15
+  - 19.5136
+  - 0
+  yaw_rad: -1.5707963267948966
+contacts:
+  model: box_scene
+  restitution: 0.1
+  friction: 0.4
+initial:
+  position_m:
+  - 0
+  - 0
+  - -1
+  orientation_wxyz:
+  - 1
+  - 0
+  - 0
+  - 0
+  linear_velocity_m_s:
+  - 0
+  - 0
+  - 0
+  angular_velocity_rad_s:
+  - 0
+  - 0
+  - 0
+commands:
+- tick: 0
+  forces_n:
+  - 4
+  - 4
+  - 2
+  - 2
+  - -2
+  - -2
+  - 4
+  - 4
+- tick: 200
+  forces_n:
+  - 4
+  - 4
+  - 2
+  - 2
+  - -2
+  - -2
+  - 4
+  - 4
+- tick: 400
+  forces_n:
+  - 4
+  - 4
+  - 2
+  - 2
+  - -2
+  - -2
+  - 4
+  - 4
+- tick: 600
+  forces_n:
+  - 4
+  - 4
+  - 2
+  - 2
+  - -2
+  - -2
+  - 4
+  - 4
+- tick: 800
+  forces_n:
+  - 4
+  - 4
+  - 2
+  - 2
+  - -2
+  - -2
+  - 4
+  - 4
+- tick: 1000
+  forces_n:
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0

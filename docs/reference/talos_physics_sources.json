@@ -1,0 +1,20 @@
+{
+  "scope": "Original Talos dynamics, static hull/pool proxies and rigid mounts. Scripted commands; no devices, visuals, tasks or stack adapters.",
+  "parameter_status": "unvalidated_prior",
+  "sources_sha256": {
+    "7f37bdd62ab90113844137a23806c89b23a8ab9b:riptide_descriptions/config/talos.yaml": "7f0c5a703e3974401a23ce316dbedde1327e974b16105d39a97c7a64837bd664",
+    "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/robots/talos/config/hydrodynamics.yaml": "bf80b5d6215a7d81fe1017b52bed31befb1749a7bec2feeceaa977909a9f0c88",
+    "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/worlds/competition_pool.yaml": "5c4e741d4ca0b763357c16a0f2e39fc3373f60d54d6e997bdf5811aa399858ae",
+    "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/tasks/2026/config/mapping.yaml": "7799e049ca39c967914244fcdb9095a3f76e0c76f9a48dabcf26183d8672fa15",
+    "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/collision_files/robots/talos.urdf": "b9135ec508b505ca100145eaeb1c2a0659c736abff4eed9172ccf2f252117c8c",
+    "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/src/physics_simulator.cpp": "d4b05d378425bfdb59773ba6b20f0db44f14469c2be4eb0ccdfb69824ff05e14",
+    "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/src/robot_class.cpp": "8207b7b8c2cd83aaa11a1f8292fa481ec4212a3aabdb89f9fd8f80169ebd1719"
+  },
+  "importer_sha256": "ad6bd673560380c5a8e2dd6427bef5fd957d024d2621e8a0fab35eb1337b6766",
+  "pyyaml_version": "6.0.1",
+  "outputs_sha256": {
+    "content/robots/talos_dynamics.yaml": "44546e303654fdac4836112f00f6cc430b9aa4bdc279546bfe91ca2cb187f953",
+    "content/worlds/competition_pool.yaml": "4d1c73dd17b2c474ad825104da2f3d0dcfdb72dc1c8153ac1ad777a12178cd48",
+    "content/examples/talos_pool.yaml": "b47fdcd680c845e8a4b1f69453b374ca5ee0727055c45bf506b6a5b0991d6af0"
+  }
+}

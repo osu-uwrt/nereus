@@ -67,3 +67,15 @@ Performance data informs implementation and configurable presentation quality.
 Any sensor/physical-fidelity setting change must be explicit and compared against
 its declared model, never hidden as an optimization. Broad RViz features and
 speculative framework work remain behind simulator-replacement acceptance.
+
+## Native Talos physics baseline
+
+[talos-physics-headless-baseline.json](reference/performance/talos-physics-headless-baseline.json)
+records the native Talos dynamics example: eight thrusters, two body boxes, five
+pool boxes, and the original pool placement. Each mode measured1.5 million ticks.
+Plant p99 was6.791 microseconds; the runtime wrapper p99 was5.5 microseconds, with
+3000 simulated seconds completed in6.872 measured seconds. The latter mode retains
+the benchmark's generic `plant_and_scheduled_sensors` label but **this profile has
+zero devices**. It must not be interpreted as Talos sensor throughput. Differences
+between the sequential modes also reflect timing noise and system scheduling.
+Meshes, cameras, mechanisms, competition tasks and ROS remain outside this result.

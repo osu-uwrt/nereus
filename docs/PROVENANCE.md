@@ -17,8 +17,9 @@ The numerical kernels in `libraries/simulation/src/marine_dynamics.cpp`,
 
 The architecture plan was developed with the project owner in the original
 simulator's `docs/REUSABILITY_PLAN.md` and copied here as the working design.
-Other project-owned files in this implementation were authored for this new project. The
-example AUV is a new synthetic model, not a Talos calibration or copied mesh.
+Other project-owned implementation files were authored for this new project. The
+synthetic example AUV is not a Talos calibration or copied mesh. Native Talos/pool
+profile data is separately attributed below.
 No meshes, textures, ROS messages, or other robot assets are included.
 
 Except for Dear ImGui described below, dependencies are installed separately: Eigen (plant), yaml-cpp
@@ -74,3 +75,16 @@ and excludes the separate optional task-contact hook. It does not build a ROS no
 Source/driver/fixture hashes and compiler flags accompany the single-response and
 whole-step optimized/unoptimized captures in `tests/fixtures/legacy_box_*.json`.
 See `reference/BOX_CONTACTS.md` for scope, optimization sensitivity and reproduction.
+
+## Native Talos and pool data
+
+`content/robots/talos_dynamics.yaml`, `content/worlds/competition_pool.yaml`, and
+`content/examples/talos_pool.yaml` were converted from pinned simulator and
+riptide_core vehicle-description data. The offline importer strips transport and
+controller configuration, resolves CAD/COM offsets, and emits native physical
+parameters, rigid mounts and collision boxes. The example command schedule is new;
+sensors/visuals/tasks are not instantiated by this slice. Exact input revisions and
+source/output/importer hashes are in `reference/talos_physics_sources.json`.
+See `reference/TALOS_PHYSICS_PACK.md` for reproduction and limits. These project
+sources retain the unresolved source/asset license review requirement before public
+redistribution; local implementation continues under the user's authorization.

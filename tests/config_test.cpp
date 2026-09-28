@@ -345,3 +345,59 @@ world_placement: {position_m: [0, 19.5136, 3], yaw_rad: -1.5707963267948966}
     replace("examples/profile_pool.yaml", "yaw_rad: -1.5707963267948966", "roll_rad: 0.2");
     EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
 }
+
+TEST_F(Profiles, NativeTalosPhysicsLoadsWithoutLegacyWorkspaceAndReplays) {
+    const auto config = robotics::config::loadScenario(root / "examples/talos_pool.yaml");
+    EXPECT_EQ(config.sources.size(), 3U);
+    EXPECT_TRUE(config.sensors.empty()); // Deliberately a dynamics slice, not a full robot stack.
+    EXPECT_DOUBLE_EQ(config.plant.body.mass, 31.998);
+    EXPECT_DOUBLE_EQ(config.plant.body.inertia(0, 1), -.0599);
+    EXPECT_DOUBLE_EQ(config.plant.body.added_mass(0, 0), 33.76441573413407);
+    EXPECT_DOUBLE_EQ(config.plant.body.displaced_volume, .0323621667640687);
+    const std::vector<std::string> order{"VUS", "VUP", "HUS", "HUP", "HLS", "HLP", "VLS", "VLP"};
+    ASSERT_EQ(config.plant.thrusters.size(), order.size());
+    for (std::size_t i = 0; i < order.size(); ++i) {
+        const auto &thruster = config.plant.thrusters[i];
+        EXPECT_EQ(thruster.id, order[i]);
+        EXPECT_NEAR(thruster.direction.norm(), 1, 1e-14);
+        EXPECT_DOUBLE_EQ(thruster.delay, .1);
+        ASSERT_TRUE(thruster.propeller_radius);
+        EXPECT_DOUBLE_EQ(*thruster.propeller_radius, .05);
+    }
+    EXPECT_TRUE(
+        config.plant.thrusters[0].position.isApprox(Eigen::Vector3d(.023, -.409, .290), 1e-14));
+    const Eigen::Vector3d expected_hus = Eigen::AngleAxisd(1.571, Eigen::Vector3d::UnitZ()) *
+                                         Eigen::AngleAxisd(-.785, Eigen::Vector3d::UnitY()) *
+                                         Eigen::Vector3d::UnitX();
+    EXPECT_TRUE(config.plant.thrusters[2].direction.isApprox(expected_hus, 1e-14));
+    EXPECT_TRUE(config.body_frames.fromRoot("base_link")
+                    .translation.isApprox(Eigen::Vector3d(.017, -.010, -.042), 1e-14));
+    EXPECT_TRUE(config.body_frames.fromRoot("dvl_mount")
+                    .translation.isApprox(Eigen::Vector3d(.038, -.006, -.202), 1e-14));
+    ASSERT_EQ(config.plant.contacts.body_boxes.size(), 2U);
+    EXPECT_EQ(config.plant.contacts.body_boxes[0].center, Eigen::Vector3d(0, 0, .07));
+    EXPECT_EQ(config.plant.contacts.body_boxes[1].center, Eigen::Vector3d(.23, -.2, -.1));
+    ASSERT_EQ(config.plant.contacts.world_boxes.size(), 5U);
+    EXPECT_DOUBLE_EQ(config.plant.pool.length, 50);
+    EXPECT_DOUBLE_EQ(config.plant.pool.width, 22.86);
+    EXPECT_DOUBLE_EQ(config.plant.pool.depth, 2.1336);
+    EXPECT_TRUE(config.plant.contacts.world_boxes[0].center.isApprox(
+        Eigen::Vector3d(11.43, -5.4864, -2.6336), 1e-13));
+    std::filesystem::remove_all(root);
+    auto a = robotics::config::makeRuntime(config), b = robotics::config::makeRuntime(config);
+    std::size_t next_command = 0;
+    for (std::uint64_t tick = 0; tick < config.ticks; ++tick) {
+        if (next_command < config.commands.size() && config.commands[next_command].tick == tick) {
+            a->command(config.commands[next_command].forces);
+            b->command(config.commands[next_command++].forces);
+        }
+        const auto x = a->advance(), y = b->advance();
+        ASSERT_TRUE(x.body.position.allFinite());
+        EXPECT_EQ(x.body.position, y.body.position);
+        EXPECT_EQ(x.body.orientation.coeffs(), y.body.orientation.coeffs());
+        EXPECT_EQ(x.thruster_forces, y.thruster_forces);
+    }
+    a->reset(config.initial, config.seed);
+    b->reset(config.initial, config.seed);
+    EXPECT_EQ(a->advance().body.position, b->advance().body.position);
+}

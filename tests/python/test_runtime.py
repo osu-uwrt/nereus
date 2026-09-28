@@ -22,6 +22,23 @@ def passive(seed: int = 42) -> rp.Runtime:
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_native_talos_physics_pack_is_installed(self) -> None:
+        scenario = rp.load_scenario(rp.example_scenario().with_name("talos_pool.yaml"))
+        self.assertEqual(
+            [item.id for item in scenario.plant.thrusters],
+            ["VUS", "VUP", "HUS", "HUP", "HLS", "HLP", "VLS", "VLP"],
+        )
+        self.assertEqual(scenario.sensors, [])
+        self.assertEqual(len(scenario.sources), 3)
+        np.testing.assert_allclose(
+            scenario.body_frames.from_root("base_link").translation,
+            [0.017, -0.010, -0.042],
+            atol=1e-14,
+        )
+        runtime = scenario.create_runtime()
+        runtime.command(scenario.commands[0].forces)
+        self.assertTrue(np.isfinite(runtime.advance(100).body.position).all())
+
     def test_placed_pool_queries_match_local_geometry(self) -> None:
         params = rp.PlantParameters()
         params.pool.origin_xy_world = [-10, -12]

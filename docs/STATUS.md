@@ -458,3 +458,28 @@ static-box composition and independent loading without robot/current mutation.
 This enables the original competition pool-to-map placement without embedding2026
 layout into reusable pool data. Native Talos content and its original sensor/reporting
 policies remain the next fidelity work; full-stack/rendering gates remain open.
+
+## Native Talos dynamics and pool content
+
+A pinned offline importer now emits native Talos mass/hydrodynamics, eight ordered
+calibrated thrusters, effective hull/poker proxies, and COM/CAD/base/device mounts.
+The original finite competition pool remains a separate world; the example owns
+its2026 map placement and a new scripted force schedule. Inputs and generated files
+have recorded revisions/hashes; the runtime has no importer or original-workspace
+dependency. See [TALOS_PHYSICS_PACK.md](reference/TALOS_PHYSICS_PACK.md).
+
+All94 Release tests and relocated installed consumers passed. The new Talos loading,
+source-removal and1500-step independent replay test passed under ASan/UBSan. The
+installed Python wheel passed17 tests, Ruff and strict mypy, including loading and
+running Talos from installed package data. Importer byte reproduction and read-only
+conversion review passed. No sanitizer diagnostics were reported.
+
+The original physical content has no instantiated devices yet: this pack explicitly
+uses sensors=[] and mechanism/camera mount frames only. It is not the complete
+robot/mission/renderer. The finite rollout proves execution, not original-trajectory
+parity; that independent numerical reference is the next check.
+
+A same-machine1.5-million-tick benchmark measured plant p99 6.791 microseconds;
+the runtime-wrapper mode p99 was5.5 microseconds with zero scheduled devices.
+The wrapper completed3000 simulated seconds in6.872 measured seconds. This excludes
+camera/renderer/task/ROS costs and does not establish full-stack performance.

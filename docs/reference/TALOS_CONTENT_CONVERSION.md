@@ -1,6 +1,8 @@
 # Talos content conversion map
 
-This is the reviewed offline-conversion specification, not a delivered Talos pack.
+This is the reviewed offline-conversion specification. The bounded native
+[dynamics/mount pack](TALOS_PHYSICS_PACK.md) is delivered; full sensors, mechanisms,
+visual assets and task/stack acceptance remain open.
 Pin simulator `07647eebe706f96ea7b76db3cc9802735a146698` and vehicle-description repo
 `src/riptide_core/riptide_descriptions` at `7f37bdd62ab90113844137a23806c89b23a8ab9b`.
 The platform must load checked native content after both source trees are absent.

@@ -1,0 +1,547 @@
+# Generated from pinned original content; see docs/reference/TALOS_PHYSICS_PACK.md.
+# Physics/mount slice; sensors and visual mechanisms are not yet instantiated.
+schema_version: 1
+kind: robot
+vehicle:
+  mass_kg: 31.998
+  inertia_matrix:
+  - - 1.6315
+    - -0.0599
+    - -0.033
+  - - -0.0599
+    - 0.7341
+    - 0.0427
+  - - -0.033
+    - 0.0427
+    - 1.6332
+  added_mass_matrix:
+  - - 33.76441573413407
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 0.0
+    - 7.138775954138664
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 0.0
+    - 0.0
+    - 14.375071388298007
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 0.0
+    - 0.0
+    - 0.0
+    - 0.062395054069073454
+    - 0.0
+    - 0.0
+  - - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.060232298657156735
+    - 0.0
+  - - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.30409901675615597
+  linear_damping_matrix:
+  - - 34.945580177147725
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 0.0
+    - 27.992277245879045
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 0.0
+    - 0.0
+    - 40.36692194478054
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 0.0
+    - 0.0
+    - 0.0
+    - 9.910927173896203
+    - 0.0
+    - 0.0
+  - - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 3.0045521578787238
+    - 0.0
+  - - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 3.8668316289236078
+  quadratic_damping:
+  - 128.93885061269464
+  - 96.24090039531974
+  - 50.33885380673263
+  - 2.7724251278046257
+  - 1.4991943770654037
+  - 5.138467615330231
+  damping_center_m:
+  - 0.0
+  - 0.0
+  - 0.0
+  displaced_volume_m3: 0.0323621667640687
+  buoyancy_center_m:
+  - 0.00775
+  - 0.0
+  - 0.01
+  buoyancy_radii_m:
+  - 0.175
+  - 0.415
+  - 0.275
+  command_timeout_s: 0.5
+  collision_boxes:
+  - id: hull_0
+    size_m:
+    - 0.35
+    - 0.83
+    - 0.55
+    center_m:
+    - 0.0
+    - 0.0
+    - 0.07
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - id: hull_1
+    size_m:
+    - 0.2
+    - 0.05
+    - 0.05
+    center_m:
+    - 0.23
+    - -0.2
+    - -0.1
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  thrusters:
+  - id: VUS
+    position_m:
+    - 0.022999999999999993
+    - -0.409
+    - 0.29
+    direction:
+    - 1.0
+    - 0.0
+    - 0.0
+    delay_s: 0.1
+    rise_time_s: 0.08
+    fall_time_s: 0.06
+    slew_rate_n_s: 300.0
+    forward_limit_n: 28.0
+    reverse_limit_n: 28.0
+    deadband_n: 0.0
+    forward_scale: 1.0
+    reverse_scale: 1.0
+    efficiency: 1.0
+    propeller_radius_m: 0.05
+  - id: VUP
+    position_m:
+    - 0.022999999999999993
+    - 0.398
+    - 0.29
+    direction:
+    - 1.0
+    - 0.0
+    - 0.0
+    delay_s: 0.1
+    rise_time_s: 0.08
+    fall_time_s: 0.06
+    slew_rate_n_s: 300.0
+    forward_limit_n: 28.0
+    reverse_limit_n: 28.0
+    deadband_n: 0.0
+    forward_scale: 1.0
+    reverse_scale: 1.0
+    efficiency: 1.0
+    propeller_radius_m: 0.05
+  - id: HUS
+    position_m:
+    - 0.016999999999999987
+    - -0.3
+    - 0.189
+    direction:
+    - -0.00014407603503774347
+    - 0.7073882544949859
+    - 0.7068251811053661
+    delay_s: 0.1
+    rise_time_s: 0.08
+    fall_time_s: 0.06
+    slew_rate_n_s: 300.0
+    forward_limit_n: 28.0
+    reverse_limit_n: 28.0
+    deadband_n: 0.0
+    forward_scale: 1.0
+    reverse_scale: 1.0
+    efficiency: 1.0
+    propeller_radius_m: 0.05
+  - id: HUP
+    position_m:
+    - 0.016999999999999987
+    - 0.28800000000000003
+    - 0.189
+    direction:
+    - -0.00014407603503774347
+    - -0.7073882544949859
+    - 0.7068251811053661
+    delay_s: 0.1
+    rise_time_s: 0.08
+    fall_time_s: 0.06
+    slew_rate_n_s: 300.0
+    forward_limit_n: 28.0
+    reverse_limit_n: 28.0
+    deadband_n: 0.0
+    forward_scale: 1.0
+    reverse_scale: 1.0
+    efficiency: 1.0
+    propeller_radius_m: 0.05
+  - id: HLS
+    position_m:
+    - 0.016999999999999987
+    - -0.3
+    - -0.09299999999999999
+    direction:
+    - -0.00014407603503774347
+    - 0.7073882544949859
+    - -0.7068251811053661
+    delay_s: 0.1
+    rise_time_s: 0.08
+    fall_time_s: 0.06
+    slew_rate_n_s: 300.0
+    forward_limit_n: 28.0
+    reverse_limit_n: 28.0
+    deadband_n: 0.0
+    forward_scale: 1.0
+    reverse_scale: 1.0
+    efficiency: 1.0
+    propeller_radius_m: 0.05
+  - id: HLP
+    position_m:
+    - 0.016999999999999987
+    - 0.28800000000000003
+    - -0.09299999999999999
+    direction:
+    - -0.00014407603503774347
+    - -0.7073882544949859
+    - -0.7068251811053661
+    delay_s: 0.1
+    rise_time_s: 0.08
+    fall_time_s: 0.06
+    slew_rate_n_s: 300.0
+    forward_limit_n: 28.0
+    reverse_limit_n: 28.0
+    deadband_n: 0.0
+    forward_scale: 1.0
+    reverse_scale: 1.0
+    efficiency: 1.0
+    propeller_radius_m: 0.05
+  - id: VLS
+    position_m:
+    - 0.022999999999999993
+    - -0.412
+    - -0.196
+    direction:
+    - 1.0
+    - 0.0
+    - 0.0
+    delay_s: 0.1
+    rise_time_s: 0.08
+    fall_time_s: 0.06
+    slew_rate_n_s: 300.0
+    forward_limit_n: 28.0
+    reverse_limit_n: 28.0
+    deadband_n: 0.0
+    forward_scale: 1.0
+    reverse_scale: 1.0
+    efficiency: 1.0
+    propeller_radius_m: 0.05
+  - id: VLP
+    position_m:
+    - 0.022999999999999993
+    - 0.4
+    - -0.196
+    direction:
+    - 1.0
+    - 0.0
+    - 0.0
+    delay_s: 0.1
+    rise_time_s: 0.08
+    fall_time_s: 0.06
+    slew_rate_n_s: 300.0
+    forward_limit_n: 28.0
+    reverse_limit_n: 28.0
+    deadband_n: 0.0
+    forward_scale: 1.0
+    reverse_scale: 1.0
+    efficiency: 1.0
+    propeller_radius_m: 0.05
+frames:
+  root: com
+  transforms:
+  - parent: com
+    child: cad
+    position_m:
+    - 0.157
+    - -0.04
+    - 0.048
+    orientation_wxyz:
+    - 1
+    - 0
+    - 0
+    - 0
+  - parent: cad
+    child: base_link
+    position_m:
+    - -0.14
+    - 0.03
+    - -0.09
+    orientation_wxyz:
+    - 1
+    - 0
+    - 0
+    - 0
+  - parent: cad
+    child: thruster_VUS
+    position_m:
+    - -0.134
+    - -0.369
+    - 0.242
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - parent: cad
+    child: thruster_VUP
+    position_m:
+    - -0.134
+    - 0.438
+    - 0.242
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - parent: cad
+    child: thruster_HUS
+    position_m:
+    - -0.14
+    - -0.26
+    - 0.141
+    orientation_wxyz:
+    - 0.6532688037723191
+    - 0.2704955304628238
+    - -0.27044044338085915
+    - 0.6534018706749187
+  - parent: cad
+    child: thruster_HUP
+    position_m:
+    - -0.14
+    - 0.328
+    - 0.141
+    orientation_wxyz:
+    - 0.6532688037723191
+    - -0.2704955304628238
+    - -0.27044044338085915
+    - -0.6534018706749187
+  - parent: cad
+    child: thruster_HLS
+    position_m:
+    - -0.14
+    - -0.26
+    - -0.141
+    orientation_wxyz:
+    - 0.6532688037723191
+    - -0.2704955304628238
+    - 0.27044044338085915
+    - 0.6534018706749187
+  - parent: cad
+    child: thruster_HLP
+    position_m:
+    - -0.14
+    - 0.328
+    - -0.141
+    orientation_wxyz:
+    - 0.6532688037723191
+    - 0.2704955304628238
+    - 0.27044044338085915
+    - -0.6534018706749187
+  - parent: cad
+    child: thruster_VLS
+    position_m:
+    - -0.134
+    - -0.372
+    - -0.244
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - parent: cad
+    child: thruster_VLP
+    position_m:
+    - -0.134
+    - 0.44
+    - -0.244
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - parent: cad
+    child: imu_mount
+    position_m:
+    - -0.25
+    - -0.1492
+    - 0.0222
+    orientation_wxyz:
+    - 0.0002095447747113296
+    - 0.7071408059844668
+    - -0.7070726926576023
+    - -0.00020952459090689933
+  - parent: cad
+    child: dvl_mount
+    position_m:
+    - -0.119
+    - 0.034
+    - -0.25
+    orientation_wxyz:
+    - 0.9238795446418628
+    - 0.0
+    - 0.0
+    - -0.3826834030792871
+  - parent: cad
+    child: fog_mount
+    position_m:
+    - 0.0
+    - 0.0
+    - 0.0
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - parent: cad
+    child: depth_mount
+    position_m:
+    - -0.305
+    - -0.125
+    - 0.045
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - parent: cad
+    child: poker_mount
+    position_m:
+    - 0.2286
+    - 0.0127
+    - -0.17145
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - parent: cad
+    child: torpedoes_mount
+    position_m:
+    - 0.048
+    - 0.18200625
+    - -0.1324
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - parent: cad
+    child: droppers_mount
+    position_m:
+    - 0.0
+    - 0.17200625
+    - -0.1501
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - parent: cad
+    child: claw_mount
+    position_m:
+    - 0.19
+    - 0.034
+    - -0.3712
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - parent: cad
+    child: magnet_mount
+    position_m:
+    - -0.2946
+    - 0.0475
+    - -0.391
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - parent: cad
+    child: hitch_mount
+    position_m:
+    - 0.0
+    - 0.0
+    - 0.0
+    orientation_wxyz:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - parent: cad
+    child: ffc_mount
+    position_m:
+    - -0.0195
+    - -0.0889
+    - 0.02
+    orientation_wxyz:
+    - 0.9996750202077826
+    - -0.004998416754581291
+    - 0.024997083447914372
+    - 0.00012498645879513106
+  - parent: cad
+    child: dfc_mount
+    position_m:
+    - -0.24347
+    - -0.065568
+    - -0.15943
+    orientation_wxyz:
+    - 0.5199427952056352
+    - 0.5095974583371051
+    - 0.48959879164377196
+    - -0.4798572114609425
+sensors: []
