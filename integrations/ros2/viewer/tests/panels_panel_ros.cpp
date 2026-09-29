@@ -74,6 +74,7 @@ int main(int argc, char **argv) {
     // Send deferred replies from the test loop, after the callback has returned.
     Registry registry;
     registerPanels(registry);
+    registerHostPlaceholders(registry);
     RosProviders ros;
     ros.registerFactories(registry);
     auto cfg = YAML::LoadFile(argv[1]);
@@ -308,6 +309,7 @@ int main(int argc, char **argv) {
     RosProviders standardRos;
     Registry standardRegistry;
     registerPanels(standardRegistry);
+    registerHostPlaceholders(standardRegistry);
     standardRos.registerFactories(standardRegistry);
     auto standard =
         std::make_unique<Composition>(YAML::LoadFile(argv[2]), Context{robot, "map", false, false}, standardRegistry);

@@ -163,6 +163,7 @@ int main() {
     io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
     Registry registry;
     registerPanels(registry);
+    registerHostPlaceholders(registry);
     for (int axis = 0; axis < 3; ++axis) {
         const auto stationary = dragAxis(registry, axis, false);
         const auto following = dragAxis(registry, axis, true);

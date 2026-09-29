@@ -1436,28 +1436,8 @@ void App::drawToolbar(float left, int &oldMode) {
 // Host-provided toolbar items and panels: an explicit table, no static self-registration. Each type can be
 // listed in the composition's `toolbar:`; `detections` can also be a sidebar panel.
 void App::registerHostItems() {
-    struct HostPanel final : panels::Panel {
-        std::function<void()> bar, body;
-        void toolbar() override {
-            if (bar)
-                bar();
-        }
-        void draw() override {
-            if (body)
-                body();
-        }
-    };
     const auto add = [this](const char *type, std::function<void()> bar, std::function<void()> body = {}) {
-        registry_.panels.emplace(
-            type, panels::ViewFactory<panels::Panel>{
-                      panels::Kind::Motion, [type](const YAML::Node &n) { panels::keys(n, {}, type); },
-                      [bar, body](const panels::Binding &) {
-                          auto panel = std::make_unique<HostPanel>();
-                          panel->bar = bar;
-                          panel->body = body;
-                          return std::unique_ptr<panels::Panel>(std::move(panel));
-                      },
-                      true, !body});
+        panels::registerHostItem(registry_, type, std::move(bar), std::move(body));
     };
     add("scene_settings", [this] { toolbarSceneSettings(); });
     add("pool_viewer", [this] { toolbarPoolViewer(); });

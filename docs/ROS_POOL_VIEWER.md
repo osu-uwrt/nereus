@@ -45,6 +45,20 @@ Capture mode saves the full window PNG plus `<stem>-<camera>.png` from the last 
   `glFinish`es after main/card draws; use it for attribution, not for the frame-time numbers). With vsync the wait for the
   vblank is reported under `ui`. `--legacy-cards` restores the old all-cards-every-0.1-s pipeline for A/B runs.
 
+## Layout: toolbar and sidebar (config)
+
+The panel composition (`content/viewer/talos_uwrt_panels.yaml`, `--panels FILE|none`) decides both bars:
+
+- `toolbar:` ordered top-bar items, each `{type, id?, provider?, title?, visible?, options?}`. Host items (no
+  provider): `scene_settings` (dropdown under its button: mechanism buttons, Lighting, Water appearance),
+  `pool_viewer`, `panels_menu`, `view`, `focus`, `follow`, `labels`, `tf`, `detections` (compact toggle +
+  placement), `mpc_path`, `preview_task` (demo). Provider-backed items: `simulation`, `run`, ... (name a provider).
+  Without a `toolbar:` key the default is today's bar minus detections. An empty list hides the bar.
+- `panels:` sidebar sections as before; `detections` can also be a sidebar panel (full settings and legend).
+- Unknown types, keys or options, duplicate ids, a provider on a host item, or a toolbar-only item in `panels:`
+  fail at startup with the item named. The canonical host item list is `panels::hostItemTypes()`; tools and tests
+  validate compositions with `registerHostPlaceholders()`.
+
 ## Real robot (no simulator)
 
 The viewer is the RViz replacement on the vehicle: `pose_source` (`--pose-source auto|truth|estimate`, host yaml
@@ -114,7 +128,7 @@ status_lights, thruster_visuals, camera_geometry (+ frame graph), jpeg, scenario
   the observer render. Runtime editing of the camera products needs a bridge parameter path (open item).
 - Detections (`yolo_orientation/visualization_marker_array`; overlay on by default, `--no-detections` /
   `detections.enabled`). Each observation (keyed by ns,id) is placed once and never follows later TF; lifetime expiry
-  is independent of visibility. Placement (`--detections-placement` / `detections.placement` / toolbar combo):
+  is independent of visibility. Placement (`--detections-placement` / `detections.placement` / Detections panel):
   `pose_source` (default) follows the pose source; `truth` = truth base at the marker stamp composed with the pack's
   base-to-camera transform; `estimate` = RViz-like TF lookup of the marker frame at the stamp, retried for 0.5 s,
   then the latest transform and drawn dim and dashed ("approximate"); `both` draws truth solid and estimate as a cyan

@@ -131,5 +131,17 @@ class Composition {
 // The built-in toolbar item used when a composition has no `toolbar:` list: the host registers the items it
 // provides (types not in the registry are skipped).
 YAML::Node defaultToolbar();
+// Host-application items (drawn by the viewer, no provider). hostItemTypes() is the canonical list with
+// whether each can also be a sidebar panel; registerHostItem binds one to drawing functions (toolbar form,
+// optional sidebar form). registerHostPlaceholders registers the whole list with no drawing, so tools and
+// tests validate compositions exactly like the viewer.
+struct HostItemType {
+    const char *type;
+    bool sidebar;
+};
+const std::vector<HostItemType> &hostItemTypes();
+void registerHostItem(Registry &, const std::string &type, std::function<void()> toolbar,
+                      std::function<void()> panel = {});
+void registerHostPlaceholders(Registry &);
 void registerPanels(Registry &);
 } // namespace robotics::ros_viewer::panels

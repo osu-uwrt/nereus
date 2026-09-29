@@ -55,7 +55,7 @@ struct HostItem final : Panel {
 int main() {
     Registry r;
     registerPanels(r);
-    std::vector<std::string> drawLog;
+    std::vector<std::string> drawLog; // this test registers its own recording host items
     for (const char *type : {"view", "detections", "scene_settings"})
         r.panels.emplace(type, ViewFactory<Panel>{Kind::Motion,
                                                   [type](const YAML::Node &o) {
@@ -114,13 +114,17 @@ ownership:
     assert(empty.empty());
     ctx.preview = false;
     auto fails = [&](const YAML::Node &cfg) {
+        const int before = created; // a rejected composition creates no provider
         bool threw = false;
         try {
             Composition bad(cfg, ctx, r);
         } catch (const std::exception &) {
             threw = true;
         }
-        assert(threw && created == 2);
+        if (!threw || created != before)
+            std::cerr << "expected rejection (threw " << threw << ", providers created " << created - before
+                      << "):\n" << YAML::Dump(cfg) << "\n";
+        assert(threw && created == before);
     };
     auto cfg = YAML::Load(text);
     cfg["panels"][0]["provider"] = "missing";

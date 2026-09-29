@@ -89,13 +89,14 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
             throw std::invalid_argument("providers." + id + ": " + e.what());
         }
     }
-    YAML::Node toolbarConfig = config["toolbar"];
-    if (!toolbarConfig) {
-        toolbarConfig = YAML::Node(YAML::NodeType::Sequence);
+    // A missing key yields an invalid node that must not be assigned to; build the default separately.
+    YAML::Node toolbarConfig(YAML::NodeType::Sequence);
+    if (config["toolbar"])
+        toolbarConfig = YAML::Clone(config["toolbar"]);
+    else
         for (const auto &item : defaultToolbar())
             if (registry.panels.count(item["type"].as<std::string>()))
                 toolbarConfig.push_back(item);
-    }
     const auto validateViews = [&](const char *name, const YAML::Node &items, const auto &factories) {
         const bool isToolbar = std::string(name) == "toolbar";
         if (items && !items.IsSequence())
@@ -175,8 +176,8 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
         b.drawOverlayControls = [this, provider = providerId] { drawOverlayControls(provider); };
         b.drawPanelMenu = [this] { drawPanelMenu(); };
         b.focus = ctx.focus;
-        b.showWindow = std::find(ctx.initialWindows.begin(), ctx.initialWindows.end(), item["id"].as<std::string>()) !=
-                       ctx.initialWindows.end();
+        const auto id = item["id"].as<std::string>(item["type"].as<std::string>("")); // toolbar ids default to the type
+        b.showWindow = std::find(ctx.initialWindows.begin(), ctx.initialWindows.end(), id) != ctx.initialWindows.end();
         if (!ctx.preview && !providerId.empty())
             b.provider = sources.at(providerId);
         b.options = item["options"] ? item["options"] : YAML::Node(YAML::NodeType::Map);
@@ -263,9 +264,47 @@ std::vector<std::string> Composition::panelIds() const {
         ids.push_back(item.id);
     return ids;
 }
+const std::vector<HostItemType> &hostItemTypes() {
+    static const std::vector<HostItemType> types{
+        {"scene_settings", false}, {"pool_viewer", false}, {"view", false},     {"focus", false},
+        {"follow", false},         {"labels", false},      {"tf", false},       {"mpc_path", false},
+        {"preview_task", false},   {"detections", true}};
+    return types;
+}
+
+void registerHostItem(Registry &registry, const std::string &type, std::function<void()> toolbar,
+                      std::function<void()> panel) {
+    struct HostPanel final : Panel {
+        std::function<void()> bar, body;
+        void toolbar() override {
+            if (bar)
+                bar();
+        }
+        void draw() override {
+            if (body)
+                body();
+        }
+    };
+    const bool sidebar = static_cast<bool>(panel);
+    registry.panels.insert_or_assign(
+        type, ViewFactory<Panel>{Kind::Motion, [type](const YAML::Node &n) { keys(n, {}, type); },
+                                 [toolbar, panel](const Binding &) {
+                                     auto item = std::make_unique<HostPanel>();
+                                     item->bar = toolbar;
+                                     item->body = panel;
+                                     return std::unique_ptr<Panel>(std::move(item));
+                                 },
+                                 true, !sidebar});
+}
+
+void registerHostPlaceholders(Registry &registry) {
+    for (const auto &item : hostItemTypes())
+        registerHostItem(registry, item.type, [] {}, item.sidebar ? std::function<void()>([] {}) : nullptr);
+}
+
 YAML::Node defaultToolbar() {
     return YAML::Load("[{type: scene_settings}, {type: pool_viewer}, {type: panels_menu}, {type: view}, "
-                      "{type: focus}, {type: follow}, {type: labels}, {type: tf}, {type: detections}, "
+                      "{type: focus}, {type: follow}, {type: labels}, {type: tf}, "
                       "{type: mpc_path}, {type: preview_task}]");
 }
 void Composition::drawSidebar(float height) {
