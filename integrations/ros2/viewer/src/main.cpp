@@ -25,6 +25,7 @@ void usage() {
         "  --show-tf --detections --mpc-path --show-scorecard   initial toggle states\n"
         "  --hidden --frames N --screenshot out.png   render N frames, save a PNG, exit\n"
         "  --render-rate HZ       optional frame cap (default: none, vsync paces)\n"
+        "  --card-rate HZ         local camera card refresh (default: each camera's own rate; 0 = camera rate)\n"
         "  --no-vsync             disable vsync (swap interval 0)\n"
         "  --profile              log frame time mean/p50/p95/p99/max and per-phase CPU cost every 5 s\n"
         "                         (F3 toggles the on-screen readout)\n"
@@ -127,6 +128,8 @@ int main(int argc, char **argv) {
             options.frames = std::atoi(value().c_str());
         else if (arg == "--render-rate")
             options.renderRate = std::atof(value().c_str());
+        else if (arg == "--card-rate")
+            options.cardRate = std::atof(value().c_str());
         else if (arg == "--use-sim-time") {
             std::string v = "true";
             if (i + 1 < argc && argv[i + 1][0] != '-')

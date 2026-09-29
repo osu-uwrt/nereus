@@ -19,6 +19,7 @@ struct Options {
     bool demo = false;              // no ROS graph: fixed preview pose, no providers
     bool showFocus = false;         // keep the orbit focus marker visible (screenshots/tests)
     bool localCameras = true;       // camera cards render from the viewer's scene at the truth pose
+    double cardRate = -1;           // local card refresh Hz; <0 = host yaml cards.rate_hz, else the camera's rate
     bool hidden = false;
     bool showTf = false, detections = false, mpcPath = false, showScorecard = false;
     std::vector<std::string> open;  // initial windows/popups: scene-settings, map, tf, pool-viewer

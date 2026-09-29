@@ -220,6 +220,7 @@ class App {
     void sectionHeading(const char *text);
     std::string runTime() const;
     void saveCameraImages(const fs::path &screenshot);
+    double cardPeriod(std::size_t camera) const;
     void renderLocalCards(double t, const rendering::Scene &mainScene);
 
     Options opt_;
@@ -1588,6 +1589,14 @@ void App::drawInterface(double time, float dt) {
 // Cost control: at most ONE card per frame (each card refreshes every 0.1 s, staggered by the round-robin), only
 // cards drawn on screen whose RGB is not replaced by the depth image or the ROS feed, the main frame's scene
 // is reused, and the renderer's preview mode skips shadow/bloom/reflection passes.
+double App::cardPeriod(std::size_t camera) const {
+    const double rate = opt_.cardRate >= 0 ? opt_.cardRate : lookup(config_, {"cards", "rate_hz"}).as<double>(0);
+    if (rate > 0)
+        return 1. / rate;
+    const double own = camera < scenario_->cameras.size() ? scenario_->cameras[camera].periodS : 1. / 15;
+    return own > 0 ? own : 1. / 15;
+}
+
 void App::renderLocalCards(double t, const rendering::Scene &mainScene) {
     if (!scenario_ || !model_ || !(demoMode_ || opt_.localCameras) || !cameraSidebarVisible_)
         return;
@@ -1608,8 +1617,13 @@ void App::renderLocalCards(double t, const rendering::Scene &mainScene) {
     if (todo.empty())
         return;
     nextCardTurn_ = todo.back() + 1;
-    for (auto i : todo)
-        cardDue_[opt_.legacyCards ? 0 : i] = t + (demoMode_ ? .25 : .1);
+    for (auto i : todo) {
+        // Refresh at the camera's own rate (or the configured card rate) on a fixed grid so updates are evenly
+        // spaced; after a stall, resume from now instead of bursting to catch up.
+        const double period = demoMode_ ? .25 : cardPeriod(i);
+        auto &due = cardDue_[opt_.legacyCards ? 0 : i];
+        due = due > 0 && t - due < period ? due + period : t + period;
+    }
     PhaseTimer timer{profiler_, Phase::Cards, profileSync()};
     rendering::Scene ownScene;
     if (!observer_.walls || opt_.legacyCards) { // the robot's camera sees the pool whatever the observer hides
