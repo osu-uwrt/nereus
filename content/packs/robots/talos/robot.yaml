@@ -6,7 +6,7 @@ kind: robot
 id: talos
 description: UWRT Talos AUV, physical plant + navigation sensors + cameras + mechanisms.
 # hash_basis git_revision: the value recorded from the pinned Git object by the offline importer
-# (tools/import_talos_physics.py). worktree: this file's working-tree content only; its
+# (original offline importer). worktree: this file's working-tree content only; its
 # relation to the pinned revision is unverified (riptide_core worktree is dirty elsewhere).
 provenance:
   revisions:

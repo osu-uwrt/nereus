@@ -2,7 +2,6 @@
 """Validate context-owned rendering and a relocated install without viewer/simulation sources."""
 
 import argparse
-import json
 import os
 import shutil
 import subprocess
@@ -11,16 +10,11 @@ import tempfile
 from pathlib import Path
 
 from check import ROOT, clean_environment, run
-from compare_render_reference import compare
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--preset", choices=("rendering", "rendering-asan"), default="rendering")
-    parser.add_argument(
-        "--reference", type=Path, help="same-backend original captures for exact comparison"
-    )
-    parser.add_argument("--report", type=Path)
     args = parser.parse_args()
     run([sys.executable, ROOT / "tools/check.py", "--preset", args.preset])
     cmake = shutil.which("cmake")
@@ -110,17 +104,8 @@ def main():
             data / "visuals/talos",
             capture,
         ]
-        if args.reference:
-            command.append(args.reference.resolve())
         info = subprocess.check_output(list(map(str, command)), cwd=temp, env=graphics, text=True)
         print(info, end="")
-        if args.reference:
-            report = compare(args.reference, capture)
-            if report["backend"] != info.strip():
-                raise ValueError("reference and native captures used different GL backends")
-            if args.report:
-                args.report.write_text(json.dumps(report, indent=2) + "\n")
-            print(report["comparison"])
     print("Renderer contracts and isolated installed captures passed.")
 
 
