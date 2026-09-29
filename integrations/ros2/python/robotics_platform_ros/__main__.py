@@ -45,6 +45,9 @@ def execution_record(resolved: Any, core: BridgeCore, sensors: list[str],
         "clock": {"epoch_ns": core.epoch_ns, "reset_policy": core.reset_policy,
                   "real_time_factor": core.real_time_factor, "topic": config["clock"]["topic"]},
         "namespace": config["namespace"],
+        "node_name": config.get("node_name", "robotics_platform_bridge"),
+        "parameters": {"real_time_factor": "double on the bridge node; 0 pauses stepping and /clock, "
+                                           "negative or non-finite values are rejected"},
         "world_frame": core.world_frame,
         "sensors": {"selected": sensors, "not_executed": list(deferred),
                     "selected_without_stream": [name for name in sensors if not any(
@@ -52,8 +55,9 @@ def execution_record(resolved: Any, core: BridgeCore, sensors: list[str],
                         for stream in config["streams"]
                         if stream["native"].startswith("sensor:"))]},
         "streams": [
-            {key: stream[key] for key in
-             ("id", "direction", "topic", "message_type", "native", "frame_id", "rate_hz")}
+            {key: stream.get(key) for key in
+             ("id", "direction", "topic", "message_type", "native", "frame_id", "rate_hz",
+              "format")}
             for stream in config["streams"]
         ],
         "services": [
@@ -65,7 +69,8 @@ def execution_record(resolved: Any, core: BridgeCore, sensors: list[str],
         "estimator_alignment": config.get("placement", {}).get("estimator_alignment"),
         "unresolved": {"note": GAP_NOTE, "items": resolved.unresolved},
         "not_executed_config": {
-            "scenario.run.options": "passed to task hooks; operator run commands are not bridged",
+            "scenario.run.options": "defaults passed to task hooks; simulator/run_command start "
+                                    "overrides them per run",
             "tf.lookup": "external owners; uses latest live TF, not stamp-matched transforms",
             "services[].required_from_step": "planning metadata; never an execution switch",
         },
@@ -137,7 +142,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         node = BridgeNode(lambda lookup: BridgeCore(resolved, pack, epoch_ns=epoch_ns,
                                                    lookup=lookup, cameras=cameras),
-                          resolved.bridge["namespace"])
+                          resolved.bridge["namespace"],
+                          resolved.bridge.get("node_name", "robotics_platform_bridge"))
         node.start_cameras()
         run(node, duration_ns)
     except KeyboardInterrupt:
@@ -160,6 +166,8 @@ def main(argv: list[str] | None = None) -> int:
         _write(arguments.output / "tasks.json", {
             "format": "robotics_platform_ros.tasks", "version": 1,
             "scores": {} if tasks is None else dict(tasks.snapshot()["scores"]),
+            "run": core.session.run_snapshot(),
+            "counters": dict(core.session.task_counters),
             "events": json.loads(json.dumps(core.task_events, default=_plain)),
         })
         _write(arguments.output / "summary.json", {

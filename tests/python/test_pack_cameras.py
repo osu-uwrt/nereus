@@ -181,11 +181,14 @@ class TalosPackCameraTests(unittest.TestCase):
         self.assertEqual(files["mesh"], visuals | {("tasks", name) for name in (
             "gate_mesh", "gate_repair_mesh", "gate_rescue_mesh", "torpedo_mesh", "slalom_mesh",
             "bin_mesh", "bin_vinyl_mesh", "bin_magnet_mesh", "octagon_buoy_mesh",
-            "octagon_compass_mesh", "octagon_hammer_and_wrench_mesh", "octagon_sos_mesh")})
+            "octagon_compass_mesh", "octagon_hammer_and_wrench_mesh", "octagon_sos_mesh",
+            "table_visual", "basket_helmet_visual", "basket_warning_visual")})
         self.assertEqual(files["texture"], {("tasks", name) for name in (
             "gate_repair_texture", "gate_rescue_texture", "torpedo_texture",
             "octagon_buoy_texture", "octagon_sos_texture", "octagon_hammer_and_wrench_texture",
-            "octagon_compass_texture", "bin_vinyl_fire_texture", "bin_vinyl_blood_texture")})
+            "octagon_compass_texture", "bin_vinyl_fire_texture", "bin_vinyl_blood_texture",
+            "basket_helmet_visual_task5_redcross_fixed",
+            "basket_warning_visual_task5_warning_fixed")})
         torpedo = next(item for item in record["scene"]["files"]
                        if item["id"] == "torpedo_texture")
         self.assertEqual(torpedo["used_by"], ["torpedo_mesh"])

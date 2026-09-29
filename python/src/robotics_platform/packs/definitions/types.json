@@ -1779,6 +1779,9 @@
         "contact_processing_threshold_m": {
           "type": "number",
           "minimum": 0
+        },
+        "visual_asset": {
+          "$ref": "common.schema.json#/$defs/name"
         }
       },
       "required": [
@@ -1798,7 +1801,7 @@
         "contact_processing_threshold_m"
       ],
       "additionalProperties": false,
-      "description": "Free dynamic prop. The collision shape is the convex hull of the .obj vertices centred on their bounds (centre = bounds midpoint). frame is the task-local pose of the mesh origin at reset; mass in kg, volume (buoyancy) in m^3, expected_region the box region that scores as correct. Friction/damping coefficients dimensionless except damping in 1/s; margins in m.",
+      "description": "Free dynamic prop. The collision shape is the convex hull of the .obj vertices centred on their bounds (centre = bounds midpoint). frame is the task-local pose of the mesh origin at reset; mass in kg, volume (buoyancy) in m^3, expected_region the box region that scores as correct. Friction/damping coefficients dimensionless except damping in 1/s; margins in m. visual_asset is the optional pack asset id of the display mesh whose origin coincides with the collision asset origin.",
       "x-category": "prop"
     },
     "contact_world": {

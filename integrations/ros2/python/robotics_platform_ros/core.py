@@ -8,6 +8,7 @@ first step. Unknown endpoints and unsupported actions fail at construction.
 from __future__ import annotations
 
 import fnmatch
+import json
 import math
 import re
 from collections.abc import Callable, Mapping
@@ -20,7 +21,7 @@ from robotics_platform.mechanisms import CommandResult
 from robotics_platform.pack_runtime import PackRuntime
 from robotics_platform.session import Session
 
-from . import mapping
+from . import mapping, visual
 from .mapping import (
     BOOLEAN,
     INTEGER,
@@ -80,6 +81,7 @@ _POSE_ARGUMENTS = {"frame": STRING, "position_m": VECTOR3, "orientation_w": SCAL
 _COMMAND_ARGUMENTS: dict[str, dict[str, Spec]] = {
     "command:thrusters.set_forces": {"forces_n": Spec("float", (None,))},
     "command:robot.set_killed": {"killed": BOOLEAN},
+    "command:runs.command": {"command_json": STRING},
     "estimate:latest": dict(_POSE_ARGUMENTS),
 }
 _RESULT = {"accepted": BOOLEAN, "message": STRING}
@@ -167,6 +169,7 @@ class BridgeCore:
         if resolved.bridge is None:
             raise BridgeError("scenario selects no bridge pack")
         self.config = resolved.bridge
+        self.resolved = resolved
         self.robot = resolved.robot
         self.pack = pack
         self.runtime = pack.runtime
@@ -205,6 +208,9 @@ class BridgeCore:
         self._sensor_streams: dict[str, list[str]] = {}
         self._timed: dict[str, _Timed] = {}
         self._events: dict[str, list[str]] = {}
+        self._state_values: dict[str, Callable[[], dict[str, Any]]] = {}
+        self._feed_streams: list[str] = []
+        self._startup_streams: list[str] = []
         self._compile_streams()
         self.services: dict[str, tuple[mapping.Reader, mapping.Writer, dict[str, Any]]] = {}
         self._compile_services()
@@ -213,6 +219,11 @@ class BridgeCore:
         self._compile_alignment()
         self._check_bindings()
         self.latest_estimate: dict[str, Any] | None = None
+
+    @property
+    def asset_paths(self) -> dict[str, dict[str, str]]:
+        """Absolute paths of every present pack asset, by pack role."""
+        return self.resolved.asset_paths()
 
     @property
     def killed(self) -> bool:
@@ -241,6 +252,34 @@ class BridgeCore:
             elif kind == "claw":
                 spec[identifier] = {"state": STRING, "gap_m": SCALAR, "target_gap_m": SCALAR}
         return spec
+
+    def _claw_spec(self) -> dict[str, Any]:
+        spec: dict[str, Any] = {"sim": {"time": TIME}}
+        for identifier, kind in self._mechanism_types.items():
+            if kind == "claw":
+                spec[identifier] = {"jaws_m": Spec("float", (2,))}
+        return spec
+
+    def _compile_format_stream(self, stream: Mapping[str, Any], cls: Any, where: str) -> None:
+        """Streams encoded by a named generic encoder instead of a field map."""
+        try:
+            encoder, values = visual.compile_format(self, stream, cls, where)
+        except visual.VisualError as error:
+            raise BridgeError(str(error)) from None
+        endpoint = stream["native"]
+        self.publishers[stream["id"]] = encoder
+        _, mode = visual.ENDPOINTS[endpoint]
+        if mode == "timed":
+            period = self._stepped_period(stream["rate_hz"], where)
+            self._timed[stream["id"]] = _Timed(period, period)
+        elif stream["rate_hz"] != 0:
+            raise BridgeError(f"{where}: event streams have rate_hz 0")
+        if values is not None:
+            self._state_values[stream["id"]] = values
+        if endpoint == "event:tasks.feed":
+            self._feed_streams.append(stream["id"])
+        elif endpoint == "event:scenario.description":
+            self._startup_streams.append(stream["id"])
 
     def _stepped_period(self, rate_hz: float, where: str) -> int:
         period = _period_ns(rate_hz, where)
@@ -279,6 +318,8 @@ class BridgeCore:
                     continue  # CameraBridge compiled these mappings before construction.
                 cls = mapping.message_class(stream["message_type"])
                 if stream["direction"] == "subscribe":
+                    if "format" in stream or "options" in stream:
+                        raise BridgeError(f"{where}: format/options apply to publish streams")
                     if endpoint in _COMMAND_ARGUMENTS:
                         arguments = _COMMAND_ARGUMENTS[endpoint]
                     elif endpoint in _SIMPLE_ACTIONS - {"command:robot.reset_to_start"}:
@@ -297,6 +338,9 @@ class BridgeCore:
                     continue
                 if "image" in stream:
                     raise BridgeError(f"{where}: image streams are not executed by this bridge")
+                if "format" in stream or "options" in stream:
+                    self._compile_format_stream(stream, cls, where)
+                    continue
                 if endpoint.startswith("sensor:"):
                     name, _, output = endpoint.removeprefix("sensor:").partition(".")
                     sensor = self._sensor(name, where)
@@ -309,10 +353,15 @@ class BridgeCore:
                     sources: dict[str, Any] = {"sample": {"time": TIME},
                                                "reading": reading_spec(sensor)}
                     self._sensor_streams.setdefault(name, []).append(stream["id"])
-                elif endpoint in ("timer", "state:robot", "state:mechanisms"):
+                elif endpoint in ("timer", "state:robot", "state:mechanisms", "state:thrusters",
+                                  "state:claws"):
+                    if endpoint == "state:thrusters" and self._thruster_index is None:
+                        raise BridgeError(f"{where}: thruster state needs a thrusters block")
                     sources = (dict(_ROBOT_STATE) if endpoint == "state:robot" else
                                self._mechanism_spec() if endpoint == "state:mechanisms" else
-                               {"sim": {"time": TIME}})
+                               self._claw_spec() if endpoint == "state:claws" else
+                               {"sim": {"time": TIME}, "forces_n": Spec("float", (None,))}
+                               if endpoint == "state:thrusters" else {"sim": {"time": TIME}})
                     period = self._stepped_period(stream["rate_hz"], where)
                     self._timed[stream["id"]] = _Timed(period, period)
                 elif endpoint == "event:robot.kill_changed":
@@ -543,9 +592,15 @@ class BridgeCore:
         state = mechanisms = None
         for stream, timed in self._timed.items():
             if now >= timed.next_ns:
-                if self.stream_config[stream]["native"] == "state:mechanisms":
+                if stream in self._state_values:
+                    publications.append(self._publish(stream, self._state_values[stream]()))
+                elif self.stream_config[stream]["native"] == "state:mechanisms":
                     mechanisms = mechanisms or self._mechanism_values()
                     publications.append(self._publish(stream, mechanisms))
+                elif self.stream_config[stream]["native"] == "state:thrusters":
+                    publications.append(self._publish(stream, self._thruster_values()))
+                elif self.stream_config[stream]["native"] == "state:claws":
+                    publications.append(self._publish(stream, self._claw_values()))
                 else:
                     state = state or self._robot_state(snapshot)
                     publications.append(self._publish(stream, state))
@@ -558,7 +613,74 @@ class BridgeCore:
                 transforms.append(Transform(entry["parent"], entry["child"], self._last_ros_ns,
                                             pose["position"], pose["orientation_wxyz"]))
                 timed.next_ns += timed.period_ns
+        publications += self.flush()
         return clocks, publications, transforms
+
+    def flush(self) -> list[Publication]:
+        """Publications of events produced outside stepping (operator commands, resets)."""
+        publications = []
+        for item in self.session.take_feed():
+            values = {"sim": {"time": self._last_ros_ns}, "json": json.dumps(item, allow_nan=False)}
+            publications += [self._publish(stream, values) for stream in self._feed_streams]
+        return publications
+
+    def refresh(self) -> list[Publication]:
+        """Current viewer state of every timed state stream, without stepping (paused).
+
+        Robot truth and sensors are excluded: nothing new exists to say about them.
+        """
+        publications = []
+        for stream in self._timed:
+            native_name = self.stream_config[stream]["native"]
+            if native_name.startswith("state:") and native_name != "state:robot":
+                publications.append(self._publish(stream, self._timed_state(stream)))
+        return publications
+
+    def _timed_state(self, stream: str) -> dict[str, Any]:
+        native_name = self.stream_config[stream]["native"]
+        if stream in self._state_values:
+            return self._state_values[stream]()
+        if native_name == "state:mechanisms":
+            return self._mechanism_values()
+        if native_name == "state:thrusters":
+            return self._thruster_values()
+        return self._claw_values()
+
+    def startup_publications(self) -> list[Publication]:
+        """One-shot publications made when the node starts (the scenario description)."""
+        values = {"sim": {"time": self._last_ros_ns}, "json": self.scenario_json()}
+        return [self._publish(stream, values) for stream in self._startup_streams]
+
+    def scenario_json(self) -> str:
+        """The resolved scenario document plus absolute paths of every present asset."""
+        document = self.resolved.manifest()
+        document["asset_paths"] = self.asset_paths
+        return json.dumps(document, allow_nan=False)
+
+    def set_real_time_factor(self, value: Any) -> str | None:
+        """Apply a new simulation speed (0 pauses); returns the rejection reason or None."""
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return "real_time_factor must be a number"
+        if not math.isfinite(value) or value < 0:
+            return "real_time_factor must be finite and >= 0"
+        self.real_time_factor = float(value)
+        return None
+
+    def _thruster_values(self) -> dict[str, Any]:
+        assert self._thruster_index is not None
+        scales = self.config["thrusters"]["input_scales"]
+        native_forces = self.session.thruster_forces()
+        forces = [float(native_forces[index]) / scale if scale else 0.0
+                  for index, scale in zip(self._thruster_index, scales, strict=True)]
+        return {"sim": {"time": self._last_ros_ns}, "forces_n": np.asarray(forces, float)}
+
+    def _claw_values(self) -> dict[str, Any]:
+        jaws = self.session.claw_jaws()
+        values: dict[str, Any] = {"sim": {"time": self._last_ros_ns}}
+        for identifier, kind in self._mechanism_types.items():
+            if kind == "claw":
+                values[identifier] = {"jaws_m": np.asarray(jaws.get(identifier, (0.0, 0.0)), float)}
+        return values
 
     def _mechanism_values(self) -> dict[str, Any]:
         state = self.session.mechanism_state()
@@ -618,6 +740,9 @@ class BridgeCore:
         if endpoint == "estimate:latest":
             self.latest_estimate = arguments
             return []
+        if endpoint == "command:runs.command":
+            self.run_command(arguments["command_json"])
+            return []
         if endpoint == "command:scenario.reset":
             accepted, message = self.full_reset()
             self._request_alignment("full_reset")
@@ -629,6 +754,31 @@ class BridgeCore:
             return []
         return [self._publish(reply, {"sim": {"time": self._last_ros_ns},
                                       "accepted": result.accepted, "message": result.message})]
+
+    def run_command(self, text: str) -> CommandResult:
+        """Operator run command (JSON): start with run options, stop, or manual adjustment.
+
+        Failures set the run message to 'Command rejected: <reason>' like the original node.
+        """
+        try:
+            command = json.loads(text)
+            action = command["action"]
+            if action == "start":
+                options = {key: value for key, value in command.items() if key != "action"}
+                result = self.session.run_start(options)
+            elif action == "stop":
+                result = self.session.run_stop()
+            elif action == "adjustment":
+                result = self.session.run_adjust(command["points"])
+            else:
+                result = CommandResult(False, "Unknown run command")
+        except (ValueError, KeyError, TypeError, AttributeError) as error:
+            result = CommandResult(False, str(error) if not isinstance(error, KeyError)
+                                   else f"missing field {error}")
+        if not result.accepted:
+            Counters.bump(self.counters.rejected_commands, "run_command")
+            self.session.run_message = "Command rejected: " + result.message
+        return result
 
     def _command(self, stream: str, forces: np.ndarray) -> None:
         assert self._thruster_index is not None

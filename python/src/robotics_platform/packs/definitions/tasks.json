@@ -89,6 +89,57 @@
     "metadata": {
       "type": "object",
       "description": "Free non-executable annotations preserved verbatim by load/save; never interpreted."
+    },
+    "ui": {
+      "type": "object",
+      "description": "Viewer/operator presentation data published verbatim in run scores and the scenario description: title, run_options (key,label,type,default,choices[{value,label}]), status_fields, score_fields, focus, previews, run_inspections, manual_adjustment, score_note, actions. Interpreted only by viewers; never by physics or scoring."
+    },
+    "score_rows": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Fixed, ordered run scorecard rows: score keys the hook writes, with their operator labels.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "outcome_counters": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/name"
+      },
+      "description": "Names counted by the task score feed: every hook feed event whose result is listed increments that counter."
+    },
+    "run_messages": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "start",
+          "stop",
+          "adjustment",
+          "reset"
+        ]
+      },
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Operator status texts for run control results."
     }
   },
   "required": [
@@ -186,6 +237,16 @@
         "parameters": {
           "type": "object",
           "description": "Hook-declared data passed verbatim; the hook owns its own parameter validation."
+        },
+        "status_function": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "Optional pure function (state, parameters) -> dict of extra scalar run-score fields for viewers."
+        },
+        "feed_function": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "Optional pure function (state, events, context, parameters) -> list of operator event-feed dicts for the events just committed; context lists released payloads with mechanism id/type and slot."
         }
       },
       "required": [

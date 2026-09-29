@@ -353,3 +353,102 @@ def evaluate(state: Mapping[str, Any], events: Sequence[Mapping[str, Any]],
         ledger.feed(event)
     result["scores"] = [{"row": row, "points": value} for row, value in updated.items()]
     return result
+
+
+ENDED_REASON = "Breach outside octagon; scoring ended (timer remains manual)"
+
+
+def _replayed(state: Mapping[str, Any], parameters: Mapping[str, Any]) -> _Ledger:
+    ledger = _Ledger(state, parameters, lambda row, value: None)
+    started = state["run"]["started_ns"]
+    for event in state["history"]:
+        if event["time_ns"] >= started and not ledger.ended:
+            ledger.feed(event)
+    return ledger
+
+
+def describe(state: Mapping[str, Any], parameters: Mapping[str, Any]) -> dict[str, Any]:
+    """Viewer-facing scalar fields of the run scorecard (never used for scoring).
+
+    Pure function of the frozen run state and its event history: the assigned and scored
+    role, the target class of the current role, whether the gate was passed, the basket
+    count, the breach message and the time-bonus prerequisites.
+    """
+    intended = state["run"]["options"]["role"]
+    ledger = _replayed(state, parameters)
+    role = ledger.role
+    scores = state["scores"]
+    slalom = parameters["slalom"]["rows"]
+    return {
+        "intended_role": intended,
+        "role": role,
+        "target_class": parameters["roles"][role or intended]["target_class"],
+        "gate_passed": role is not None,
+        "ended_reason": ENDED_REASON if ledger.ended else "",
+        "basket_count": len(ledger.contents),
+        "pinger": {"mode": "disabled", "first": None, "active": None, "stage": 0},
+        "time_bonus_eligible": bool(
+            scores.get("surface") and any(scores.get(row) for row in slalom)
+            and (scores.get("bins") or scores.get("torpedoes"))),
+    }
+
+
+def feed(state: Mapping[str, Any], events: Sequence[Mapping[str, Any]],
+         context: Mapping[str, Any], parameters: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Operator event feed for the events just committed (original task-node vocabulary).
+
+    kind torpedo|dropper (released, success, wrong_target, blocked, miss; with slot), claw
+    (grasped, released/slipped/reset, success, wrong_target) and magnet (activated). One
+    result per payload; results are judged against the target class of the current role.
+    """
+    spec = parameters["feed"]
+    kinds, baskets = spec["kinds"], spec["basket_names"]
+    target_class = describe(state, parameters)["target_class"]
+    released = context["payloads"]
+    seen: set[tuple[Any, ...]] = set()
+    items: list[dict[str, Any]] = []
+
+    def add(identifier: Any, kind: str, result: str, target: str, time_ns: int,
+            slot: int | None = None) -> None:
+        key = (kind, identifier, result)
+        if key in seen:
+            return
+        seen.add(key)
+        item = {"id": identifier, "kind": kind, "result": result, "target": target,
+                "time": time_ns / 1e9}
+        if slot is not None:
+            item["slot"] = slot
+        items.append(item)
+
+    for event in events:
+        kind, data, time_ns = event["type"], event["data"], event["time_ns"]
+        mechanism = data.get("mechanism_type")
+        identifier = data.get("projectile_id")
+        slot = released.get(identifier, {}).get("slot")
+        if kind == "payload_released" and mechanism in kinds:
+            add(identifier, kinds[mechanism], "released", "", time_ns, slot)
+        elif kind == "hit" and mechanism in kinds:
+            if data["outcome"] == "pass":
+                result = "success" if data.get("hole_class") == target_class else "wrong_target"
+                add(identifier, kinds[mechanism], result, data.get("hole_id") or "", time_ns, slot)
+            elif data["outcome"] == "blocked":
+                add(identifier, kinds[mechanism], "blocked", data.get("hole_id") or "", time_ns, slot)
+        elif kind == "payload_landing" and mechanism in kinds:
+            if data["outcome"] == "inside" and mechanism == parameters["bins"]["mechanism_type"]:
+                result = "success" if data["region_class"] == target_class else "wrong_target"
+            else:
+                result = "blocked"
+            add(identifier, kinds[mechanism], result, event["region"], time_ns, slot)
+        elif kind == "miss" and mechanism in kinds:
+            add(identifier, kinds[mechanism], "miss", str(data.get("reason", "")), time_ns, slot)
+        elif kind == "activate":
+            add("", spec["magnet_kind"], "activated", event["region"], time_ns)
+        elif kind == "attach" and event["task"] == "table":
+            add(data["prop_id"], kinds["claw"], "grasped", "", time_ns)
+        elif kind == "detach" and event["task"] == "table":
+            add(data["prop_id"], kinds["claw"], data.get("reason", "released"), "", time_ns)
+        elif kind == "drop_into" and event["id"] == "basket_drop":
+            result = "success" if data["basket"] == data["expected_basket"] else "wrong_target"
+            add(data["prop_id"], kinds["claw"], result,
+                baskets.get(data["basket"], data["basket"]), time_ns)
+    return items
