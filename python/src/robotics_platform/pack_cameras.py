@@ -87,7 +87,7 @@ class PackCameras:
                  shader_directory: Path | None = None) -> None:
         self._lock = threading.Lock()
         self._resolved: ResolvedScenario = resolved
-        self._meshes: dict[tuple[str, str], _camera.Mesh] = {}
+        self._meshes: dict[tuple[str, str, str | None], _camera.Mesh] = {}
         self._files: dict[tuple[str, str], dict[str, Any]] = {}
         scenario, robot, pool = resolved.scenario, resolved.robot, resolved.pool
         self._cameras = self._select(robot, sensor_ids)
@@ -103,7 +103,7 @@ class PackCameras:
         self._unrendered: list[str] = []
         self._static = self._scene.instances + self._task_instances()
         self._robot_visuals = [
-            (self._mesh("robot", item["asset"]),
+            (self._mesh("robot", item["asset"], item.get("texture")),
              self._frames.from_root(item["frame"]).compose(_placed(item)).matrix())
             for item in robot.get("visuals", [])
         ]
@@ -380,7 +380,7 @@ class PackCameras:
                 counts = [0] * (len(panel[0]) if panel else 0)
                 for visual in visuals:
                     task_asset = frames[visual["frame"]].compose(_placed(visual))
-                    mesh = self._mesh("tasks", visual["asset"])
+                    mesh = self._mesh("tasks", visual["asset"], visual.get("texture"))
                     if panel is not None:
                         mesh, selected = _camera.perforate_mesh(
                             mesh, task_asset.matrix().astype(np.float32), *panel,
@@ -413,19 +413,30 @@ class PackCameras:
                  for item in region["holes"]]
         return list(cutouts["faces_local_x_m"]), region["half_size_m"], holes
 
-    def _mesh(self, role: str, asset_id: str) -> _camera.Mesh:
-        """Load a declared mesh after verifying it and every texture the renderer will open."""
-        key = (role, asset_id)
+    def _mesh(self, role: str, asset_id: str, texture_id: str | None = None) -> _camera.Mesh:
+        """Load a declared mesh after verifying it and every texture the renderer will open.
+
+        ``texture_id`` (a visual's ``texture``) names a declared PNG asset of the same pack that
+        replaces the diffuse texture of the mesh's textured submeshes for this placement.
+        """
+        key = (role, asset_id, texture_id)
         if key not in self._meshes:
-            declared = {item["id"]: item for item in self._pack(role)["assets"]}.get(asset_id)
-            if declared is None:
+            declared = {item["id"]: item for item in self._pack(role)["assets"]}
+            item = declared.get(asset_id)
+            if item is None:
                 raise ValueError(f"{role} pack: unknown asset '{asset_id}'")
-            path = self._verify(role, self._root(role) / declared["path"], "mesh", asset_id)
+            path = self._verify(role, self._root(role) / item["path"], "mesh", asset_id)
             mesh = _camera.load_mesh(path)
             for dependency in mesh.dependencies:
                 self._verify(role, dependency, "importer_dependency", asset_id)
             for texture in mesh.textures:
                 self._verify(role, texture, "texture", asset_id)
+            if texture_id is not None:
+                override = declared.get(texture_id)
+                if override is None:
+                    raise ValueError(f"{role} pack: unknown texture asset '{texture_id}'")
+                mesh = mesh.with_texture(self._verify(
+                    role, self._root(role) / override["path"], "texture", asset_id))
             self._meshes[key] = mesh
         return self._meshes[key]
 

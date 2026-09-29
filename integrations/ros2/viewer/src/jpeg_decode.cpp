@@ -51,4 +51,72 @@ bool decodeJpeg(const std::uint8_t *data, std::size_t size, int minWidth, Decode
     jpeg_destroy_decompress(&info);
     return true;
 }
+
+AsyncJpegDecoder::AsyncJpegDecoder(int minWidth) : minWidth_(minWidth), worker_([this] { run(); }) {}
+
+AsyncJpegDecoder::~AsyncJpegDecoder() {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        stopping_ = true;
+    }
+    condition_.notify_all();
+    worker_.join();
+}
+
+void AsyncJpegDecoder::submit(std::vector<std::uint8_t> jpeg) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (havePending_)
+            ++dropped_;
+        pending_ = std::move(jpeg);
+        havePending_ = true;
+    }
+    condition_.notify_one();
+}
+
+bool AsyncJpegDecoder::take(DecodedImage &out) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!haveResult_)
+        return false;
+    out = std::move(result_);
+    haveResult_ = false;
+    return true;
+}
+
+std::uint64_t AsyncJpegDecoder::decoded() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return decoded_;
+}
+std::uint64_t AsyncJpegDecoder::dropped() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return dropped_;
+}
+std::uint64_t AsyncJpegDecoder::failed() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return failed_;
+}
+
+void AsyncJpegDecoder::run() {
+    std::vector<std::uint8_t> data;
+    DecodedImage image;
+    while (true) {
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            condition_.wait(lock, [&] { return stopping_ || havePending_; });
+            if (stopping_)
+                return;
+            data = std::move(pending_);
+            havePending_ = false;
+        }
+        const bool ok = decodeJpeg(data.data(), data.size(), minWidth_, image);
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!ok) {
+            ++failed_;
+            continue;
+        }
+        ++decoded_;
+        result_ = std::move(image);
+        haveResult_ = true;
+    }
+}
 } // namespace robotics::ros_viewer::host

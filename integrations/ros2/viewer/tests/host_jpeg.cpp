@@ -2,6 +2,8 @@
 #include "jpeg_decode.hpp"
 #include <gtest/gtest.h>
 #include <jpeglib.h>
+#include <chrono>
+#include <thread>
 
 using namespace robotics::ros_viewer::host;
 namespace {
@@ -56,4 +58,38 @@ TEST(HostJpeg, DecodesColorsAndScalesToTheRequestedWidth) {
     EXPECT_FALSE(decodeJpeg(data.data(), 10, 64, small)); // truncated header
     const std::uint8_t garbage[] = {1, 2, 3, 4, 5, 6, 7, 8};
     EXPECT_FALSE(decodeJpeg(garbage, sizeof(garbage), 64, small));
+}
+
+TEST(HostJpeg, AsyncDecoderKeepsOnlyTheNewestFrameAndNeverBlocksTheCaller) {
+    const int w = 128, h = 64;
+    std::vector<std::uint8_t> red(std::size_t(w) * std::size_t(h) * 3, 20), blue = red;
+    for (std::size_t i = 0; i < red.size(); i += 3) {
+        red[i] = 230;
+        blue[i + 2] = 230;
+    }
+    const auto redJpeg = encode(w, h, red), blueJpeg = encode(w, h, blue);
+    AsyncJpegDecoder decoder(64);
+    DecodedImage image;
+    EXPECT_FALSE(decoder.take(image)); // nothing before the first submit
+    for (int i = 0; i < 50; ++i) {     // a burst: the caller only ever copies bytes into the slot
+        decoder.submit(redJpeg);
+    }
+    decoder.submit(blueJpeg);
+    for (int i = 0; i < 400 && decoder.decoded() == 0; ++i)
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    // Wait for the worker to reach the newest frame, whatever it decoded in between.
+    bool sawBlue = false;
+    for (int i = 0; i < 400 && !sawBlue; ++i) {
+        if (decoder.take(image))
+            sawBlue = image.rgb[2] > 200;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    EXPECT_TRUE(sawBlue);
+    EXPECT_EQ(image.width, 64);
+    EXPECT_FALSE(decoder.take(image)); // an image is handed out once
+    decoder.submit({1, 2, 3, 4, 5, 6});
+    for (int i = 0; i < 400 && decoder.failed() == 0; ++i)
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    EXPECT_EQ(decoder.failed(), 1u);
+    EXPECT_EQ(decoder.decoded() + decoder.dropped() + decoder.failed(), 52u);
 }

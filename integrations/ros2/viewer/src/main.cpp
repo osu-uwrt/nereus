@@ -12,6 +12,8 @@ void usage() {
         "  --config FILE          host viewer document (default content/viewer/talos_uwrt_host.yaml)\n"
         "  --panels FILE|none     operator panel composition (default content/viewer/talos_uwrt_panels.yaml)\n"
         "  --scenario-topic NAME  latched scenario topic (default from the config)\n"
+        "  --local-cameras [true|false]  camera cards render from this viewer's scene at the truth pose\n"
+        "                         (default true); each card can switch to the bridge's images (ROS)\n"
         "  --demo                 scene preview without ROS: fixed vehicle pose, landmark picker\n"
         "  --demo-task NAME       preview target landmark (demo only)\n"
         "  --focus NAME           initial focus (Course, Vehicle, a landmark, ...)\n"
@@ -73,6 +75,14 @@ int main(int argc, char **argv) {
             options.demoTask = value();
         else if (arg == "--demo")
             options.demo = true;
+        else if (arg == "--no-local-cameras")
+            options.localCameras = false;
+        else if (arg == "--local-cameras") {
+            std::string v = "true";
+            if (i + 1 < argc && argv[i + 1][0] != '-')
+                v = argv[++i];
+            options.localCameras = v != "false" && v != "0";
+        }
         else if (arg == "--hidden")
             options.hidden = true;
         else if (arg == "--show-tf")

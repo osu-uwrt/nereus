@@ -1,7 +1,9 @@
 // ROS-facing half of the host: TF, visual-state subscriptions, detections, MPC path, camera feeds.
-// Single-threaded: everything runs from RosSide::spin() on the render thread, so the GUI reads plain data.
+// Callbacks run from RosSide::spin() on the render thread, so the GUI reads plain data; only camera JPEG
+// decoding happens on a worker (results are collected in spin()).
 #pragma once
 #include "detection_pose.hpp"
+#include "jpeg_decode.hpp"
 #include "scenario.hpp"
 #include "status_lights.hpp"
 #include "tf_tree.hpp"
@@ -46,9 +48,13 @@ struct CameraFeed {
     std::vector<std::uint8_t> rgb, depth; // decoded previews (RGB8)
     int rgbWidth = 0, rgbHeight = 0, depthWidth = 0, depthHeight = 0;
     bool rgbDirty = false, depthDirty = false, wantDepth = false;
+    // false: the card shows the viewer's own render from the truth pose; true ("What the stack sees"):
+    // the bridge's published images. Depth always comes from the topic.
+    bool rosMode = true;
     double hz = 0;
     std::uint64_t frames = 0;
     Clock::time_point lastFrame{};
+    std::unique_ptr<AsyncJpegDecoder> decoder; // JPEG decoding runs off the UI thread
     rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr rgbSub;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depthSub;
     bool connected() const {

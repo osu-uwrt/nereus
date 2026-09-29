@@ -223,6 +223,8 @@ def robot(data: dict[str, Any]) -> list[str]:
     for index, visual in enumerate(data.get("visuals", [])):
         if visual["asset"] not in asset_ids:
             problems.append(f"/visuals/{index}/asset: unknown asset '{visual['asset']}'")
+        if "texture" in visual and visual["texture"] not in asset_ids:
+            problems.append(f"/visuals/{index}/texture: unknown asset '{visual['texture']}'")
         frame(visual["frame"], f"/visuals/{index}/frame")
     mechanisms = {item["id"]: item for item in data["mechanisms"]}
     duplicates((item["id"] for item in data["mechanisms"]), "mechanism", problems)
@@ -344,6 +346,8 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
         for visual in parameters.get("visuals", []):
             if asset_ids is not None and visual["asset"] not in asset_ids:
                 problems.append(f"/props/{identifier}/visuals: unknown asset '{visual['asset']}'")
+            if asset_ids is not None and "texture" in visual and visual["texture"] not in asset_ids:
+                problems.append(f"/props/{identifier}/visuals: unknown texture asset '{visual['texture']}'")
             if visual["frame"] not in frames:
                 problems.append(f"/props/{identifier}/visuals: unknown frame '{visual['frame']}'")
         cutouts = parameters.get("cutouts")
