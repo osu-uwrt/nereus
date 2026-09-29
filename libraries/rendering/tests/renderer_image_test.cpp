@@ -311,3 +311,22 @@ TEST_F(RendererImage, ImportedTaskAssetWithTextureRenders) {
     EXPECT_EQ(image.rgb.size(), 96u * 60 * 3);
     EXPECT_LT(image.depth[index(image, 48, 30)], 1.f) << "board must occupy the image centre";
 }
+
+TEST_F(RendererImage, AbandonContextReleasesCpuOwnersWithoutAContextAndIsTerminal) {
+    r::Renderer lost(RP_RENDERING_SHADERS);
+    auto mesh = quad();
+    std::weak_ptr<const r::MeshAsset> retained = mesh;
+    lost.draw(scene(mesh), view(), plain(), 0, 16, 16);
+    mesh.reset();
+    EXPECT_FALSE(retained.expired());
+    glfwMakeContextCurrent(nullptr);
+    lost.abandonContext();
+    EXPECT_TRUE(retained.expired());
+    EXPECT_NO_THROW(lost.abandonContext());
+    EXPECT_THROW(lost.capture(), std::logic_error);
+    EXPECT_THROW(lost.captureImage(), std::logic_error);
+    EXPECT_THROW(lost.draw(scene(quad()), view(), plain(), 0, 16, 16), std::logic_error);
+    // This test deliberately abandons GPU names. The fixture destroys their owning
+    // context after the suite, just as the offscreen host does after a lost context.
+    glfwMakeContextCurrent(context->window);
+}

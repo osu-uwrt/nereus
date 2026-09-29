@@ -49,6 +49,11 @@ Step 3 progress:
 - [x] Declare robot visual placements, right-eye frames, water tint and lighting in
   packs; 79 existing and 10 new pack tests pass, including lossless saves.
   Water and lighting match Talos bringup startup, not the UI Pool preset.
+- [x] Optional EGL capture host and standalone Python camera extension; eight host,
+  nine renderer and five installed Python cases pass, including real stereo capture,
+  context cleanup and image ownership. Camera-only wheel built from the source
+  archive passes the five Python cases without DISPLAY, simulation or ROS.
+  Opus reviewed and approved the host/binding corrections.
 - [ ] Compose sensor scenes from pack data, including robot visual placement.
 - [ ] Execute the existing robot-pack camera/stereo definitions offscreen.
 - [ ] Publish calibrated, synchronized image/CameraInfo products through the bridge.

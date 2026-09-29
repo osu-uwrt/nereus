@@ -249,7 +249,8 @@ struct Texture {
     Texture(const Texture &) = delete;
     Texture &operator=(const Texture &) = delete;
     ~Texture() {
-        glDeleteTextures(1, &id);
+        if (id)
+            glDeleteTextures(1, &id);
     }
 };
 std::shared_ptr<Texture> uploadTexture(const std::filesystem::path &path, int maximum_side) {
@@ -277,9 +278,12 @@ using TextureLoader = std::function<std::shared_ptr<Texture>(const std::filesyst
 struct Buffers {
     GLuint vao = 0, vbo = 0, ebo = 0;
     ~Buffers() {
-        glDeleteVertexArrays(1, &vao);
-        glDeleteBuffers(1, &vbo);
-        glDeleteBuffers(1, &ebo);
+        if (vao)
+            glDeleteVertexArrays(1, &vao);
+        if (vbo)
+            glDeleteBuffers(1, &vbo);
+        if (ebo)
+            glDeleteBuffers(1, &ebo);
     }
 };
 struct Mesh {
@@ -366,9 +370,12 @@ struct Target {
     Target(const Target &) = delete;
     Target &operator=(const Target &) = delete;
     ~Target() {
-        glDeleteFramebuffers(1, &fbo);
-        glDeleteTextures(1, &color);
-        glDeleteTextures(1, &depth);
+        if (fbo)
+            glDeleteFramebuffers(1, &fbo);
+        if (color)
+            glDeleteTextures(1, &color);
+        if (depth)
+            glDeleteTextures(1, &depth);
     }
     void resize(int w, int h, bool high = true, bool onlyDepth = false) {
         if (width == w && height == h && hdr == high && depthOnly == onlyDepth)
@@ -433,6 +440,7 @@ bool affine(const Eigen::Matrix4f &m) {
 }
 } // namespace
 struct Renderer::Resources {
+    // Every new owned GL object must also be zeroed by abandon() after context loss.
     GLuint sceneProgram = 0, waterProgram = 0, shadowProgram = 0, postProgram = 0, bloomProgram = 0,
            quad = 0;
     Frame f;
@@ -468,8 +476,28 @@ struct Renderer::Resources {
     }
     ~Resources() {
         for (auto id : {sceneProgram, waterProgram, shadowProgram, postProgram, bloomProgram})
-            glDeleteProgram(id);
-        glDeleteVertexArrays(1, &quad);
+            if (id)
+                glDeleteProgram(id);
+        if (quad)
+            glDeleteVertexArrays(1, &quad);
+    }
+    void abandon() noexcept {
+        sceneProgram = waterProgram = shadowProgram = postProgram = bloomProgram = quad = 0;
+        for (auto *target : {&f.opaque, &f.composite, &f.final, &f.bloom[0], &f.bloom[1],
+                             &shadow, &reflection})
+            target->fbo = target->color = target->depth = 0;
+        const auto forget = [](auto &meshes) {
+            for (auto &mesh : meshes) {
+                mesh->gpu.vao = mesh->gpu.vbo = mesh->gpu.ebo = 0;
+                if (mesh->image)
+                    mesh->image->id = 0;
+            }
+        };
+        for (auto &entry : cache)
+            forget(entry.second.meshes);
+        for (auto &object : objects)
+            forget(object.meshes);
+        forget(water.meshes);
     }
     void initialize(const std::filesystem::path &root) {
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximum_texture);
@@ -749,8 +777,16 @@ Renderer::Renderer(const std::filesystem::path &root) {
     resources_->initialize(root);
 }
 Renderer::~Renderer() = default;
+void Renderer::abandonContext() noexcept {
+    if (resources_) {
+        resources_->abandon();
+        resources_.reset();
+    }
+}
 RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appearance &a, float time,
                              int width, int height) {
+    if (!resources_)
+        throw std::logic_error("renderer context was abandoned");
     auto &r = *resources_;
     r.frame_valid = false;
     struct Guard {
@@ -874,6 +910,8 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
     return {r.f.final.color, width, height, r.f.composite.depth};
 }
 Capture Renderer::capture() const {
+    if (!resources_)
+        throw std::logic_error("renderer context was abandoned");
     const auto &f = resources_->f;
     if (!resources_->frame_valid)
         throw std::logic_error("capture requires a rendered frame");
@@ -909,6 +947,8 @@ Capture Renderer::capture() const {
     return result;
 }
 ImageCapture Renderer::captureImage(bool color, bool depth) const {
+    if (!resources_)
+        throw std::logic_error("renderer context was abandoned");
     const auto &f = resources_->f;
     if (!resources_->frame_valid)
         throw std::logic_error("capture requires a rendered frame");

@@ -52,6 +52,24 @@ All 79 existing pack tests and 10 new pack-field cases pass; invalid references,
 camera limits and appearance values are rejected, and saves remain byte-exact.
 These fields are data foundations; camera scene construction remains to be wired.
 
+The optional EGL capture host and Python `_camera` extension now render without a
+display server, simulation or ROS. Capture accepts scene, camera and time explicitly;
+it returns owned pixels and supports worker-thread use. The installed extension
+captures a real right-eye view with the expected stereo disparity, processes depth
+and JPEG, and preserves arrays after producer destruction. Context loss releases
+CPU state without GL calls; host teardown preserves other users of the EGL display.
+Opus reviewed the ownership/GIL/cleanup changes and approved them after corrections.
+Eight offscreen host tests, nine renderer contracts and five installed Python cases
+pass on this machine's M1 Pro GPU. A wheel built from the source archive, with
+simulation disabled, passes the same five Python cases. Ruff and stub mypy pass.
+Camera streams remain disabled pending pack scene composition and bridge integration.
+
+Proof: `env -u DISPLAY PYTHONPATH=build/step3-camera-wheel-sdk RP_REQUIRE_CAMERA=1
+python3 -m unittest discover -s tests/python -p test_camera_capture.py -v`.
+The optional build requires `RP_BUILD_CAMERAS`, `RP_BUILD_SCENE_RENDERER`,
+`RP_BUILD_OFFSCREEN_RENDERER`, and `RP_BUILD_CAMERA_PYTHON`; all default off.
+This is a tested Linux EGL backend, not a claim of cross-platform capture support.
+
 Step 1 passed joint review. `proposals/step1/` contains nine proposed JSON Schemas
 and eight YAML documents: Talos robot, 2026 pool, gate/torpedo task definitions,
 task manifest, UWRT bridge, scenario and the exception ledger. One task-pack

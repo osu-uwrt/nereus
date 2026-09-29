@@ -24,7 +24,7 @@ build-dir = "build/python/{wheel_tag}"
 build.tool-args = ["-j2"]
 wheel.packages = []
 install.components = ["python"]
-sdist.include = ["bindings/**", "python/**", "libraries/**", "cmake/**", "content/examples/**", "content/robots/**", "content/sensors/**", "content/worlds/**", "content/packs/**", "tests/**", "examples/**", "tools/**", "docs/**", "/CMakeLists.txt", "/LICENSE.md", "/README.md"]
+sdist.include = ["bindings/**", "python/**", "libraries/**", "cmake/**", "third_party/glm/**", "content/examples/**", "content/robots/**", "content/sensors/**", "content/worlds/**", "content/packs/**", "tests/**", "examples/**", "tools/**", "docs/**", "/CMakeLists.txt", "/LICENSE.md", "/README.md"]
 sdist.exclude = ["content/visuals/**", "build/**", "install/**", "dist/**", ".cache/**", "**/__pycache__/**"]
 
 [tool.scikit-build.cmake.define]

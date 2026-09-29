@@ -44,6 +44,10 @@ class Renderer {
     // Requires the most recent draw to have completed successfully. Resets pixel-pack
     // state like capture() and leaves framebuffer zero bound for reading.
     ImageCapture captureImage(bool color = true, bool depth = true) const;
+    // Terminal cleanup after context loss: release CPU state without any GL calls.
+    // The host must destroy the context to reclaim its GPU allocations. Idempotent;
+    // drawing/capture is no longer allowed after this call.
+    void abandonContext() noexcept;
 
   private:
     struct Resources;

@@ -40,6 +40,29 @@ if(RP_BUILD_SCENE_RENDERER)
   install(DIRECTORY shaders/ DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform/shaders)
   install(FILES ${PROJECT_SOURCE_DIR}/third_party/glm/glm/copying.txt
     DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform/legal RENAME glm-license.txt)
+  if(RP_BUILD_OFFSCREEN_RENDERER)
+    find_package(OpenGL REQUIRED COMPONENTS EGL)
+    find_package(Threads REQUIRED)
+    add_library(rp_offscreen_rendering src/offscreen.cpp)
+    add_library(RoboticsPlatform::offscreen_rendering ALIAS rp_offscreen_rendering)
+    set_target_properties(rp_offscreen_rendering PROPERTIES EXPORT_NAME offscreen_rendering)
+    target_link_libraries(rp_offscreen_rendering PUBLIC rp_scene_rendering
+      PRIVATE OpenGL::EGL GLEW::GLEW Threads::Threads)
+    rp_project_options(rp_offscreen_rendering)
+    install(TARGETS rp_offscreen_rendering EXPORT RoboticsPlatformTargets
+      ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    install(FILES include/robotics/rendering/offscreen.hpp
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/robotics/rendering)
+    if(BUILD_TESTING)
+      add_executable(offscreen_tests tests/offscreen_test.cpp)
+      target_link_libraries(offscreen_tests PRIVATE rp_offscreen_rendering GTest::gtest_main
+        OpenGL::EGL Threads::Threads)
+      target_compile_definitions(offscreen_tests PRIVATE
+        RP_RENDERING_SHADERS="${CMAKE_CURRENT_SOURCE_DIR}/shaders")
+      rp_project_options(offscreen_tests)
+      gtest_discover_tests(offscreen_tests DISCOVERY_MODE PRE_TEST)
+    endif()
+  endif()
   if(BUILD_TESTING)
     find_package(glfw3 REQUIRED CONFIG)
     add_executable(renderer_image_tests tests/renderer_image_test.cpp)
