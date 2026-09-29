@@ -362,6 +362,10 @@ class PackCameras:
             regions = {item["id"]: item for item in task["regions"]}
             for prop in task["props"]:
                 where = f"task '{task['id']}' prop '{prop['id']}'"
+                if prop["type"] in ("rigid_body", "contact_world"):
+                    # Moving props need per-capture poses; recorded as unrendered for now.
+                    self._unrendered.append(f"{task['id']}/{prop['id']}")
+                    continue
                 if prop["type"] != "static_body":
                     raise ValueError(f"{where}: prop type '{prop['type']}' has no camera visuals")
                 parameters = prop["parameters"]

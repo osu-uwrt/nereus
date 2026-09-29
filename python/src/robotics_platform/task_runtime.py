@@ -182,6 +182,26 @@ class TaskRuntime:
         self._run["running"] = False
         return result
 
+    def record(self, time_ns: int, events: Sequence[Mapping[str, Any]]
+               ) -> tuple[Mapping[str, Any], ...]:
+        """Score events produced by another physical owner (e.g. a prop contact world)."""
+        self._check_time(time_ns)
+        inputs = []
+        for event in events:
+            item = {"id": event["id"], "type": event["type"], "task": event["task"],
+                    "region": event.get("region") or "", "time_ns": event["time_ns"],
+                    "data": dict(event["data"])}
+            if item["task"] not in self._tasks or item["time_ns"] != time_ns:
+                raise ValueError("recorded events must belong to a selected task and this time")
+            inputs.append(item)
+        try:
+            result = self._evaluate(inputs)
+        except Exception:
+            self._failed = True
+            raise
+        self._last_time = time_ns
+        return result
+
     def _check_time(self, time_ns: int) -> None:
         _time(time_ns)
         if self._failed:

@@ -121,6 +121,17 @@ class Session:
         if tasks is None:
             tasks = bool(getattr(resolved, "task_definitions", ()))
         self.tasks = TaskRuntime(resolved, task_ids=task_ids) if tasks else None
+        # Tasks with a contact_world prop get their own rigid-body world (optional pybullet).
+        self.prop_worlds: list[Any] = []
+        if self.tasks is not None:
+            selected = set(task_ids) if task_ids is not None else None
+            for task in resolved.task_definitions:
+                if (selected is None or task["id"] in selected) and any(
+                    prop["type"] == "contact_world" for prop in task["props"]
+                ):
+                    from .prop_world import PropWorld
+
+                    self.prop_worlds.append(PropWorld(resolved, task=task["id"]))
         self._environment = None
         if self._dynamics:
             pool = pack.parameters.pool
@@ -161,6 +172,8 @@ class Session:
             for payload in self.payloads.values():
                 if payload.active:
                     events += self._propagate(payload, now, environment)
+        if self.prop_worlds:
+            events += self._step_props(snapshot.body, now)
         if self.tasks is not None:
             events += self.tasks.observe(now, self.reference_pose(snapshot.body))
         self.last_step = Step(snapshot, tuple(events))
@@ -191,6 +204,42 @@ class Session:
                 payload.state.velocity = np.zeros(3)
                 payload.state.angular_velocity = np.zeros(3)
         return events
+
+    def _step_props(self, body: Any, now: int) -> list[Mapping[str, Any]]:
+        from .prop_world import Water
+
+        assert self.tasks is not None and self.mechanisms is not None
+        root = _pose(body.position, body.orientation_wxyz)
+        rotation = native.Pose()
+        rotation.orientation_wxyz = root.orientation_wxyz
+        velocity = np.asarray(rotation.apply(body.linear_velocity), float).tolist()
+        omega = np.asarray(rotation.apply(body.angular_velocity), float).tolist()
+        state = self.mechanisms.snapshot(killed=self.killed)
+        pool = self.pack.parameters.pool
+        flow = np.asarray(pool.current_velocity, float) + np.asarray(
+            pool.current_oscillation_amplitude, float
+        ) * math.sin(2 * math.pi * float(pool.current_oscillation_frequency) * now / 1e9)
+        water = Water((float(flow[0]), float(flow[1]), float(flow[2])), float(pool.water_density))
+        events: list[Mapping[str, Any]] = []
+        for world in self.prop_worlds:
+            claw = state.claws[world.mechanism_id]
+            produced = world.step(
+                self.timestep_ns / 1e9,
+                now,
+                root,
+                velocity,
+                omega,
+                list(claw.joint_positions_m),
+                water,
+                enabled=state.armed and not self.killed,
+            )
+            if produced:
+                events += self.tasks.record(now, produced)
+        return events
+
+    def props(self) -> dict[str, Mapping[str, Any]]:
+        """Current rigid-prop poses per task, for rendering and records."""
+        return {world.task: world.props_state() for world in self.prop_worlds}
 
     # ------------------------------------------------------------------ robot state
 
@@ -314,6 +363,8 @@ class Session:
             self.mechanisms.reload_all(killed=self.killed)
         if self.tasks is not None:
             self.tasks.reset()
+        for world in self.prop_worlds:
+            world.reset()
         return True, "All tasks reset; ammunition reloaded and actuators disarmed"
 
     def full_reset(self, seed: int | None = None) -> Any:
@@ -325,5 +376,7 @@ class Session:
         self._reset_owned_state()
         if self.tasks is not None:
             self.tasks.reset()
+        for world in self.prop_worlds:
+            world.reset()
         self.last_step = Step(snapshot)
         return snapshot
