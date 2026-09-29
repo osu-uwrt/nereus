@@ -15,6 +15,7 @@ void usage() {
         "  --local-cameras [true|false]  camera cards render from this viewer's scene at the truth pose\n"
         "                         (default true); each card can switch to the bridge's images (ROS)\n"
         "  --demo                 scene preview without ROS: fixed vehicle pose, landmark picker\n"
+        "  --show-focus           keep the orbit focus marker visible (screenshots/tests)\n"
         "  --demo-task NAME       preview target landmark (demo only)\n"
         "  --focus NAME           initial focus (Course, Vehicle, a landmark, ...)\n"
         "  --view NAME            initial view: orbit, free, or a camera id\n"
@@ -86,6 +87,8 @@ int main(int argc, char **argv) {
             options.demoTask = value();
         else if (arg == "--demo")
             options.demo = true;
+        else if (arg == "--show-focus")
+            options.showFocus = true;
         else if (arg == "--no-local-cameras")
             options.localCameras = false;
         else if (arg == "--local-cameras") {

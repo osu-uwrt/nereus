@@ -1456,7 +1456,10 @@ void App::drawInterface(double time, float dt) {
     }
     renderLocalCards(time, scene);
     const rendering::View renderView{toEigen(view.view), toEigen(view.projection), Eigen::Vector3f(view.eye.x, view.eye.y, view.eye.z)};
-    const auto appearance = observer_.apply(look_.appearance);
+    auto appearance = observer_.apply(look_.appearance);
+    // Original viewer: a 3D focus disc at the orbit target while orbiting/zooming without Follow.
+    if (mode_ == 0 && (orbitInteracting_ || opt_.showFocus) && !follow_)
+        appearance.focus = Eigen::Vector3f(target_.x, target_.y, target_.z);
     rendering::RenderedFrame frame;
     {
         PhaseTimer timer{profiler_, Phase::Main, profileSync()};
@@ -1500,14 +1503,6 @@ void App::drawInterface(double time, float dt) {
     }
     auto *d = ImGui::GetWindowDrawList();
     d->AddRect(position, {position.x + left, position.y + viewHeight}, IM_COL32(38, 62, 72, 255), 5, 0, 1);
-    // Orbit focus marker while dragging or zooming without Follow.
-    if (mode_ == 0 && orbitInteracting_ && !follow_) {
-        ImVec2 p;
-        if (projectToScreen(vp, {position, left, viewHeight}, glm::vec4(target_, 1), p)) {
-            d->AddCircleFilled(p, 9, IM_COL32(80, 220, 210, 60));
-            d->AddCircle(p, 9, IM_COL32(80, 220, 210, 200), 0, 2);
-        }
-    }
     d->AddRectFilled({position.x + 14, position.y + 14}, {position.x + 237, position.y + 43}, IM_COL32(8, 22, 29, 225), 4);
     d->AddText(window_->small, 12, {position.x + 25, position.y + 22}, color(white),
                (scenario_->poolId + " / " + fixed(scenario_->poolLength, 1) + " x " + fixed(scenario_->poolWidth, 2) + " m")

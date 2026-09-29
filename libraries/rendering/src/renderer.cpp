@@ -37,6 +37,8 @@ struct Look {
     bool surface, shadows, surfaceReflections, outdoor;
     float sunAzimuth, sunElevation, directLight, ambientLight, glare;
     bool bloom = true;
+    bool hasFocus = false;
+    glm::vec3 focus{0};
     glm::vec3 sunDirection() const {
         float a = glm::radians(sunAzimuth), e = glm::radians(sunElevation);
         return {cos(e) * cos(a), cos(e) * sin(a), sin(e)};
@@ -355,6 +357,28 @@ struct Mesh {
         glDrawElements(GL_TRIANGLES, count, GL_UNSIGNED_INT, nullptr);
     }
 };
+// Unit sphere flattened to a disc along z (original focus marker geometry: 16 rings x 32 segments).
+Submesh focusDiscMesh() {
+    Submesh disc;
+    constexpr int rings = 16, segments = 32;
+    for (int y = 0; y <= rings; ++y)
+        for (int x = 0; x <= segments; ++x) {
+            const float latitude = glm::pi<float>() * static_cast<float>(y) / rings;
+            const float longitude = glm::two_pi<float>() * static_cast<float>(x) / segments;
+            const glm::vec3 p(std::sin(latitude) * std::cos(longitude), std::sin(latitude) * std::sin(longitude),
+                              std::cos(latitude));
+            const glm::vec3 scaled = p * glm::vec3(1, 1, .12f), normal = glm::normalize(p / glm::vec3(1, 1, .12f));
+            disc.vertices.push_back({Eigen::Vector3f(scaled.x, scaled.y, scaled.z),
+                                     Eigen::Vector3f(normal.x, normal.y, normal.z), Eigen::Vector2f::Zero()});
+        }
+    for (int y = 0; y < rings; ++y)
+        for (int x = 0; x < segments; ++x) {
+            const std::uint32_t a = static_cast<std::uint32_t>(y * (segments + 1) + x), b = a + segments + 1;
+            for (std::uint32_t i : {a, b, a + 1, a + 1, b, b + 1})
+                disc.indices.push_back(i);
+        }
+    return disc;
+}
 struct Object {
     std::vector<std::shared_ptr<Mesh>> meshes;
     glm::mat4 transform{1};
@@ -459,7 +483,8 @@ bool affine(const Eigen::Matrix4f &m) {
 struct Renderer::Resources {
     // Every new owned GL object must also be zeroed by abandon() after context loss.
     GLuint sceneProgram = 0, waterProgram = 0, shadowProgram = 0, postProgram = 0, bloomProgram = 0,
-           quad = 0;
+           focusProgram = 0, quad = 0;
+    std::shared_ptr<Mesh> focusDisc;
     Frame f, preview; // `preview` is swapped into `f` for Appearance::preview draws
     bool shadow_valid = false; // the shadow map holds a real (shadows-on) pass
     Target shadow, reflection;
@@ -493,14 +518,14 @@ struct Renderer::Resources {
         return uploaded;
     }
     ~Resources() {
-        for (auto id : {sceneProgram, waterProgram, shadowProgram, postProgram, bloomProgram})
+        for (auto id : {sceneProgram, waterProgram, shadowProgram, postProgram, bloomProgram, focusProgram})
             if (id)
                 glDeleteProgram(id);
         if (quad)
             glDeleteVertexArrays(1, &quad);
     }
     void abandon() noexcept {
-        sceneProgram = waterProgram = shadowProgram = postProgram = bloomProgram = quad = 0;
+        sceneProgram = waterProgram = shadowProgram = postProgram = bloomProgram = focusProgram = quad = 0;
         for (auto *target : {&f.opaque, &f.composite, &f.final, &f.bloom[0], &f.bloom[1], &preview.opaque,
                              &preview.composite, &preview.final, &preview.bloom[0], &preview.bloom[1],
                              &shadow, &reflection})
@@ -517,6 +542,10 @@ struct Renderer::Resources {
         for (auto &object : objects)
             forget(object.meshes);
         forget(water.meshes);
+        if (focusDisc) {
+            std::vector<std::shared_ptr<Mesh>> disc{focusDisc};
+            forget(disc);
+        }
     }
     void initialize(const std::filesystem::path &root) {
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximum_texture);
@@ -528,6 +557,8 @@ struct Renderer::Resources {
         shadowProgram = program(root, "shadow");
         postProgram = program(root, "post");
         bloomProgram = program(root, "bloom");
+        focusProgram = program(root, "focus");
+        focusDisc = std::make_shared<Mesh>(focusDiscMesh(), TextureLoader{});
         glGenVertexArrays(1, &quad);
         shadow.resize(4096, 4096, false, true);
         bindTexture(shadow.depth, 0);
@@ -748,6 +779,25 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
         water.meshes.front()->draw();
         glDepthMask(GL_TRUE);
     }
+    if (look.hasFocus) {
+        // Original viewer orbit focus marker: a shaded world-space disc, depth-tested against the scene,
+        // drawn only in this observer pass after water, with no shadow or sensor effects.
+        glUseProgram(focusProgram);
+        uniform(focusProgram, "view", camera.view);
+        uniform(focusProgram, "projection", camera.projection);
+        uniform(focusProgram, "center", look.focus);
+        uniform(focusProgram, "radius", glm::distance(camera.eye, look.focus) * .012f);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+        focusDisc->draw();
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+        glDisable(GL_CULL_FACE);
+    }
     // Filter the HDR bright pass before tone mapping. A continuous low-resolution
     // blur avoids the replicated bars produced by sparse full-resolution rings.
     glDisable(GL_DEPTH_TEST);
@@ -919,7 +969,7 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
         guard.swapped = true;
     }
     r.f.resize(width, height);
-    const Look look{{vector(a.water.tint), vector(a.water.absorption), a.water.scattering,
+    Look look{{vector(a.water.tint), vector(a.water.absorption), a.water.scattering,
                      a.water.distance_scale, a.water.distance_power, a.water.clear_distance},
                     a.caustics,
                     a.exposure,
@@ -933,6 +983,10 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
                     a.ambient_light,
                     a.glare,
                     !a.preview};
+    if (a.focus && a.focus->allFinite() && !a.preview) {
+        look.hasFocus = true;
+        look.focus = vector(*a.focus);
+    }
     if (!(a.preview && r.shadow_valid)) { // previews reuse the last full pass's shadow map and light matrix
         r.shadows(look);
         r.shadow_valid = look.shadows;

@@ -17,6 +17,7 @@ struct Options {
     std::string demoTask;           // preview target landmark
     std::string scenarioTopic;      // overrides the config
     bool demo = false;              // no ROS graph: fixed preview pose, no providers
+    bool showFocus = false;         // keep the orbit focus marker visible (screenshots/tests)
     bool localCameras = true;       // camera cards render from the viewer's scene at the truth pose
     bool hidden = false;
     bool showTf = false, detections = false, mpcPath = false, showScorecard = false;
