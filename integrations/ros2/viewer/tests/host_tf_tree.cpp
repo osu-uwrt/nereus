@@ -61,3 +61,28 @@ TEST(HostTfTree, SelectionSurvivesReparenting) {
   ASSERT_TRUE(!tree.frames.at("cycle_b").enabled);
   ASSERT_TRUE(tree.roots.front() == "cycle_a");
 }
+
+// The simulator's static truth frames hang under the truth base link; a real robot has none of them.
+TEST(HostTfTree, TruthStaticChildrenAreOptional) {
+  TfTree tree;
+  std::map<std::string, std::string> parents{
+      {"map", ""}, {"simulator/talos/base_link", "map"}, {"talos/base_link", "map"},
+      {"simulator/talos/origin", "simulator/talos/base_link"},
+      {"simulator/talos/ffc_camera_link", "simulator/talos/base_link"},
+      {"simulator/talos/ffc_left_camera_optical_frame", "simulator/talos/ffc_camera_link"}};
+  tree.update(parents);
+  ASSERT_EQ(tree.roots, std::vector<std::string>{"map"});
+  ASSERT_EQ(tree.children.at("simulator/talos/base_link").size(), 2u);
+  tree.selectBranch("simulator/talos/base_link", false);
+  ASSERT_TRUE(tree.branchSelection("simulator/talos/base_link") == TfTree::Selection::Hidden);
+  ASSERT_TRUE(!tree.frames.at("simulator/talos/ffc_left_camera_optical_frame").enabled);
+  ASSERT_TRUE(tree.frames.at("talos/base_link").enabled);
+  // The same tree without the simulator (real robot): still valid, selection state of the rest kept.
+  parents.erase("simulator/talos/origin");
+  parents.erase("simulator/talos/ffc_camera_link");
+  parents.erase("simulator/talos/ffc_left_camera_optical_frame");
+  parents.erase("simulator/talos/base_link");
+  tree.update(parents);
+  ASSERT_EQ(tree.roots, std::vector<std::string>{"map"});
+  ASSERT_TRUE(tree.frames.at("talos/base_link").enabled);
+}
