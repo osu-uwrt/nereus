@@ -22,3 +22,21 @@ if(BUILD_TESTING)
   rp_project_options(asset_tests)
   gtest_discover_tests(asset_tests DISCOVERY_MODE PRE_TEST)
 endif()
+
+if(RP_BUILD_SCENE_RENDERER)
+  find_package(OpenGL REQUIRED)
+  find_package(GLEW REQUIRED)
+  add_library(rp_scene_rendering src/scene.cpp src/renderer.cpp)
+  add_library(RoboticsPlatform::scene_rendering ALIAS rp_scene_rendering)
+  set_target_properties(rp_scene_rendering PROPERTIES EXPORT_NAME scene_rendering)
+  target_link_libraries(rp_scene_rendering PUBLIC rp_mesh_assets PRIVATE OpenGL::GL GLEW::GLEW)
+  target_include_directories(rp_scene_rendering SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/third_party/glm)
+  rp_project_options(rp_scene_rendering)
+  install(TARGETS rp_scene_rendering EXPORT RoboticsPlatformTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  install(FILES include/robotics/rendering/scene.hpp include/robotics/rendering/renderer.hpp
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/robotics/rendering)
+  install(DIRECTORY shaders/ DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform/shaders)
+  install(FILES ${PROJECT_SOURCE_DIR}/third_party/glm/glm/copying.txt
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform/legal RENAME glm-license.txt)
+endif()

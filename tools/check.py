@@ -28,7 +28,7 @@ def clean_environment():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--preset", choices=("assets", "assets-asan", "release", "dev", "asan", "viewer", "viewer-asan", "simulation-view", "simulation-view-asan", "simulator-viewer", "simulator-viewer-asan"), default="release")
+    parser.add_argument("--preset", choices=("rendering", "rendering-asan", "assets", "assets-asan", "release", "dev", "asan", "viewer", "viewer-asan", "simulation-view", "simulation-view-asan", "simulator-viewer", "simulator-viewer-asan"), default="release")
     parser.add_argument("--install-check", action="store_true")
     parser.add_argument("--tidy", action="store_true")
     args = parser.parse_args()
@@ -51,7 +51,7 @@ def main():
                     continue
                 if token == "yaml-cpp" and any(part in path.as_posix() for part in ("config/src", "viewer_io/src")):
                     continue
-                if token == "GLFW" and "applications/viewer" in path.as_posix():
+                if token == "GLFW" and any(part in path.as_posix() for part in ("applications/viewer", "applications/render_capture")):
                     continue
                 raise RuntimeError(f"Forbidden dependency in {path}: {line}")
     for path in sources:
@@ -81,8 +81,8 @@ def main():
                 continue
             if path.suffix == ".cpp" and ("/src/" in path.as_posix() or "/applications/" in path.as_posix()):
                 run([tidy, path, "-p", ROOT / "build" / args.preset], env=env)
-    if args.install_check and args.preset.startswith(("viewer", "assets")):
-        parser.error("Use tools/check_viewer.py or tools/check_assets.py for these installation checks")
+    if args.install_check and args.preset.startswith(("viewer", "assets", "rendering")):
+        parser.error("Use tools/check_viewer.py, tools/check_assets.py or tools/check_rendering.py for these installation checks")
     if args.install_check:
         # Relocate the installed prefix and copy the downstream example. The exported
         # build graph must refer only to installed artifacts and system dependencies.

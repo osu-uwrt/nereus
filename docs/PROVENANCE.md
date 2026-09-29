@@ -36,7 +36,8 @@ backends, copied from the identified unmodified distribution in
 https://github.com/ocornut/imgui/tree/v1.91.9b. The MIT license and the bundled stb
 notices are retained; the ImGui license is also installed with the viewer.
 The viewer UI, neutral contracts, line renderer, and local motion fixture were
-authored for this project; no legacy host, shaders or ROS code was copied.
+authored for this project; no legacy host or ROS code was copied.
+Original shaders are now extracted in the separately attributed scene renderer.
 Original mesh resources and CPU loading conventions are separately attributed below.
 
 The viewer links system GLFW, GLEW, and OpenGL in addition to Eigen/yaml-cpp.
@@ -143,10 +144,38 @@ is authorized and public redistribution still requires that review.
 `camera_faker/src/pool_viewer/renderer.cpp`: Assimp flags, node transforms,
 inverse-transpose normals, submesh order and diffuse/opacity selection. Ownership,
 validation, output limits and neutral value types are new. It links the separately
-installed Assimp library; no Assimp or GLM implementation is vendored here.
+installed Assimp library. The scene renderer now privately vendors GLM as described below.
 
 `tools/capture_mesh_reference.py` compiles the unchanged original loading method
 with the original pinned GLM headers in a temporary directory. The CPU wrapper
 records ordered mesh statistics without GL, ROS or new platform code. Its fixture
 manifest records exact source/archive/driver/capture/output hashes and tool versions.
 See [MESH_ASSETS.md](MESH_ASSETS.md) for comparison scope and installation boundaries.
+
+
+## Original scene renderer and GLM
+
+`libraries/rendering/src/{scene,renderer}.cpp` adapts geometry, frustum tests and the
+scene/shadow/reflection/water/bloom/post pass graph from simulator revision
+`07647eebe706f96ea7b76db3cc9802735a146698`,
+`camera_faker/src/pool_viewer/renderer.cpp` and
+`camera_faker/include/pool_viewer/{renderer,frustum}.hpp`. Neutral inputs, ownership,
+validation, GL state handling and failure recovery are new. Old YAML/robot/topic
+loading, window ownership and clocks are not part of this library.
+
+`libraries/rendering/shaders` contains the original five shader pairs. `scene.frag`
+adds only an explicit water-presence guard; present-water calculations are retained.
+`third_party/glm/glm` contains the original vendored GLM 1.0.0 header distribution,
+unchanged from that pinned revision's `camera_faker/include/external/glm`. Its dual
+Happy Bunny/MIT notice is retained and installed with the renderer; it is a private
+implementation dependency. Per-file source/output hashes and importer hash are in
+`reference/render_resources.json`. Original renderer/shader license metadata remains
+subject to the source review described above.
+
+The offline original-renderer capture reads pinned Git objects and builds the
+original renderer/shaders with a thin GLFW/CPU-output harness. Its timing helper is
+shared harness code, not platform scene/rendering implementation. The recorded
+reference includes source and wrapper hashes, exact view matrices and output hashes;
+`reference/rendering_baseline.json` also records native implementation hashes and
+the current backend/performance evidence. See [RENDERING.md](RENDERING.md) for scope,
+reproduction, exact comparison and remaining integration.

@@ -101,3 +101,12 @@ and a relocated consumer without simulation or graphics dependencies. Keep Assim
 private and visual packs optional; Python and default headless installs exclude the
 large reference assets. [MESH_ASSETS.md](docs/MESH_ASSETS.md) documents fidelity limits
 and pinned import/capture tools. Never regenerate reference outputs from platform code.
+
+
+For original scene rendering, `python3 tools/check_rendering.py` builds an isolated
+renderer/capture install and runs graphics contracts on the current DISPLAY. It
+needs Assimp/GLEW/OpenGL and GLFW for the capture host, but no simulation, YAML,
+viewer or ImGui. Use `--preset rendering-asan` for sanitized graphics checks. Exact
+same-backend original comparisons are a separate reference gate; commands and
+optimization pairing are in [RENDERING.md](docs/RENDERING.md). Do not substitute
+cross-driver image tolerances for the recorded same-backend fidelity evidence.

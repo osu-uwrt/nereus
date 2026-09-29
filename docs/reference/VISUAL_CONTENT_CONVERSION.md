@@ -99,3 +99,10 @@ mechanisms, LEDs, rotor animation, course assets and original rendering remain o
 For textured course conversion, explicitly preserve the original white texture tint;
 the generic loader retains imported tint. Indexed bounds match the original culling
 convention, but rendered/depth comparison remains a separate gate.
+
+
+The full original scene/shadow/water/reflection/bloom/post pipeline is now extracted
+for the body/rotor/pool fixture. Six fixed scenes match all 30 original image/depth
+buffers in corresponding release/debug builds on the current backend. The existing
+interactive viewer is not yet attached. See [RENDERING.md](../RENDERING.md) for
+ownership, boundaries, benchmark and remaining texture/overlay/assembly work.

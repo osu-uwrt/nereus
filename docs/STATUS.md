@@ -686,3 +686,40 @@ scene/shadow/water/reflection/bloom/post pass graph for fixed Talos-body/pool RG
 and depth comparisons. That renderer must own no window or simulation and later
 serve camera acquisition as well as the viewer. Mechanisms/LEDs and course assets
 follow; original UI/ROS panels and full physical RepairCompTree remain required.
+
+## Original water rendering behind an independent scene API
+
+The optional `scene_rendering` library now accepts explicit immutable mesh instances,
+view/projection matrices, appearance, water and time. It owns GPU resources in a
+caller-owned context, with no window, simulation, viewer, clock or ROS dependency.
+The original shadow, reflection, HDR scene, water, bloom and post-processing passes
+are retained. Water is optional; ordinary live scenes require no pool or water
+shading. Original GLM is private and licensed; public types remain Eigen/std.
+
+Six fixed body/rotor/pool views exercise above/below water, close transparent hull,
+near-surface, indoor/outdoor, reflection and shadow settings. All 30 final RGBA,
+opaque HDR/depth and composite HDR/depth buffers match the independently compiled
+pinned original byte for byte on this machine, in Release and ASan/UBSan builds
+against their corresponding original optimization modes. Visual inspection also
+confirmed nonempty Talos/pool/water imagery. Original float normalization order is
+retained because changing it affected sparse shadow decisions in debug builds.
+
+Both renderer configurations pass seven CPU tests and isolated relocated install
+checks after their copied source/build trees are removed. GPU checks cover hostile
+caller state, resize/replay, explicit time, absent water, invalid-plane rejection
+and recovery. Default headless Release still passes 122 tests and installed
+consumers. Rendering source clang-tidy checks passed. A Mesa CI matrix is configured
+but has not run remotely; no cross-driver pixel equality is claimed.
+
+The current-machine 1280×800 benchmark averages 8.246 ms per GPU-complete draw versus
+8.364 ms for the original (p99 14.639 vs 14.501 ms). These are provisional body/pool
+measurements without UI, cameras/readback, textured tasks or ROS. See
+[RENDERING.md](RENDERING.md) and the recorded source/output hashes and timings in
+[rendering_baseline.json](reference/rendering_baseline.json).
+
+Next: connect scene rendering to the interactive viewer using neutral scene/source
+data; the existing viewport still draws lines. Complete Talos rotor animation,
+LEDs, mechanisms and original course content afterward. Per-view targets and shared
+scene preparation must precede camera integration. Original simulator replacement
+remains the first acceptance priority, followed by RViz expansion and wider reuse;
+this fixed scene does not close full assembly, task, UI or robot-stack acceptance.

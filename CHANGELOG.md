@@ -2,6 +2,10 @@
 
 ## 0.1.0 — unreleased
 
+- Context-owned original scene/shadow/water/reflection/bloom/post rendering with
+  neutral mesh/appearance inputs, optional pool geometry, original fixed-frame
+  comparisons and installed graphics contracts; interactive integration remains open.
+
 - Optional CPU mesh/material loading and exact pinned Talos body/eight-rotor pack,
   with original-loader comparisons and relocated installed consumption.
 - Explicit altitude observations and native original Talos depth reporting; all

@@ -55,8 +55,8 @@ Build it directly; all generated files stay in this project's `build/` directory
 
 The optional [CPU mesh library and Talos pack](docs/MESH_ASSETS.md) preserve the
 original body/eight-rotor geometry, materials and transparency without a graphics
-or simulation dependency. Original water rendering and complete visual assembly
-remain in progress. Use `python3 tools/check_assets.py` for installed-pack validation.
+or simulation dependency. The [original water/rendering pipeline](docs/RENDERING.md) now matches fixed
+body/pool captures; interactive integration and complete visual assembly remain in progress. Use `python3 tools/check_assets.py` for installed-pack validation.
 
 ## Standalone viewer
 

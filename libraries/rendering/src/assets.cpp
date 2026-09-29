@@ -82,14 +82,16 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
                 const auto &p = input->mVertices[k];
                 const Eigen::Vector4f position = transform * Eigen::Vector4f(p.x, p.y, p.z, 1);
                 const Eigen::Vector3f n = normal * vector(input->mNormals[k]);
-                const float norm = n.norm();
+                // Retain original float dot order and reciprocal multiplication. Equivalent
+                // normalizations can move shadow-bias thresholds in unoptimized builds.
+                const float norm = std::sqrt((n.x() * n.x() + n.y() * n.y()) + n.z() * n.z());
                 Eigen::Vector2f uv = Eigen::Vector2f::Zero();
                 if (input->HasTextureCoords(0))
                     uv = {input->mTextureCoords[0][k].x, input->mTextureCoords[0][k].y};
                 if (!position.allFinite() || !n.allFinite() || !std::isfinite(norm) || norm <= 0 ||
                     !uv.allFinite())
                     fail("invalid transformed vertex");
-                mesh.vertices.push_back({position.head<3>(), n / norm, uv});
+                mesh.vertices.push_back({position.head<3>(), n * (1.f / norm), uv});
             }
             for (unsigned k = 0; k < input->mNumFaces; ++k) {
                 const auto &face = input->mFaces[k];

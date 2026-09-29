@@ -125,9 +125,12 @@ the viewer still draws line geometry.
 
 - [x] Independent CPU mesh/material loader and exact original Talos body/eight-rotor
   resource pack, pinned hashes, original submesh comparison and relocated consumption.
-- [ ] Neutral scene instances/light descriptors and complete Talos visual assembly
-  with no robot/year dispatch.
-- [ ] Original scene/shadow/water/reflection/bloom/post shaders and pass semantics.
+- [x] Neutral mesh instances, material/emission/lighting inputs and optional water,
+  with a context-owned renderer independent of viewer/simulation/ROS.
+- [ ] Complete Talos visual assembly with no robot/year dispatch.
+- [x] Original scene/shadow/water/reflection/bloom/post pipeline over exact body/pool
+  inputs; all 30 captured buffers match original release/debug builds on this backend.
+- [ ] Texture/cutout/overlay inputs and complete scene acceptance through that pipeline.
 - [ ] Same meshes/textures/material corrections and task cutouts through content data.
 - [ ] Same Talos 3D mesh/materials with thruster/rotor motion, direction and speed
   driven by explicit state; LEDs and all other status/mechanism visuals reproduce
@@ -204,8 +207,10 @@ selected live-robot workflows required here.
 3. Stage forcing and actuator calibration/stop interfaces are verified in their
    bounded reference/contracts. Static compound contacts are integrated and validated.
    Named body mounts are now resolved for sensors and live visualization. Next:
-   the complete original scene/shadow/water/reflection/bloom/post pipeline in fixed-input
-   body/pool scenes. Exact Talos body/rotor assets and neutral CPU loading are delivered.
+   presenting the extracted original renderer through the interactive viewport using
+   neutral scene/source inputs. Fixed body/pool captures now match the original pipeline.
+   Then complete Talos mechanisms/LEDs/rotor animation and original course content.
+   Reusable per-view GPU targets/shared preparation precede camera integration.
    Depth reporting now passes its captured original comparisons. Cameras follow the
    extracted renderer; other device/adapter work stays in the sensor conversion map.
    The original Talos
