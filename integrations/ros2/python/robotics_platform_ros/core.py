@@ -131,6 +131,9 @@ class Counters:
     filtered_messages: dict[str, int] = field(default_factory=dict)
     service_calls: dict[str, int] = field(default_factory=dict)
     alignments: dict[str, int] = field(default_factory=dict)
+    alignments_superseded: dict[str, int] = field(default_factory=dict)
+    alignments_acknowledged: dict[str, int] = field(default_factory=dict)
+    alignments_failed: dict[str, int] = field(default_factory=dict)
 
     @staticmethod
     def bump(table: dict[str, int], key: str) -> None:
@@ -598,6 +601,8 @@ class BridgeCore:
 
     def _request_alignment(self, trigger: str) -> None:
         if self.alignment is not None and trigger in self.alignment["triggers"]:
+            if self.alignment_pending is not None:
+                Counters.bump(self.counters.alignments_superseded, self.alignment_pending)
             self.alignment_pending = trigger
 
     def pending_alignment(self) -> Alignment | None:

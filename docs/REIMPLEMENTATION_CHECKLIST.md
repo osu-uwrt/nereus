@@ -28,7 +28,9 @@ Step 2 progress:
 - [x] Native placement preserves time and sensor schedules, clears stale readings,
   and supports clearing or preserving propulsion; invalid input is atomic.
 - [x] Generic ROS bridge, UWRT navigation bindings and independently installable
-  package; 108 installed ROS tests and 111 installed core Python tests pass.
+  package; 110 installed ROS tests and 111 installed core Python tests pass.
+- [x] Record alignment acknowledgement, supersession and failure; preserve the
+  original simulator's coalescing behavior. Native placement passes ASan/UBSan.
 - [ ] Old/new real-stack hold comparison: repeated runs, equal controller config,
   actual truth/EKF errors and real-time factor, no rejected input or missing alignment.
 

@@ -21,7 +21,7 @@ from rosgraph_msgs.msg import Clock
 from tf2_ros import Buffer, TransformBroadcaster, TransformException, TransformListener
 
 from . import mapping
-from .core import BridgeCore, Publication, Transform
+from .core import BridgeCore, Counters, Publication, Transform
 
 
 def qos(config: dict[str, Any]) -> QoSProfile:
@@ -119,7 +119,19 @@ class BridgeNode(Node):
         if self.alignment_client is not None and self.alignment_client.service_is_ready():
             alignment = self.core.pending_alignment()
             if alignment is not None:
-                self.alignment_client.call_async(alignment.request)
+                future = self.alignment_client.call_async(alignment.request)
+                future.add_done_callback(
+                    lambda result, trigger=alignment.trigger: self.alignment_finished(trigger, result))
+
+    def alignment_finished(self, trigger: str, future: Any) -> None:
+        try:
+            if future.result() is None:
+                raise RuntimeError("estimator alignment returned no response")
+        except Exception as error:
+            Counters.bump(self.core.counters.alignments_failed, trigger)
+            self.get_logger().error(f"estimator alignment failed ({trigger}): {error}")
+        else:
+            Counters.bump(self.core.counters.alignments_acknowledged, trigger)
 
 
 def run(node: BridgeNode, duration_ns: int | None, max_catchup_ticks: int = 20) -> int:

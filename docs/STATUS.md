@@ -98,10 +98,23 @@ content/packs/scenarios/talos_uwrt --output build/my-run`. In this workspace's
 provisional FastDDS tests also set `ROS_LOCALHOST_ONLY=1`, a private
 `ROS_DOMAIN_ID`, and `RMW_IMPLEMENTATION=rmw_fastrtps_cpp`.
 
-The installed ROS wheel passes 108 mapping/core/rejection tests; installed core
+The installed ROS wheel passes 110 mapping/core/rejection tests; installed core
 passes 111 Python tests including the C++ runner comparison. Installed data-pack
 preflight passes, and Ruff passes. These checks deliver the bridge increment;
 the paired real-stack depth/heading acceptance still determines gate 2.
+
+The first two paired live trials met the unchanged hold and real-time bounds.
+An added request-count check exposed that both simulators coalesce an unsent
+startup alignment with a newer placement. Alignment diagnostics now distinguish
+sent, superseded, acknowledged and failed service calls. Two regression tests
+cover coalescing and failed service responses. The paired harness now checks the
+actual pose jump and acknowledgement rather than requiring redundant requests.
+An old-only diagnostic confirmed correct seeding followed by about 4.5 cm of
+horizontal EKF error while killed; the pose-jump check allows 10 cm for an 8 m
+placement, records per-axis errors, and compares post-placement error to the old
+baseline. Depth/heading hold bounds are unchanged. The final repeated run and
+peer evidence review remain open. Native placement also passes all 92 plant and
+sensor tests under ASan/UBSan.
 
 The user replaced human approval with joint Codex/Claude Code execution. Claude
 uses `claude-opus-5-5` with high effort. It may delegate bounded mechanical work
