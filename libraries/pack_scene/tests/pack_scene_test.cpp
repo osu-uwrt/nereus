@@ -120,37 +120,32 @@ TEST(PackScene, PoseHelpers) {
     EXPECT_THROW(ps::placement({{"position_m", {0, 0, 0}}, {"orientation_wxyz", {2, 0, 0, 0}}}), std::exception);
 }
 
-TEST(PackScene, UnmappedUvFacesAreDrawnInTheDeclaredColor) {
+TEST(PackScene, TableTokenBodiesAreUntexturedDarkPlastic) {
+    // The repaired pill/nut_and_bolt exports keep their body faces in the untextured Material.006; no textured
+    // triangle may sit entirely at UV (0,0) (it would sample the vinyl's transparent corner and vanish).
     ps::PackScene pack(talos());
-    const auto raw = r::loadMesh(talos().asset("tasks", "pill_visual"));
-    std::size_t rawTriangles = 0, rawUnmapped = 0;
-    for (const auto &part : raw.submeshes)
-        for (std::size_t k = 0; k + 2 < part.indices.size(); k += 3) {
-            ++rawTriangles;
-            bool all = part.material.diffuse_texture.has_value();
-            for (std::size_t c = 0; c < 3; ++c)
-                all = all && part.vertices[part.indices[k + c]].uv.squaredNorm() < 1e-14f;
-            rawUnmapped += all;
-        }
-    ASSERT_GT(rawUnmapped, 0u) << "the shipped pill mesh has unmapped body faces";
     for (const auto *asset : {"pill_visual", "nut_and_bolt_visual"}) {
-        const auto repaired = pack.mesh("tasks", asset);
-        ASSERT_TRUE(repaired) << asset;
-        std::size_t body = 0, triangles = 0;
-        for (const auto &part : repaired->submeshes) {
-            triangles += part.indices.size() / 3;
-            if (!part.material.diffuse_texture && part.material.base_color.isApprox(Eigen::Vector4f(.003442196f, .003442196f, .003442196f, 1)))
+        const auto mesh = pack.mesh("tasks", asset, std::string(asset) == "pill_visual"
+                                                        ? "pill_visual_task5_pill_fixed"
+                                                        : "nut_and_bolt_visual_task5_nutbolt_fixed");
+        ASSERT_TRUE(mesh) << asset;
+        std::size_t body = 0, top = 0;
+        for (const auto &part : mesh->submeshes) {
+            if (!part.material.diffuse_texture) {
+                EXPECT_LT(part.material.base_color.head<3>().maxCoeff(), .01f) << asset;
+                EXPECT_FLOAT_EQ(part.material.base_color.w(), 1.f) << asset;
                 body += part.indices.size() / 3;
+                continue;
+            }
+            for (std::size_t k = 0; k + 2 < part.indices.size(); k += 3) {
+                bool unmapped = true;
+                for (std::size_t c = 0; c < 3; ++c)
+                    unmapped = unmapped && part.vertices[part.indices[k + c]].uv.squaredNorm() < 1e-14f;
+                EXPECT_FALSE(unmapped) << asset << ": textured triangle at UV (0,0)";
+                ++top;
+            }
         }
-        EXPECT_GT(body, 0u) << asset << ": dark-plastic body submesh";
-        if (std::string(asset) == "pill_visual") {
-            EXPECT_EQ(body, rawUnmapped);
-            EXPECT_EQ(triangles, rawTriangles); // nothing lost, nothing duplicated
-        }
+        EXPECT_EQ(body, 260u) << asset;
+        EXPECT_EQ(top, 36u) << asset;
     }
-    // Assets without the repair are unchanged (bandage has no unmapped_uv_color).
-    const auto bandage = pack.mesh("tasks", "bandage_visual");
-    const auto rawBandage = r::loadMesh(talos().asset("tasks", "bandage_visual"));
-    ASSERT_TRUE(bandage);
-    EXPECT_EQ(bandage->submeshes.size(), rawBandage.submeshes.size());
 }

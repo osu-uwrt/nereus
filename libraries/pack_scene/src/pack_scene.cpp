@@ -102,49 +102,6 @@ PackScene::PackScene(const session::ResolvedScenario &resolved, Options options)
     // Reject content that silently vanished from a strict scene (mesh() throws when strict).
 }
 
-namespace {
-// Pack asset repair (`unmapped_uv_color`): in textured submeshes, triangles whose three UVs are all at (0,0)
-// were never mapped by the exporter; draw them untextured in the given color instead of sampling the corner
-// texel (original viewer, camera_faker renderer.cpp:247-268).
-void splitUnmappedUv(r::MeshAsset &asset, const std::array<float, 4> &rgba) {
-    std::vector<r::Submesh> result;
-    for (auto &part : asset.submeshes) {
-        if (!part.material.diffuse_texture) {
-            result.push_back(std::move(part));
-            continue;
-        }
-        const auto unmapped = [&](std::uint32_t index) { return part.vertices[index].uv.squaredNorm() < 1e-14f; };
-        r::Submesh body;
-        body.vertices = part.vertices;
-        body.material.base_color = Eigen::Vector4f(rgba[0], rgba[1], rgba[2], rgba[3]);
-        std::vector<std::uint32_t> kept;
-        for (std::size_t k = 0; k + 2 < part.indices.size(); k += 3) {
-            const auto a = part.indices[k], b = part.indices[k + 1], c = part.indices[k + 2];
-            auto &destination = unmapped(a) && unmapped(b) && unmapped(c) ? body.indices : kept;
-            destination.insert(destination.end(), {a, b, c});
-        }
-        if (!body.indices.empty())
-            result.push_back(std::move(body));
-        if (!kept.empty()) {
-            part.indices = std::move(kept);
-            result.push_back(std::move(part));
-        }
-    }
-    asset.submeshes = std::move(result);
-}
-} // namespace
-
-const Json *PackScene::assetEntry(const std::string &role, const std::string &asset) const {
-    const Json &pack = role == "robot" ? resolved_.robot : role == "pool" ? resolved_.pool : resolved_.tasks;
-    const auto assets = pack.find("assets");
-    if (assets == pack.end() || !assets->is_array())
-        return nullptr;
-    for (const auto &entry : *assets)
-        if (entry.value("id", std::string()) == asset)
-            return &entry;
-    return nullptr;
-}
-
 std::shared_ptr<const r::MeshAsset> PackScene::mesh(const std::string &role, const std::string &asset,
                                                     const std::string &texture) const {
     const std::string key = role + '\0' + asset + '\0' + texture;
@@ -157,8 +114,6 @@ std::shared_ptr<const r::MeshAsset> PackScene::mesh(const std::string &role, con
     std::shared_ptr<const r::MeshAsset> loaded;
     try {
         r::MeshAsset value = r::loadMesh(resolved_.asset(role, asset));
-        if (const auto *declared = assetEntry(role, asset); declared && declared->contains("unmapped_uv_color"))
-            splitUnmappedUv(value, declared->at("unmapped_uv_color").get<std::array<float, 4>>());
         if (!texture.empty()) {
             const auto path = resolved_.asset(role, texture);
             bool textured = false;
