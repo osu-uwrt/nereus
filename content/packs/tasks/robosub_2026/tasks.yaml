@@ -101,6 +101,7 @@ run_options:
 scoring_hooks:
 - module: hooks.rules_2026            # pack-relative hooks/rules_2026.py
   function: evaluate
+  rules: robosub_2026                  # compiled C++ Rules name (the Python runtime uses module/function)
   status_function: describe            # extra run-score fields (role, gate_passed, basket_count, ...)
   feed_function: feed                  # operator event feed (old simulator/task_events kinds and results)
   parameters:

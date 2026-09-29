@@ -238,6 +238,11 @@
           "type": "object",
           "description": "Hook-declared data passed verbatim; the hook owns its own parameter validation."
         },
+        "rules": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "Optional name of the compiled C++ Rules implementation (RulesRegistry key) the C++ runtime uses for this hook; the Python runtime ignores it and keeps using module/function."
+        },
         "status_function": {
           "type": "string",
           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
