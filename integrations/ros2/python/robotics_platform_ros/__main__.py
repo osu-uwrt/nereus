@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import sys
 import time
 from dataclasses import asdict
@@ -179,6 +180,7 @@ def main(argv: list[str] | None = None) -> int:
         failure = error
         raise
     finally:
+        signal.signal(signal.SIGINT, signal.SIG_IGN)  # a repeated Ctrl-C must not cut the records
         camera_error = None
         if cameras is not None:
             try:

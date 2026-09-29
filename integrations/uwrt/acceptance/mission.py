@@ -33,6 +33,7 @@ def drive(args: argparse.Namespace, log: list[dict]) -> dict:
     from riptide_msgs2.action import ExecuteTree
     from riptide_msgs2.msg import KillSwitchReport
     from rosgraph_msgs.msg import Clock
+    from std_msgs.msg import String
 
     rclpy.init()
     node = Node("mission_driver", namespace="/talos")
@@ -41,6 +42,7 @@ def drive(args: argparse.Namespace, log: list[dict]) -> dict:
         Clock, "/clock", lambda m: clock.update(sim_s=m.clock.sec + m.clock.nanosec * 1e-9), 10
     )
     kill = node.create_publisher(KillSwitchReport, "command/software_kill", 10)
+    run = node.create_publisher(String, "simulator/run_command", 10)
     client = ActionClient(node, ExecuteTree, "autonomy/run_tree")
     start = time.monotonic()
     result: dict = {"tree": str(args.tree)}
@@ -50,6 +52,14 @@ def drive(args: argparse.Namespace, log: list[dict]) -> dict:
             return result
         settle = time.monotonic()
         while time.monotonic() - settle < args.settle:
+            rclpy.spin_once(node, timeout_sec=0.1)
+
+        # Operator starts the scored run (Run panel "Start run"), as with the original simulator.
+        for action in ("stop", "start"):  # fresh judge after the killed float-up
+            run.publish(String(data=json.dumps({"action": action})))
+            for _ in range(5):
+                rclpy.spin_once(node, timeout_sec=0.1)
+        for _ in range(10):
             rclpy.spin_once(node, timeout_sec=0.1)
 
         def feedback(message) -> None:
