@@ -614,6 +614,22 @@ TEST(StaticTf, StaticEdgesComeFromTheFrameTreeAndAreValidated) {
     EXPECT_NE(bridgeError([&] { Rig r(truth); }).find("truth transforms must have parent"), std::string::npos);
 }
 
+TEST(StaticTf, TruthEdgesMirrorFramesUnderAPublishedTruthFrame) {
+    Json bridge = defaultBridge();
+    bridge["frame_names"]["base"] = "vehicle/mount";
+    bridge["tf"] = {{"publish", Json::array({{{"native", "state:robot.reference_pose"}, {"parent", bridge["frame_names"]["world"]},
+                                              {"child", "sim/root"}, {"rate_hz", 10}}})},
+                    {"static", Json::array({{{"parent", "sim/root"}, {"child", "sim/mount"}, {"from_frame", "com"},
+                                             {"to_frame", "base"}, {"truth", true}}})}};
+    Rig rig(bridge); // same robot frame as frame_names['base'] under another ROS name: allowed
+    ASSERT_EQ(rig.core->staticTransforms().size(), 1u);
+    EXPECT_EQ(rig.core->staticTransforms()[0].child, "sim/mount");
+    EXPECT_TRUE(rig.core->staticTransforms()[0].translation.isApprox(kOffset));
+    Json detached = bridge;
+    detached["tf"]["static"][0]["parent"] = "elsewhere";
+    EXPECT_NE(bridgeError([&] { Rig r(detached); }).find("must descend from a tf.publish frame"), std::string::npos);
+}
+
 namespace {
 Json alignmentBridge() {
     Json bridge = defaultBridge();

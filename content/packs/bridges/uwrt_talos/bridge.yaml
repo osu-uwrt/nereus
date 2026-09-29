@@ -67,6 +67,13 @@ tf:
   - {parent: talos/ffc_left_camera_optical_frame, child: talos/ffc_right_camera_optical_frame, from_frame: ffc_left_optical, to_frame: ffc_right_optical}
   - {parent: talos/dfc_camera_link, child: talos/dfc_left_camera_optical_frame, from_frame: dfc_mount, to_frame: dfc_left_optical}
   - {parent: talos/dfc_left_camera_optical_frame, child: talos/dfc_right_camera_optical_frame, from_frame: dfc_left_optical, to_frame: dfc_right_optical}
+  # Simulator-truth tree under the published truth base (original physics_simulator/pool_viewer
+  # simulator/talos/* frames); mirrors the robot pack so tools can compare truth with the estimate.
+  - {parent: simulator/talos/base_link, child: simulator/talos/origin, from_frame: base_link, to_frame: cad, truth: true}
+  - {parent: simulator/talos/base_link, child: simulator/talos/ffc_camera_link, from_frame: base_link, to_frame: ffc_mount, truth: true}
+  - {parent: simulator/talos/ffc_camera_link, child: simulator/talos/ffc_left_camera_optical_frame, from_frame: ffc_mount, to_frame: ffc_left_optical, truth: true}
+  - {parent: simulator/talos/base_link, child: simulator/talos/dfc_camera_link, from_frame: base_link, to_frame: dfc_mount, truth: true}
+  - {parent: simulator/talos/dfc_camera_link, child: simulator/talos/dfc_left_camera_optical_frame, from_frame: dfc_mount, to_frame: dfc_left_optical, truth: true}
   # Transforms the bridge only reads live. Owners are external; the bridge never republishes them.
   lookup:
   - {parent: world, child: map, owner: 'riptide_mapping2 mapping.launch.py chameleon_tf world_to_map (identity start; XY/yaw free)'}

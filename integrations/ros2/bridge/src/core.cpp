@@ -500,11 +500,25 @@ void BridgeCore::compileStaticTf() {
             throw BridgeError("tf: cycle at " + repr(current));
     }
     const Json names = config_.value("frame_names", Json::object());
+    std::set<std::string> truth_roots;
+    for (const auto &edge : tf.value("publish", Json::array()))
+        truth_roots.insert(edge.at("child").get<std::string>());
     for (const auto &edge : tf.value("static", Json::array())) {
+        // Simulator-truth tree: ROS names mirror robot frames under the truth frame, so they are
+        // independent of frame_names; the edge must descend from a published truth frame.
+        const bool truth = edge.value("truth", false);
+        if (truth) {
+            std::string root = edge.at("parent");
+            while (parents.count(root) && !truth_roots.count(root))
+                root = parents.at(root);
+            if (!truth_roots.count(root))
+                throw BridgeError("tf: truth frame " + repr(edge.at("child").get<std::string>()) +
+                                  " must descend from a tf.publish frame");
+        }
         for (const auto &[native_name, ros_name] :
              {std::pair<const char *, const char *>{"from_frame", "parent"}, {"to_frame", "child"}}) {
             const std::string frame = edge.at(native_name);
-            if (names.contains(frame) && names[frame] != edge.at(ros_name))
+            if (!truth && names.contains(frame) && names[frame] != edge.at(ros_name))
                 throw BridgeError(std::string("tf: ") + ros_name + " differs from frame_names[" + repr(frame) + "]");
         }
         try {

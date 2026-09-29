@@ -389,6 +389,10 @@
               },
               "to_frame": {
                 "$ref": "common.schema.json#/$defs/name"
+              },
+              "truth": {
+                "type": "boolean",
+                "description": "Simulator-truth tree: the edge descends from a tf.publish truth frame; ROS names are independent of frame_names (they mirror the robot's frames under the truth prefix)."
               }
             },
             "required": [

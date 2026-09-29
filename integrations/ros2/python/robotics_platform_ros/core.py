@@ -447,19 +447,32 @@ class BridgeCore:
                 raise BridgeError(f"tf: cycle at {current!r}")
         names = self.config.get("frame_names", {})
         transforms = []
+        truth_roots = {edge["child"] for edge in tf.get("publish", [])}
         for edge in tf.get("static", []):
+            if edge.get("truth", False):
+                root = edge["parent"]
+                while root in parents and root not in truth_roots:
+                    root = parents[root]
+                if root not in truth_roots:
+                    raise BridgeError(f"tf: truth frame {edge['child']!r} must descend from a "
+                                      "tf.publish frame")
+                transforms.append(self._static_transform(edge))
+                continue
             for native_name, ros_name in (("from_frame", "parent"), ("to_frame", "child")):
                 frame = edge[native_name]
                 if frame in names and names[frame] != edge[ros_name]:
                     raise BridgeError(f"tf: {ros_name} differs from frame_names[{frame!r}]")
-            try:
-                pose = self.frames.lookup(edge["from_frame"], edge["to_frame"])
-            except (ValueError, IndexError) as error:
-                raise BridgeError(f"tf: invalid static robot frames: {error}") from None
-            transforms.append(Transform(edge["parent"], edge["child"], self._last_ros_ns,
-                                        np.array(pose.translation, copy=True),
-                                        np.array(pose.orientation_wxyz, copy=True)))
+            transforms.append(self._static_transform(edge))
         return tuple(transforms)
+
+    def _static_transform(self, edge: Mapping[str, Any]) -> Transform:
+        try:
+            pose = self.frames.lookup(edge["from_frame"], edge["to_frame"])
+        except (ValueError, IndexError) as error:
+            raise BridgeError(f"tf: invalid static robot frames: {error}") from None
+        return Transform(edge["parent"], edge["child"], self._last_ros_ns,
+                         np.array(pose.translation, copy=True),
+                         np.array(pose.orientation_wxyz, copy=True))
 
     def _compile_alignment(self) -> None:
         self.alignment = self.config.get("placement", {}).get("estimator_alignment")
