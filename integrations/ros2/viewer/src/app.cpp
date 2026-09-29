@@ -308,7 +308,7 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
         openDepth_ |= name == "depth";
     }
     showTf_ = opt_.showTf;
-    detections_ = opt_.detections;
+    detections_ = opt_.detections.value_or(lookup(config_, {"detections", "enabled"}).as<bool>(true));
     showMpc_ = opt_.mpcPath;
     if (!demoMode_) {
         rclcpp::init(argc, argv);
@@ -327,6 +327,10 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
                                                  : lookup(config_, {"pose", "source"}).as<std::string>("auto")),
         opt_.truthDelay >= 0 ? opt_.truthDelay : lookup(config_, {"pose", "truth_delay_s"}).as<double>(.02),
         opt_.otherDelay >= 0 ? opt_.otherDelay : lookup(config_, {"pose", "other_delay_s"}).as<double>(.06));
+    ros_->setDetectionMode(parseDetectionMode(
+        !opt_.detectionPlacement.empty() ? opt_.detectionPlacement
+                                         : lookup(config_, {"detections", "placement"}).as<std::string>("pose_source")));
+    ros_->setHonorDeleteAll(!opt_.keepDetections && lookup(config_, {"detections", "honor_delete_all"}).as<bool>(true));
     const int width = lookup(config_, {"window", "width"}).as<int>(1480),
               height = lookup(config_, {"window", "height"}).as<int>(940);
     window_ = std::make_unique<Window>(width, height,
@@ -1315,8 +1319,20 @@ void App::drawToolbar(float left, int &oldMode) {
                        ImGui::CalcTextSize("Detections").x);
         ImGui::Checkbox("Detections", &detections_);
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Camera detections use the simulator pose at image capture.\n"
-                              "Each observation stays fixed in the simulated world.");
+            ImGui::SetTooltip("Detector markers (%s), placed once when observed and then fixed in the world.\n"
+                              "Truth: simulator pose at image capture. Estimate: TF at the image stamp.",
+                              ros_->detectionTopic.c_str());
+        if (detections_ && ros_->truthPlacementAvailable()) {
+            // Truth/both only exist with a simulator; a real robot has the estimate alone.
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(110);
+            int placement = int(ros_->detectionMode());
+            if (ImGui::Combo("##detplace", &placement, "Pose source\0Truth\0Estimate\0Both\0"))
+                ros_->setDetectionMode(DetectionMode(placement));
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Detection placement: follow the pose source, simulator truth, localization\n"
+                                  "estimate (RViz-like TF), or both (truth solid, estimate cyan outline).");
+        }
         sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
                        ImGui::CalcTextSize("MPC path").x);
         ImGui::Checkbox("MPC path", &showMpc_);
@@ -1501,7 +1517,7 @@ void App::drawInterface(double time, float dt) {
         drawTfAxes(overlay, vp, rect);
     }
     if (detections_ && !demoMode_)
-        drawDetections(ros_->placedDetections, vp, rect);
+        drawDetections(ros_->placedDetections, vp, rect, ros_->detectionShow().truth && ros_->detectionShow().estimate);
     if (showMpc_ && !demoMode_)
         drawMpcPath(ros_->mpcPath, vp, rect);
     if (composition_ && mode_ == 0) {

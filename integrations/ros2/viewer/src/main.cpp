@@ -22,7 +22,10 @@ void usage() {
         "  --inject-f X Y         test aid: hover window position (X,Y) and press F halfway through a capture run\n"
         "  --orbit YAW PITCH DIST initial orbit angles (radians) and distance (metres) after the focus\n"
         "  --open NAME            open scene-settings, map, tf, pool-viewer or depth (camera cards) at start (repeatable)\n"
-        "  --show-tf --detections --mpc-path --show-scorecard   initial toggle states\n"
+        "  --show-tf --mpc-path --show-scorecard   initial toggle states\n"
+        "  --detections | --no-detections   detection overlay on/off at start (default on)\n"
+        "  --keep-detections      ignore detector DELETEALL; observations live out their lifetime\n"
+        "  --detections-placement MODE   pose_source (default) | truth | estimate | both; truth/both need the simulator\n"
         "  --hidden --frames N --screenshot out.png   render N frames, save a PNG, exit\n"
         "  --render-rate HZ       optional frame cap (default: none, vsync paces)\n"
         "  --card-rate HZ         local camera card refresh (default: each camera's own rate; 0 = camera rate)\n"
@@ -120,6 +123,12 @@ int main(int argc, char **argv) {
             options.showTf = true;
         else if (arg == "--detections")
             options.detections = true;
+        else if (arg == "--no-detections")
+            options.detections = false;
+        else if (arg == "--keep-detections")
+            options.keepDetections = true;
+        else if (arg == "--detections-placement")
+            options.detectionPlacement = value();
         else if (arg == "--mpc-path")
             options.mpcPath = true;
         else if (arg == "--show-scorecard")

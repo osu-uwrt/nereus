@@ -48,8 +48,10 @@ struct MarkerRecord {
     std::filesystem::path mesh;
 };
 struct PlacedDetection {
+    enum class Kind { Truth, Estimate, EstimateApprox };
     glm::mat4 pose;
     visualization_msgs::msg::Marker marker;
+    Kind kind = Kind::Truth;
 };
 struct CameraFeed {
     const SensorCamera *camera = nullptr;
@@ -127,6 +129,24 @@ class RosSide {
         return usingTruth_ ? scenario_->truthBaseFrame : scenario_->estimateBaseFrame;
     }
     void captureDetections(bool show);
+    // Which placement(s) of each detection to draw (requested); detectionShow() is what is effective now.
+    void setDetectionMode(DetectionMode mode) {
+        detectionMode_ = mode;
+    }
+    // false: ignore DELETEALL so observations live out their lifetime (the detector clears on every frame).
+    void setHonorDeleteAll(bool honor) {
+        honorDeleteAll_ = honor;
+    }
+    DetectionMode detectionMode() const {
+        return detectionMode_;
+    }
+    // Simulator truth exists and is (or may be) the pose source: truth/both placements are offered.
+    bool truthPlacementAvailable() const {
+        return source_ != PoseSource::Estimate && truth_.seen && (source_ == PoseSource::Truth || usingTruth_);
+    }
+    DetectionShow detectionShow() const {
+        return resolveDetectionMode(detectionMode_, truthPlacementAvailable(), usingTruth_);
+    }
     void captureMpc(bool wanted);
     void captureTf(bool wanted, TfTree &tree, TfSnapshot &out);
     void setCamerasWanted(bool wanted);
@@ -148,7 +168,7 @@ class RosSide {
     struct DetectionEntry {
         visualization_msgs::msg::Marker marker;
         Clock::time_point received;
-        DetectionPose placement;
+        DetectionPose truth, estimate;
     };
     void receiveMarkers(std::map<MarkerKey, MarkerRecord> &, const visualization_msgs::msg::MarkerArray &);
     void receiveDetections(const visualization_msgs::msg::MarkerArray &);
@@ -200,6 +220,8 @@ class RosSide {
     bool mpcPending_ = false, mpcFailing_ = false;
     Clock::time_point mpcReceived_{}, mpcFailingSince_{};
     std::map<MarkerKey, DetectionEntry> detectionMarkers_;
+    DetectionMode detectionMode_ = DetectionMode::PoseSource;
+    bool warnedDetectionDowngrade_ = false, honorDeleteAll_ = true;
     std::map<std::string, rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr> mechanismCommands_;
     std::set<std::string> warnedMeshes_;
 };
