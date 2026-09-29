@@ -70,7 +70,7 @@ def centre_depth(frame, info):
 
 @unittest.skipIf(pc is None, "optional camera extension is not installed")
 class TalosPackCameraTests(unittest.TestCase):
-    """Copied resolved data with cameras enabled; production packs stay disabled."""
+    """Production camera packs and isolated copies for configuration/error cases."""
 
     @classmethod
     def setUpClass(cls):
@@ -134,11 +134,16 @@ class TalosPackCameraTests(unittest.TestCase):
         world_eye = pc._upright(placement).compose(eye)
         return root_for_eye(cameras, "ffc_left_optical", world_eye)
 
-    def test_production_packs_select_no_camera_and_selection_is_explicit(self):
+    def test_disabled_cameras_and_explicit_selection_are_validated(self):
+        robot = copy.deepcopy(self.resolved.robot)
+        for sensor in robot["sensors"]:
+            if sensor["type"] == "stereo_camera":
+                sensor["enabled"] = False
+        disabled = with_changes(self.resolved, robot)
         with self.assertRaisesRegex(ValueError, "no enabled"):
-            pc.PackCameras(self.resolved)
+            pc.PackCameras(disabled)
         with self.assertRaisesRegex(ValueError, "disabled"):
-            pc.PackCameras(self.resolved, ["ffc"])
+            pc.PackCameras(disabled, ["ffc"])
         for sensors, error in ((["dvl"], ValueError), (["ghost"], ValueError), ("ffc", TypeError)):
             with self.subTest(sensors=sensors), self.assertRaises(error):
                 pc.PackCameras(self.resolved, sensors)

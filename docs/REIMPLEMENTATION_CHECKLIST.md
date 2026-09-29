@@ -12,7 +12,7 @@ only; no pushes. No UI or visual-fidelity work until step 5 is complete.
   review passed; production loaders and runtime checks remain in later gates.
 - [x] 2. Generic YAML bridge, UWRT config and required converters: the existing
   controllers and EKF hold depth and heading about as well as the old simulator.
-- [ ] 3. Robot-pack offscreen camera and stereo products: real perception runs on them.
+- [x] 3. Robot-pack offscreen camera and stereo products: real perception runs on them.
 - [ ] 4. Task runtime, launcher/dropper/claw mechanisms, all 2026 task packs and full
   reset: each task scores correctly in a scripted run.
 - [ ] 5. RepairCompTree through the real stack with every descendant outcome checked;
@@ -74,7 +74,19 @@ Step 3 progress:
 - [x] Assess/improve full-resolution camera throughput: per-camera CPU workers reach
   about 14.2 FPS each in capture benchmarks; actual perception run captures 635 FFC
   and 590 DFC frames in 42.38 simulated seconds. Residual overflow remains counted.
-- [ ] Run actual UWRT perception on those products and review its output.
+- [x] Run actual UWRT perception and independently review raw synchronized detections,
+  causal mapper updates, camera switching and controller/EKF hold under load.
+  `integrations/uwrt/acceptance/perception.py --output build/gate3-review` reproduces it.
+- [x] Enable production Talos cameras and six image/calibration streams matching the
+  accepted run; configuration and affected pack/bridge regression checks pass.
+
+Step 4 progress:
+
+- [ ] Gate traversal and pack-owned gate/home scoring with scripted reset/replay.
+- [ ] Mechanism state, payload trajectories and task contacts.
+- [ ] Remaining 2026 task definitions and original-rule scoring comparisons.
+- [ ] Coordinated full reset including physics, sensors, cameras, mechanisms and scores.
+- [ ] Every task scores correctly in scripted runs; independent evidence review.
 
 The user delegated approval to Codex and Claude Code, using Opus 5.5/high. Agree
 ownership, have the other partner review each gate's evidence, and continue without

@@ -1,5 +1,7 @@
 """Alignment coalescing and service acknowledgements are independently observable."""
 
+import copy
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import SkipTest, TestCase
@@ -21,9 +23,16 @@ class AlignmentTests(TestCase):
     def test_placement_supersedes_unsent_startup_and_uses_latest_pose(self):
         root = Path(__file__).resolve().parents[3]
         config = resolve_scenario(root / "content/packs/scenarios/talos_uwrt")
+        # Alignment exercises navigation independently of optional camera rendering.
+        bridge = copy.deepcopy(config.bridge)
+        bridge["streams"] = [
+            stream for stream in bridge["streams"]
+            if not stream["native"].startswith(("sensor:ffc.", "sensor:dfc."))
+        ]
+        config = replace(config, bridge=bridge)
         core = BridgeCore(
             config,
-            create_runtime(config),
+            create_runtime(config, sensor_ids=["imu", "fog", "dvl", "depth"]),
             epoch_ns=1_000_000_000,
             lookup=lambda target, source: Pose(),
         )

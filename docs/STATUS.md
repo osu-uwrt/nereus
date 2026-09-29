@@ -13,12 +13,26 @@ Visual work stopped at local commit `9081760`. UI, LEDs, radiance and visual
 fidelity stay deferred until step 5 passes. Offscreen camera work is explicitly
 part of step 3. Do not restructure unrelated components.
 
-Current step: **3 — offscreen cameras/stereo and the real perception gate.**
-Step 2 passed the repeated real-controller/EKF hold comparison and Opus review.
-Pack capture and bounded ROS publication are implemented. The real detector/mapper
-run now passes independent internal review; the acceptance and config activation
-checkpoint is being recorded. User-authorized internal reviewers replace Claude
-while its quota is unavailable; its later review will not block current work.
+Current step: **4 — task runtime, mechanisms, all 2026 tasks and full reset.**
+Step 3 passed independent internal review. Production Talos cameras and all six
+image/calibration streams are enabled; their configuration equals the accepted run
+apart from stream declaration order. The real UWRT detector produced 35 synchronized
+measured detections (position error p95 5.08 mm). The mapper corrected an intentionally
+wrong 0.4 m prior to 4.89 mm error; locking it prevented updates despite detections.
+Both camera switches passed. Real controller/EKF hold remained within its acceptance
+limits at real time. Evidence: `build/gate3-concurrent/summary.json` and raw records.
+
+Proof: `PYTHONPATH=build/step3-camera-python:$PYTHONPATH python3
+integrations/uwrt/acceptance/perception.py --output build/gate3-review`.
+The gate covers FFC task detection/mapping and DFC image delivery/switching. DFC task
+recognition awaits the remaining task content. Residual camera overflow is counted;
+this is not a sustained 15 Hz guarantee for both cameras. UI and mission acceptance
+remain deferred. Internal reviewers replace Claude while its quota is unavailable;
+request its catch-up review after 1:30 p.m. Eastern without interrupting progress.
+
+The first step-4 slice is physical gate traversal, pure pack-owned gate/home scoring,
+and reset/replay. Mechanisms, remaining tasks and coordinated whole-system reset
+follow; none is implied complete by the camera gate.
 
 The first camera increment adds optional CPU camera geometry and image processing
 (`RP_BUILD_CAMERAS`), with optical frames, rectified stereo projection, owned RGB

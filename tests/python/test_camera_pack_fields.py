@@ -93,14 +93,14 @@ class TalosCameraFieldTests(unittest.TestCase):
             "claw_left_pad_mesh", "claw_right_pad_mesh"]))
         self.assertEqual(set(placed), {"cad", claw["frame"]})
 
-    def test_stereo_cameras_stay_disabled_with_rectified_right_eyes(self) -> None:
+    def test_stereo_cameras_are_enabled_with_rectified_right_eyes(self) -> None:
         transforms = {item["child"]: item for item in self.robot["frames"]["transforms"]}
         cameras = [item for item in self.robot["sensors"] if item["type"] == "stereo_camera"]
         self.assertEqual({item["id"] for item in cameras}, {"ffc", "dfc"})
         for camera in cameras:
             parameters = camera["parameters"]
             with self.subTest(camera=camera["id"]):
-                self.assertFalse(camera["enabled"])
+                self.assertTrue(camera["enabled"])
                 self.assertEqual(parameters["outputs"], ["rgb_left", "depth_left", "camera_info"])
                 self.assertEqual(parameters["intrinsics_left"], parameters["intrinsics_right"])
                 right = transforms[parameters["right_frame"]]

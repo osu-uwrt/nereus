@@ -3,7 +3,7 @@
 # {from, enum_map}; filters only field equality. Destination keys are ROS field paths on publish and
 # native argument names on subscribe; [i] indexes arrays. Native side: robot-pack ids and the native
 # reading fields of libraries/sensors/include/robotics/sensors/readings.hpp.
-# Working copy for the step-2 navigation bridge; the approved full contract is proposals/step1/packs.
+# Navigation and camera runtime bindings; the approved full contract is proposals/step1/packs.
 schema_version: 1
 kind: bridge
 id: uwrt_talos
@@ -228,6 +228,84 @@ streams:
     esc_telemetry[2].thruster_ready: {constant: true}
     esc_telemetry[3].thruster_ready: {constant: true}
 # ---------------- simulator -> ROS: cameras (step 3; yolo_orientation.py inputs) ----------------
+- id: ffc_rgb_compressed
+  direction: publish
+  topic: ffc/zed_node/rgb/image_rect_color/compressed
+  message_type: sensor_msgs/msg/CompressedImage
+  native: 'sensor:ffc.rgb_left'
+  frame_id: talos/ffc_left_camera_optical_frame
+  rate_hz: 15
+  qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
+  # O5 (camera_faker main.cpp:1102-1155, camera_processor.cpp:15): format 'rgb8; jpeg compressed bgr8', quality 93
+  image: {compression: jpeg, quality: 93, source_encoding: rgb8, compressed_encoding: bgr8}
+  fields: {header.stamp: {from: sample.time}}
+- id: ffc_camera_info
+  direction: publish
+  topic: ffc/zed_node/rgb/camera_info
+  message_type: sensor_msgs/msg/CameraInfo
+  native: 'sensor:ffc.camera_info'
+  frame_id: talos/ffc_left_camera_optical_frame
+  rate_hz: 15
+  qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
+  # Rectified output (O5): zero distortion, identity R, P = [fx,0,cx,0, 0,fy,cy,0, 0,0,1,0].
+  # Raw charuco distortion in the robot pack is calibration metadata and is never published here.
+  fields:
+    header.stamp: {from: sample.time}
+    width: {from: info.width}
+    height: {from: info.height}
+    k: {from: info.k}
+    p: {from: info.p}
+    distortion_model: {constant: plumb_bob}
+    d: {constant: [0.0, 0.0, 0.0, 0.0, 0.0]}
+    r: {constant: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]}
+- id: ffc_depth
+  direction: publish
+  topic: ffc/zed_node/depth/depth_registered
+  message_type: sensor_msgs/msg/Image
+  native: 'sensor:ffc.depth_left'
+  frame_id: talos/ffc_left_camera_optical_frame
+  rate_hz: 15
+  qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
+  image: {encoding: 32FC1}               # metres, NaN invalid (O5 resolved)
+  fields: {header.stamp: {from: sample.time}}
+- id: dfc_rgb_compressed
+  direction: publish
+  topic: dfc/zed_node/rgb/image_rect_color/compressed
+  message_type: sensor_msgs/msg/CompressedImage
+  native: 'sensor:dfc.rgb_left'
+  frame_id: talos/dfc_left_camera_optical_frame
+  rate_hz: 15
+  qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
+  image: {compression: jpeg, quality: 93, source_encoding: rgb8, compressed_encoding: bgr8}
+  fields: {header.stamp: {from: sample.time}}
+- id: dfc_camera_info
+  direction: publish
+  topic: dfc/zed_node/rgb/camera_info
+  message_type: sensor_msgs/msg/CameraInfo
+  native: 'sensor:dfc.camera_info'
+  frame_id: talos/dfc_left_camera_optical_frame
+  rate_hz: 15
+  qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
+  fields:
+    header.stamp: {from: sample.time}
+    width: {from: info.width}
+    height: {from: info.height}
+    k: {from: info.k}
+    p: {from: info.p}
+    distortion_model: {constant: plumb_bob}
+    d: {constant: [0.0, 0.0, 0.0, 0.0, 0.0]}
+    r: {constant: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]}
+- id: dfc_depth
+  direction: publish
+  topic: dfc/zed_node/depth/depth_registered
+  message_type: sensor_msgs/msg/Image
+  native: 'sensor:dfc.depth_left'
+  frame_id: talos/dfc_left_camera_optical_frame
+  rate_hz: 15
+  qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
+  image: {encoding: 32FC1}
+  fields: {header.stamp: {from: sample.time}}
+
 # ---------------- diagnostics (not consumed by the stack) ----------------
 - id: ground_truth
   direction: publish

@@ -1,7 +1,7 @@
 # Robot pack for native navigation and offscreen cameras; mechanism assets remain unresolved (step 4).
 # Values are copied from the verified native assembly content/robots/talos_navigation.yaml
 # (sha256 14ce5067...d746) unless a field says otherwise. Units: SI; frames: ROS ENU/FLU.
-# Working copy for the step-2 navigation bridge; the approved full contract is proposals/step1/packs.
+# Navigation and camera runtime pack; the approved full contract is proposals/step1/packs.
 schema_version: 1
 kind: robot
 id: talos
@@ -234,7 +234,7 @@ sensors:
   type: stereo_camera          # Stage 3; offscreen renderer-owned acquisition
   frame: ffc_left_optical
   mount_frame: ffc_mount
-  enabled: false               # cameras are not executed by the navigation bridge
+  enabled: true                # offscreen acquisition, independent of viewer subscriptions
   period_ns: 66666667          # grab_frame_rate 15 Hz (ffc_config.yaml); lattice rounds to 66/134 ms
   latency_ns: 0
   parameters:
@@ -264,7 +264,7 @@ sensors:
   type: stereo_camera
   frame: dfc_left_optical
   mount_frame: dfc_mount
-  enabled: false               # cameras are not executed by the navigation bridge
+  enabled: true                # offscreen acquisition, independent of viewer subscriptions
   period_ns: 66666667          # 15 Hz
   latency_ns: 0
   parameters:
