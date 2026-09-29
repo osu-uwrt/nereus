@@ -1,0 +1,1256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "built-in parameter definitions",
+  "description": "Authoritative loader definition: published JSON Schemas and the type registry are generated from this corpus. Reuse existing native types; add definitions only for actual pack instances. The remaining user-listed types (region box and surface; events drop_into, attach, surface and timeout; prop rigid_body; sensor acoustic_amplitude) are deliberately absent until their first step-4 instance.",
+  "$defs": {
+    "marine_6dof": {
+      "type": "object",
+      "properties": {
+        "mass_kg": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "inertia_matrix": {
+          "$ref": "common.schema.json#/$defs/matrix3"
+        },
+        "added_mass_matrix": {
+          "$ref": "common.schema.json#/$defs/matrix6"
+        },
+        "linear_damping_matrix": {
+          "$ref": "common.schema.json#/$defs/matrix6"
+        },
+        "quadratic_damping": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "damping_center_m": {
+          "$ref": "common.schema.json#/$defs/vector3"
+        },
+        "displaced_volume_m3": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "buoyancy_center_m": {
+          "$ref": "common.schema.json#/$defs/vector3"
+        },
+        "buoyancy_radii_m": {
+          "$ref": "common.schema.json#/$defs/positive_vector3"
+        },
+        "command_timeout_s": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "mass_kg",
+        "inertia_matrix",
+        "added_mass_matrix",
+        "linear_damping_matrix",
+        "quadratic_damping",
+        "displaced_volume_m3",
+        "buoyancy_center_m",
+        "buoyancy_radii_m",
+        "command_timeout_s"
+      ],
+      "additionalProperties": false,
+      "description": "Current native Fossen body parameters in SI, expressed at COM. Inertia definiteness, hydrodynamic matrix validity and frame consistency are semantic checks; JSON Schema alone cannot prove them.",
+      "x-category": "body"
+    },
+    "lagged_force": {
+      "type": "object",
+      "properties": {
+        "delay_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "rise_time_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "fall_time_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "slew_rate_n_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "forward_limit_n": {
+          "type": "number",
+          "minimum": 0
+        },
+        "reverse_limit_n": {
+          "type": "number",
+          "minimum": 0
+        },
+        "deadband_n": {
+          "type": "number",
+          "minimum": 0
+        },
+        "forward_scale": {
+          "type": "number",
+          "minimum": 0
+        },
+        "reverse_scale": {
+          "type": "number",
+          "minimum": 0
+        },
+        "propeller_radius_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "efficiency": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "delay_s",
+        "rise_time_s",
+        "fall_time_s",
+        "slew_rate_n_s",
+        "forward_limit_n",
+        "reverse_limit_n",
+        "deadband_n",
+        "forward_scale",
+        "reverse_scale",
+        "efficiency",
+        "propeller_radius_m"
+      ],
+      "additionalProperties": false,
+      "description": "Signed force input in N along configured unit direction. Order/scaling of a transport array belongs to the bridge, not this model.",
+      "x-category": "thruster"
+    },
+    "imu": {
+      "type": "object",
+      "properties": {
+        "acceleration_noise": {
+          "$ref": "common.schema.json#/$defs/noise3"
+        },
+        "gyro_noise": {
+          "$ref": "common.schema.json#/$defs/noise3"
+        },
+        "reporting": {
+          "type": "object",
+          "properties": {
+            "gravity_magnitude_m_s2": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "force_variance": {
+              "$ref": "common.schema.json#/$defs/nonnegative_vector3"
+            },
+            "angular_variance": {
+              "$ref": "common.schema.json#/$defs/nonnegative_vector3"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "x-category": "sensor"
+    },
+    "attitude": {
+      "type": "object",
+      "properties": {
+        "angle_stddev_rad": {
+          "type": "number",
+          "minimum": 0
+        },
+        "heading_drift_rad_s": {
+          "type": "number"
+        },
+        "heading_axis_world": {
+          "$ref": "common.schema.json#/$defs/vector3"
+        },
+        "reported_variance": {
+          "$ref": "common.schema.json#/$defs/nonnegative_vector3"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "x-category": "sensor"
+    },
+    "ahrs": {
+      "type": "object",
+      "properties": {
+        "inertial": {
+          "$ref": "#/$defs/imu"
+        },
+        "attitude": {
+          "$ref": "#/$defs/attitude"
+        }
+      },
+      "required": [
+        "inertial",
+        "attitude"
+      ],
+      "additionalProperties": false,
+      "description": "Synchronized orientation, specific force and angular rate; no perfect orientation substituted for noisy AHRS.",
+      "x-category": "sensor"
+    },
+    "fog": {
+      "type": "object",
+      "properties": {
+        "axes": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/vector3"
+          },
+          "minItems": 1,
+          "maxItems": 3
+        },
+        "gyro_noise": {
+          "$ref": "common.schema.json#/$defs/noise3"
+        },
+        "reported_variance": {
+          "$ref": "common.schema.json#/$defs/nonnegative_vector3"
+        }
+      },
+      "required": [
+        "axes"
+      ],
+      "additionalProperties": false,
+      "x-category": "sensor"
+    },
+    "reference_velocity": {
+      "type": "object",
+      "properties": {
+        "reference_velocity_world_m_s": {
+          "$ref": "common.schema.json#/$defs/vector3"
+        },
+        "velocity_noise": {
+          "$ref": "common.schema.json#/$defs/noise3"
+        },
+        "reported_variance": {
+          "$ref": "common.schema.json#/$defs/nonnegative_vector3"
+        },
+        "inclination_limit": {
+          "type": "object",
+          "properties": {
+            "axis": {
+              "$ref": "common.schema.json#/$defs/vector3"
+            },
+            "maximum_angle_rad": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Native reference-relative sensor-point velocity, with no implicit bottom-lock gate; preserves the current Talos default.",
+      "x-category": "sensor"
+    },
+    "dvl": {
+      "type": "object",
+      "properties": {
+        "bottom_axis": {
+          "$ref": "common.schema.json#/$defs/vector3"
+        },
+        "minimum_range_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maximum_range_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "velocity_noise": {
+          "$ref": "common.schema.json#/$defs/noise3"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Physical ideal bottom-track DVL; explicit availability and range semantics are distinct from reference_velocity.",
+      "x-category": "sensor"
+    },
+    "reference_altitude": {
+      "type": "object",
+      "properties": {
+        "target_position_body_m": {
+          "$ref": "common.schema.json#/$defs/vector3"
+        },
+        "noise": {
+          "$ref": "common.schema.json#/$defs/noise1"
+        },
+        "reported_variance": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Existing Z-up target-point altitude report with sensor lever-arm correction; not positive-down depth or raw pressure.",
+      "x-category": "sensor"
+    },
+    "pressure": {
+      "type": "object",
+      "properties": {
+        "noise": {
+          "$ref": "common.schema.json#/$defs/noise1"
+        },
+        "reference_pressure_pa": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "reference_density_kg_m3": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "reference_gravity_m_s2": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "minimum_pressure_pa": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maximum_pressure_pa": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "Hydrostatic pressure and separately calibrated depth. World atmospheric pressure/density do not silently change sensor calibration.",
+      "x-category": "sensor"
+    },
+    "rectangular_pool": {
+      "type": "object",
+      "properties": {
+        "length_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "width_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "depth_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "deck_height_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Deck height above the water surface in m; sets pool wall box height (depth + deck + 1)."
+        },
+        "speed_of_sound_m_s": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Speed of sound in the water in m/s (environment value)."
+        },
+        "water_level_m": {
+          "type": "number"
+        },
+        "water_density_kg_m3": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "surface_pressure_pa": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "current_m_s": {
+          "$ref": "common.schema.json#/$defs/vector3"
+        },
+        "current_oscillation_amplitude_m_s": {
+          "$ref": "common.schema.json#/$defs/vector3"
+        },
+        "current_oscillation_frequency_hz": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "length_m",
+        "width_m",
+        "depth_m",
+        "deck_height_m",
+        "water_level_m",
+        "water_density_kg_m3",
+        "surface_pressure_pa",
+        "current_m_s",
+        "current_oscillation_amplitude_m_s",
+        "current_oscillation_frequency_hz"
+      ],
+      "additionalProperties": false,
+      "description": "Finite rectangular pool in pool-local SI units: origin at the floor-plan corner on the water surface, +Z up.",
+      "x-category": "pool"
+    },
+    "water_optics": {
+      "type": "object",
+      "properties": {
+        "required_from_step": {
+          "$ref": "common.schema.json#/$defs/step"
+        },
+        "distance_scale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "distance_power": {
+          "type": "number",
+          "minimum": 0
+        },
+        "clear_distance_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "scattering": {
+          "type": "number",
+          "minimum": 0
+        },
+        "absorption_per_m_rgb": {
+          "$ref": "common.schema.json#/$defs/nonnegative_vector3"
+        }
+      },
+      "required": [
+        "required_from_step",
+        "distance_scale",
+        "distance_power",
+        "clear_distance_m",
+        "scattering",
+        "absorption_per_m_rgb"
+      ],
+      "additionalProperties": false,
+      "description": "Sensor-affecting water appearance for offscreen cameras. Distances in m, absorption per m in RGB order; dimensionless otherwise."
+    },
+    "pinhole_intrinsics": {
+      "type": "object",
+      "properties": {
+        "fx": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "fy": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "cx": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cy": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "fx",
+        "fy",
+        "cx",
+        "cy"
+      ],
+      "additionalProperties": false,
+      "description": "Pinhole intrinsics in pixels: focal lengths fx, fy and principal point cx, cy."
+    },
+    "stereo_camera": {
+      "type": "object",
+      "properties": {
+        "baseline_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "resolution_px": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "intrinsics_left": {
+          "$ref": "#/$defs/pinhole_intrinsics"
+        },
+        "intrinsics_right": {
+          "$ref": "#/$defs/pinhole_intrinsics"
+        },
+        "distortion_left_plumb_bob": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 5,
+          "maxItems": 5
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "rgb_left",
+              "depth_left",
+              "camera_info"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "depth": {
+          "type": "object",
+          "properties": {
+            "min_range_m": {
+              "type": "number",
+              "minimum": 0
+            },
+            "max_range_m": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "noise": {
+              "type": "object",
+              "properties": {
+                "base_sigma_m": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "range_coefficient": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "range_exponent": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "bias_m": {
+                  "type": "number"
+                },
+                "dropout": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "range_dropout": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "edge_dropout": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "outliers": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "correlation": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "patch_size_px": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "base_sigma_m",
+                "range_coefficient",
+                "range_exponent",
+                "bias_m",
+                "dropout",
+                "range_dropout",
+                "edge_dropout",
+                "outliers",
+                "correlation",
+                "patch_size_px"
+              ],
+              "additionalProperties": false,
+              "description": "Depth noise: sigma = base_sigma_m + range_coefficient * range^range_exponent (m); dropout and outlier fractions in 0..1; patch_size_px correlation patch in pixels."
+            }
+          },
+          "required": [
+            "min_range_m",
+            "max_range_m",
+            "noise"
+          ],
+          "additionalProperties": false,
+          "description": "Depth output range limits in m and noise model. min_range_m < max_range_m is a semantic check."
+        }
+      },
+      "required": [
+        "baseline_m",
+        "resolution_px",
+        "intrinsics_left",
+        "intrinsics_right",
+        "distortion_left_plumb_bob",
+        "outputs",
+        "depth"
+      ],
+      "additionalProperties": false,
+      "description": "Offscreen-rendered stereo camera. Baseline in m along optical +X, resolution [width, height] px, plumb-bob distortion [k1, k2, p1, p2, k3] for the left camera.",
+      "x-category": "sensor"
+    },
+    "projectile": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "enum": [
+            "finned_rigid_body",
+            "fixed_axis_body"
+          ]
+        },
+        "length_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "radius_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "mass_kg": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "displaced_volume_m3": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "added_mass_kg": {
+          "type": "number",
+          "minimum": 0
+        },
+        "drag_axial": {
+          "type": "number",
+          "minimum": 0
+        },
+        "drag_lateral": {
+          "type": "number",
+          "minimum": 0
+        },
+        "neutral_buoyancy": {
+          "type": "boolean"
+        },
+        "max_age_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "center_of_mass_m": {
+          "type": "number"
+        },
+        "center_of_buoyancy_m": {
+          "type": "number"
+        },
+        "center_of_drag_m": {
+          "type": "number"
+        },
+        "angular_damping_n_m_s": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "model",
+        "length_m",
+        "radius_m",
+        "mass_kg",
+        "displaced_volume_m3",
+        "added_mass_kg",
+        "drag_axial",
+        "drag_lateral",
+        "neutral_buoyancy",
+        "max_age_s"
+      ],
+      "if": {
+        "properties": {
+          "model": {
+            "const": "finned_rigid_body"
+          }
+        },
+        "required": [
+          "model"
+        ]
+      },
+      "then": {
+        "required": [
+          "center_of_mass_m",
+          "center_of_buoyancy_m",
+          "center_of_drag_m",
+          "angular_damping_n_m_s"
+        ]
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "center_of_mass_m"
+              ]
+            },
+            {
+              "required": [
+                "center_of_buoyancy_m"
+              ]
+            },
+            {
+              "required": [
+                "center_of_drag_m"
+              ]
+            },
+            {
+              "required": [
+                "angular_damping_n_m_s"
+              ]
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "Released projectile, SI units. Centers are axial offsets in m along +X nose from the body center. finned_rigid_body requires the four rotational fields; fixed_axis_body (non-rotating integrator) forbids them."
+    },
+    "payload_release": {
+      "type": "object",
+      "properties": {
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "position_m": {
+                "$ref": "common.schema.json#/$defs/vector3"
+              },
+              "orientation_wxyz": {
+                "$ref": "common.schema.json#/$defs/quaternion"
+              }
+            },
+            "required": [
+              "id",
+              "position_m",
+              "orientation_wxyz"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "description": "Ordered release slots in the mechanism frame; projectile nose is slot +X. Fire order is list order."
+        },
+        "projectile": {
+          "$ref": "#/$defs/projectile"
+        },
+        "launch": {
+          "type": "object",
+          "properties": {
+            "spring_energy_j": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "spring_energy_j"
+          ],
+          "additionalProperties": false,
+          "description": "Launch spring energy in J."
+        },
+        "cooldown_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cooldown_group": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "capacity": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "slots",
+        "projectile",
+        "launch",
+        "cooldown_s",
+        "cooldown_group",
+        "capacity"
+      ],
+      "additionalProperties": false,
+      "description": "Shared payload release parameters: slots, projectile, launch energy in J, cooldown in s (shared by mechanisms in the same cooldown_group), and slot capacity. capacity vs slot count is a semantic check."
+    },
+    "launcher": {
+      "$ref": "#/$defs/payload_release",
+      "description": "Torpedo launcher: spring-launched payload release whose launch speed adds the vehicle point velocity.",
+      "x-category": "mechanism"
+    },
+    "dropper": {
+      "$ref": "#/$defs/payload_release",
+      "description": "Dropper: payload release with gravity-driven drop from slots oriented nose-down.",
+      "x-category": "mechanism"
+    },
+    "claw": {
+      "type": "object",
+      "properties": {
+        "min_gap_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_gap_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "jaw_speed_m_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "hold_force_n": {
+          "type": "number",
+          "minimum": 0
+        },
+        "friction": {
+          "type": "number",
+          "minimum": 0
+        },
+        "contact_margin_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "grasp_dwell_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "slip_distance_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "pads": {
+          "type": "object",
+          "properties": {
+            "left": {
+              "$ref": "common.schema.json#/$defs/name"
+            },
+            "right": {
+              "$ref": "common.schema.json#/$defs/name"
+            }
+          },
+          "required": [
+            "left",
+            "right"
+          ],
+          "additionalProperties": false,
+          "description": "Asset ids of the left and right pad contact representations."
+        },
+        "timed_command": {
+          "const": "signed_duration",
+          "description": "Command is a signed duration: >0 open for |d| s, <0 close for |d| s, 0 stop."
+        },
+        "initial_state": {
+          "enum": [
+            "closed",
+            "open"
+          ]
+        }
+      },
+      "required": [
+        "min_gap_m",
+        "max_gap_m",
+        "jaw_speed_m_s",
+        "hold_force_n",
+        "friction",
+        "contact_margin_m",
+        "grasp_dwell_s",
+        "slip_distance_m",
+        "pads",
+        "timed_command",
+        "initial_state"
+      ],
+      "additionalProperties": false,
+      "description": "Two-jaw claw in SI: gaps and margins in m, jaw speed per jaw in m/s, hold force in N, dwell in s, friction dimensionless. min_gap_m < max_gap_m is a semantic check.",
+      "x-category": "mechanism"
+    },
+    "magnet": {
+      "type": "object",
+      "properties": {
+        "tip_position_m": {
+          "$ref": "common.schema.json#/$defs/vector3"
+        },
+        "actuated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "tip_position_m",
+        "actuated"
+      ],
+      "additionalProperties": false,
+      "description": "Magnet tip position in m in the mechanism frame; actuated false means passive (proximity is judged by the task pack).",
+      "x-category": "mechanism"
+    },
+    "static_body": {
+      "type": "object",
+      "properties": {
+        "collision_boxes": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/collision_box"
+          }
+        },
+        "visuals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "asset": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "frame": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "position_m": {
+                "$ref": "common.schema.json#/$defs/vector3"
+              },
+              "orientation_wxyz": {
+                "$ref": "common.schema.json#/$defs/quaternion"
+              }
+            },
+            "required": [
+              "asset",
+              "frame",
+              "position_m",
+              "orientation_wxyz"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "cutouts": {
+          "type": "object",
+          "properties": {
+            "region": {
+              "$ref": "common.schema.json#/$defs/name"
+            },
+            "faces_local_x_m": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "region",
+            "faces_local_x_m"
+          ],
+          "additionalProperties": false,
+          "description": "Render cutouts from a perforated_panel region on faces at these local x offsets in m."
+        }
+      },
+      "required": [
+        "collision_boxes"
+      ],
+      "additionalProperties": false,
+      "description": "Static task-local prop. Collision boxes in m in the task-local frame; visuals reference asset ids and frames (offsets in m); cutouts are optional.",
+      "x-category": "prop"
+    },
+    "task_plane": {
+      "type": "object",
+      "properties": {
+        "axis": {
+          "enum": [
+            "x",
+            "y",
+            "z"
+          ]
+        },
+        "offset_m": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "axis",
+        "offset_m"
+      ],
+      "additionalProperties": false,
+      "description": "Task-local plane normal to the given axis at offset in m."
+    },
+    "rectangular_portal": {
+      "type": "object",
+      "properties": {
+        "plane": {
+          "$ref": "#/$defs/task_plane"
+        },
+        "bounds_local": {
+          "type": "object",
+          "properties": {
+            "abs_y_lt_m": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "z_lt_m": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "abs_y_lt_m",
+            "z_lt_m"
+          ],
+          "additionalProperties": false,
+          "description": "Strict local bounds in m: |y| < abs_y_lt_m and z < z_lt_m."
+        },
+        "world_floor_clearance": {
+          "type": "boolean"
+        },
+        "crossing_reference": {
+          "const": "robot_reference_origin"
+        },
+        "fit_checks": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "envelope_at_crossing_point_with_current_orientation",
+              "envelope_at_completion"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "traversal": {
+          "enum": [
+            "full_envelope",
+            "reference_origin"
+          ]
+        },
+        "approach_radius_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_pose_step_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "plane",
+        "bounds_local",
+        "world_floor_clearance",
+        "crossing_reference",
+        "fit_checks",
+        "traversal",
+        "approach_radius_m",
+        "max_pose_step_m"
+      ],
+      "additionalProperties": false,
+      "description": "Rectangular opening crossed by the robot. Lengths in m; approach_radius_m opens/closes an attempt; a larger reference-origin jump than max_pose_step_m resets the judge.",
+      "x-category": "region"
+    },
+    "perforated_panel": {
+      "type": "object",
+      "properties": {
+        "plane": {
+          "$ref": "#/$defs/task_plane"
+        },
+        "half_size_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "holes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "class": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "size": {
+                "$ref": "common.schema.json#/$defs/name",
+                "description": "Size label emitted with the hit (e.g. large/small); scoring meaning is hook-owned."
+              },
+              "uv": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "radius_uv": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 0.5
+              }
+            },
+            "required": [
+              "id",
+              "class",
+              "size",
+              "uv",
+              "radius_uv"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "description": "Holes in panel uv (0..1 across the 2 * half_size_m square); radius_uv is a fraction of the panel side. Hole id uniqueness is a semantic check."
+        },
+        "projectile_clearance": {
+          "type": "object",
+          "properties": {
+            "rule": {
+              "const": "radius_over_axis_cosine"
+            },
+            "min_cosine": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1
+            }
+          },
+          "required": [
+            "rule",
+            "min_cosine"
+          ],
+          "additionalProperties": false,
+          "description": "Pass iff |hit - centre| + r / max(min_cosine, |axis . plane normal|) <= hole radius."
+        }
+      },
+      "required": [
+        "plane",
+        "half_size_m",
+        "holes",
+        "projectile_clearance"
+      ],
+      "additionalProperties": false,
+      "description": "Square panel of half_size_m (m) with circular holes; outside the panel no event fires.",
+      "x-category": "region"
+    },
+    "pass_through": {
+      "type": "object",
+      "properties": {
+        "region": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "from_side": {
+          "enum": [
+            "positive",
+            "negative"
+          ]
+        },
+        "to_side": {
+          "enum": [
+            "positive",
+            "negative"
+          ]
+        },
+        "emits": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "crossing_point_local",
+              "envelope_top_world"
+            ]
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "region",
+        "from_side",
+        "to_side",
+        "emits"
+      ],
+      "additionalProperties": false,
+      "description": "Event fired when the robot crosses the named portal region from from_side to to_side. from_side != to_side is a semantic check; region must be a rectangular_portal.",
+      "x-category": "event"
+    },
+    "contact": {
+      "type": "object",
+      "properties": {
+        "prop": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "with": {
+          "const": "robot"
+        }
+      },
+      "required": [
+        "prop",
+        "with"
+      ],
+      "additionalProperties": false,
+      "description": "Informational event when the robot touches the named prop; prop must exist (semantic check).",
+      "x-category": "event"
+    },
+    "hit": {
+      "type": "object",
+      "properties": {
+        "region": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "projectile_mechanism_type": {
+          "enum": [
+            "launcher",
+            "dropper"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "pass",
+            "blocked"
+          ]
+        },
+        "stop_projectile": {
+          "type": "boolean"
+        },
+        "emits": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "hole_id",
+              "hole_class",
+              "hole_size",
+              "projectile_id",
+              "hit_point_local"
+            ]
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "region",
+        "projectile_mechanism_type",
+        "outcome",
+        "stop_projectile",
+        "emits"
+      ],
+      "additionalProperties": false,
+      "description": "Event fired when a projectile from the given mechanism type crosses the named perforated_panel region with the given outcome.",
+      "x-category": "event"
+    },
+    "event_points": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "points": {
+          "type": "integer"
+        },
+        "max_awards": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "event",
+        "points"
+      ],
+      "additionalProperties": false,
+      "description": "Declarative scoring: points (may be negative) awarded per firing of the named event, up to max_awards times if given. Currently unused by packs.",
+      "x-category": "scoring"
+    }
+  }
+}

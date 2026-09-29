@@ -19,6 +19,13 @@ only; no pushes. No UI or visual-fidelity work until step 5 is complete.
   then a synthetic AUV on a different topic layout, a new pool and a new task,
   all without simulator code changes; one-page robot, pool and task guides.
 
+Step 2 progress:
+
+- [x] Standalone pack loader, lossless saves, source snapshots, generated schemas,
+  registered-type output, validation CLI and explicit unresolved dependencies.
+- [ ] Connect resolved packs to the native runtime and preserve navigation behavior.
+- [ ] Generic ROS bridge and UWRT bindings, followed by the old/new real-stack hold comparison.
+
 The user delegated approval to Codex and Claude Code, using Opus 5.5/high. Agree
 ownership, have the other partner review each gate's evidence, and continue without
 human approval. Stop and report genuine blockers; do not work around a wrong gate.

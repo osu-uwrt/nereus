@@ -36,6 +36,22 @@ sensor model and source positions in step 4; it is recorded as blocker B1 in the
 exception ledger. Step 2 must prove depth/heading holds through the real stack,
 with an old-simulator baseline; static schema checks do not satisfy that gate.
 
+The first step-2 data increment implements `robotics_platform.packs`: YAML 1.2
+loading, task includes and cross-reference checks, lossless untouched saves,
+comment-preserving edits, a single installed definition corpus, generated schema
+and type exports, and reproducible resolved manifests with source-change detection.
+Task hooks are never imported during validation. Config tooling imports without
+ROS or the native simulation extension. Missing assets/hooks remain explicit;
+`validate --strict` rejects them for every pack kind. Planning milestone numbers
+are diagnostic metadata and do not select runtime behavior.
+
+Commands: `PYTHONPATH=python/src python3 -m robotics_platform.packs validate
+proposals/step1/packs/scenarios/talos_uwrt --dump build/step2-resolved.json`,
+`types --json`, and `schema robot` on the same module. The installed-component
+Python suite passed all 110 cases (the initially skipped C++ comparison was run
+separately with `RP_REFERENCE_RUNNER=build/release/robotics-sim`). Ruff and strict
+mypy passed for the changed Python code. This remains below the real ROS hold gate.
+
 The user replaced human approval with joint Codex/Claude Code execution. Claude
 uses `claude-opus-5-5` with high effort. It may delegate bounded mechanical work
 to `claude-sonnet-5-5`; the exact model was checked successfully. Codex and Opus

@@ -10,7 +10,8 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE.md"}
 classifiers = ["Private :: Do Not Upload", "Programming Language :: Python :: 3"]
-dependencies = ["numpy>=1.23,<3"]
+dependencies = ["numpy>=1.23,<3", "ruamel.yaml>=0.18,<0.20",
+                "jsonschema>=4.21,<5", "referencing>=0.34,<1"]
 
 [project.optional-dependencies]
 dev = ["build>=1.2,<2", "mypy>=1.11,<2", "ruff>=0.9,<1",
@@ -42,3 +43,7 @@ select = ["E4", "E7", "E9", "F", "I"]
 [tool.mypy]
 python_version = "3.10"
 strict = true
+
+[[tool.mypy.overrides]]
+module = ["ruamel.*", "jsonschema.*"]
+ignore_missing_imports = true

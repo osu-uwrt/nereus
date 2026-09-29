@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "robot pack",
+  "description": "Authoritative loader definition: published JSON Schemas and the type registry are generated from this corpus. Robot data only: no ROS names, tasks or code. Frame/asset/mechanism id references and thruster/scale lengths are semantic checks.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "robot"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/name"
+    },
+    "description": {
+      "type": "string"
+    },
+    "provenance": {
+      "$ref": "common.schema.json#/$defs/provenance"
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/asset"
+      }
+    },
+    "reference_frame": {
+      "$ref": "common.schema.json#/$defs/name",
+      "description": "Frame reported as the vehicle pose to tasks, bridge and placement."
+    },
+    "body": {
+      "type": "object",
+      "properties": {},
+      "required": [
+        "type",
+        "parameters"
+      ],
+      "additionalProperties": false,
+      "x-typed": "body"
+    },
+    "frames": {
+      "$ref": "common.schema.json#/$defs/frames"
+    },
+    "collision_boxes": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/collision_box"
+      },
+      "description": "Robot contact proxies expressed in the frames root (COM)."
+    },
+    "thrusters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/thruster"
+      },
+      "minItems": 1
+    },
+    "safety": {
+      "$ref": "#/$defs/safety"
+    },
+    "sensors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sensor"
+      }
+    },
+    "mechanisms": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/mechanism"
+      }
+    },
+    "scoring_envelope": {
+      "$ref": "#/$defs/scoring_envelope"
+    },
+    "pending": {
+      "$ref": "common.schema.json#/$defs/pending"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Free non-executable annotations preserved verbatim by load/save; never interpreted."
+    }
+  },
+  "required": [
+    "schema_version",
+    "kind",
+    "id",
+    "assets",
+    "reference_frame",
+    "body",
+    "frames",
+    "collision_boxes",
+    "thrusters",
+    "safety",
+    "sensors",
+    "mechanisms",
+    "scoring_envelope"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "thruster": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "position_m": {
+          "$ref": "common.schema.json#/$defs/vector3",
+          "description": "COM-relative."
+        },
+        "direction": {
+          "$ref": "common.schema.json#/$defs/vector3",
+          "description": "Unit thrust axis, body frame (norm is a semantic check)."
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "position_m",
+        "direction",
+        "parameters"
+      ],
+      "additionalProperties": false,
+      "description": "List order is the native actuator index; ROS array order is bridge-owned.",
+      "x-typed": "thruster"
+    },
+    "safety": {
+      "type": "object",
+      "properties": {
+        "initially_killed": {
+          "type": "boolean"
+        },
+        "kill_stops_thrusters": {
+          "type": "boolean"
+        },
+        "commands_while_killed": {
+          "enum": [
+            "zero_force",
+            "rejected"
+          ]
+        },
+        "kill_disarms_mechanisms": {
+          "type": "boolean"
+        },
+        "arming": {
+          "type": "object",
+          "properties": {
+            "initially_armed": {
+              "type": "boolean"
+            },
+            "arm_rejected_while_killed": {
+              "type": "boolean"
+            },
+            "applies_to": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "initially_armed",
+            "arm_rejected_while_killed",
+            "applies_to"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "initially_killed",
+        "kill_stops_thrusters",
+        "commands_while_killed",
+        "kill_disarms_mechanisms",
+        "arming"
+      ],
+      "additionalProperties": false,
+      "description": "Robot-owned kill/arming semantics; transports only map commands onto them."
+    },
+    "sensor": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "frame": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Reporting frame (robot frame or world)."
+        },
+        "mount_frame": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "period_ns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "latency_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "capacity": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "overflow": {
+          "enum": [
+            "fail",
+            "drop_oldest"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "frame",
+        "mount_frame",
+        "period_ns",
+        "parameters"
+      ],
+      "additionalProperties": false,
+      "description": "Active sensor instance; parameters are validated by the per-type definition selected by type.",
+      "x-typed": "sensor"
+    },
+    "mechanism": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "frame": {
+          "$ref": "common.schema.json#/$defs/name"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "frame",
+        "parameters"
+      ],
+      "additionalProperties": false,
+      "x-typed": "mechanism"
+    },
+    "scoring_envelope": {
+      "type": "object",
+      "properties": {
+        "collision_boxes": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/name"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "frame": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "position_m": {
+                "$ref": "common.schema.json#/$defs/vector3"
+              }
+            },
+            "required": [
+              "id",
+              "frame",
+              "position_m"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "collision_boxes",
+        "points"
+      ],
+      "additionalProperties": false,
+      "description": "Vertices tasks use for pass-through/breach tests: all 8 corners of each listed collision box plus points."
+    }
+  }
+}
