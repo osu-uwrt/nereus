@@ -291,9 +291,18 @@ class App {
     // Simulator only (truth is the pose source): the localization estimate at its display time, drawn as a
     // translucent robot ghost; the control gizmo and Follow are anchored together on it or on the truth robot.
     glm::mat4 estimateBody_{1};
-    bool haveEstimate_ = false, robotGhost_ = false, anchorEstimate_ = false;
+    bool haveEstimate_ = false, robotGhost_ = false, gizmoOnEstimate_ = true, followEstimate_ = false;
+    // Follow on the estimate: truth * low-passed estimate error. The error is mostly EKF jitter frame to frame
+    // but drifts slowly, so smoothing it steadies the camera without lagging the robot's own motion.
+    glm::vec3 errorShift_{0};
+    glm::quat errorTurn_{1, 0, 0, 0};
+    bool haveError_ = false;
+    Clock::time_point errorTime_{};
+    void smoothEstimateError();
     glm::mat4 followBody() const {
-        return anchorEstimate_ && haveEstimate_ ? estimateBody_ : body_;
+        return followEstimate_ && haveEstimate_ && haveError_
+                   ? glm::translate(glm::mat4(1), errorShift_) * glm::mat4_cast(errorTurn_) * body_
+                   : body_;
     }
     ImVec2 mapPan_{0, 0};
     TfTree tfTree_;
@@ -357,7 +366,8 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
         opt_.truthDelay >= 0 ? opt_.truthDelay : lookup(config_, {"pose", "truth_delay_s"}).as<double>(.02),
         opt_.otherDelay >= 0 ? opt_.otherDelay : lookup(config_, {"pose", "other_delay_s"}).as<double>(.06));
     robotGhost_ = lookup(config_, {"pose", "robot_ghost"}).as<bool>(false);
-    anchorEstimate_ = lookup(config_, {"pose", "anchor"}).as<std::string>("estimate") == "estimate";
+    gizmoOnEstimate_ = lookup(config_, {"pose", "gizmo_anchor"}).as<std::string>("estimate") == "estimate";
+    followEstimate_ = lookup(config_, {"pose", "follow_anchor"}).as<std::string>("truth") == "estimate";
     ros_->setDetectionMode(parseDetectionMode(
         !opt_.detectionPlacement.empty() ? opt_.detectionPlacement
                                          : lookup(config_, {"detections", "placement"}).as<std::string>("pose_source")));
@@ -672,6 +682,7 @@ void App::updatePose() {
     haveEstimate_ = ros_->truthFromEstimate(truthFromEstimate);
     if (haveEstimate_)
         estimateBody_ = glm::inverse(truthFromEstimate) * body_;
+    smoothEstimateError();
     if (updated) {
         if (first) {
             const auto p = presetFor(focusName_);
@@ -735,6 +746,31 @@ void App::step(double t) {
     ros_->captureMpc(showMpc_ && !demoMode_);
     thrusters_.advance(clockSeconds());
     (void)t;
+}
+
+void App::smoothEstimateError() {
+    const auto now = Clock::now();
+    if (!haveEstimate_) {
+        haveError_ = false;
+        return;
+    }
+    // World-frame error: estimate = error * truth.
+    const glm::mat4 error = estimateBody_ * glm::inverse(body_);
+    const glm::vec3 shift(error[3]);
+    const glm::quat turn = glm::normalize(glm::quat_cast(glm::mat3(error)));
+    const double dt = std::chrono::duration<double>(now - errorTime_).count();
+    errorTime_ = now;
+    // Take large changes (reset, placement, re-anchoring) at once; filter the rest with a 0.5 s time constant.
+    if (!haveError_ || dt > 1 || glm::distance(shift, errorShift_) > .5f ||
+        std::abs(glm::dot(turn, errorTurn_)) < std::cos(glm::radians(15.f) / 2)) {
+        errorShift_ = shift;
+        errorTurn_ = turn;
+        haveError_ = true;
+        return;
+    }
+    const float alpha = float(1 - std::exp(-dt / .5));
+    errorShift_ += (shift - errorShift_) * alpha;
+    errorTurn_ = glm::normalize(glm::slerp(errorTurn_, glm::dot(turn, errorTurn_) < 0 ? -turn : turn, alpha));
 }
 
 bool App::courseFromMapping() const {
@@ -1365,14 +1401,18 @@ void App::toolbarPoolViewer() {
             ImGui::Checkbox("Robot ghost", &robotGhost_);
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Draw the robot translucent at the localization estimate (TF base_link).");
-            int anchor = anchorEstimate_ ? 1 : 0;
+            int gizmo = gizmoOnEstimate_ ? 1 : 0, follow = followEstimate_ ? 1 : 0;
             ImGui::SetNextItemWidth(170);
-            if (ImGui::Combo("Anchor", &anchor, "Truth (sim)\0Estimate (TF)\0"))
-                anchorEstimate_ = anchor == 1;
+            if (ImGui::Combo("Control gizmo", &gizmo, "Truth (sim)\0Estimate (TF)\0"))
+                gizmoOnEstimate_ = gizmo == 1;
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Robot the control gizmo and the Follow camera centre on. Commands always go to\n"
-                                  "the controller in its (estimate) frame; on Truth they are shown re-rooted at the\n"
-                                  "sim robot.");
+                ImGui::SetTooltip("Where the drag axes and rings are drawn. Commands always go to the controller in its\n"
+                                  "(estimate) frame; on Truth they are shown re-rooted at the sim robot.");
+            ImGui::SetNextItemWidth(170);
+            if (ImGui::Combo("Follow", &follow, "Truth (sim)\0Estimate (TF)\0"))
+                followEstimate_ = follow == 1;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Robot the Follow camera tracks (the estimate with its jitter smoothed).");
         }
         ImGui::Checkbox("Surface reflections", &observer_.reflections);
         ImGui::Checkbox("Frame stats (F3)", &showProfile_);
@@ -1705,7 +1745,7 @@ void App::drawInterface(double time, float dt) {
                                bool(glfwGetWindowAttrib(window_->handle(), GLFW_FOCUSED))};
     // Commands live in the estimate frame; anchored on the truth robot, draw them re-rooted there (offset
     // sampled at one time for both poses, see RosSide::truthFromEstimate).
-    if (!anchorEstimate_ && haveEstimate_)
+    if (!gizmoOnEstimate_ && haveEstimate_)
         panelView.displayFromCommand = body_ * glm::inverse(estimateBody_);
     const bool dragging = composition_ && mode_ == 0 && composition_->input(panelView);
     bool unused = false;

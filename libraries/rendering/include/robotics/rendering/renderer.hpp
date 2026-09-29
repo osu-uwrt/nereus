@@ -26,7 +26,7 @@ struct ImageCapture {
 // current on the owning thread, and destroys Renderer before the context.
 // Does not create a window, read a clock, or own simulation/transport state.
 // Draw resets relevant GL state, then leaves state changed and framebuffer zero bound.
-// Meshes must remain immutable while shared. Unused GPU assets are released each draw.
+// Meshes must remain immutable while shared. Unused GPU assets are released each full (non-preview) draw.
 // Diffuse textures are 8-bit PNG files (at most 16384 pixels per side and 256 MiB),
 // uploaded like the original viewer: rows flipped, sRGB internal format, trilinear
 // mipmaps, repeat wrapping, raw stored values (no gamma chunk conversion), and a

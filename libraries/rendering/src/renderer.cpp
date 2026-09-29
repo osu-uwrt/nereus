@@ -1046,12 +1046,15 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
         r.poolToMap = matrix(m);
         r.mapToPool = glm::inverse(r.poolToMap);
     }
-    for (auto it = r.cache.begin(); it != r.cache.end();) {
-        if (!it->second.used)
-            it = r.cache.erase(it);
-        else
-            ++it;
-    }
+    // Release meshes no scene uses any more, but only on full draws: a preview (e.g. a camera card that
+    // omits observer-only content) must not evict the observer's meshes, or they re-upload every frame.
+    if (!a.preview)
+        for (auto it = r.cache.begin(); it != r.cache.end();) {
+            if (!it->second.used)
+                it = r.cache.erase(it);
+            else
+                ++it;
+        }
     if (a.preview) {
         r.f.swap(r.preview);
         guard.swapped = true;

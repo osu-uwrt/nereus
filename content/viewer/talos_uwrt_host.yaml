@@ -35,9 +35,10 @@ pose:
   other_delay_s: 0.06
   # Simulator only (ignored on a real robot, where the estimate is the only pose): defaults of the Pool Viewer
   # menu's "Localization estimate" section. robot_ghost: translucent robot at the estimate (TF base_link);
-  # anchor: truth | estimate, the robot the control gizmo and the Follow camera centre on.
+  # gizmo_anchor / follow_anchor: truth | estimate, the robot the control gizmo / Follow camera centre on.
   robot_ghost: false
-  anchor: estimate
+  gizmo_anchor: estimate
+  follow_anchor: truth
 
 # Detector markers (topics.detections). Each observation is placed once and then stays fixed in the world.
 #   enabled:   overlay on at start (CLI: --detections / --no-detections).
