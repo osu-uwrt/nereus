@@ -1,0 +1,136 @@
+# Task include file (kind task): NewTableTree object sorting. Task-local frame = original mapping
+# `table` (table top plane, +Z up); the scenario places it. Physics: prop_world.py (PyBullet CPU
+# rigid bodies, opposing-jaw finite-force grasp) per claw_world.py; source config:
+# talos_tasks.yaml claw.props / table_collision and mapping.yaml table children.
+# Events emitted by the prop world (task id table); scoring is stateful and stays with the pack hook.
+schema_version: 1
+kind: task
+id: table
+description: Table with four grabbable props and two baskets (helmet, warning); grasp, carry and drop.
+
+# Original mapping frames (parent table_frame, yaw in source degrees). Basket frames are mesh origins.
+frames:
+- {id: helmet_basket, position_m: [0.40168, 0, 0.021457], orientation_wxyz: [1, 0, 0, 0]}
+- {id: warning_basket, position_m: [-0.40168, 0, 0.021457], orientation_wxyz: [1, 0, 0, 0]}
+- {id: pill, position_m: [-0.082859, 0.192053, 0.05], orientation_wxyz: [0, 0, 0, 1]}   # yaw 180 deg
+- {id: bandage, position_m: [-0.068547, -0.133469, 0.03], orientation_wxyz: [0, 0, 0, 1]}   # yaw 180 deg
+- {id: nut_and_bolt, position_m: [0.15, 0.15, 0.05], orientation_wxyz: [1, 0, 0, 0]}
+- {id: plug, position_m: [0.25, -0.25, 0.03], orientation_wxyz: [1, 0, 0, 0]}
+
+props:
+- id: table_structure
+  type: static_body
+  parameters:
+    # Solid backing shared by vehicle and prop worlds (talos_tasks.yaml table_collision); the
+    # triangle meshes supply legs, rims and basket walls.
+    collision_boxes:
+    - {id: slab, size_m: [0.635, 0.635, 0.01905], center_m: [0, 0, -0.009525], orientation_wxyz: [1, 0, 0, 0]}
+    collision_meshes:
+    - {id: table, asset: table_mesh, frame: task, lateral_friction: 0.7, restitution: 0.05}
+    - {id: helmet_basket, asset: basket_helmet_mesh, frame: helmet_basket, lateral_friction: 0.7, restitution: 0.05}
+    - {id: warning_basket, asset: basket_warning_mesh, frame: warning_basket, lateral_friction: 0.7, restitution: 0.05}
+- id: pill
+  type: rigid_body
+  parameters:
+    frame: pill
+    collision_asset: pill_mesh
+    mass_kg: 0.12
+    volume_m3: 9e-05
+    expected_region: helmet_basket
+    lateral_friction: 0.8
+    spinning_friction: 0.003
+    rolling_friction: 0.001
+    restitution: 0.05
+    linear_damping: 0.02
+    angular_damping: 0.1
+    collision_margin_m: 0.0005
+    ccd_swept_sphere_radius_m: 0.008
+    contact_processing_threshold_m: 0.0
+- id: bandage
+  type: rigid_body
+  parameters:
+    frame: bandage
+    collision_asset: bandage_mesh
+    mass_kg: 0.1
+    volume_m3: 7e-05
+    expected_region: helmet_basket
+    lateral_friction: 0.8
+    spinning_friction: 0.003
+    rolling_friction: 0.001
+    restitution: 0.05
+    linear_damping: 0.02
+    angular_damping: 0.1
+    collision_margin_m: 0.0005
+    ccd_swept_sphere_radius_m: 0.008
+    contact_processing_threshold_m: 0.0
+- id: nut_and_bolt
+  type: rigid_body
+  parameters:
+    frame: nut_and_bolt
+    collision_asset: nut_and_bolt_mesh
+    mass_kg: 0.12
+    volume_m3: 9e-05
+    expected_region: warning_basket
+    lateral_friction: 0.8
+    spinning_friction: 0.003
+    rolling_friction: 0.001
+    restitution: 0.05
+    linear_damping: 0.02
+    angular_damping: 0.1
+    collision_margin_m: 0.0005
+    ccd_swept_sphere_radius_m: 0.008
+    contact_processing_threshold_m: 0.0
+- id: plug
+  type: rigid_body
+  parameters:
+    frame: plug
+    collision_asset: plug_mesh
+    mass_kg: 0.1
+    volume_m3: 7e-05
+    expected_region: warning_basket
+    lateral_friction: 0.8
+    spinning_friction: 0.003
+    rolling_friction: 0.001
+    restitution: 0.05
+    linear_damping: 0.02
+    angular_damping: 0.1
+    collision_margin_m: 0.0005
+    ccd_swept_sphere_radius_m: 0.008
+    contact_processing_threshold_m: 0.0
+- id: world
+  type: contact_world
+  parameters:
+    gravity_m_s2: 9.81
+    solver_iterations: 60
+    rest_speed_m_s: 0.04
+    rest_time_s: 0.5
+    angular_drag_n_m_s_per_rad: 0.005
+    drag_coefficient: 0.5
+    claw_mechanism_type: claw
+
+regions:
+# Basket containment (claw_world.py basket_destination): |local xy| + prop extent < [0.087, 0.130],
+# -0.001 < local z < 0.077 in the basket frame, and contact with the basket or a stacked prop inside.
+- id: helmet_basket
+  type: box
+  parameters: {frame: helmet_basket, half_extents_xy_m: [0.087, 0.13], z_range_m: [-0.001, 0.077], support_mesh: helmet_basket}
+- id: warning_basket
+  type: box
+  parameters: {frame: warning_basket, half_extents_xy_m: [0.087, 0.13], z_range_m: [-0.001, 0.077], support_mesh: warning_basket}
+
+events:
+- id: grasp
+  type: attach
+  parameters: {mechanism_type: claw, emits: [prop_id, mechanism_id]}
+- id: release
+  type: detach
+  parameters: {mechanism_type: claw, emits: [prop_id, mechanism_id, reason]}
+- id: basket_drop
+  type: drop_into
+  parameters: {outcome: in_region, regions: [helmet_basket, warning_basket], emits: [prop_id, basket, expected_basket]}
+- id: object_dropped
+  type: drop_into
+  parameters: {outcome: elsewhere, regions: [helmet_basket, warning_basket], surfaces: {floor: floor, support: table}, emits: [prop_id]}
+
+# Object-drop 200/object, basket 700 correct / 500 other, basket-count turns: pack hook.
+scoring: []

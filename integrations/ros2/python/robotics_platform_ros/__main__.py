@@ -20,8 +20,13 @@ from robotics_platform.packs import PackError, resolve_scenario
 from .core import BridgeCore, BridgeError
 from .mapping import MappingError
 
-GAP_NOTE = ("This bridge executes no task scoring or mechanisms. Selected cameras load their "
-            "referenced scene assets; missing hooks and unrelated assets remain unresolved.")
+GAP_NOTE = ("Mechanisms, payloads and selected task packs run in the session; pending task "
+            "entries are not executed. Selected cameras load their referenced scene assets.")
+
+
+def _plain(value: Any) -> Any:
+    """Detach read-only mapping/tuple views returned by the task runtime."""
+    return dict(value) if hasattr(value, "items") else list(value)
 
 
 def _write(path: Path, document: dict[str, Any]) -> None:
@@ -60,7 +65,7 @@ def execution_record(resolved: Any, core: BridgeCore, sensors: list[str],
         "estimator_alignment": config.get("placement", {}).get("estimator_alignment"),
         "unresolved": {"note": GAP_NOTE, "items": resolved.unresolved},
         "not_executed_config": {
-            "scenario.run": "task scoring/run control is not executed by this bridge",
+            "scenario.run.options": "passed to task hooks; operator run commands are not bridged",
             "tf.lookup": "external owners; uses latest live TF, not stamp-matched transforms",
             "services[].required_from_step": "planning metadata; never an execution switch",
         },
@@ -151,6 +156,12 @@ def main(argv: list[str] | None = None) -> int:
                 reason = f"failed: {type(error).__name__}: {error}"
         snapshot = pack.runtime.observe()
         core = preflight if node is None else node.core
+        tasks = core.session.tasks
+        _write(arguments.output / "tasks.json", {
+            "format": "robotics_platform_ros.tasks", "version": 1,
+            "scores": {} if tasks is None else dict(tasks.snapshot()["scores"]),
+            "events": json.loads(json.dumps(core.task_events, default=_plain)),
+        })
         _write(arguments.output / "summary.json", {
             "format": "robotics_platform_ros.summary", "version": 1, "stop": reason,
             "ticks": snapshot.tick, "elapsed_ns": snapshot.elapsed_ns,

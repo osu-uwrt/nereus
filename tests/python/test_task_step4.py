@@ -47,9 +47,6 @@ def plain(value):
 
 def load_resolved():
     resolved = resolve_scenario(SCENARIO)
-    resolved.task_definitions.append({"id": "table", "frames": [], "props": [], "regions": [],
-                                      "events": [], "scoring": []})
-    resolved.scenario["task_placements"].append(dict(TABLE))
     return resolved
 
 
@@ -251,7 +248,7 @@ class LightsAndBinsTests(Base):
         course.gate()   # repair: fire crates are bin_vinyl2 / bin_vinyl3
         step = self.drop(course, 1, "bin_vinyl2")
         self.assertTrue(step.stop)
-        landed = course.kinds("drop_into")[-1]
+        landed = course.kinds("payload_landing")[-1]
         self.assertEqual((landed["id"], landed["region"], landed["data"]["outcome"],
                           landed["data"]["region_class"]), ("bin_vinyl2_inside", "bin_vinyl2",
                                                             "inside", "fire"))
@@ -289,10 +286,10 @@ class LightsAndBinsTests(Base):
         course = Course(self.resolved, ["gate", "bins"])
         course.gate()
         self.drop(course, 1, "bin_vinyl2", kind="launcher")   # lands inside, scores nothing (T15)
-        self.assertEqual(course.kinds("drop_into")[-1]["data"]["mechanism_type"], "launcher")
+        self.assertEqual(course.kinds("payload_landing")[-1]["data"]["mechanism_type"], "launcher")
         self.assertNotIn("bins", course.scores)
         step = self.drop(course, 2, "bin_vinyl2", offset=(0.16, 0.0))   # rim: |x| + r > inner
-        landed = course.kinds("drop_into")[-1]
+        landed = course.kinds("payload_landing")[-1]
         self.assertEqual((landed["id"], landed["data"]["detail"]), ("bin_vinyl2_blocked", "rim"))
         self.assertTrue(step.stop)
         self.assertNotIn("bins", course.scores)
@@ -307,7 +304,7 @@ class LightsAndBinsTests(Base):
         floor = outside.runtime.snapshot()["environment"]["floor_z_m"]
         self.assertAlmostEqual(step.position_world[2], floor + 0.0415)
         np.testing.assert_array_equal(step.velocity_world, [0, 0, 0])
-        self.assertEqual(outside.kinds("drop_into"), [])
+        self.assertEqual(outside.kinds("payload_landing"), [])
         # A stopped payload is inert; further steps report the stop without events.
         again = outside.runtime.step_projectile(
             outside.advance(), 1, [0, 0, 0], [0, 0, -1], [0, 0, -1], [0, 0, 0])
@@ -469,12 +466,12 @@ class SurfaceTests(Base):
                 course = Course(self.resolved, ["gate", "surface", "table"])
                 course.gate()
                 for index in range(count):
-                    course.submit(basket(f"p{index}", "helmet", "helmet"))
+                    course.submit(basket(f"p{index}", "helmet_basket", "helmet_basket"))
                 self.facing(course, icon, dwell_ticks=10)
                 self.assertEqual(course.scores["facing"], value)
         rescue = Course(self.resolved, ["gate", "surface", "table"])
         rescue.gate(y=0.75)
-        rescue.submit(basket("p0", "warning", "warning"))
+        rescue.submit(basket("p0", "warning_basket", "warning_basket"))
         self.facing(rescue, "buoy", dwell_ticks=10)
         self.assertEqual(rescue.scores["facing"], 700)
 
@@ -531,7 +528,7 @@ class TurnTests(Base):
         course = Course(self.resolved, ["gate", "surface", "table"])
         course.gate()
         for index in range(count):
-            course.submit(basket(f"p{index}", "helmet", "helmet"))
+            course.submit(basket(f"p{index}", "helmet_basket", "helmet_basket"))
         return course
 
     def test_full_turns_match_basket_count(self):
@@ -553,7 +550,7 @@ class TurnTests(Base):
         self.spin(small, 15, step_deg=15)
         self.assertEqual(small.kinds("rotation_judged"), [])
         ungated = Course(self.resolved, ["gate", "surface", "table"])
-        ungated.submit(basket("p0", "helmet", "helmet"))
+        ungated.submit(basket("p0", "helmet_basket", "helmet_basket"))
         self.spin(ungated, 360)
         self.assertNotIn("basket_count", ungated.scores)
 
@@ -569,7 +566,7 @@ class TurnTests(Base):
         for _ in range(6):
             heading += math.radians(30)
             changed.observe(_pose(pos, quaternion(heading)))
-        changed.submit(basket("late", "warning", "warning"))
+        changed.submit(basket("late", "warning_basket", "warning_basket"))
         for _ in range(3):
             changed.observe(_pose(pos, quaternion(heading)))
         for _ in range(10):
@@ -623,20 +620,20 @@ class TableRowTests(Base):
         course.submit(grasp("plug"))
         course.submit(release("plug"))
         self.assertEqual(course.scores["objects_drop"], 400)
-        course.submit(basket("pill", "helmet", "helmet"))
+        course.submit(basket("pill", "helmet_basket", "helmet_basket"))
         self.assertEqual(course.scores["baskets"], 700)
-        course.submit(basket("plug", "helmet", "warning"))
+        course.submit(basket("plug", "helmet_basket", "warning_basket"))
         self.assertEqual(course.scores["baskets"], 700 + 500)
-        course.submit(basket("plug", "warning", "warning"))          # re-sorted: prop keeps its best
+        course.submit(basket("plug", "warning_basket", "warning_basket"))          # re-sorted: prop keeps its best
         self.assertEqual(course.scores["baskets"], 700 + 700)
-        course.submit(basket("bandage", "table", "helmet"))          # not a basket
+        course.submit(basket("bandage", "table", "helmet_basket"))          # not a basket
         self.assertEqual(course.scores["baskets"], 1400)
 
     def test_table_rows_need_the_gate_and_reject_bad_events(self):
         course = Course(self.resolved, ["gate", "table"])
         course.submit(grasp("pill"))
         course.submit(release("pill"))
-        course.submit(basket("pill", "helmet", "helmet"))
+        course.submit(basket("pill", "helmet_basket", "helmet_basket"))
         self.assertEqual(course.scores, {})
         course.gate()
         course.submit(release("pill"))                               # grasped before the gate
@@ -737,7 +734,7 @@ class OriginalComparisonTests(Base):
                 self.tick(course, ledger, judge, _pose(base, quaternion(yaw)))
                 for k in range(count):
                     ledger.object_event(f"p{k}", "success", "helmet", "helmet", role)
-                    course.submit(basket(f"p{k}", "helmet", "helmet"))
+                    course.submit(basket(f"p{k}", "helmet_basket", "helmet_basket"))
                     judge.update(matrix(_pose(base, quaternion(yaw))), 0.0)
                     course.runtime.observe(course.t, _pose(base, quaternion(yaw)))
                 for k in range(1, 26):
@@ -783,12 +780,12 @@ class OriginalComparisonTests(Base):
             [("gate", "rescue"), ("drop", 1, "bin_vinyl1"), ("drop", 2, "bin_vinyl4"),
              ("drop", 2, "bin_vinyl4")],
             [("gate", "repair"), ("grasp", "pill"), ("release", "pill"), ("grasp", "pill"),
-             ("basket", "pill", "helmet", "helmet"), ("grasp", "plug"),
+             ("basket", "pill", "helmet_basket", "helmet_basket"), ("grasp", "plug"),
              ("release", "plug", "slipped"), ("release", "plug"),
-             ("basket", "plug", "helmet", "warning"), ("basket", "plug", "warning", "warning"),
-             ("grasp", "plug"), ("basket", "pill", "warning", "helmet")],
+             ("basket", "plug", "helmet_basket", "warning_basket"), ("basket", "plug", "warning_basket", "warning_basket"),
+             ("grasp", "plug"), ("basket", "pill", "warning_basket", "helmet_basket")],
             [("grasp", "pill"), ("gate", "repair"), ("release", "pill"),
-             ("basket", "pill", "helmet", "helmet"), ("release", "nut_and_bolt")],
+             ("basket", "pill", "helmet_basket", "helmet_basket"), ("release", "nut_and_bolt")],
         ]
         classes = {"bin_vinyl1": "blood", "bin_vinyl2": "fire", "bin_vinyl3": "fire",
                    "bin_vinyl4": "blood"}
@@ -820,8 +817,9 @@ class OriginalComparisonTests(Base):
                                             "", "", role)
                         hook.submit(release(step[1], **({"reason": step[2]} if len(step) > 2 else {})))
                     else:
-                        ledger.object_event(step[1], "success" if step[3] == step[2] else "wrong_target",
-                                            step[2], step[3], role)
+                        short = [name.removesuffix("_basket") for name in step[2:4]]
+                        ledger.object_event(step[1], "success" if short[0] == short[1]
+                                            else "wrong_target", short[0], short[1], role)
                         hook.submit(basket(step[1], step[2], step[3]))
                     self.compare(hook, ledger)
 
@@ -833,7 +831,7 @@ class OriginalComparisonTests(Base):
              "region": crate, "time_ns": course.t,
              "data": {"projectile_id": ident, "mechanism_type": "dropper"}}])
         runtime._evaluate([
-            {"id": f"{crate}_inside", "type": "drop_into", "task": "bins", "region": crate,
+            {"id": f"{crate}_inside", "type": "payload_landing", "task": "bins", "region": crate,
              "time_ns": course.t, "data": {"projectile_id": ident, "mechanism_type": "dropper",
                                            "outcome": "inside", "detail": "floor",
                                            "region_class": crate_class}}])

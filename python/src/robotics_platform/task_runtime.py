@@ -101,7 +101,7 @@ class _Projectile:
 
 
 _SURFACE_FACTS = ("surface_reached", "surface_lost", "facing_reached", "facing_lost", "breach")
-_EVENT_TYPES = ("pass_through", "hit", "drop_into", "activate", "rotation_judged", "attach",
+_EVENT_TYPES = ("pass_through", "hit", "payload_landing", "drop_into", "activate", "rotation_judged", "attach",
                 "detach", *_SURFACE_FACTS)
 _MAX_PAYLOAD_AGE_S = 30.0
 
@@ -127,7 +127,7 @@ class TaskRuntime:
     axis, velocity) -> ProjectileStep(events, stop, position_world, velocity_world). Crate walls,
     rim/floor landings, panel blocks and pool floor/wall/30 s misses are judged for every
     payload kind; the owner applies stop/position/velocity when set. Events: payload_released,
-    hit (panels), drop_into (crate landing: outcome inside | blocked) and miss (pool_floor |
+    hit (panels), payload_landing (crate landing: outcome inside | blocked) and miss (pool_floor |
     pool_wall_or_timeout, once per payload, emitted to each task that registered its release).
     A payload that already produced a panel or crate/miss result gets no further crate/miss
     events. observe_projectile() is the events-only view of the same step (velocity unknown).
@@ -195,6 +195,8 @@ class TaskRuntime:
                                  for name in parameters["facing"]["targets"]}
                     self._surfaces[key] = SurfaceTracker(
                         parameters, placed(parameters), envelope, surface, positions)
+                elif kind == "box":  # containment is judged by the rigid-body prop world
+                    continue
                 elif kind == "turn_zone":
                     self._turns[key] = TurnTracker(parameters, placed(parameters))
                 else:
@@ -273,6 +275,26 @@ class TaskRuntime:
             raise
         self._last_time = time_ns
         self._run["running"] = False
+        return result
+
+    def record(self, time_ns: int, events: Sequence[Mapping[str, Any]]
+               ) -> tuple[Mapping[str, Any], ...]:
+        """Score events produced by another physical owner (e.g. a prop contact world)."""
+        self._check_time(time_ns)
+        inputs = []
+        for event in events:
+            item = {"id": event["id"], "type": event["type"], "task": event["task"],
+                    "region": event.get("region") or "", "time_ns": event["time_ns"],
+                    "data": dict(event["data"])}
+            if item["task"] not in self._tasks or item["time_ns"] != time_ns:
+                raise ValueError("recorded events must belong to a selected task and this time")
+            inputs.append(item)
+        try:
+            result = self._evaluate(inputs)
+        except Exception:
+            self._failed = True
+            raise
+        self._last_time = time_ns
         return result
 
     def _check_time(self, time_ns: int) -> None:
@@ -394,7 +416,7 @@ class TaskRuntime:
                                         "release_distance_m": panel.release_distance(tip)}})
         for task, region in self._crates:
             if task not in tasks and any(
-                    b["type"] == "drop_into"
+                    b["type"] == "payload_landing"
                     and mechanism_type in b["parameters"]["projectile_mechanism_types"]
                     and (task, b["parameters"]["region"]) in self._crates
                     for b in self._tasks[task]["events"]):
@@ -482,10 +504,10 @@ class TaskRuntime:
             state.scored = True
             for binding in self._tasks[task]["events"]:
                 p = binding["parameters"]
-                if (binding["type"] == "drop_into" and p["region"] == region
+                if (binding["type"] == "payload_landing" and p["region"] == region
                         and mechanism in p["projectile_mechanism_types"]
                         and p["outcome"] == step.outcome):
-                    events.append({"id": binding["id"], "type": "drop_into", "task": task,
+                    events.append({"id": binding["id"], "type": "payload_landing", "task": task,
                                    "region": region, "time_ns": time_ns,
                                    "data": {"projectile_id": identifier,
                                             "mechanism_type": mechanism, "outcome": step.outcome,

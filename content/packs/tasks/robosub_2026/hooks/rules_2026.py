@@ -14,19 +14,19 @@ Event contract by task (platform-emitted unless noted):
   slalom    pass_through on regions slalom_front|middle|back (positive -> negative), data
             crossing_point_local (row frame; y sign = side) and depth_overlap (bool).
   bins      payload_released (mechanism dropper registers a shot, at most max_shots);
-            drop_into outcome inside|blocked with region = crate id, data region_class,
+            payload_landing outcome inside|blocked with region = crate id, data region_class,
             mechanism_type; activate on regions magnet_target1|2 (light latched);
             miss (ignored: a missed payload scores nothing).
   surface   surface_reached / surface_lost (0.5 s dwell inside the octagon), facing_reached
             {target} / facing_lost, breach (outside the octagon: scoring ends),
             rotation_judged {turns} (basket-count turn judge on region turn_zone).
-  table     supplied by the prop world through TaskRuntime.observe_events, all with
-            task "table":
+  table     supplied by the prop world (TaskRuntime.record / observe_events), task "table":
               {type attach, id grasp, data {prop_id, mechanism_id}}
-              {type detach, id release, data {prop_id, mechanism_id, reason?}}
-                  reason "released" (default) credits objects_drop; "slipped" does not.
-              {type drop_into, id basket_drop, region <basket id>,
+              {type detach, id release, data {prop_id, mechanism_id, reason}}
+                  reason "released" credits objects_drop; "slipped"/"reset" do not.
+              {type drop_into, id basket_drop, region <basket box region id>,
                data {prop_id, basket, expected_basket}}  prop settled in a basket.
+              (drop_into object_dropped, prop at rest outside the baskets, scores nothing.)
   A basket holds a prop from its basket_drop until the prop is grasped again.
 """
 
@@ -152,7 +152,7 @@ class _Ledger:
             if identifier not in self.shots and len(self.shots) < points["max_shots"]:
                 self.shots[identifier] = {"eligible": self.role is not None, "result": None,
                                           "target": "", "correct": False}
-        elif event["type"] == "drop_into" and data["outcome"] == "inside":
+        elif event["type"] == "payload_landing" and data["outcome"] == "inside":
             shot = self.shots.get(identifier)
             if self.role is None or shot is None or not shot["eligible"] or shot["result"]:
                 return

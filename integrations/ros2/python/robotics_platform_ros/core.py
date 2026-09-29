@@ -9,17 +9,21 @@ from __future__ import annotations
 
 import fnmatch
 import math
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from robotics_platform import _native as native
+from robotics_platform.mechanisms import CommandResult
 from robotics_platform.pack_runtime import PackRuntime
+from robotics_platform.session import Session
 
 from . import mapping
 from .mapping import (
     BOOLEAN,
+    INTEGER,
     MATRIX3,
     QUATERNION_WXYZ,
     SCALAR,
@@ -79,6 +83,10 @@ _COMMAND_ARGUMENTS: dict[str, dict[str, Spec]] = {
     "estimate:latest": dict(_POSE_ARGUMENTS),
 }
 _RESULT = {"accepted": BOOLEAN, "message": STRING}
+_MECHANISM_COMMAND = re.compile(r"^command:mechanisms\.([A-Za-z0-9_]+)\.(timed_move|fire|command)$")
+# Service actions without request arguments, and the session call each one makes.
+_SIMPLE_ACTIONS = {"command:mechanisms.reload_all", "command:tasks.reset",
+                   "command:scenario.reset", "command:robot.reset_to_start"}
 _ALIGNMENT_TRIGGERS = {"startup", "placement", "reset_to_start", "full_reset"}
 
 
@@ -154,13 +162,18 @@ class BridgeCore:
     """Validated bridge over one PackRuntime; the only object that advances it."""
 
     def __init__(self, resolved: Any, pack: PackRuntime, *, epoch_ns: int,
-                 lookup: Lookup | None = None, cameras: CameraBridge | None = None) -> None:
+                 lookup: Lookup | None = None, cameras: CameraBridge | None = None,
+                 session: Session | None = None) -> None:
         if resolved.bridge is None:
             raise BridgeError("scenario selects no bridge pack")
         self.config = resolved.bridge
         self.robot = resolved.robot
         self.pack = pack
         self.runtime = pack.runtime
+        self.session = session if session is not None else Session(resolved, pack)
+        self._mechanism_types = {item["id"]: item["type"]
+                                 for item in self.robot.get("mechanisms", [])}
+        self.task_events: list[Any] = []  # every task/scoring event, in simulation order
         self.frames = pack.frames
         self.lookup = lookup
         self.cameras = cameras
@@ -182,7 +195,6 @@ class BridgeCore:
         self.start_state = pack.initial
 
         safety = self.robot["safety"]
-        self.killed = bool(safety["initially_killed"])
         self.kill_stops_thrusters = bool(safety["kill_stops_thrusters"])
         self.commands_while_killed = safety["commands_while_killed"]
         self._thruster_index = self._thruster_permutation()
@@ -202,7 +214,33 @@ class BridgeCore:
         self._check_bindings()
         self.latest_estimate: dict[str, Any] | None = None
 
+    @property
+    def killed(self) -> bool:
+        return self.session.killed
+
     # ------------------------------------------------------------ construction
+
+    def _mechanism(self, endpoint: str, where: str) -> tuple[str, str]:
+        match = _MECHANISM_COMMAND.match(endpoint)
+        if match is None:
+            raise BridgeError(f"{where}: unsupported native endpoint {endpoint!r}")
+        identifier, operation = match.groups()
+        kind = self._mechanism_types.get(identifier)
+        expected = {"timed_move": ("claw",), "command": ("claw",),
+                    "fire": ("launcher", "dropper")}[operation]
+        if kind not in expected:
+            raise BridgeError(f"{where}: {identifier!r} is not a robot {'/'.join(expected)} "
+                              "mechanism")
+        return identifier, operation
+
+    def _mechanism_spec(self) -> dict[str, Any]:
+        spec: dict[str, Any] = {"sim": {"time": TIME}, "armed": BOOLEAN, "any_busy": BOOLEAN}
+        for identifier, kind in self._mechanism_types.items():
+            if kind in ("launcher", "dropper"):
+                spec[identifier] = {"state": STRING, "available": INTEGER}
+            elif kind == "claw":
+                spec[identifier] = {"state": STRING, "gap_m": SCALAR, "target_gap_m": SCALAR}
+        return spec
 
     def _stepped_period(self, rate_hz: float, where: str) -> int:
         period = _period_ns(rate_hz, where)
@@ -241,12 +279,20 @@ class BridgeCore:
                     continue  # CameraBridge compiled these mappings before construction.
                 cls = mapping.message_class(stream["message_type"])
                 if stream["direction"] == "subscribe":
-                    if endpoint not in _COMMAND_ARGUMENTS:
-                        raise BridgeError(f"{where}: unsupported native endpoint {endpoint!r}")
+                    if endpoint in _COMMAND_ARGUMENTS:
+                        arguments = _COMMAND_ARGUMENTS[endpoint]
+                    elif endpoint in _SIMPLE_ACTIONS - {"command:robot.reset_to_start"}:
+                        arguments = {}
+                    elif endpoint == "command:mechanisms.set_armed":
+                        arguments = {"armed": BOOLEAN}
+                    else:  # topic-form mechanism commands, as firmware/translators send them
+                        arguments = {"timed_move": {"signed_duration_s": SCALAR},
+                                     "command": {"open": BOOLEAN}, "fire": {}}[
+                                         self._mechanism(endpoint, where)[1]]
                     if endpoint == "command:thrusters.set_forces" and self._thruster_index is None:
                         raise BridgeError(f"{where}: thruster commands need a thrusters block")
                     self.readers[stream["id"]] = mapping.compile_reader(
-                        cls, stream["fields"], _COMMAND_ARGUMENTS[endpoint],
+                        cls, stream["fields"], arguments,
                         stream.get("accept_if"), where=where)
                     continue
                 if "image" in stream:
@@ -263,13 +309,17 @@ class BridgeCore:
                     sources: dict[str, Any] = {"sample": {"time": TIME},
                                                "reading": reading_spec(sensor)}
                     self._sensor_streams.setdefault(name, []).append(stream["id"])
-                elif endpoint in ("timer", "state:robot"):
-                    sources = dict(_ROBOT_STATE) if endpoint == "state:robot" else {
-                        "sim": {"time": TIME}}
+                elif endpoint in ("timer", "state:robot", "state:mechanisms"):
+                    sources = (dict(_ROBOT_STATE) if endpoint == "state:robot" else
+                               self._mechanism_spec() if endpoint == "state:mechanisms" else
+                               {"sim": {"time": TIME}})
                     period = self._stepped_period(stream["rate_hz"], where)
                     self._timed[stream["id"]] = _Timed(period, period)
                 elif endpoint == "event:robot.kill_changed":
                     sources = {"sim": {"time": TIME}, "killed": BOOLEAN}
+                    self._events.setdefault(endpoint, []).append(stream["id"])
+                elif endpoint == "event:mechanisms.command_result":
+                    sources = {"sim": {"time": TIME}, **_RESULT}
                     self._events.setdefault(endpoint, []).append(stream["id"])
                 else:
                     raise BridgeError(f"{where}: unsupported native endpoint {endpoint!r}")
@@ -278,8 +328,11 @@ class BridgeCore:
             except MappingError as error:
                 raise BridgeError(str(error)) from None
         for stream in self.config["streams"]:
-            if "reply_stream" in stream:
-                raise BridgeError(f"streams/{stream['id']}: reply streams are not executed")
+            reply = stream.get("reply_stream")
+            if reply is not None and (reply not in self.stream_config or self.stream_config[
+                    reply]["native"] != "event:mechanisms.command_result"):
+                raise BridgeError(f"streams/{stream['id']}: reply_stream must name an "
+                                  "event:mechanisms.command_result stream")
 
     def _compile_services(self) -> None:
         for service in self.config.get("services", []):
@@ -290,10 +343,15 @@ class BridgeCore:
                 if not options:
                     raise BridgeError(f"{where}: robot.place needs placement options")
                 arguments = _POSE_ARGUMENTS if options["pose_source"] == "request" else {}
-            elif action == "command:robot.reset_to_start":
+            elif action in _SIMPLE_ACTIONS:
                 arguments = {}
+            elif action == "command:mechanisms.set_armed":
+                arguments = {"armed": BOOLEAN}
             else:
-                raise BridgeError(f"{where}: unsupported native action {action!r}")
+                identifier, operation = self._mechanism(action, where)
+                if operation == "timed_move":
+                    raise BridgeError(f"{where}: timed_move is a topic command")
+                arguments = {"open": BOOLEAN} if operation == "command" else {}
             if not hasattr(self.runtime, "place"):
                 raise BridgeError(f"{where}: native Runtime.place is not available")
             if options.get("pose_source") == "estimate" and not self._has_estimate_stream():
@@ -399,11 +457,13 @@ class BridgeCore:
             require("kill.state_stream", state["id"],
                     state["native"] == "event:robot.kill_changed", "event:robot.kill_changed")
         reset = self.config.get("reset", {})
+        actions = {"robot_service": "command:robot.reset_to_start",
+                   "tasks_service": "command:tasks.reset",
+                   "full_service": "command:scenario.reset"}
         for key in reset:
-            require(f"reset.{key}", reset[key], key == "robot_service"
-                    and services[reset[key]]["action"] == "command:robot.reset_to_start",
-                    "the robot service with action command:robot.reset_to_start (task and full "
-                    "resets are not executed by this bridge)")
+            require(f"reset.{key}", reset[key], key in actions
+                    and services[reset[key]]["action"] == actions[key],
+                    f"a service with action {actions.get(key, '(unknown reset key)')}")
         placement = self.config.get("placement", {})
         for key, source in (("set_service", "request"), ("sync_service", "estimate")):
             if key in placement:
@@ -436,10 +496,10 @@ class BridgeCore:
     def ros_ns(self, native_ns: int) -> int:
         return self.epoch_ns + self._offset_ns + int(native_ns)
 
-    def _observe_generation(self, snapshot: Any) -> None:
+    def _observe_generation(self, snapshot: Any, *, coordinated: bool = False) -> None:
         if snapshot.generation == self._generation:
             return
-        if self.cameras is not None:
+        if self.cameras is not None and not coordinated:
             # Full reset will coordinate camera seeds with the native seed in step 4.
             # Reject an uncoordinated native reset rather than silently replay wrong noise.
             self.cameras.invalidate()
@@ -460,7 +520,9 @@ class BridgeCore:
     def step(self) -> tuple[list[int], list[Publication], list[Transform]]:
         """Advance exactly one tick; return clock stamps, publications and transforms in the
         order they must be sent (clock first)."""
-        snapshot = self.runtime.advance(1)
+        step = self.session.advance()
+        snapshot = step.snapshot
+        self.task_events.extend(step.task_events)
         self._observe_generation(snapshot)
         now = int(snapshot.elapsed_ns)
         self._last_ros_ns = self.ros_ns(now)
@@ -478,11 +540,15 @@ class BridgeCore:
                 values = {"sample": {"time": self.ros_ns(sample.header.acquired_ns)},
                           "reading": sample.value}
                 publications += [self._publish(stream, values) for stream in streams]
-        state = None
+        state = mechanisms = None
         for stream, timed in self._timed.items():
             if now >= timed.next_ns:
-                state = state or self._robot_state(snapshot)
-                publications.append(self._publish(stream, state))
+                if self.stream_config[stream]["native"] == "state:mechanisms":
+                    mechanisms = mechanisms or self._mechanism_values()
+                    publications.append(self._publish(stream, mechanisms))
+                else:
+                    state = state or self._robot_state(snapshot)
+                    publications.append(self._publish(stream, state))
                 timed.next_ns += timed.period_ns
         transforms = []
         for entry, timed in self._tf:
@@ -493,6 +559,19 @@ class BridgeCore:
                                             pose["position"], pose["orientation_wxyz"]))
                 timed.next_ns += timed.period_ns
         return clocks, publications, transforms
+
+    def _mechanism_values(self) -> dict[str, Any]:
+        state = self.session.mechanism_state()
+        values: dict[str, Any] = {"sim": {"time": self._last_ros_ns},
+                                  "armed": bool(state and state.armed),
+                                  "any_busy": bool(state and state.any_busy)}
+        if state is not None:
+            for key, release in state.releases.items():
+                values[key] = {"state": release.state, "available": release.available}
+            for key, claw in state.claws.items():
+                values[key] = {"state": claw.state, "gap_m": claw.gap_m,
+                               "target_gap_m": claw.target_gap_m}
+        return values
 
     def _publish(self, stream: str, values: Any) -> Publication:
         Counters.bump(self.counters.published, stream)
@@ -536,8 +615,20 @@ class BridgeCore:
             return []
         if endpoint == "command:robot.set_killed":
             return self.set_killed(arguments["killed"])
-        self.latest_estimate = arguments
-        return []
+        if endpoint == "estimate:latest":
+            self.latest_estimate = arguments
+            return []
+        if endpoint == "command:scenario.reset":
+            accepted, message = self.full_reset()
+            self._request_alignment("full_reset")
+            result = CommandResult(accepted, message)
+        else:
+            result = self._mechanism_action(endpoint, arguments)
+        reply = self.stream_config[stream].get("reply_stream")
+        if reply is None:
+            return []
+        return [self._publish(reply, {"sim": {"time": self._last_ros_ns},
+                                      "accepted": result.accepted, "message": result.message})]
 
     def _command(self, stream: str, forces: np.ndarray) -> None:
         assert self._thruster_index is not None
@@ -548,7 +639,7 @@ class BridgeCore:
         if not np.all(np.isfinite(forces)):
             Counters.bump(self.counters.rejected_commands, f"{stream}:nonfinite")
             return
-        if self.killed:
+        if self.session.killed:
             if self.commands_while_killed == "rejected":
                 Counters.bump(self.counters.rejected_commands, f"{stream}:killed")
                 return
@@ -560,12 +651,10 @@ class BridgeCore:
         if not np.all(np.isfinite(native_forces)):  # finite input can overflow when scaled
             Counters.bump(self.counters.rejected_commands, f"{stream}:nonfinite_scaled")
             return
-        self.runtime.command(native_forces)
+        self.session.command_thrusters(native_forces)
 
     def set_killed(self, killed: bool) -> list[Publication]:
-        self.killed = bool(killed)
-        if self.killed and self.kill_stops_thrusters:
-            self.runtime.stop_thrusters()
+        self.session.set_killed(bool(killed))
         values = {"sim": {"time": self._last_ros_ns}, "killed": self.killed}
         return [self._publish(stream, values)
                 for stream in self._events.get("event:robot.kill_changed", [])]
@@ -580,10 +669,18 @@ class BridgeCore:
         except MappingError as error:
             Counters.bump(self.counters.rejected_commands, f"{service}:malformed")
             return writer({"accepted": False, "message": str(error)})
-        if options["action"] == "command:robot.reset_to_start":
+        action = options["action"]
+        trigger = None
+        if action == "command:robot.reset_to_start":
             accepted, message = self._place_state(self.start_state, keep_velocity=False,
                                                   becomes_start=False)
             trigger = "reset_to_start"
+        elif action == "command:scenario.reset":
+            accepted, message = self.full_reset()
+            trigger = "full_reset"
+        elif action != "command:robot.place":
+            result = self._mechanism_action(action, arguments)
+            accepted, message = result.accepted, result.message
         elif options["pose_source"] == "estimate":
             if self.latest_estimate is None:
                 accepted, message = False, "no estimate received yet"
@@ -593,10 +690,37 @@ class BridgeCore:
         else:
             accepted, message = self.place_reference(arguments, options)
             trigger = "placement"
-        if accepted and (options["action"] == "command:robot.reset_to_start"
-                         or options.get("align_estimator", False)):
+        if accepted and trigger is not None and (
+                trigger in ("reset_to_start", "full_reset")
+                or options.get("align_estimator", False)):
             self._request_alignment(trigger)
         return writer({"accepted": accepted, "message": message})
+
+    def _mechanism_action(self, action: str, arguments: Mapping[str, Any]) -> Any:
+        if action == "command:mechanisms.set_armed":
+            return self.session.set_armed(arguments["armed"])
+        if action == "command:mechanisms.reload_all":
+            return self.session.reload_all()
+        if action == "command:tasks.reset":
+            return CommandResult(*self.session.reset_tasks())
+        identifier, operation = self._mechanism(action, "command")
+        if operation == "timed_move":
+            return self.session.move_claw(identifier, arguments["signed_duration_s"])
+        if operation == "fire":
+            result = self.session.fire(identifier)
+            self.task_events.extend(self.session.last_step.task_events)
+            return result
+        return self.session.command_claw(identifier, arguments["open"])
+
+    def full_reset(self) -> tuple[bool, str]:
+        """Whole scenario to its start with the scenario seed; ROS time never rewinds."""
+        if self.cameras is not None:
+            self.cameras.invalidate(seed=self.session.seed)
+        snapshot = self.session.full_reset()
+        self.start_state = self.session.start_state
+        self._observe_generation(snapshot, coordinated=True)
+        return True, "Scenario reset: plant, sensors, mechanisms, payloads, tasks and scores"
+
 
     def place_reference(self, pose: Mapping[str, Any], options: Mapping[str, Any]
                         ) -> tuple[bool, str]:
@@ -637,7 +761,7 @@ class BridgeCore:
         try:
             if self.cameras is not None:
                 self.cameras.invalidate()
-            snapshot = self.runtime.place(target, clear_actuators=not keep_velocity)
+            snapshot = self.session.place(target, clear_actuators=not keep_velocity)
         except ValueError as error:
             return False, str(error)
         if becomes_start:

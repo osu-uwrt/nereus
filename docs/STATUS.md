@@ -51,7 +51,7 @@ Slalom, bins (crates plus magnet lights) and the octagon surface task are now pa
 (`slalom.yaml`, `bins.yaml`, `surface.yaml`) with generic runtime primitives in
 `task_zones.py` (open crates, proximity latches, surfacing/facing, turn zones) and portal
 frames/depth bands; their rows, and the table rows fed by prop-world events through
-`TaskRuntime.observe_events`, are scored by the 2026 hook. `step_projectile` returns the
+`TaskRuntime.record`/`observe_events`, are scored by the 2026 hook. `step_projectile` returns the
 crate/panel/pool physical correction for the payload owner. 30 new tests include per-tick
 comparison with the original CourseJudge/RunScore. Table props, the pinger and the
 `table.yaml` definition remain open (see the hook header for the table event contract).
@@ -1171,3 +1171,12 @@ including independent original image comparisons, then remaining mechanisms and
 course content. LED ROS routing, full operator workflows, camera acquisition and
 physical RepairCompTree acceptance remain open. The replacement priority and
 independent robot/world/task/scoring boundaries are unchanged.
+
+Claw/table prop world (step 4): `robotics_platform.prop_world.PropWorld` ports the original
+`claw_world.py` (PyBullet CPU props, table/basket meshes, kinematic jaw pads, finite-force
+opposing-jaw grasp) as a pack-driven, ROS-free module with an optional `props` extra. The `table`
+task (`content/packs/tasks/robosub_2026/table.yaml`, new `rigid_body`/`contact_world` props, `box`
+region and `attach`/`detach`/`drop_into` event types) and its scenario placement replace the
+pending entries; claw pad collision assets are in the Talos pack. Tests script grasp, carry,
+basket/elsewhere drops, reset, independence and replay, and match the original ClawWorld to about
+1e-5 m on the same script. Scoring hooks, prop rendering and mechanism/bridge wiring are not done.

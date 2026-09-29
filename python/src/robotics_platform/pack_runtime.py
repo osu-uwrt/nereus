@@ -299,6 +299,8 @@ def create_runtime(
         yaw = math.radians(instance["yaw_deg"]) / 2
         quaternion = np.array([math.cos(yaw), 0, 0, math.sin(yaw)])
         for prop in tasks[instance["task"]]["props"]:
+            if prop["type"] in ("rigid_body", "contact_world"):
+                continue  # owned by the task's prop contact world, as in the original
             if prop["type"] != "static_body":
                 raise ValueError(
                     f"prop {prop['id']!r}: no native contact implementation for {prop['type']!r}"

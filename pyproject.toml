@@ -14,6 +14,7 @@ dependencies = ["numpy>=1.23,<3", "ruamel.yaml>=0.18,<0.20",
                 "jsonschema>=4.21,<5", "referencing>=0.34,<1"]
 
 [project.optional-dependencies]
+props = ["pybullet>=3.2"]   # claw/table rigid-body prop world (prop_world.py)
 dev = ["build>=1.2,<2", "mypy>=1.11,<2", "ruff>=0.9,<1",
        "scikit-build-core>=0.11,<1.1", "pybind11>=2.13,<4", "ninja>=1.5"]
 
@@ -45,5 +46,5 @@ python_version = "3.10"
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["ruamel.*", "jsonschema.*"]
+module = ["ruamel.*", "jsonschema.*", "pybullet", "pybullet_utils.*"]
 ignore_missing_imports = true

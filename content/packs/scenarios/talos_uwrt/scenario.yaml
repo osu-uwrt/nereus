@@ -47,6 +47,7 @@ task_placements:
 # Octagon = mapping octagon under table: table [19.290761, 9.007, -1.54] yaw 89.039804 composed with
 # [0.082085, -0.064919, 1.2352] yaw -134.313351, at full precision (world z = -0.3048).
 - {task: surface, position_m: [19.35704644774681, 9.087985574042571, -0.3048], yaw_deg: -45.273547}
+- {task: table, position_m: [19.290761, 9.007, -1.54], yaw_deg: 89.039804}
 
 contacts:
   model: box_scene
@@ -65,11 +66,3 @@ initial:
 run:
   auto_start: true                      # original starts via operator run_command "start"
   options: {role: repair, heading_coin: true, role_coin: true, pinger_task: none, pinger_random: false}
-
-# Inactive: placements for task definitions that do not exist until the table pack lands (same source file).
-pending:
-- id: table_placement
-  category: task_placement
-  required_from_step: 4
-  blocker: table task definition not written in step 1
-  known: {frame: table, position_m: [19.290761, 9.007, -1.54], yaw_deg: 89.039804}

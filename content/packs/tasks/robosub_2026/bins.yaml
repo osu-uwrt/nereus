@@ -105,28 +105,28 @@ regions:
     indicator: {initial: red, latched: green}
 events:
 - id: bin_vinyl1_inside
-  type: drop_into
+  type: payload_landing
   parameters: {region: bin_vinyl1, projectile_mechanism_types: [launcher, dropper], outcome: inside}
 - id: bin_vinyl1_blocked
-  type: drop_into
+  type: payload_landing
   parameters: {region: bin_vinyl1, projectile_mechanism_types: [launcher, dropper], outcome: blocked}
 - id: bin_vinyl2_inside
-  type: drop_into
+  type: payload_landing
   parameters: {region: bin_vinyl2, projectile_mechanism_types: [launcher, dropper], outcome: inside}
 - id: bin_vinyl2_blocked
-  type: drop_into
+  type: payload_landing
   parameters: {region: bin_vinyl2, projectile_mechanism_types: [launcher, dropper], outcome: blocked}
 - id: bin_vinyl3_inside
-  type: drop_into
+  type: payload_landing
   parameters: {region: bin_vinyl3, projectile_mechanism_types: [launcher, dropper], outcome: inside}
 - id: bin_vinyl3_blocked
-  type: drop_into
+  type: payload_landing
   parameters: {region: bin_vinyl3, projectile_mechanism_types: [launcher, dropper], outcome: blocked}
 - id: bin_vinyl4_inside
-  type: drop_into
+  type: payload_landing
   parameters: {region: bin_vinyl4, projectile_mechanism_types: [launcher, dropper], outcome: inside}
 - id: bin_vinyl4_blocked
-  type: drop_into
+  type: payload_landing
   parameters: {region: bin_vinyl4, projectile_mechanism_types: [launcher, dropper], outcome: blocked}
 - id: magnet_target1_on
   type: activate

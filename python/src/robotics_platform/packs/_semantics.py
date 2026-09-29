@@ -304,15 +304,24 @@ def tasks(data: dict[str, Any], root: Path) -> tuple[list[str], list[dict[str, A
     return problems, unresolved
 
 
-# Event type -> region types it may name. drop_into also names regions of other owners
-# (for example basket volumes checked by a prop world) once their region types exist.
+# Event type -> region types it may name (drop_into names several box regions, checked below).
 _EVENT_REGION = {
     "pass_through": ("rectangular_portal",), "hit": ("perforated_panel",),
-    "drop_into": ("open_crate",), "activate": ("proximity_target",),
+    "payload_landing": ("open_crate",), "activate": ("proximity_target",),
     "surface_reached": ("surface",), "surface_lost": ("surface",), "breach": ("surface",),
     "facing_reached": ("surface",), "facing_lost": ("surface",),
     "rotation_judged": ("turn_zone",),
 }
+
+
+def _known(value: str, known: set[str], where: str, field: str, problems: list[str]) -> None:
+    if value not in known:
+        problems.append(f"{where}: unknown {field} '{value}'")
+
+
+def _asset(value: str, asset_ids: set[str] | None, where: str, problems: list[str]) -> None:
+    if asset_ids is not None and value not in asset_ids:
+        problems.append(f"{where}: unknown asset '{value}'")
 
 
 def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
@@ -331,7 +340,7 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
         duplicates((item["id"] for item in items), what, problems)
     for identifier, item in props.items():
         parameters = item["parameters"]
-        duplicates((box["id"] for box in parameters["collision_boxes"]), f"{identifier} box", problems)
+        duplicates((box["id"] for box in parameters.get("collision_boxes", [])), f"{identifier} box", problems)
         for visual in parameters.get("visuals", []):
             if asset_ids is not None and visual["asset"] not in asset_ids:
                 problems.append(f"/props/{identifier}/visuals: unknown asset '{visual['asset']}'")
@@ -342,6 +351,21 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
             region = regions.get(cutouts["region"])
             if region is None or region["type"] != "perforated_panel":
                 problems.append(f"/props/{identifier}/cutouts: region must be a perforated_panel")
+    meshes: set[str] = set()
+    for identifier, item in props.items():
+        for mesh in item["parameters"].get("collision_meshes", []):
+            meshes.add(mesh["id"])
+            _known(mesh["frame"], frames, f"/props/{identifier}/collision_meshes", "frame", problems)
+            _asset(mesh["asset"], asset_ids, f"/props/{identifier}/collision_meshes", problems)
+        if item["type"] == "rigid_body":
+            parameters = item["parameters"]
+            where = f"/props/{identifier}"
+            _known(parameters["frame"], frames, where, "frame", problems)
+            _asset(parameters["collision_asset"], asset_ids, where, problems)
+            target = regions.get(parameters["expected_region"])
+            if target is None or target["type"] != "box":
+                problems.append(f"{where}/expected_region: must name a box region")
+    duplicates(sorted(meshes), "collision mesh", problems)
     for identifier, item in regions.items():
         if item["type"] == "perforated_panel":
             duplicates((hole["id"] for hole in item["parameters"]["holes"]), "hole", problems)
@@ -352,6 +376,14 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
         for frame in named:
             if frame not in frames:
                 problems.append(f"/regions/{identifier}: unknown frame '{frame}'")
+        if item["type"] == "box":
+            _known(item["parameters"]["frame"], frames, f"/regions/{identifier}", "frame", problems)
+            if item["parameters"]["support_mesh"] not in meshes:
+                problems.append(f"/regions/{identifier}/support_mesh: unknown collision mesh "
+                                f"'{item['parameters']['support_mesh']}'")
+            low, high = item["parameters"]["z_range_m"]
+            if low >= high:
+                problems.append(f"/regions/{identifier}/z_range_m: must be increasing")
     for item in data["events"]:
         where = f"/events/{item['id']}"
         parameters = item["parameters"]
@@ -363,6 +395,12 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
                                 f"{' or '.join(expected)} region")
         if item["type"] == "pass_through" and parameters["from_side"] == parameters["to_side"]:
             problems.append(f"{where}/parameters: from_side and to_side must differ")
+        if item["type"] == "drop_into":
+            for name in parameters["regions"]:
+                if name not in regions or regions[name]["type"] != "box":
+                    problems.append(f"{where}/parameters/regions: '{name}' is not a box region")
+            if parameters["outcome"] == "elsewhere" and "surfaces" not in parameters:
+                problems.append(f"{where}/parameters: outcome elsewhere requires surfaces")
         if item["type"] == "contact" and parameters["prop"] not in props:
             problems.append(f"{where}/parameters/prop: unknown prop '{parameters['prop']}'")
     for item in data["scoring"]:

@@ -37,6 +37,14 @@ assets:
 - {id: gate_rescue_texture, path: assets/gate_rescue/Task1_SearchRescue_Fixed.png, required_from_step: 3, status: present, sha256: b672a1d01c0468532a2cb87d5a466f6406db494f48daf09b738d4528cbb218a0, source: "riptide_gui riptide_meshes/meshes/gate_rescue/Task1_SearchRescue_Fixed.png @907c9ded"}
 - {id: torpedo_mesh, path: assets/torpedo/model.dae, required_from_step: 3, status: present, sha256: 0d45476fb0c24d9acf508b5cad95060a51b85373ed5c131813541ca685ed754e, source: "riptide_gui riptide_meshes/meshes/torpedo/model.dae @907c9ded"}
 - {id: torpedo_texture, path: assets/torpedo/Task4_ver1_Fixed.png, required_from_step: 3, status: present, sha256: b6a5a8bc9ef0cde09a055296f9746b61be9b8d6961fe5504b46350649dbf4336, source: "riptide_gui riptide_meshes/meshes/torpedo/Task4_ver1_Fixed.png @907c9ded"}
+# Step-4 table collision meshes (PyBullet CPU prop world); copied byte-for-byte with cp.
+- {id: table_mesh, path: assets/table/table.obj, required_from_step: 4, status: present, sha256: 5a1d74b0c4c8691c673776ba284f9b2ba5e069d77f19bfafe464d9fed8dedd2e, source: "riptide_simulator c_simulator/collision_files/tasks/table.obj @07647eeb"}
+- {id: basket_helmet_mesh, path: assets/table/table_basket_helmet.obj, required_from_step: 4, status: present, sha256: ede76ab0c280dd38277301411fbebf5195575da788f49956d38ecd6abda95f3f, source: "riptide_simulator c_simulator/collision_files/tasks/table_basket_helmet.obj @07647eeb"}
+- {id: basket_warning_mesh, path: assets/table/table_basket_warning.obj, required_from_step: 4, status: present, sha256: ede76ab0c280dd38277301411fbebf5195575da788f49956d38ecd6abda95f3f, source: "riptide_simulator c_simulator/collision_files/tasks/table_basket_warning.obj @07647eeb"}
+- {id: pill_mesh, path: assets/table/table_pill.obj, required_from_step: 4, status: present, sha256: 534baeeccd98b78fd41ae145f0334a5e24f2515a467a84594d4ce95f6591a656, source: "riptide_simulator c_simulator/collision_files/tasks/table_pill.obj @07647eeb"}
+- {id: bandage_mesh, path: assets/table/table_bandage.obj, required_from_step: 4, status: present, sha256: 0fb179d57b4c7ba6d6941355e3274deb294bfdeb1a8c08f3a2e2598dc7eebc15, source: "riptide_simulator c_simulator/collision_files/tasks/table_bandage.obj @07647eeb"}
+- {id: nut_and_bolt_mesh, path: assets/table/table_nut_and_bolt.obj, required_from_step: 4, status: present, sha256: 534baeeccd98b78fd41ae145f0334a5e24f2515a467a84594d4ce95f6591a656, source: "riptide_simulator c_simulator/collision_files/tasks/table_nut_and_bolt.obj @07647eeb"}
+- {id: plug_mesh, path: assets/table/table_plug.obj, required_from_step: 4, status: present, sha256: 0fb179d57b4c7ba6d6941355e3274deb294bfdeb1a8c08f3a2e2598dc7eebc15, source: "riptide_simulator c_simulator/collision_files/tasks/table_plug.obj @07647eeb"}
 
 - {id: slalom_mesh, path: assets/slalom/model.dae, required_from_step: 3, status: present, sha256: ab2a771f16f9f0546362a986608eeb3af18a16e9d7e2b772c9b05c7178cf25bf, source: "riptide_gui riptide_meshes/meshes/slalom/model.dae @907c9ded"}
 - {id: bin_mesh, path: assets/bin/model.dae, required_from_step: 3, status: present, sha256: 3c99920f0cd42830336356365a4f0df2ac7504a22e7fdf136efde33265f509a9, source: "riptide_gui riptide_meshes/meshes/bin/model.dae @907c9ded"}
@@ -53,13 +61,14 @@ assets:
 - {id: octagon_sos_mesh, path: assets/octagon_sos/model.dae, required_from_step: 3, status: present, sha256: 889932acae53c335bb0b526453d1d36398b3eefaa6c9b0f4ca8b232a76482a1b, source: "riptide_gui riptide_meshes/meshes/octagon_sos/model.dae @907c9ded"}
 - {id: octagon_sos_texture, path: assets/octagon_sos/Task5_Rescue_Fixed.png, required_from_step: 3, status: present, sha256: 58dd02090cc7fec1daeebf1ea63f4fdf64c59dcf072fb864c791d8fff9d2d579, source: "riptide_gui riptide_meshes/meshes/octagon_sos/Task5_Rescue_Fixed.png @907c9ded"}
 
-tasks: [gate.yaml, torpedo.yaml, slalom.yaml, bins.yaml, surface.yaml]   # pack-relative task include files (kind task)
+tasks: [gate.yaml, torpedo.yaml, table.yaml, slalom.yaml, bins.yaml, surface.yaml]   # pack-relative task include files (kind task)
 
 # Robot capabilities by mechanism TYPE (never robot id); checked at scenario resolution.
 requires:
 - {task: torpedo, mechanism_type: launcher, min_count: 1}
 - {task: bins, mechanism_type: dropper, min_count: 1}
 - {task: bins, mechanism_type: magnet, min_count: 1}
+- {task: table, mechanism_type: claw, min_count: 1}
 
 # Run options (competition.yaml ui.run_options defaults; pinger_select run command).
 run_options:
@@ -124,7 +133,7 @@ scoring_hooks:
       max_style_quarters: 8
     slalom: {rows: [slalom_front, slalom_middle, slalom_back]}   # region ids double as score rows
     bins: {mechanism_type: dropper}       # only dropper landings inside a crate score (T15)
-    table: {baskets: [helmet, warning]}   # prop-world events, see the hook header
+    table: {baskets: [helmet_basket, warning_basket]}   # box region ids   # prop-world events, see the hook header
     # The simulator tolerances (breach margin, surface/facing/turn dwells and tolerances) are geometry
     # timing owned by the surface/turn_zone regions of surface.yaml; the hook only sees their events.
 
@@ -135,18 +144,6 @@ pending:
   required_from_step: 4
   blocker: no acoustic source placement or amplitude model exists (robot pending pinger, O3/O4)
   known: {subtree: RandomPingerTree, hook: pinger_first/pinger_second tied to first scored deploy/restore row}
-- id: table
-  category: task
-  required_from_step: 4
-  blocker: task definition not written in step 1; original props used PyBullet (T9)
-  known:
-    subtree: NewTableTree
-    static_collision: [table.obj, table_basket_helmet.obj, table_basket_warning.obj]
-    slab: {size_m: [0.635, 0.635, 0.01905], center_m: [0, 0, -0.009525]}
-    props: {ids: [pill, bandage, nut_and_bolt, plug], mass_kg: [0.12, 0.10, 0.12, 0.10],
-            volume_m3: [9.0e-05, 7.0e-05, 9.0e-05, 7.0e-05], basket: [helmet, helmet, warning, warning]}
-    events: [attach, drop_into, surface]
-    hook: object drop, baskets, basket-count turns
 - id: return_home
   category: task
   required_from_step: 4
