@@ -15,6 +15,7 @@ option(RP_BUILD_VISUALIZATION "Build neutral visualization and viewer IO librari
 option(RP_BUILD_SIMULATION_VIEW "Build read-only simulation visualization adapter" OFF)
 option(RP_BUILD_SIMULATOR_VIEWER "Build the composed simulation viewer application" OFF)
 option(RP_BUILD_VIEWER "Build the standalone desktop viewer" OFF)
+option(RP_BUILD_ROS_VIEWER "Build the ROS pool viewer (needs a sourced ROS 2 workspace)" OFF)
 option(RP_BUILD_CLI "Build the YAML scenario loader and standalone runner" ON)
 option(RP_BUILD_BENCHMARKS "Build headless scenario performance measurements" OFF)
 option(RP_BUILD_PYTHON "Build the optional Python extension and package" OFF)
@@ -186,6 +187,14 @@ endif()
 
 if(RP_BUILD_SIMULATOR_VIEWER)
   add_subdirectory(applications/simulation_view)
+endif()
+
+if(RP_BUILD_ROS_VIEWER)
+  if(NOT RP_BUILD_VIEWER OR NOT RP_BUILD_SCENE_RENDERER OR NOT RP_BUILD_MESH_ASSETS)
+    message(FATAL_ERROR "RP_BUILD_ROS_VIEWER requires RP_BUILD_VIEWER, RP_BUILD_SCENE_RENDERER "
+                        "and RP_BUILD_MESH_ASSETS")
+  endif()
+  add_subdirectory(integrations/ros2/viewer)
 endif()
 
 install(FILES LICENSE.md docs/PROVENANCE.md DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform/legal)
