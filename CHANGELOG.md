@@ -2,6 +2,9 @@
 
 ## 0.1.0 — unreleased
 
+- Explicit-clock rotor and indicator models, independently captured original phase,
+  matrix and LED color references, reset/error contracts and installed usage.
+
 - Optional interactive scene viewer with frame-bound mesh documents, original
   Talos/pool examples, source-safe resolution and isolated depth-tested overlays.
 

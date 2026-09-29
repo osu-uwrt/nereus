@@ -179,3 +179,15 @@ reference includes source and wrapper hashes, exact view matrices and output has
 `reference/rendering_baseline.json` also records native implementation hashes and
 the current backend/performance evidence. See [RENDERING.md](RENDERING.md) for scope,
 reproduction, exact comparison and remaining integration.
+
+
+`libraries/visualization/src/animation.cpp` adapts the rotor RPM/integration and
+indicator color/pulse behavior from the same pinned simulator revision's
+`camera_faker/include/pool_viewer/thruster_visuals.hpp` and `status_lights.hpp`.
+The new API receives validated values and explicit clocks; resource/ROS loading
+and target-mask dispatch are not copied into the models. Pivot rotation uses the
+platform's double-precision spatial representation. `tools/capture_animation_reference.py`
+compiles the unchanged original headers independently and records source archive,
+harness and output hashes in `reference/animation_sources.json`. The fixture
+parameters are copied from the original Talos thruster/status-light configurations.
+Source licensing remains subject to the original metadata review above.

@@ -1,4 +1,4 @@
-add_library(rp_visualization src/frames.cpp src/source.cpp src/live_source.cpp src/display.cpp src/camera.cpp)
+add_library(rp_visualization src/frames.cpp src/source.cpp src/live_source.cpp src/display.cpp src/camera.cpp src/animation.cpp)
 add_library(RoboticsPlatform::visualization ALIAS rp_visualization)
 set_target_properties(rp_visualization PROPERTIES EXPORT_NAME visualization)
 target_include_directories(rp_visualization PUBLIC
@@ -70,9 +70,10 @@ endif()
 if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
-  add_executable(visualization_tests tests/visualization_test.cpp tests/live_source_test.cpp)
+  add_executable(visualization_tests tests/visualization_test.cpp tests/live_source_test.cpp tests/animation_test.cpp)
   target_link_libraries(visualization_tests PRIVATE rp_viewer_io GTest::gtest_main)
-  target_compile_definitions(visualization_tests PRIVATE RP_WORKSPACES="${PROJECT_SOURCE_DIR}/workspaces")
+  target_compile_definitions(visualization_tests PRIVATE RP_WORKSPACES="${PROJECT_SOURCE_DIR}/workspaces"
+    RP_ANIMATION_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures")
   rp_project_options(visualization_tests)
   gtest_discover_tests(visualization_tests DISCOVERY_MODE PRE_TEST)
 endif()

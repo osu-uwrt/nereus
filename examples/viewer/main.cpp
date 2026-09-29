@@ -1,5 +1,7 @@
 #include <robotics/viewer/session.hpp>
+#include <robotics/visualization/animation.hpp>
 
+#include <cmath>
 #include <iostream>
 #include <stdexcept>
 #include <utility>
@@ -58,5 +60,17 @@ int main() {
     session.disconnect();
     if (session.scene().status.at("Device pose").first != v::Level::warning)
         throw std::runtime_error("source removal did not invalidate the display");
+    v::RotorAnimation rotor_config;
+    rotor_config.curve.forward = rotor_config.curve.reverse = {0, 30. / 3.141592653589793, 0, 0};
+    v::RotorAnimator rotor(rotor_config);
+    rotor.receive({2}, 0);
+    rotor.advance(.1);
+    v::Indicator indicator;
+    indicator.command({0, 1, 0}, v::IndicatorMode::Solid, 0);
+    indicator.command({1, 0, 0}, v::IndicatorMode::Pulse, .1);
+    if (std::abs(rotor.angles()[0] - .2) > 1e-12 ||
+        !indicator.color(.2).isApprox(Eigen::Vector3f(1, 0, 0)) ||
+        !indicator.color(.3).isApprox(Eigen::Vector3f(0, 1, 0)))
+        throw std::runtime_error("installed animation contract failed");
     std::cout << "External source and display composed without simulation or a graphics context.\n";
 }

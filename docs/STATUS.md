@@ -762,3 +762,28 @@ or whole-stack acceptance. Next are original rotor motion, LED state and complet
 mechanism/course assets, then the remaining camera/control/transport/task gates.
 Per-view render targets and shared scene preparation still precede camera providers.
 See [SCENE_VIEWER.md](SCENE_VIEWER.md) for commands, schema and current limits.
+
+
+## Original rotor and indicator state models
+
+`RotorAnimator` now preserves the original signed RPM fit, deadband, handedness,
+replacement-time integration, sample timeout, phase wrapping and clock rewind.
+`Indicator` preserves source-clock flash/breath phases, clamped RGB and temporary
+pulse override/replacement with exclusive expiry. Both own their state and accept
+explicit times; neither reads a clock, renderer, ROS message or robot identifier.
+Invalid input is rejected before mutation. Explicit generation reset clears state.
+
+Independent pinned-original captures compare all eight rotor phases/matrices over
+169 timed events and all 402 indicator output colors. Phase tolerance is 1e-10 rad;
+local matrices compare at 1e-6 because native Eigen/double spatial transforms differ
+from original float GLM arithmetic. This does not claim byte-identical animated
+pixels. Color channels match at float precision. Additional tests cover timeout
+preservation after invalid packets, reset, independent instances and shaft geometry.
+
+Release and ASan/UBSan viewer suites pass 29 tests and relocated installed consumers,
+including the new models without a graphics context or simulation. Independent
+review found no blocking correctness issue. The current interactive example still
+has stationary rotors and no LED assembly: next is source-owned animation delivery
+and generic scene bindings, followed by original LED geometry/radiance and animated
+render comparisons. Delivery must integrate every force sample independently of
+lossy display queues. See [ANIMATION.md](ANIMATION.md) for the ownership contract.

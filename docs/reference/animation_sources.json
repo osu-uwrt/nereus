@@ -1,0 +1,27 @@
+{
+  "source_revision": "07647eebe706f96ea7b76db3cc9802735a146698",
+  "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "compile_options": [
+    "-std=c++17",
+    "-O2"
+  ],
+  "architecture": "aarch64",
+  "source_paths": [
+    "camera_faker/include/pool_viewer/camera.hpp",
+    "camera_faker/include/pool_viewer/thruster_visuals.hpp",
+    "camera_faker/include/pool_viewer/status_lights.hpp",
+    "camera_faker/include/external/glm",
+    "camera_faker/models/talos3/thrusters.yaml",
+    "camera_faker/models/talos3/rotors",
+    "c_simulator/robots/talos/config/status_lights.yaml"
+  ],
+  "archive_sha256": "3712dd2dbd5c59b204955b642cad24e2fa7f4a73a99bc3286f84b72021be8a9c",
+  "driver_sha256": "eaf2fe0969dccf126ba3afa1cef09c17321363fefb5f8dc25af37a70c9133205",
+  "capture_script_sha256": "2fe4fe449f85babf40da14c47374f96107e8e70d8f59c9f7ec21c8ca77d0c79f",
+  "scope": "Original unchanged rotor integration/matrices and clamped indicator colors. No ROS routing, renderer, live-source delivery or LED geometry acceptance.",
+  "outputs_sha256": {
+    "tests/fixtures/animation_reference_config.csv": "9800e48bc1805591fcd41bbdfb89ab4b9f13e0272c0cb1d6dbc0885c22ae52ac",
+    "tests/fixtures/animation_reference_lights.csv": "fb171ec0b1038357119c4dfa9c2b2fcb44799be531aad73943ebf92d3fbb38ce",
+    "tests/fixtures/animation_reference_rotors.csv": "f856187367ef5224a3c2ebd6d72e4ef017bf5169a6cb24d3a4b1a78c0e80d363"
+  }
+}
