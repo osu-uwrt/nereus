@@ -60,6 +60,7 @@ class ScheduledDevice {
     virtual void advance(const simulation::MotionSample &) = 0;
     virtual void reset(std::uint64_t seed) = 0;
     virtual void invalidate() noexcept = 0;
+    virtual void discardBuffered() noexcept = 0;
 };
 
 template <class Model> class ScheduledSensor final : public ScheduledDevice {
@@ -90,6 +91,13 @@ template <class Model> class ScheduledSensor final : public ScheduledDevice {
         stream_->ready_.clear();
         stream_->latest_.reset();
         stream_->active_ = false;
+    }
+    void discardBuffered() noexcept override {
+        stream_->stats_.dropped_pending += pending_.size();
+        stream_->stats_.dropped_delivered += stream_->ready_.size();
+        pending_.clear();
+        stream_->ready_.clear();
+        stream_->latest_.reset();
     }
     void advance(const simulation::MotionSample &motion) override {
         const auto now = motion.state.elapsed;
@@ -202,6 +210,8 @@ class Runtime {
     void stopThrusters(); // Clears propulsion targets/queues without restarting sensors/time.
     simulation::Snapshot advance(std::uint64_t ticks = 1);
     simulation::Snapshot observe() const;
+    // Keeps sensor phase/noise and time; discards readings from before placement.
+    simulation::Snapshot place(const simulation::BodyState &state, bool clear_actuators = true);
     simulation::Snapshot reset(const simulation::BodyState &initial, std::uint64_t seed);
     bool faulted() const {
         return faulted_;

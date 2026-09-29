@@ -338,6 +338,20 @@ Snapshot Plant::advance(std::uint64_t ticks) {
     return observe();
 }
 
+Snapshot Plant::place(const BodyState &state, bool clear_actuators) {
+    if (impl_->faulted)
+        throw std::logic_error("plant must be reset after a failed advance");
+    auto next = pack(state);
+    if (impl_->pool_contacts)
+        impl_->pool_contacts->validateInitial(next);
+    if (clear_actuators) {
+        impl_->actuators.clear();
+        impl_->committed_forces.setZero();
+    }
+    impl_->state = next;
+    return observe();
+}
+
 Snapshot Plant::reset(const BodyState &initial) {
     auto next = pack(initial);
     if (impl_->pool_contacts)

@@ -1,5 +1,6 @@
 #include "robotics/sensors/models.hpp"
 #include "robotics/sensors/runtime.hpp"
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <gtest/gtest.h>
@@ -66,6 +67,44 @@ TEST(Imu, SpecificForceAtRestAndFreeFall) {
     EXPECT_EQ(rest.value->force_covariance, Eigen::Matrix3d::Zero());
     input.acceleration_body = input.gravity_world;
     EXPECT_EQ(imu.sample(input, 0.01).value->specific_force, Eigen::Vector3d::Zero());
+}
+
+TEST(Runtime, PlacementDiscardsOldReadingsAndPreservesSensorPhaseAndNoise) {
+    Runtime runtime({}, initial(), 42), reference({}, initial(), 42);
+    const auto a = runtime.add(device(), Imu({}, noisy(), noisy()));
+    const auto b = reference.add(device(), Imu({}, noisy(), noisy()));
+    runtime.advance(8);
+    reference.advance(8);
+    ASSERT_TRUE(a->latest());
+    const auto acquired = a->stats().acquired;
+    auto state = runtime.observe().body;
+    state.position.x() += 1;
+    const auto before = runtime.observe();
+    const auto placed = runtime.place(state);
+    EXPECT_EQ(placed.elapsed, before.elapsed);
+    EXPECT_EQ(placed.generation, before.generation);
+    EXPECT_TRUE(a->active());
+    EXPECT_FALSE(a->latest());
+    EXPECT_TRUE(a->drain().empty());
+    EXPECT_EQ(a->stats().acquired, acquired);
+    EXPECT_GT(a->stats().dropped_pending, 0U);
+    EXPECT_GT(a->stats().dropped_delivered, 0U);
+    runtime.advance(6);
+    reference.advance(6);
+    const auto actual = a->drain();
+    auto expected = b->drain();
+    expected.erase(std::remove_if(expected.begin(), expected.end(),
+                                  [acquired](const auto &sample) {
+                                      return sample.header.sequence < acquired;
+                                  }),
+                   expected.end());
+    ASSERT_FALSE(actual.empty());
+    same(actual, expected);
+    const auto latest = a->latest();
+    state.position.z() = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_THROW(runtime.place(state), std::invalid_argument);
+    ASSERT_TRUE(a->latest());
+    EXPECT_EQ(a->latest()->header.sequence, latest->header.sequence);
 }
 
 TEST(Imu, RotatedMountIncludesTangentialAndCentripetalAcceleration) {

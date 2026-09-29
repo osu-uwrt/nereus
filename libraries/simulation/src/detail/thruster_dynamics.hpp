@@ -17,6 +17,7 @@ class ThrusterDynamics {
     void advance(double dt);
     void stop(); // Cancel queued commands immediately; propellers coast down.
     void reset();
+    void clear(); // Clears force/history while preserving the actuator clock.
     double time() const {
         return time_;
     }

@@ -61,7 +61,16 @@ is reused for transforms. Talos command/sensor traces match the established
 native profile under identical inputs, and a separate four-thruster pack runs
 without robot-specific code. The nine factory/binding cases pass as part of the
 110-case verification above. ROS clock mapping, placement and bridge lifecycle
-remain the next increment; no live UWRT hold has been demonstrated yet.
+remain below the hold gate until the paired live test passes.
+
+Native placement now changes pose/velocity without changing tick, generation or
+sensor phase/noise. Operator placement clears active and delayed propulsion;
+estimate synchronization can preserve it. Both discard buffered pre-placement
+readings and count the discarded samples. Invalid placement leaves state and
+sensor queues unchanged. Opus reviewed the native change without a blocker;
+48 plant, 44 sensor and 22 installed Python binding tests pass. The old simulator
+has completed an initial two-target controller/EKF baseline. The automated paired
+comparison and generic bridge review are in progress; gate 2 is still open.
 
 The user replaced human approval with joint Codex/Claude Code execution. Claude
 uses `claude-opus-5-5` with high effort. It may delegate bounded mechanical work

@@ -66,6 +66,15 @@ simulation::Snapshot Runtime::advance(std::uint64_t ticks) {
     }
     return observe();
 }
+simulation::Snapshot Runtime::place(const simulation::BodyState &state, bool clear_actuators) {
+    requireHealthy();
+    const auto snapshot = plant_.place(state, clear_actuators);
+    for (auto &device : devices_) {
+        device->discardBuffered();
+    }
+    return snapshot;
+}
+
 simulation::Snapshot Runtime::reset(const simulation::BodyState &initial, std::uint64_t seed) {
     // Invalid plant initial conditions are rejected before changing any sensor state.
     const auto snapshot = plant_.reset(initial);

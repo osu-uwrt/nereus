@@ -111,8 +111,10 @@ class Plant {
     // subsequent steps. Does not reset time or latch out future explicit commands.
     void stopThrusters();
     Snapshot advance(std::uint64_t ticks = 1);
-    Snapshot observe() const;                 // Value copy: callers cannot mutate the plant.
-    MotionSample motion() const;              // Read-only derivatives for sensor acquisition.
+    Snapshot observe() const;    // Value copy: callers cannot mutate the plant.
+    MotionSample motion() const; // Read-only derivatives for sensor acquisition.
+    // Teleports without restarting time/generation; optionally clears propulsion history.
+    Snapshot place(const BodyState &state, bool clear_actuators = true);
     Snapshot reset(const BodyState &initial); // Restarts time and clears actuator history.
 
   private:

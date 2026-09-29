@@ -44,6 +44,50 @@ TEST(Plant, ConstantForceMatchesAnalyticalTranslation) {
     EXPECT_NEAR(end.body.angular_velocity.norm(), 0, 1e-12);
 }
 
+TEST(Plant, PlacementPreservesTimeAndClearsActiveAndDelayedForces) {
+    auto parameters = ideal();
+    parameters.thrusters[0].delay = 0.01;
+    Plant plant(parameters, initial());
+    plant.command(force(10));
+    const auto before = plant.advance(20);
+    ASSERT_GT(before.thruster_forces[0], 0);
+    plant.command(force(20));
+    auto position = initial();
+    position.position.x() = 7;
+    const auto placed = plant.place(position);
+    EXPECT_EQ(placed.tick, before.tick);
+    EXPECT_EQ(placed.elapsed, before.elapsed);
+    EXPECT_EQ(placed.generation, before.generation);
+    EXPECT_EQ(placed.body.position, position.position);
+    EXPECT_EQ(placed.thruster_forces[0], 0);
+    EXPECT_EQ(plant.advance(20).thruster_forces[0], 0);
+    plant.command(force(3));
+    EXPECT_EQ(plant.advance(20).thruster_forces[0], 3);
+}
+
+TEST(Plant, PlacementCanPreservePropulsionAndRejectsInvalidStateAtomically) {
+    auto parameters = ideal();
+    parameters.thrusters[0].delay = 0.01;
+    parameters.thrusters[0].rise_time = 0.1;
+    Plant plant(parameters, initial()), reference(parameters, initial());
+    plant.command(force(10));
+    reference.command(force(10));
+    plant.advance(20);
+    reference.advance(20);
+    plant.command(force(20));
+    reference.command(force(20));
+    auto placed = plant.observe().body;
+    placed.position.x() += 1;
+    plant.place(placed, false);
+    for (int i = 0; i < 20; ++i)
+        EXPECT_EQ(plant.advance().thruster_forces, reference.advance().thruster_forces);
+    const auto before = plant.observe();
+    placed.position.x() = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_THROW(plant.place(placed), std::invalid_argument);
+    same(before, plant.observe());
+    EXPECT_EQ(plant.advance().thruster_forces, reference.advance().thruster_forces);
+}
+
 TEST(Plant, OffCenterThrusterProducesExpectedTorque) {
     auto p = ideal();
     p.thrusters[0].position.y() = 0.2;

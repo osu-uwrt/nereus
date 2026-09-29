@@ -38,6 +38,10 @@ void ThrusterDynamics::stop() {
     targets_.setZero();
     lastCommand_ = -1e9;
 }
+void ThrusterDynamics::clear() {
+    stop();
+    forces_.setZero();
+}
 void ThrusterDynamics::command(const Eigen::VectorXd &f) {
     if (f.size() != forces_.size() || !f.allFinite())
         throw std::invalid_argument("Invalid thruster command");

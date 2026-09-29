@@ -22,6 +22,25 @@ def passive(seed: int = 42) -> rp.Runtime:
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_placement_preserves_time_and_sensor_schedule(self) -> None:
+        runtime = passive()
+        stream = runtime.add(rp.Device("imu", "imu"), rp.Imu())
+        before = runtime.advance(7)
+        self.assertIsNotNone(stream.latest())
+        state = initial()
+        state.position = [6, 5, -3]
+        placed = runtime.place(state, clear_actuators=False)
+        self.assertEqual(placed.tick, before.tick)
+        self.assertEqual(placed.generation, before.generation)
+        np.testing.assert_array_equal(placed.body.position, state.position)
+        self.assertIsNone(stream.latest())
+        self.assertTrue(stream.active)
+        runtime.advance(3)
+        sample = stream.latest()
+        assert sample
+        self.assertEqual(sample.header.sequence, 1)
+        self.assertEqual(sample.header.acquired_ns, 20_000_000)
+
     def test_native_talos_physics_pack_is_installed(self) -> None:
         scenario = rp.load_scenario(rp.example_scenario().with_name("talos_pool.yaml"))
         self.assertEqual(
