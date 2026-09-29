@@ -92,6 +92,39 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(dvl.header.acquired_ns, 126000000)
         np.testing.assert_array_equal(dvl.value.covariance, np.eye(3) * 1e-6)
 
+    def test_altitude_copies_parameters_and_native_talos_depth_is_installed(self) -> None:
+        parameters = rp.ReferenceAltitudeParameters()
+        mount = rp.Mount()
+        mount.position_body = [0, 0, 1]
+        parameters.mount = mount
+        parameters.target_position_body = [0, 0, -2]
+        parameters.reported_variance = 0.0001
+        runtime = passive()
+        stream = runtime.add(rp.Device("height", "world"), rp.ReferenceAltitude(parameters))
+        parameters.target_position_body = [0, 0, 99]
+        runtime.advance(5)
+        sample = stream.latest()
+        assert sample and sample.value
+        self.assertAlmostEqual(sample.value.mounted_world_z, -1)
+        self.assertAlmostEqual(sample.value.target_world_z, -4)
+        self.assertEqual(sample.value.variance, 0.0001)
+        self.assertIsNotNone(runtime.altitude_stream("height").latest())
+        scenario = rp.load_scenario(rp.example_scenario().with_name("talos_navigation_pool.yaml"))
+        navigation = scenario.create_runtime()
+        navigation.advance(25)
+        depth = navigation.altitude_stream("depth").latest()
+        assert depth and depth.value
+        self.assertEqual(depth.header.acquired_ns, 50000000)
+        self.assertEqual(depth.header.frame, "world")
+        self.assertEqual(depth.value.variance, 0.0001)
+        body = navigation.observe().body
+        # The first sample is close to the original base height with 1 cm noise.
+        self.assertAlmostEqual(
+            depth.value.target_world_z, float(body.position[2]) - 0.042, delta=0.04
+        )
+        runtime.reset(initial(), 42)
+        self.assertIsNone(stream.latest())
+
     def test_placed_pool_queries_match_local_geometry(self) -> None:
         params = rp.PlantParameters()
         params.pool.origin_xy_world = [-10, -12]

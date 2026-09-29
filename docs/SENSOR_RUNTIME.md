@@ -207,6 +207,17 @@ unavailable results; invalid provider values are errors. Both ideal and measured
 pressure must fit the inclusive configured range. Mount rotation affects the
 world position of the offset through body attitude; pressure itself is scalar.
 
+**Reference altitude:** an explicitly ideal observation of world Z in metres,
+independent of the fluid surface or pressure. `ReferenceAltitudeParameters` owns a
+mount, optional COM-local target position (defaults to the mount), scalar noise in
+metres and optional reported variance in m². `AltitudeReading` contains
+`mounted_world_z`, `target_world_z` and their shared `variance`. A single noisy
+mounted measurement is corrected by `q_body * (target - mount)` using the same
+acquisition pose. Both outputs are perfectly correlated, not independent height
+measurements. No pressure, surface clamp, range or acceleration query is implied.
+Above-water and negative heights are valid. This selectable approximation preserves
+the original Talos depth product without changing physical pressure semantics.
+
 ## Noise and reproducibility
 
 Each three-axis noise component combines configured fixed bias, independent Gaussian

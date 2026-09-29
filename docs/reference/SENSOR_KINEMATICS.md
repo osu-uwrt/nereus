@@ -10,7 +10,7 @@ values. The wrapper resolves original FOG parameter defaults without building RO
 
 ```sh
 python3 tools/capture_sensor_reference.py /path/to/riptide_simulator /path/to/riptide_core
-ctest --preset release -R OriginalNoiseDisabledInertial --output-on-failure
+ctest --preset release -R OriginalNoiseDisabledSensor --output-on-failure
 ```
 
 Capture requires a C++ compiler, Eigen and yaml-cpp. Normal tests use the committed
@@ -21,11 +21,11 @@ angular velocities and angular acceleration. Original COM velocity derivatives
 become native inertial acceleration via `v_dot + omega × v`; omitting that term
 would change mounted specific force.
 
-## Verified and pending outputs
+## Verified outputs
 
-The current comparison checks all 25 AHRS/FOG/reference-velocity fields: specific force, angular
+The current comparison checks all 28 AHRS/FOG/reference-velocity/reference-altitude fields: specific force, angular
 velocity, sign-equivalent sensor-to-world quaternion, three reported covariance
-diagonals, FOG rate/variance and DVL velocity/variance. Maximum absolute error must remain below
+diagonals, FOG rate/variance and DVL velocity/variance, mounted and corrected altitude/variance. Maximum absolute error must remain below
 `1e-12`. Native mounts come from the resolved Talos frame pack. Models explicitly
 select zero sampling noise with the original gravity and reported uncertainty.
 This gates native models and resolved mounts; profile loading/settings have separate
@@ -33,9 +33,9 @@ assembly tests and are not all exercised by this manually configured comparison.
 Reported variance remains independent of sampling noise, including for FOG before
 configured axis projection.
 
-The remaining three fields capture mounted depth-point world Z, corrected base-link
-world Z and depth variance. They are retained as
-upcoming acceptance inputs and are **not yet verified against native models**.
+The last three verified fields are mounted depth-point world Z, corrected base-link
+world Z and depth variance. The explicit `ReferenceAltitude` model applies the
+rigid offset with the same acquisition pose and shares one noisy height observation.
 Keeping both depth heights prevents the final lever-arm cancellation from hiding
 an incorrect pressure-sensor mount.
 

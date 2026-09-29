@@ -598,7 +598,9 @@ TEST_F(Profiles, ReferenceVelocityInclinationAndValidationReachRuntime) {
 TEST_F(Profiles, NativeTalosNavigationPreservesEightHzReferenceVelocityAcquisition) {
     const auto config =
         robotics::config::loadScenario(root / "examples/talos_navigation_pool.yaml");
-    ASSERT_EQ(config.sensors.size(), 3U);
+    ASSERT_EQ(config.sensors.size(), 4U);
+    EXPECT_EQ(config.sensors[3].model, "reference_altitude");
+    EXPECT_EQ(config.sensors[3].device.period.count(), 50000000);
     EXPECT_EQ(config.sensors[2].model, "reference_velocity");
     EXPECT_EQ(config.sensors[2].device.period.count(), 125000000);
     std::filesystem::remove_all(root);
@@ -606,13 +608,28 @@ TEST_F(Profiles, NativeTalosNavigationPreservesEightHzReferenceVelocityAcquisiti
     const auto imu = runtime->stream<robotics::sensors::AhrsReading>("imu");
     const auto fog = runtime->stream<robotics::sensors::FogReading>("fog");
     const auto dvl = runtime->stream<robotics::sensors::VelocityReading>("dvl");
-    std::size_t command = 0, count = 0;
+    const auto depth = runtime->stream<robotics::sensors::AltitudeReading>("depth");
+    std::size_t command = 0, count = 0, depth_count = 0;
     for (std::uint64_t tick = 0; tick < config.ticks; ++tick) {
         if (command < config.commands.size() && config.commands[command].tick == tick)
             runtime->command(config.commands[command++].forces);
         runtime->advance();
         imu->drain();
         fog->drain();
+        for (const auto &sample : depth->drain()) {
+            ++depth_count;
+            ASSERT_TRUE(sample.measurement.value);
+            const auto &value = *sample.measurement.value;
+            const auto body = runtime->observe().body;
+            const Eigen::Vector3d delta = config.body_frames.fromRoot("base_link").translation -
+                                          config.body_frames.fromRoot("depth_mount").translation;
+            EXPECT_NEAR(value.target_world_z - value.mounted_world_z,
+                        (body.orientation * delta).z(), 1e-12);
+            EXPECT_EQ(value.variance, .0001);
+            EXPECT_EQ(sample.header.frame, "world");
+            EXPECT_EQ(sample.header.acquired.count(),
+                      static_cast<std::int64_t>(depth_count) * 50000000);
+        }
         for (const auto &sample : dvl->drain()) {
             ++count;
             ASSERT_TRUE(sample.measurement.value);
@@ -627,6 +644,18 @@ TEST_F(Profiles, NativeTalosNavigationPreservesEightHzReferenceVelocityAcquisiti
         }
     }
     EXPECT_EQ(count, 24U);
+    EXPECT_EQ(depth_count, 60U);
     EXPECT_EQ(imu->stats().acquired, 150U);
     EXPECT_EQ(fog->stats().acquired, 1500U);
+}
+
+TEST_F(Profiles, ReferenceAltitudeRejectsInvalidOrUnknownConfiguration) {
+    const std::string prefix =
+        "schema_version: 1\nkind: sensor\nmodel: reference_altitude\nparameters:\n";
+    for (const auto &parameters : {"  reported_variance: -1\n", "  noise: {white_stddev: -1}\n",
+                                   "  target_position_body_m: [1, 2]\n", "  noise: {unknown: 0}\n",
+                                   "  reference_pressure_pa: 101325\n"}) {
+        write("sensors/imu.yaml", prefix + parameters);
+        EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
+    }
 }

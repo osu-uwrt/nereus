@@ -35,15 +35,15 @@ sensor-free example remains the numerical dynamics reference. `imu_mount` and
 `fog_mount` are native acquisition frames; future ROS adapters map them to the
 required stack frame names. Sampling and noise never depend on that adapter.
 
-This inertial assembly has two devices; the navigation assembly below adds DVL.
-Pressure/depth, cameras/stereo and their reporting policies remain open. The three-second inertial
+This inertial assembly has two devices; the navigation assembly below adds DVL
+and original depth reporting. Cameras/stereo remain open. The three-second inertial
 example acquires 150 AHRS and 1500 FOG samples while preserving the sensor-free
 plant trajectory. Tests verify original mount/calibration/covariance settings,
 source-file removal and native reset replay. An independent [prescribed-state sensor reference](SENSOR_KINEMATICS.md) now
 verifies AHRS/FOG formulas; complete trajectory/transport comparison remains open; sample-by-sample equality to the old shared RNG is not claimed.
 See [TALOS_SENSOR_CONVERSION.md](TALOS_SENSOR_CONVERSION.md) for conversion limits.
 
-## Navigation assembly with original DVL policy
+## Navigation assembly with original DVL and depth policies
 
 `talos_navigation.yaml` adds the 8 Hz device using `talos_dvl.yaml`, whose declared
 model is `reference_velocity`: a stationary-world velocity observation with original
@@ -55,18 +55,27 @@ through its separate model. Run the navigation assembly with:
 build/release/robotics-sim content/examples/talos_navigation_pool.yaml --sensors build/talos-navigation.csv
 ```
 
-This example produces 150 AHRS, 1500 FOG and 24 velocity samples in three seconds.
+This example produces 150 AHRS, 1500 FOG, 24 velocity and 60 depth samples in three seconds.
 The 125 ms device period rounds acquisitions onto the 2 ms physics lattice without
-phase drift (126 ms, 250 ms, 376 ms, ...). Pressure/depth and cameras remain open.
+phase drift (126 ms, 250 ms, 376 ms, ...).
+
+The 20 Hz depth device selects `reference_altitude`, with the original .010 m
+sampling standard deviation and .0001 m² reported variance. It measures the mounted
+point's world Z and corrects to the configured base point using the same pose.
+The target is the native COM-local base offset; the model has no robot/frame-name
+conventions. Both outputs share one noisy observation. This preserves the original
+unbounded world-Z product, including above-water positions. It is not raw pressure;
+physical pressure sensing remains separately selectable. Cameras remain open.
 The independent prescribed-state reference now verifies velocity and reported
-variance as well as AHRS/FOG. ROS names/messages remain outer adapter work.
+variance plus both depth heights and variance, as well as AHRS/FOG. ROS names/messages remain outer adapter work.
 
 ## Bounded delivery and remaining work
 
 This is a physics/mount slice, not the complete Talos simulator replacement:
 
-- `sensors: []` is explicit. Original sensor acquisition/calibration/reporting,
-  pressure/depth policy, cameras and stereo pairing remain to be connected.
+- The dynamics-only assembly explicitly has `sensors: []`; inertial and navigation
+  assemblies add the documented devices. Camera acquisition and stereo pairing
+  remain to be connected.
 - Camera frames describe mounting extrinsics only, not optical transforms or stereo
   baselines. Mechanism frames carry mount coordinates, not mechanism dynamics.
 - Original body/rotor/LED/prop assets, water rendering, task geometry/scoring and ROS

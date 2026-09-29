@@ -178,6 +178,26 @@ class ReferenceVelocity {
 struct ScalarNoiseParameters {
     double bias = 0, white_stddev = 0, walk_stddev = 0;
 };
+struct ReferenceAltitudeParameters {
+    Mount mount;
+    std::optional<Eigen::Vector3d> target_position_body; // COM-local metres; absent uses mount.
+    ScalarNoiseParameters noise;                         // m, m per acquisition, m/sqrt(s).
+    std::optional<double> reported_variance;             // m^2, independent of generated noise.
+};
+// Ideal world-Z observation with same-acquisition target-point correction, not pressure.
+class ReferenceAltitude {
+  public:
+    using Reading = AltitudeReading;
+    explicit ReferenceAltitude(ReferenceAltitudeParameters parameters = {});
+    void reset(std::uint64_t seed, const std::string &id);
+    Measurement<Reading> sample(const simulation::MotionSample &, double elapsed_seconds);
+
+  private:
+    ReferenceAltitudeParameters parameters_;
+    Eigen::Vector3d target_delta_body_;
+    Noise3 noise_;
+};
+
 struct PressureParameters {
     Mount mount;
     ScalarNoiseParameters noise;                         // Pa, Pa per acquisition, Pa/sqrt(s).

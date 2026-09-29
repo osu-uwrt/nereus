@@ -1,5 +1,5 @@
 # Generated from pinned original content; see docs/reference/TALOS_PHYSICS_PACK.md.
-# AHRS, FOG and reference-velocity DVL; pressure/cameras/mechanisms remain open.
+# AHRS, FOG, reference-velocity DVL and original depth reporting; cameras/mechanisms remain open.
 schema_version: 1
 kind: robot
 vehicle:
@@ -574,3 +574,16 @@ sensors:
   mount_frame: dvl_mount
   period_ns: 125000000
   profile: ../sensors/talos_dvl.yaml
+- id: depth
+  frame: world
+  mount_frame: depth_mount
+  period_ns: 50000000
+  model: reference_altitude
+  parameters:
+    target_position_body_m:
+    - 0.016999999999999987
+    - -0.010000000000000002
+    - -0.041999999999999996
+    noise:
+      white_stddev: 0.01
+    reported_variance: 0.0001

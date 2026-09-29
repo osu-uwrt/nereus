@@ -34,6 +34,11 @@ struct VelocityReading {
     Eigen::Vector3d reference_relative_velocity; // Sensor frame, m/s; no range observation.
     Eigen::Matrix3d covariance;
 };
+struct AltitudeReading {
+    double mounted_world_z; // m, measured altitude of the configured sensor point.
+    double target_world_z;  // m, corrected to the configured body-fixed target at acquisition.
+    double variance;        // m^2, shared by both perfectly correlated scalar observations.
+};
 struct PressureReading {
     double absolute_pressure; // Pa, including surface atmospheric pressure.
     double pressure_variance; // Pa^2.

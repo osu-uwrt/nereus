@@ -89,3 +89,8 @@ or silently call ideal altitude a pressure measurement. The legacy profile must
 name this approximation explicitly. Independent reported variance must remain
 present when sampling noise is disabled, and correction must use the acquisition
 orientation rather than a later or noisy AHRS observation.
+
+The selected reference-altitude model is now delivered through C++, native profiles,
+CSV and Python. The navigation assembly acquires the original depth product at
+20 Hz; all 28 captured noiseless sensor fields are verified. Camera/ROS integration
+and sensor behavior across a full mission remain open.

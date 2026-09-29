@@ -36,6 +36,7 @@ void bindRuntime(py::module_ &m) {
                        .def("fog_stream", &Runtime::stream<FogReading>, py::arg("id"))
                        .def("velocity_stream", &Runtime::stream<VelocityReading>, py::arg("id"))
                        .def("dvl_stream", &Runtime::stream<DvlReading>, py::arg("id"))
+                       .def("altitude_stream", &Runtime::stream<AltitudeReading>, py::arg("id"))
                        .def("pressure_stream", &Runtime::stream<PressureReading>, py::arg("id"));
     addModel<Imu>(runtime);
     addModel<Attitude>(runtime);
@@ -44,6 +45,7 @@ void bindRuntime(py::module_ &m) {
     addModel<Dvl>(runtime);
     addModel<ReferenceVelocity>(runtime);
     addModel<Pressure>(runtime);
+    addModel<ReferenceAltitude>(runtime);
     auto command = py::class_<config::ScheduledCommand>(m, "ScheduledCommand")
                        .def_readonly("tick", &config::ScheduledCommand::tick);
     readCopy(command, "forces", &config::ScheduledCommand::forces);

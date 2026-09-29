@@ -74,13 +74,18 @@ class ProfileRunnerTests(unittest.TestCase):
         result = self.run_profile(output)
         self.assertEqual(result.returncode, 0, result.stderr)
         rows = list(csv.DictReader(io.StringIO(output.read_text())))
-        for name, count in (("imu", 150), ("fog", 1500), ("dvl", 24)):
+        for name, count in (("imu", 150), ("fog", 1500), ("dvl", 24), ("depth", 60)):
             device = [r for r in rows if r["device"] == name]
             self.assertEqual(len({r["sequence"] for r in device}), count)
             self.assertEqual({r["valid"] for r in device}, {"1"})
         dvl = [r for r in rows if r["device"] == "dvl"]
         self.assertIn("reference_relative_velocity.z", {r["field"] for r in dvl})
         self.assertNotIn("bottom_distance", {r["field"] for r in dvl})
+        depth = [r for r in rows if r["device"] == "depth"]
+        self.assertEqual({r["field"] for r in depth},
+                         {"mounted_world_z", "target_world_z", "altitude_variance"})
+        self.assertEqual({float(r["value"]) for r in depth if r["field"] == "altitude_variance"},
+                         {0.0001})
 
     def test_invalid_nested_profile_fails_before_creating_output(self):
         profile = self.root / "content/sensors/imu.yaml"

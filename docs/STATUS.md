@@ -628,3 +628,28 @@ truthful pressure-device model; unbounded original world-Z cannot be preserved b
 extrapolating absolute pressure through negative values. Depth reference columns
 remain unverified until that model lands. Cameras, scene/water/LED/mechanism/task
 implementation and full-stack acceptance remain open.
+
+## Original depth reporting and complete prescribed sensor comparison
+
+The selectable `ReferenceAltitude` model observes mounted world Z and applies a
+configured COM-local target correction using the same acquisition pose. Both
+outputs share one scalar noise observation and variance; physical pressure remains
+separately selectable. C++, profiles, CSV and copied Python products are delivered.
+The pinned navigation assembly now includes original 20 Hz depth reporting with
+.010 m noise and .0001 m² reported variance. Its three-second run acquires 150 AHRS,
+1500 FOG, 24 DVL and 60 depth samples without changing the physical assembly.
+
+All 28 captured original noiseless sensor outputs match across 24 prescribed
+states, including mounted/base height above and below water. This closes the
+captured formula comparison, not full trajectory, stochastic-sequence, ROS or
+mission acceptance. Independent read-only review found no actionable defects.
+
+Next: original Talos body/rotor assets and a neutral CPU loader, then extract the
+full original scene/shadow/water/reflection/bloom/post renderer for fixed-input
+comparisons. Camera acquisition follows that renderer. LEDs, mechanisms, course
+assets/tasks, original operator panels and full RepairCompTree remain required.
+
+Validation: all 122 Release and ASan/UBSan tests passed, relocated installed C++
+consumers passed, and the installed Python wheel passed all 22 tests plus Ruff and
+strict mypy. The pinned importer reproduced all ten files. No ROS environment or
+original runtime files were required by the installed consumers.

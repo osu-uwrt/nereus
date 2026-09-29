@@ -84,6 +84,11 @@ void fields(const Row &row, const sensors::VelocityReading &reading) {
     row.vector("reference_relative_velocity", "m/s", reading.reference_relative_velocity);
     row.matrix("velocity_covariance", "m^2/s^2", reading.covariance);
 }
+void fields(const Row &row, const sensors::AltitudeReading &reading) {
+    row.field("mounted_world_z", "m", reading.mounted_world_z);
+    row.field("target_world_z", "m", reading.target_world_z);
+    row.field("altitude_variance", "m^2", reading.variance);
+}
 void fields(const Row &row, const sensors::PressureReading &reading) {
     row.field("absolute_pressure", "Pa", reading.absolute_pressure);
     row.field("pressure_variance", "Pa^2", reading.pressure_variance);
@@ -129,7 +134,8 @@ std::vector<std::function<void()>> telemetry(sensors::Runtime &runtime,
         {"fog", watch<sensors::FogReading>},
         {"dvl", watch<sensors::DvlReading>},
         {"reference_velocity", watch<sensors::VelocityReading>},
-        {"pressure", watch<sensors::PressureReading>}};
+        {"pressure", watch<sensors::PressureReading>},
+        {"reference_altitude", watch<sensors::AltitudeReading>}};
     std::vector<std::function<void()>> observers;
     for (const auto &plan : plans) {
         const auto factory = factories.find(plan.model);

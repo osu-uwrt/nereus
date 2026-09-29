@@ -123,6 +123,16 @@ void bindSensors(py::module_ &m) {
     py::class_<ReferenceVelocity>(m, "ReferenceVelocity")
         .def(py::init<ReferenceVelocityParameters>(),
              py::arg("parameters") = ReferenceVelocityParameters{});
+    auto altitude =
+        py::class_<ReferenceAltitudeParameters>(m, "ReferenceAltitudeParameters").def(py::init<>());
+    valueProperty(altitude, "mount", &ReferenceAltitudeParameters::mount);
+    valueProperty(altitude, "target_position_body",
+                  &ReferenceAltitudeParameters::target_position_body);
+    valueProperty(altitude, "noise", &ReferenceAltitudeParameters::noise);
+    valueProperty(altitude, "reported_variance", &ReferenceAltitudeParameters::reported_variance);
+    py::class_<ReferenceAltitude>(m, "ReferenceAltitude")
+        .def(py::init<ReferenceAltitudeParameters>(),
+             py::arg("parameters") = ReferenceAltitudeParameters{});
     py::class_<PressureParameters>(m, "PressureParameters")
         .def(py::init<>())
         .def_readwrite("mount", &PressureParameters::mount)
@@ -188,6 +198,11 @@ void bindSensors(py::module_ &m) {
              &VelocityReading::reference_relative_velocity);
     readCopy(velocity_reading, "covariance", &VelocityReading::covariance);
     bindStream<VelocityReading>(m, "VelocitySample", "VelocityStream");
+    py::class_<AltitudeReading>(m, "AltitudeReading")
+        .def_readonly("mounted_world_z", &AltitudeReading::mounted_world_z)
+        .def_readonly("target_world_z", &AltitudeReading::target_world_z)
+        .def_readonly("variance", &AltitudeReading::variance);
+    bindStream<AltitudeReading>(m, "AltitudeSample", "AltitudeStream");
     py::class_<PressureReading>(m, "PressureReading")
         .def_readonly("absolute_pressure", &PressureReading::absolute_pressure)
         .def_readonly("pressure_variance", &PressureReading::pressure_variance)

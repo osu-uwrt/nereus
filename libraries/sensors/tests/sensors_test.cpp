@@ -900,3 +900,91 @@ TEST(ReferenceVelocity, InclinationAcceptsRotatedAlignmentAndRejectsExteriorAngl
     input.state.body.orientation = Eigen::AngleAxisd(.4 + 1e-8, Eigen::Vector3d::UnitX());
     EXPECT_FALSE(boundary.sample(input, .01).value);
 }
+
+TEST(ReferenceAltitude, CorrectsMountedHeightUsingTheSameAcquisitionPose) {
+    ReferenceAltitudeParameters parameters;
+    parameters.mount.position_body = {1, 2, 3};
+    parameters.mount.sensor_to_body = Eigen::AngleAxisd(.7, Eigen::Vector3d::UnitY());
+    parameters.target_position_body = Eigen::Vector3d(-2, 3, -4);
+    parameters.noise.bias = .25;
+    auto input = motion();
+    input.state.body.orientation = Eigen::AngleAxisd(std::acos(-1.) / 2, Eigen::Vector3d::UnitX());
+    input.acceleration_valid = false; // Height needs pose, not differentiated acceleration.
+    ReferenceAltitude model(parameters);
+    const auto result = model.sample(input, .05).value.value();
+    EXPECT_NEAR(result.mounted_world_z, .25, 1e-12);
+    EXPECT_NEAR(result.target_world_z, 1.25, 1e-12);
+    EXPECT_EQ(result.variance, 0);
+    input.state.body.orientation = Eigen::Quaterniond::Identity();
+    const auto upright = model.sample(input, .05).value.value();
+    EXPECT_DOUBLE_EQ(upright.mounted_world_z, 1.25);
+    EXPECT_DOUBLE_EQ(upright.target_world_z, -5.75);
+    parameters.target_position_body.reset();
+    ReferenceAltitude at_mount(parameters);
+    const auto same = at_mount.sample(input, .05).value.value();
+    EXPECT_EQ(same.target_world_z, same.mounted_world_z);
+}
+
+TEST(ReferenceAltitude, NoiseIsSharedAndReportedVarianceDoesNotChangeReplay) {
+    ReferenceAltitudeParameters parameters;
+    parameters.mount.position_body.z() = 1;
+    parameters.target_position_body = Eigen::Vector3d(0, 0, -2);
+    parameters.noise = {.1, .02, .03};
+    ReferenceAltitude generated(parameters);
+    parameters.reported_variance = .9;
+    ReferenceAltitude reported(parameters);
+    std::vector<double> first;
+    for (int replay = 0; replay < 2; ++replay) {
+        generated.reset(42, "depth");
+        reported.reset(42, "depth");
+        for (int i = 0; i < 20; ++i) {
+            const auto a = generated.sample(motion(), .05).value.value();
+            const auto b = reported.sample(motion(), .05).value.value();
+            EXPECT_EQ(a.mounted_world_z, b.mounted_world_z);
+            EXPECT_EQ(a.target_world_z, b.target_world_z);
+            EXPECT_NEAR(a.target_world_z - a.mounted_world_z, -3, 1e-14);
+            EXPECT_NEAR(a.variance, .02 * .02 + (i + 1) * .05 * .03 * .03, 1e-14);
+            EXPECT_EQ(b.variance, .9);
+            if (replay == 0)
+                first.push_back(a.mounted_world_z);
+            else
+                EXPECT_EQ(a.mounted_world_z, first[i]);
+        }
+    }
+}
+
+TEST(ReferenceAltitude, UnboundedWorldHeightIsDistinctFromHydrostaticPressure) {
+    ReferenceAltitude altitude;
+    Pressure pressure({}, HydrostaticPressure(0));
+    auto input = motion();
+    for (double z : {-100., -2., 0., 20., 100.}) {
+        input.state.body.position.z() = z;
+        const auto measured = altitude.sample(input, .05).value.value();
+        EXPECT_EQ(measured.mounted_world_z, z);
+        EXPECT_EQ(measured.target_world_z, z);
+        if (z >= 0) {
+            EXPECT_EQ(pressure.sample(input, .05).value->absolute_pressure, 101325);
+            EXPECT_EQ(pressure.sample(input, .05).value->depth, 0);
+        }
+    }
+}
+
+TEST(ReferenceAltitude, RejectsInvalidParametersAndOverflow) {
+    ReferenceAltitudeParameters p;
+    p.target_position_body = Eigen::Vector3d(0, 0, std::numeric_limits<double>::infinity());
+    EXPECT_THROW((ReferenceAltitude(p)), std::invalid_argument);
+    p.target_position_body.reset();
+    for (double variance : {-1., std::numeric_limits<double>::quiet_NaN()}) {
+        p.reported_variance = variance;
+        EXPECT_THROW((ReferenceAltitude(p)), std::invalid_argument);
+    }
+    p.reported_variance.reset();
+    p.noise.white_stddev = -1;
+    EXPECT_THROW((ReferenceAltitude(p)), std::invalid_argument);
+    p.noise.white_stddev = 0;
+    p.mount.position_body.z() = std::numeric_limits<double>::max();
+    auto input = motion();
+    input.state.body.position.z() = std::numeric_limits<double>::max();
+    ReferenceAltitude model(p);
+    EXPECT_THROW(model.sample(input, .05), std::overflow_error);
+}

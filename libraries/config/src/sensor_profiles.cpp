@@ -25,6 +25,19 @@ sensors::NoiseParameters noise(const YAML::Node &node, const std::string &field)
     }
     return result;
 }
+sensors::ScalarNoiseParameters scalarNoise(const YAML::Node &node, const std::string &field) {
+    sensors::ScalarNoiseParameters result;
+    if (!node.IsDefined())
+        return result;
+    keys(node, {"bias", "white_stddev", "walk_stddev"}, field);
+    if (node["bias"])
+        result.bias = number(node, "bias", field);
+    if (node["white_stddev"])
+        result.white_stddev = number(node, "white_stddev", field);
+    if (node["walk_stddev"])
+        result.walk_stddev = number(node, "walk_stddev", field);
+    return result;
+}
 sensors::Nanoseconds duration(const YAML::Node &node, const char *key, const std::string &field) {
     const auto value = integer(node, key, field);
     if (value > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
@@ -160,6 +173,21 @@ Attach referenceVelocity(const sensors::Mount &mount, const YAML::Node &node,
         runtime.add(device, model);
     };
 }
+Attach referenceAltitude(const sensors::Mount &mount, const YAML::Node &node,
+                         const std::string &field) {
+    keys(node, {"target_position_body_m", "noise", "reported_variance"}, field);
+    sensors::ReferenceAltitudeParameters p;
+    p.mount = mount;
+    p.noise = scalarNoise(node["noise"], field + ".noise");
+    if (node["target_position_body_m"])
+        p.target_position_body = vector(node, "target_position_body_m", 3, field);
+    if (node["reported_variance"])
+        p.reported_variance = number(node, "reported_variance", field);
+    const sensors::ReferenceAltitude model(p);
+    return [model](auto &runtime, const auto &device, const auto &, double) {
+        runtime.add(device, model);
+    };
+}
 Attach pressure(const sensors::Mount &mount, const YAML::Node &node, const std::string &field) {
     keys(node,
          {"noise", "reference_pressure_pa", "reference_density_kg_m3", "reference_gravity_m_s2",
@@ -167,19 +195,7 @@ Attach pressure(const sensors::Mount &mount, const YAML::Node &node, const std::
          field);
     sensors::PressureParameters p;
     p.mount = mount;
-    if (node["noise"]) {
-        const auto n = node["noise"];
-        keys(n, {"bias", "white_stddev", "walk_stddev"}, field + ".noise");
-        if (n["bias"]) {
-            p.noise.bias = number(n, "bias", field + ".noise");
-        }
-        if (n["white_stddev"]) {
-            p.noise.white_stddev = number(n, "white_stddev", field + ".noise");
-        }
-        if (n["walk_stddev"]) {
-            p.noise.walk_stddev = number(n, "walk_stddev", field + ".noise");
-        }
-    }
+    p.noise = scalarNoise(node["noise"], field + ".noise");
     if (node["reference_pressure_pa"]) {
         p.reference_pressure = number(node, "reference_pressure_pa", field);
     }
@@ -268,9 +284,10 @@ SensorPlan parseSensor(const YAML::Node &node, const std::filesystem::path &decl
     result.model = model;
     // Configuration-edge registry only; no family enum or branch in the runtime.
     const std::map<std::string, Decode> decoders{
-        {"imu", imu},          {"attitude", attitude}, {"ahrs", ahrs},
-        {"fog", fog},          {"dvl", dvl},           {"reference_velocity", referenceVelocity},
-        {"pressure", pressure}};
+        {"imu", imu},           {"attitude", attitude},
+        {"ahrs", ahrs},         {"fog", fog},
+        {"dvl", dvl},           {"reference_velocity", referenceVelocity},
+        {"pressure", pressure}, {"reference_altitude", referenceAltitude}};
     const auto decoder = decoders.find(model);
     if (decoder == decoders.end()) {
         throw std::invalid_argument(definition_field + ": unsupported sensor model " + model);

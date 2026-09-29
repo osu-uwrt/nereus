@@ -13,6 +13,7 @@ int main() {
     sensors::Runtime runtime(parameters, initial, 42);
     auto imu = runtime.add({"imu", "imu_link", 10ms}, sensors::Imu{});
     auto velocity = runtime.add({"velocity", "velocity_link", 10ms}, sensors::ReferenceVelocity{});
+    auto altitude = runtime.add({"altitude", "world", 50ms}, sensors::ReferenceAltitude{});
     sensors::AhrsParameters ahrs_parameters;
     ahrs_parameters.attitude.heading_drift_rate = .1;
     auto ahrs = runtime.add({"ahrs", "imu_link", 20ms}, sensors::Ahrs({}, ahrs_parameters));
@@ -56,6 +57,11 @@ int main() {
                     runtime.observe().body.linear_velocity)
                 return 1;
         }
+        for (const auto &sample : altitude->drain()) {
+            if (!sample.measurement.value ||
+                sample.measurement.value->target_world_z != runtime.observe().body.position.z())
+                return 1;
+        }
         for (const auto &sample : pressure->drain()) {
             if (!sample.measurement.value) {
                 return 1;
@@ -75,12 +81,12 @@ int main() {
     if (imu->stats().delivered != 100 || fog->stats().delivered != 50 ||
         dvl->stats().delivered != 9 || pressure->stats().delivered != 20 ||
         ahrs->stats().delivered != 50 || attitude->stats().delivered != 50 ||
-        velocity->stats().delivered != 100) {
+        velocity->stats().delivered != 100 || altitude->stats().delivered != 20) {
         return 1;
     }
     runtime.reset(initial, 42);
     return imu->latest() || fog->latest() || dvl->latest() || pressure->latest() ||
-                   ahrs->latest() || attitude->latest() || velocity->latest()
+                   ahrs->latest() || attitude->latest() || velocity->latest() || altitude->latest()
                ? 1
                : 0;
 }

@@ -298,6 +298,18 @@ def main():
                 "period_ns": round(1e9 / vehicle["dvl"]["rate"]),
                 "profile": "../sensors/talos_dvl.yaml",
             },
+            {
+                "id": "depth",
+                "frame": "world",
+                "mount_frame": "depth_mount",
+                "period_ns": round(1e9 / vehicle["depth"]["rate"]),
+                "model": "reference_altitude",
+                "parameters": {
+                    "target_position_body_m": [vehicle["base_link"][i] - com[i] for i in range(3)],
+                    "noise": {"white_stddev": vehicle["depth"]["sigma"]},
+                    "reported_variance": vehicle["depth"]["sigma"] ** 2,
+                },
+            },
         ],
     }
     navigation_run = {**run, "robot": "../robots/talos_navigation.yaml"}
@@ -323,14 +335,14 @@ def main():
         + "# Original default velocity reporting: no floor, range or inclination gate.\n"
         + yaml.safe_dump(dvl, sort_keys=False),
         "content/robots/talos_navigation.yaml": header
-        + "# AHRS, FOG and reference-velocity DVL; pressure/cameras/mechanisms remain open.\n"
+        + "# AHRS, FOG, reference-velocity DVL and original depth reporting; cameras/mechanisms remain open.\n"
         + yaml.safe_dump(navigation_robot, sort_keys=False),
         "content/examples/talos_navigation_pool.yaml": header
         + "# Scripted navigation-sensor example, not the competition mission.\n"
         + yaml.safe_dump(navigation_run, sort_keys=False),
     }
     metadata = {
-        "scope": "Original Talos dynamics, static hull/pool proxies and rigid mounts, separate noise-enabled inertial and navigation assemblies (IMU/FOG/reference-velocity DVL). Scripted commands; no pressure/cameras, visuals, tasks or stack adapters.",
+        "scope": "Original Talos dynamics, static hull/pool proxies and rigid mounts, separate noise-enabled inertial and navigation assemblies (IMU/FOG/reference-velocity DVL/reference-altitude depth). Scripted commands; no raw pressure/cameras, visuals, tasks or stack adapters.",
         "parameter_status": hydro["parameter_status"],
         "sources_sha256": sources,
         "importer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),

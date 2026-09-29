@@ -383,6 +383,42 @@ Measurement<Dvl::Reading> Dvl::sample(const simulation::MotionSample &motion,
     }
     return {std::move(result), {}};
 }
+ReferenceAltitude::ReferenceAltitude(ReferenceAltitudeParameters parameters)
+    : parameters_(std::move(parameters)),
+      target_delta_body_(
+          parameters_.target_position_body.value_or(parameters_.mount.position_body) -
+          parameters_.mount.position_body),
+      noise_(NoiseParameters{{parameters_.noise.bias, 0, 0},
+                             {parameters_.noise.white_stddev, 0, 0},
+                             {parameters_.noise.walk_stddev, 0, 0}}) {
+    normalizeMount(parameters_.mount);
+    if (!target_delta_body_.allFinite() ||
+        (parameters_.target_position_body && !parameters_.target_position_body->allFinite()))
+        throw std::invalid_argument("altitude target requires finite position and mount offset");
+    if (parameters_.reported_variance &&
+        (!std::isfinite(*parameters_.reported_variance) || *parameters_.reported_variance < 0))
+        throw std::invalid_argument("altitude reported variance must be finite and nonnegative");
+}
+void ReferenceAltitude::reset(std::uint64_t seed, const std::string &id) {
+    noise_.reset(seed, id, "reference_altitude.height");
+}
+Measurement<ReferenceAltitude::Reading>
+ReferenceAltitude::sample(const simulation::MotionSample &motion, double elapsed_seconds) {
+    validateMotion(motion);
+    const double noise = noise_.sample(elapsed_seconds).x();
+    const auto &body = motion.state.body;
+    const Eigen::Vector3d mounted =
+        body.position + body.orientation * parameters_.mount.position_body;
+    const Eigen::Vector3d correction = body.orientation * target_delta_body_;
+    const double measured = mounted.z() + noise;
+    Reading result{measured, measured + correction.z(),
+                   parameters_.reported_variance.value_or(noise_.covariance()(0, 0))};
+    if (!mounted.allFinite() || !correction.allFinite() || !std::isfinite(result.mounted_world_z) ||
+        !std::isfinite(result.target_world_z))
+        throw std::overflow_error("altitude measurement overflow");
+    return {result, {}};
+}
+
 HydrostaticPressure::HydrostaticPressure(double water_level, double density,
                                          double surface_pressure, double gravity)
     : level_(water_level), surface_pressure_(surface_pressure), gradient_(density * gravity) {

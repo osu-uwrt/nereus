@@ -109,13 +109,16 @@ the viewer still draws line geometry.
   Talos full device composition, original output captures and ROS products remain open.
 - [x] Pinned native Talos 50 Hz AHRS and 500 Hz FOG assembly, source-independent
   execution, complete three-second acquisition and unchanged plant trajectory.
-  DVL, pressure/depth and cameras remain open.
+  Navigation assembly below adds DVL/depth; cameras remain open.
 - [x] Independent extracted original AHRS/FOG measurement formulas match 24 prescribed
   kinematic states, now also including original DVL velocity/variance and retained
   uncertainty with sampling noise disabled
   (reference/SENSOR_KINEMATICS.md). Whole-stack timing/products remain open.
 - [x] Separate reference-velocity model and original default Talos DVL policy,
   optional inclination validity, native 8 Hz acquisition and captured formula parity.
+- [x] Explicit reference-altitude observation with same-acquisition mount-to-target
+  correction, original Talos 20 Hz depth configuration and all 28 captured sensor
+  fields verified. Physical pressure remains independently selectable.
 - [ ] Native assets and reproducible resolved configuration load outside old workspace.
 
 ## D. Renderer and UI fidelity
@@ -198,9 +201,11 @@ selected live-robot workflows required here.
 3. Stage forcing and actuator calibration/stop interfaces are verified in their
    bounded reference/contracts. Static compound contacts are integrated and validated.
    Named body mounts are now resolved for sensors and live visualization. Next:
-   pressure/depth reporting with its captured original comparisons, then remaining
-   device composition (reference/TALOS_SENSOR_CONVERSION.md), then original neutral
-   scene/assets. The original Talos
+   original Talos mesh assets and neutral CPU loader, followed by the complete
+   original scene/shadow/water/reflection/bloom/post pipeline in fixed-input scenes.
+   Depth reporting now passes its captured original comparisons. Cameras follow the
+   extracted renderer; other device/adapter work stays in the sensor conversion map.
+   The original Talos
    dynamics capture now covers every tick of the three bounded physics cases;
    task/prop contacts and full mission references remain open.
 4. Re-evaluate this order after each validated commit against concrete dependencies.

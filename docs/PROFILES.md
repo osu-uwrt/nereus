@@ -98,10 +98,11 @@ rules or overrides. All models require a parameters mapping, even when it is `{}
 | `fog` | Required `axes`: one to three unit vectors in sensor coordinates; `gyro_noise`, optional sensor-axis diagonal `reported_variance` in (rad/s)² |
 | `dvl` | `bottom_axis` (default sensor −Z), `minimum_range_m` (0.1), `maximum_range_m` (50), `velocity_noise` |
 | `reference_velocity` | `reference_velocity_world_m_s` (zero), `velocity_noise`, `reported_variance`, optional `inclination_limit` |
+| `reference_altitude` | `target_position_body_m` (mount position), scalar `noise` in metres, optional `reported_variance` in m² |
 | `pressure` | `noise`, `reference_pressure_pa` (101325), `reference_density_kg_m3` (1000), `reference_gravity_m_s2` (9.80665), `minimum_pressure_pa` (0), `maximum_pressure_pa` (10000000) |
 
 Noise mappings allow `bias`, `white_stddev`, and `walk_stddev`, defaulting to zero.
-Use three-element vectors for IMU/FOG/DVL and scalars for pressure. Units are the
+Use three-element vectors for IMU/FOG/DVL and scalars for pressure/reference altitude. Units are the
 measurement's units, per-acquisition standard deviation, and standard deviation per
 sqrt(second), respectively. Pressure calibration intentionally remains independent
 of the world's density and atmospheric pressure. DVL uses the resolved world's
@@ -202,6 +203,7 @@ handles for checked lookup, never measurement values or arbitrary parameter maps
 sample generates named field rows containing generation, device/frame, sequence,
 physics tick, scheduled/acquired/delivered nanoseconds, validity/reason, field, unit,
 and value. IMU/DVL vectors use `.x/.y/.z`; covariance fields use `.row.column`.
+Reference altitude exports `mounted_world_z`, `target_world_z` and `altitude_variance`.
 FOG rates use configured axis indices. Pressure exports absolute pressure, depth,
 and both variances. An unavailable reading produces one row with its reason and
 an empty field/unit/value, not valid zeros. Strings are CSV-escaped.

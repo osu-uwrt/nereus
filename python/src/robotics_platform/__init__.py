@@ -8,6 +8,9 @@ from ._native import (
     AhrsReading,
     AhrsSample,
     AhrsStream,
+    AltitudeReading,
+    AltitudeSample,
+    AltitudeStream,
     Attitude,
     AttitudeParameters,
     AttitudeReading,
@@ -48,6 +51,8 @@ from ._native import (
     PressureReading,
     PressureSample,
     PressureStream,
+    ReferenceAltitude,
+    ReferenceAltitudeParameters,
     ReferenceVelocity,
     ReferenceVelocityParameters,
     Runtime,
@@ -72,6 +77,11 @@ def example_scenario() -> Path:
 
 
 __all__ = [
+    "ReferenceAltitude",
+    "ReferenceAltitudeParameters",
+    "AltitudeReading",
+    "AltitudeSample",
+    "AltitudeStream",
     "InclinationLimit",
     "ReferenceVelocityParameters",
     "ReferenceVelocity",
