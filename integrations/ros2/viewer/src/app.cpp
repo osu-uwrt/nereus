@@ -957,10 +957,11 @@ void App::drawWaterControls() {
     slider("Blue absorption", edited.absorption[2], 0, 1, "%.3f /m");
     ImGui::TextDisabled("More red absorption\nmakes distant objects\nlook bluer.");
     ImGui::Columns(1);
-    ImGui::TextDisabled("Tint and haze accumulate along the underwater sightline. These settings change only this "
-                        "viewer's rendering;");
-    ImGui::TextDisabled("the robot cameras are rendered by the bridge from the pool pack. Exponent 1 / clear distance 0: "
-                        "exponential attenuation.");
+    ImGui::PushStyleColor(ImGuiCol_Text, muted);
+    ImGui::TextWrapped("Tint and haze accumulate along the underwater sightline. These settings change only this "
+                       "viewer's rendering; the robot cameras are rendered by the bridge from the pool pack. "
+                       "Exponent 1 / clear distance 0: exponential attenuation.");
+    ImGui::PopStyleColor();
     look_.appearance.water = edited;
     ImGui::PopStyleVar(2);
 }
@@ -1090,7 +1091,9 @@ void App::drawSceneSettings(float sidebar, float left) {
                     ImGui::SliderFloat("Glare", &a.glare, 0, 2, "%.2f");
                 } else
                     ImGui::TextDisabled("Diffuse indoor lighting. Switch to Outdoor to adjust sun and glare.");
-                ImGui::TextDisabled("Observer settings only: the bridge renders the robot cameras from the pool pack.");
+                ImGui::PushStyleColor(ImGuiCol_Text, muted);
+                ImGui::TextWrapped("Observer settings only: the bridge renders the robot cameras from the pool pack.");
+                ImGui::PopStyleColor();
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Water appearance")) {
@@ -1529,7 +1532,7 @@ int App::loop() {
         if (composition_)
             composition_->touch();
         step(t);
-        if (opt_.injectF.size() == 2 && opt_.frames > 0) {
+        if (opt_.injectF.size() == 2 && opt_.frames > 0 && scenario_) {
             auto &io = ImGui::GetIO();
             if (frames == opt_.frames / 2)
                 io.AddMousePosEvent(opt_.injectF[0], opt_.injectF[1]);
@@ -1564,7 +1567,11 @@ int App::loop() {
         }
         if (opt_.frames > 0 && window_->imguiErrors() > 0)
             throw std::runtime_error("ImGui validation failed during capture run");
-        ++frames;
+        // A capture run starts counting once the scene exists (the scenario topic can arrive late).
+        if (scenario_)
+            ++frames;
+        else if (opt_.frames > 0 && t > 30)
+            throw std::runtime_error("no scenario document received within 30 s");
         const bool last = opt_.frames > 0 && frames >= opt_.frames;
         window_->present(last, opt_.screenshot);
         if (last) {
