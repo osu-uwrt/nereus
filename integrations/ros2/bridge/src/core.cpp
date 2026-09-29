@@ -922,8 +922,10 @@ CommandResult BridgeCore::runCommand(const std::string &text) {
     } catch (const Json::exception &error) {
         result = CommandResult{false, error.what()};
     }
-    if (!result.accepted)
+    if (!result.accepted) {
         Counters::bump(counters_.rejected_commands, "run_command");
+        session_.setRunMessage("Command rejected: " + result.message); // shown by the viewer's scorecard
+    }
     return result;
 }
 

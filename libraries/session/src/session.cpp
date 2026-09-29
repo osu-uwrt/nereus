@@ -514,6 +514,10 @@ CommandResult Session::runAdjust(double points) {
     return {true, s.run_message};
 }
 
+void Session::setRunMessage(const std::string &message) {
+    impl_->run_message = message;
+}
+
 std::optional<Json> Session::runSnapshot() const {
     const auto &s = *impl_;
     if (!s.tasks)

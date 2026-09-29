@@ -77,6 +77,7 @@ class SessionPort {
     virtual session::CommandResult runStart(const Json &options) = 0;
     virtual session::CommandResult runStop() = 0;
     virtual session::CommandResult runAdjust(double points) = 0;
+    virtual void setRunMessage(const std::string &message) = 0;
     virtual std::optional<Json> runSnapshot() const = 0;
     virtual Json takeFeed() = 0;
     virtual Json taskCounters() const = 0;

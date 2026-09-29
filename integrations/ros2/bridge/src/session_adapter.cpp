@@ -189,6 +189,7 @@ session::CommandResult SessionAdapter::runStart(const Json &options) { return im
 session::CommandResult SessionAdapter::runStop() { return impl_->session->runStop(); }
 session::CommandResult SessionAdapter::runAdjust(double points) { return impl_->session->runAdjust(points); }
 std::optional<Json> SessionAdapter::runSnapshot() const { return impl_->session->runSnapshot(); }
+void SessionAdapter::setRunMessage(const std::string &message) { impl_->session->setRunMessage(message); }
 Json SessionAdapter::takeFeed() { return impl_->session->takeFeed(); }
 Json SessionAdapter::taskCounters() const { return impl_->session->taskCounters(); }
 Eigen::VectorXd SessionAdapter::thrusterForces() const { return impl_->session->thrusterForces(); }

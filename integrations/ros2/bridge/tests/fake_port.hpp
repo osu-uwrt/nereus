@@ -207,6 +207,8 @@ class FakePort : public SessionPort {
     session::CommandResult runStop() override { calls.push_back("run_stop"); return next_result; }
     session::CommandResult runAdjust(double p) override { calls.push_back("run_adjust:" + std::to_string(p)); return next_result; }
     std::optional<Json> runSnapshot() const override { return run_snapshot; }
+    void setRunMessage(const std::string &message) override { run_message = message; }
+    std::string run_message;
     Json takeFeed() override {
         Json out = feed;
         feed = Json::array();

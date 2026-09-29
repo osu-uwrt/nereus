@@ -405,6 +405,10 @@ TEST(Commands, RunCommandsStartStopAdjustAndRejectMalformedText) {
     EXPECT_EQ(rejected, 6u);
     const auto unknown = rig.core->runCommand("{\"action\": \"dance\"}");
     EXPECT_EQ(unknown.message, "Unknown run command");
+    EXPECT_EQ(rig.port.run_message, "Command rejected: Unknown run command"); // surfaced in run_score
+    rig.port.next_result = {false, "Stop the current run first"};
+    EXPECT_FALSE(rig.core->runCommand(R"({"action": "start"})").accepted);
+    EXPECT_EQ(rig.port.run_message, "Command rejected: Stop the current run first");
 }
 
 TEST(RealTimeFactor, ValidatesAndAppliesSpeed) {

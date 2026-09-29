@@ -44,6 +44,7 @@ class SessionAdapter final : public SessionPort {
     session::CommandResult runStop() override;
     session::CommandResult runAdjust(double points) override;
     std::optional<Json> runSnapshot() const override;
+    void setRunMessage(const std::string &message) override;
     Json takeFeed() override;
     Json taskCounters() const override;
     Eigen::VectorXd thrusterForces() const override;

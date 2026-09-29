@@ -89,6 +89,7 @@ class Session {
     CommandResult runStart(const Json &options = Json::object());
     CommandResult runStop();
     CommandResult runAdjust(double points);
+    void setRunMessage(const std::string &message); // e.g. "Command rejected: <reason>" from a transport
     std::optional<Json> runSnapshot() const; // run_score document (old simulator format)
     Json takeFeed();                         // task_events records since the last call
     Json taskCounters() const;               // task_score document
