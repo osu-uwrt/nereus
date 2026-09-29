@@ -62,6 +62,8 @@ RosSide::RosSide(rclcpp::Node::SharedPtr node) : node_(std::move(node)) {
     executor_->add_node(node_);
     buffer_ = std::make_unique<tf2_ros::Buffer>(node_->get_clock());
     listener_ = std::make_unique<tf2_ros::TransformListener>(*buffer_, node_, false);
+    // Data arrives via spin() on this thread and every lookup uses a zero timeout, so nothing ever waits.
+    buffer_->setUsingDedicatedThread(true);
 }
 
 glm::mat4 RosSide::matrixOf(const geometry_msgs::msg::Transform &t) const {
@@ -382,9 +384,11 @@ void RosSide::captureMpc(bool wanted) {
         return;
     const double age = std::chrono::duration<double>(Clock::now() - mpcReceived_).count();
     if (mpcPending_) {
-        // Solves are stamped at compute time; TF can trail that by a few ms. Retry at the stamp briefly,
-        // then settle for the latest transforms.
-        const rclcpp::Time stamp = age > .2 ? rclcpp::Time(0, 0, RCL_ROS_TIME) : rclcpp::Time(mpcMessage_.header.stamp);
+        // Solves are stamped at compute time; TF can trail that by a few ms. Retry at the stamp briefly
+        // (measured from the first failed attempt, not the latest message), then settle for the latest
+        // transforms.
+        const bool settle = mpcFailing_ && std::chrono::duration<double>(Clock::now() - mpcFailingSince_).count() > .2;
+        const rclcpp::Time stamp = settle ? rclcpp::Time(0, 0, RCL_ROS_TIME) : rclcpp::Time(mpcMessage_.header.stamp);
         try {
             const auto estimated =
                 matrixOf(buffer_->lookupTransform(scenario_->estimateBaseFrame, mpcMessage_.header.frame_id, stamp).transform);
@@ -394,7 +398,12 @@ void RosSide::captureMpc(bool wanted) {
             for (const auto &pose : mpcMessage_.poses)
                 mpcPath.push_back(truth * estimated * poseOf(pose.pose));
             mpcPending_ = false;
+            mpcFailing_ = false;
         } catch (const tf2::TransformException &) {
+            if (!mpcFailing_) {
+                mpcFailing_ = true;
+                mpcFailingSince_ = Clock::now();
+            }
         }
     }
     if (age > .5)

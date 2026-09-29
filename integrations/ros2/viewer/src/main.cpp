@@ -16,6 +16,8 @@ void usage() {
         "  --demo-task NAME       preview target landmark (demo only)\n"
         "  --focus NAME           initial focus (Course, Vehicle, a landmark, ...)\n"
         "  --view NAME            initial view: orbit, free, or a camera id\n"
+        "  --orbit YAW PITCH DIST initial orbit angles (radians) and distance (metres) after the focus\n"
+        "  --open NAME            open scene-settings, map, tf, pool-viewer or depth (camera cards) at start (repeatable)\n"
         "  --show-tf --detections --mpc-path --show-scorecard   initial toggle states\n"
         "  --hidden --frames N --screenshot out.png   render N frames, save a PNG, exit\n"
         "  --render-rate HZ       frame cap (default 30)\n"
@@ -60,7 +62,11 @@ int main(int argc, char **argv) {
             options.initialFocus = value();
         else if (arg == "--view")
             options.initialView = value();
-        else if (arg == "--demo-task")
+        else if (arg == "--open")
+            options.open.push_back(value());
+        else if (arg == "--orbit") {
+            options.orbit = {std::stof(value()), std::stof(value()), std::stof(value())};
+        } else if (arg == "--demo-task")
             options.demoTask = value();
         else if (arg == "--demo")
             options.demo = true;

@@ -134,8 +134,8 @@ class RosSide {
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr scenarioSub_;
     rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr mpcSub_;
     nav_msgs::msg::Path mpcMessage_;
-    bool mpcPending_ = false;
-    Clock::time_point mpcReceived_{};
+    bool mpcPending_ = false, mpcFailing_ = false;
+    Clock::time_point mpcReceived_{}, mpcFailingSince_{};
     std::map<MarkerKey, DetectionEntry> detectionMarkers_;
     std::map<std::string, rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr> mechanismCommands_;
     std::set<std::string> warnedMeshes_;

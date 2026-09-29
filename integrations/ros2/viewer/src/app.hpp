@@ -19,6 +19,8 @@ struct Options {
     bool demo = false;              // no ROS graph: fixed preview pose, no providers
     bool hidden = false;
     bool showTf = false, detections = false, mpcPath = false, showScorecard = false;
+    std::vector<std::string> open;  // initial windows/popups: scene-settings, map, tf, pool-viewer
+    std::vector<float> orbit;       // optional initial orbit: yaw pitch distance (radians, metres)
     int frames = 0;                 // render N frames, save the screenshot, exit
     double renderRate = 30;
     std::optional<bool> useSimTime; // default: on unless --demo

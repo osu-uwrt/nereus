@@ -157,6 +157,7 @@ class App {
     void focus(const std::string &name);
     glm::vec3 focusTarget(const std::string &name) const;
     void previewPose(const std::string &name);
+    void applyInitialView();
     // --- per frame
     double clockSeconds() const;
     void step(double t);
@@ -178,6 +179,7 @@ class App {
     void sectionHeading(const char *text);
     std::string runTime() const;
     void saveCameraImages(const fs::path &screenshot);
+    void renderDemoCards(const rendering::Scene &, double t);
 
     Options opt_;
     YAML::Node config_;
@@ -214,10 +216,11 @@ class App {
     SensorView viewportView_;
     rendering::RenderedFrame lastFrame_;
     bool haveFrame_ = false;
-    GLuint readFbo_ = 0;
+    GLuint readFbo_ = 0, drawFbo_ = 0;
     // settings
     Look look_;
     ObserverSettings observer_;
+    bool openTfPopup_ = false, openObserverPopup_ = false, openDepth_ = false;
     bool sceneSettingsOpen_ = false, showTf_ = false, tfNames_ = true, tfTreeOpen_ = false, detections_ = false,
          showMpc_ = false, largeMap_ = false, focusMap_ = false, demoMode_ = false;
     float tfAxisLength_ = .12f, mapZoom_ = 1;
@@ -244,6 +247,13 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     config_ = YAML::LoadFile(configPath.string());
     configDir_ = configPath.parent_path();
     demoMode_ = opt_.demo;
+    for (const auto &name : opt_.open) {
+        sceneSettingsOpen_ |= name == "scene-settings";
+        largeMap_ = focusMap_ = largeMap_ || name == "map";
+        openTfPopup_ |= name == "tf";
+        openObserverPopup_ |= name == "pool-viewer";
+        openDepth_ |= name == "depth";
+    }
     showTf_ = opt_.showTf;
     detections_ = opt_.detections;
     showMpc_ = opt_.mpcPath;
@@ -269,6 +279,7 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
         shaders = fs::canonical("/proc/self/exe").parent_path().parent_path() / "share/robotics_platform/shaders";
     renderer_ = std::make_unique<rendering::Renderer>(shaders);
     glGenFramebuffers(1, &readFbo_);
+    glGenFramebuffers(1, &drawFbo_);
     start_ = Clock::now();
     if (opt_.renderRate <= 0 || opt_.renderRate > 240)
         throw std::runtime_error("render rate must be in (0,240]");
@@ -302,6 +313,8 @@ App::~App() {
     }
     if (readFbo_)
         glDeleteFramebuffers(1, &readFbo_);
+    if (drawFbo_)
+        glDeleteFramebuffers(1, &drawFbo_);
     renderer_.reset();
     ros_.reset();
     window_.reset();
@@ -396,6 +409,21 @@ void App::focus(const std::string &name) {
     follow_ = p.follow;
 }
 
+// Command-line view overrides survive the first-pose refocus.
+void App::applyInitialView() {
+    if (opt_.orbit.size() == 3) {
+        yaw_ = opt_.orbit[0];
+        pitch_ = opt_.orbit[1];
+        distance_ = opt_.orbit[2];
+    }
+    if (!opt_.initialView.empty() && scenario_) {
+        mode_ = opt_.initialView == "free" ? 1 : 0;
+        for (std::size_t i = 0; i < scenario_->cameras.size(); ++i)
+            if (scenario_->cameras[i].id == opt_.initialView)
+                mode_ = int(i) + 2;
+    }
+}
+
 void App::previewPose(const std::string &name) {
     if (!scenario_)
         return;
@@ -448,6 +476,9 @@ void App::loadScenario(const std::string &json) {
     look_.appearance = scenario_->appearance;
     look_.tag = lookup(config_, {"calibration_board", "visible"}).as<bool>(true);
     cards_.assign(scenario_->cameras.size(), {});
+    for (auto &feed : ros_->feeds)
+        feed.wantDepth = openDepth_;
+    ros_->refreshCameras();
     // Focus / preview lists from the ui document, keeping only targets the scenario can resolve.
     focusNames_.clear();
     for (const auto &name : scenario_->ui["focus"])
@@ -475,12 +506,7 @@ void App::loadScenario(const std::string &json) {
     if (!focusable(initial))
         initial = "Vehicle";
     focus(initial);
-    if (!opt_.initialView.empty()) {
-        mode_ = opt_.initialView == "free" ? 1 : 0;
-        for (std::size_t i = 0; i < scenario_->cameras.size(); ++i)
-            if (scenario_->cameras[i].id == opt_.initialView)
-                mode_ = int(i) + 2;
-    }
+    applyInitialView();
     status_ = demoMode_ ? "SCENE PREVIEW" : "WAITING FOR PHYSICS";
 }
 
@@ -524,6 +550,7 @@ void App::updatePose() {
             const auto p = presetFor(focusName_);
             if (p.target == "vehicle" || p.target == "mechanism" || p.target == "mechanisms")
                 focus(focusName_);
+            applyInitialView();
         }
         const glm::vec3 position(body_[3]);
         if (trail_.empty() || glm::distance(trail_.back(), position) > .06f) {
@@ -1073,8 +1100,10 @@ void App::drawToolbar(float left, int &oldMode) {
     if (composition_)
         composition_->drawToolsToolbar("settings");
     sameLineIfFits(ImGui::CalcTextSize("Pool Viewer").x + 2 * ImGui::GetStyle().FramePadding.x);
-    if (ImGui::Button("Pool Viewer"))
+    if (ImGui::Button("Pool Viewer") || openObserverPopup_) {
+        openObserverPopup_ = false;
         ImGui::OpenPopup("observer_visibility");
+    }
     if (ImGui::BeginPopup("observer_visibility")) {
         ImGui::Checkbox("Water", &observer_.water);
         ImGui::Checkbox("Pool walls", &observer_.walls);
@@ -1141,8 +1170,10 @@ void App::drawToolbar(float left, int &oldMode) {
     sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("Labels").x);
     ImGui::Checkbox("Labels", &labels_);
     sameLineIfFits(ImGui::CalcTextSize("TF").x + 2 * ImGui::GetStyle().FramePadding.x);
-    if (ImGui::Button("TF"))
+    if (ImGui::Button("TF") || openTfPopup_) {
+        openTfPopup_ = false;
         ImGui::OpenPopup("TF display");
+    }
     tfTreeOpen_ = false;
     if (ImGui::BeginPopup("TF display")) {
         tfTreeOpen_ = true;
@@ -1306,6 +1337,7 @@ void App::drawInterface(double time, float dt) {
         viewportView_ = view;
     }
     const auto scene = model_->build(buildState());
+    renderDemoCards(scene, time);
     const rendering::View renderView{toEigen(view.view), toEigen(view.projection), Eigen::Vector3f(view.eye.x, view.eye.y, view.eye.z)};
     const auto appearance = observer_.apply(look_.appearance);
     const auto frame = renderer_->draw(scene, renderView, appearance, float(time), rw, rh);
@@ -1406,6 +1438,47 @@ void App::drawInterface(double time, float dt) {
         composition_->drawWindows();
 }
 
+// Scene preview has no bridge, so the camera cards show this viewer's own render from each sensor pose.
+void App::renderDemoCards(const rendering::Scene &scene, double t) {
+    if (!demoMode_ || t < nextCard_ || !scenario_)
+        return;
+    nextCard_ = t + .25;
+    for (std::size_t i = 0; i < scenario_->cameras.size() && i < cards_.size(); ++i) {
+        const auto &camera = scenario_->cameras[i];
+        auto k = camera.k;
+        const int w = 480, h = std::max(16, int(std::lround(480.0 * k.height / k.width)));
+        k.fx *= double(w) / k.width;
+        k.cx *= double(w) / k.width;
+        k.fy *= double(h) / k.height;
+        k.cy *= double(h) / k.height;
+        k.width = w;
+        k.height = h;
+        const auto v = sensorView(body_ * camera.opticalInBase, k);
+        const rendering::View renderView{toEigen(v.view), toEigen(v.projection), Eigen::Vector3f(v.eye.x, v.eye.y, v.eye.z)};
+        const auto frame = renderer_->draw(scene, renderView, look_.appearance, float(t), w, h);
+        auto &card = cards_[i];
+        if (!card.rgb || card.rgbWidth != w || card.rgbHeight != h) {
+            if (!card.rgb)
+                glGenTextures(1, &card.rgb);
+            glBindTexture(GL_TEXTURE_2D, card.rgb);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            card.rgbWidth = w;
+            card.rgbHeight = h;
+        }
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, readFbo_);
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, frame.color_texture, 0);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFbo_);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, card.rgb, 0);
+        glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        card.flipped = true;
+    }
+}
+
 void App::saveCameraImages(const fs::path &screenshot) {
     if (screenshot.empty() || !scenario_)
         return;
@@ -1466,6 +1539,13 @@ int App::loop() {
         const bool last = opt_.frames > 0 && frames >= opt_.frames;
         window_->present(last, opt_.screenshot);
         if (last) {
+            if (scenario_)
+                std::cout << "capture: status=" << status_ << " detections stored/placed=" << ros_->detectionCount() << "/"
+                          << ros_->placedDetections.size() << " mpc_points=" << ros_->mpcPath.size()
+                          << " props=" << ros_->props.size() << " projectiles=" << ros_->projectiles.size()
+                          << " magnet_lights=" << ros_->magnetLights.size() << " tf_frames=" << tf_.frames.size()
+                          << " camera_frames=" << (ros_->feeds.empty() ? 0 : ros_->feeds[0].frames) << " body=("
+                          << body_[3].x << "," << body_[3].y << "," << body_[3].z << ")\n";
             saveCameraImages(opt_.screenshot);
             break;
         }
