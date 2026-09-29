@@ -471,15 +471,12 @@ Json TaskRuntime::describe() const {
 }
 
 Json TaskRuntime::feed(const Events &events, const Json &context) const {
-    // The pinned Rules::feed has no state argument; the pack's feed function reads the run state
-    // (e.g. the role's target class), so it is handed to the rules under context["state"].
     Impl &m = *impl_;
     Json items = Json::array();
-    Json with_state = context.is_object() ? context : Json::object();
-    with_state["state"] = snapshot();
+    const Json state = snapshot();
     for (std::size_t i = 0; i < m.hooks.size(); ++i) {
         if (!m.hooks[i].feed) continue;
-        const Json part = m.instances[i]->feed(events, with_state, m.hooks[i].parameters);
+        const Json part = m.instances[i]->feed(state, events, context, m.hooks[i].parameters);
         if (!finiteJson(part) || !part.is_array()) invalid("feed function must return a finite list");
         for (const auto &item : part) items.push_back(item);
     }

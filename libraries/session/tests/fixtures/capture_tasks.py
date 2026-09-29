@@ -47,13 +47,26 @@ def quat_rpy(roll=0.0, pitch=0.0, yaw=0.0):
 
 
 class Case:
-    def __init__(self, resolved, name, task_ids):
-        self.name, self.task_ids = name, task_ids
+    def __init__(self, resolved, name, task_ids, hooks=False):
+        # Hooked runs of non-gate tasks first cross the gate (scoring eligibility), then shift
+        # every later op by `off` so time stays monotonic.
+        self.prelude = hooks and "gate" not in task_ids
+        self.off = 5_000 * MS if self.prelude else 0
+        self.name, self.task_ids = name, (["gate"] + task_ids if self.prelude else task_ids)
+        task_ids = self.task_ids
         self.rt = TaskRuntime(copy.deepcopy(resolved), task_ids=task_ids)
-        self.rt._hook_sources = []  # scoring is the Rules implementation's job, not compared here
-        self.rt.reset()
+        if not hooks:
+            self.rt._hook_sources = []  # rule outputs are excluded from the pure-geometry cases
+            self.rt.reset()
         self.place = {item["task"]: _placement(item) for item in resolved.scenario["task_placements"]}
         self.ops, self.results, self.snapshots = [], [], []
+
+    def _prelude(self):
+        for i, x in enumerate([3, 2.5, 2, 1.5, 1, .5, 0, -.5, -1, -2, -3]):
+            position, wxyz = self.world("gate", [x, -0.75, -0.2])
+            t = i * STEP
+            self.ops.append({"op": "observe", "t": t, "position": position, "wxyz": wxyz})
+            self.results.append(plain({"events": self.rt.observe(t, _pose(position, wxyz))}))
 
     def world(self, task, local, quat=(1, 0, 0, 0)):
         pose = self.place[task].compose(_pose(local, quat))
@@ -72,6 +85,7 @@ class Case:
         return result
 
     def observe(self, t, position, wxyz):
+        t += self.off
         pose = _pose(position, wxyz)
         events = self.rt.observe(t, pose)
         return self.add({"op": "observe", "t": t, "position": position, "wxyz": wxyz},
@@ -82,29 +96,38 @@ class Case:
         return self.observe(t, position, wxyz)
 
     def release(self, t, ident, mech, tip, radius, length):
+        t += self.off
         events = self.rt.release_projectile(t, ident, mech, tip, radius, length)
         return self.add({"op": "release", "t": t, "id": ident, "mech": mech, "tip": tip,
                          "radius": radius, "length": length}, {"events": events})
 
     def step(self, t, ident, start, end, axis, velocity):
+        t += self.off
         result = self.rt.step_projectile(t, ident, start, end, axis, velocity)
-        return self.add({"op": "step", "t": t, "id": ident, "start": start, "end": end,
-                         "axis": axis, "velocity": velocity},
-                        {"events": result.events, "stop": result.stop,
-                         "position": result.position_world, "velocity": result.velocity_world})
+        self.add({"op": "step", "t": t, "id": ident, "start": start, "end": end,
+                  "axis": axis, "velocity": velocity},
+                 {"events": result.events, "stop": result.stop,
+                  "position": result.position_world, "velocity": result.velocity_world})
+        return result
 
     def record(self, t, events):
+        t += self.off
+        events = [{**e, "time_ns": t} for e in events]
         return self.add({"op": "record", "t": t, "events": events},
                         {"events": self.rt.record(t, events)})
 
     def start(self, t, options=None):
         self.rt.start(t, options)
-        return self.add({"op": "start", "t": t, "options": options or {}}, {})
+        self.add({"op": "start", "t": t, "options": options or {}}, {})
+        if self.prelude:
+            self._prelude()
 
     def stop(self, t):
+        t += self.off
         return self.add({"op": "stop", "t": t}, {"events": self.rt.stop(t)})
 
     def reset(self, t):
+        t += self.off
         self.rt.reset(t)
         return self.add({"op": "reset", "t": t}, {})
 
@@ -113,14 +136,14 @@ class Case:
         return None
 
     def finish(self):
-        return {"name": self.name, "task_ids": self.task_ids, "ops": self.ops,
+        return {"scores": plain(self.rt.snapshot()["scores"]), "name": self.name, "task_ids": self.task_ids, "ops": self.ops,
                 "results": self.results, "snapshot": plain(self.rt.snapshot()),
                 "indicators": plain(self.rt.indicators()), "describe": plain(self.rt.describe()),
                 "event_count": sum(len(r.get("events", [])) for r in self.results)}
 
 
-def gate_case(resolved):
-    c = Case(resolved, "gate", ["gate"])
+def gate_case(resolved, hooks=False):
+    c = Case(resolved, "gate", ["gate"], hooks)
     t = 0
     c.start(t, {"role": "rescue"})
     # forward pass with a roll/yaw spin near the plane, then the reverse pass
@@ -152,11 +175,11 @@ def gate_case(resolved):
     return c.finish()
 
 
-def slalom_case(resolved):
-    c = Case(resolved, "slalom", ["slalom"])
+def slalom_case(resolved, hooks=False):
+    c = Case(resolved, "slalom", ["slalom"], hooks)
     t = 0
     c.start(t)
-    path = [(1.5, 0.0), (0.5, 0.0), (0.0, 0.0), (-0.5, 0.2), (-1.5, 0.5), (-2.127, 0.694),
+    path = [(1.5, 0.3), (0.5, 0.3), (0.0, 0.3), (-0.5, 0.3), (-1.5, 0.5), (-2.127, 0.694),
             (-2.6, 0.5), (-3.5, 0.3), (-4.232, 0.118), (-4.8, 0.0), (-4.0, 0.1), (-2.7, 0.6),
             (-2.127, 0.694), (-1.0, 0.3), (0.5, 0.0), (1.0, 0.0)]
     dense = []
@@ -176,8 +199,8 @@ def slalom_case(resolved):
     return c.finish()
 
 
-def torpedo_case(resolved):
-    c = Case(resolved, "torpedo", ["torpedo"])
+def torpedo_case(resolved, hooks=False):
+    c = Case(resolved, "torpedo", ["torpedo"], hooks)
     t = 0
     c.start(t)
     T = "torpedo"
@@ -223,13 +246,11 @@ def torpedo_case(resolved):
     return c.finish()
 
 
-def bins_case(resolved):
-    c = Case(resolved, "bins", ["bins"])
+def bins_case(resolved, hooks=False):
+    c = Case(resolved, "bins", ["bins"], hooks)
     t = 0
     c.start(t)
     B = "bins"
-    frames = {f["id"]: f["position_m"] for f in resolved.task_definitions
-              if f["id"] == "bins" for f in f["frames"]}
     frames = {f["id"]: f["position_m"] for task in resolved.task_definitions if task["id"] == "bins"
               for f in task["frames"]}
     ident = [0]
@@ -259,24 +280,24 @@ def bins_case(resolved):
     drop("dropper", "bin_vinyl3", 0.5, 0.5)               # beside: pool floor miss
     drop("dropper", "bin_vinyl4", 0.0, 0.0, axis=(0.6, 0, 0.8), length=0.2)  # tilted, long
     drop("launcher", "bin_vinyl1", 0.0, 0.0, z0=0.5, down=-0.5)  # coarse steps
-    # horizontal flight into a crate wall, then fall (owner applies the correction)
+    # horizontal flight into a crate wall, then the owner applies the correction and it falls
     ident[0] += 1
     i = ident[0]
     fx, fy, fz = frames["bin_vinyl1"]
     t += 50 * MS
-    pos = [fx + 0.5, fy + 0.02, fz + 0.1]
-    vel = c.axis(B, [-2.0, 0, 0])
-    c.release(t, i, "launcher", c.vec(B, pos), 0.02, 0.08)
-    for _ in range(14):
-        start_local = list(pos)
-        pos = [pos[0] - 0.05, pos[1], pos[2]]
+    pos = np.array(c.vec(B, [fx + 0.5, fy + 0.02, fz + 0.1]))
+    vel = np.array(c.axis(B, [-2.0, 0, 0]))
+    move = np.array(c.axis(B, [-0.05, 0, 0]))
+    c.release(t, i, "launcher", list(pos), 0.02, 0.08)
+    for _ in range(40):
+        end = pos + move
         t += 10 * MS
-        r = c.step(t, i, c.vec(B, start_local), c.vec(B, pos), [0, 0, 1.0], vel)
-        if r.position_world is not None:
-            pos = list(np.linalg.solve(np.array(c.place[B].orientation_wxyz and
-                                                _pose([0, 0, 0], c.place[B].orientation_wxyz)
-                                                .apply(np.eye(3)[k]) for k in range(3)).T
-                                       if False else np.eye(3), np.zeros(3)))
+        r = c.step(t, i, list(pos), list(end), [0, 0, 1.0], list(vel))
+        pos = np.array(r.position_world) if r.position_world is not None else end
+        vel = np.array(r.velocity_world) if r.velocity_world is not None else vel
+        vel = vel + np.array([0, 0, -0.1])
+        move = vel * 0.025
+        if r.stop:
             break
     # free flight into the crate top rim from the side with wall entry
     drop("launcher", "bin_vinyl3", 0.16, 0.0, radius=0.03)
@@ -291,7 +312,7 @@ def bins_case(resolved):
     for key in ("magnet_target1", "magnet_target2"):
         target = c.rt._targets[(B, key)]
         base = np.asarray(target._sensor) - np.asarray(target._probe)
-        seq = [(0.0, 5), (0.5, 3), (0.0, 3), (0.0, 8)] if key == "magnet_target1" else [(0.0, 4)]
+        seq = [(0.0, 5), (0.5, 3), (0.0, 3), (0.0, 8)] if key == "magnet_target1" else [(0.0, 8)]
         for offset, n in seq:
             for _ in range(n):
                 t += 100 * MS
@@ -301,9 +322,9 @@ def bins_case(resolved):
     return c.finish()
 
 
-def surface_case(resolved, breach):
+def surface_case(resolved, breach, hooks=False):
     name = "surface_breach" if breach else "surface"
-    c = Case(resolved, name, ["surface", "table"])
+    c = Case(resolved, name, ["surface", "table"], hooks)
     t = 0
     c.start(t)
     S = "surface"
@@ -379,8 +400,8 @@ def surface_case(resolved, breach):
     return c.finish()
 
 
-def table_case(resolved):
-    c = Case(resolved, "table", ["table"])
+def table_case(resolved, hooks=False):
+    c = Case(resolved, "table", ["table"], hooks)
     t = 0
     c.start(t)
     ev = [("grasp", "attach", None, {"prop_id": "pill", "mechanism_id": "claw"}),
@@ -400,10 +421,17 @@ def table_case(resolved):
 
 def main():
     resolved = resolve_scenario(SCENARIO)
-    cases = [gate_case(resolved), slalom_case(resolved), torpedo_case(resolved),
-             bins_case(resolved), surface_case(resolved, False), surface_case(resolved, True),
-             table_case(resolved)]
-    OUT.write_text(json.dumps({"cases": cases}, sort_keys=True, separators=(",", ":")) + "\n")
+    def build(hooks):
+        return [gate_case(resolved, hooks), slalom_case(resolved, hooks), torpedo_case(resolved, hooks),
+                bins_case(resolved, hooks), surface_case(resolved, False, hooks),
+                surface_case(resolved, True, hooks), table_case(resolved, hooks)]
+
+    cases = build(False)
+    rules_cases = build(True)
+    for case in rules_cases:  # the real robosub_2026 hook, run end to end
+        case["describe"] = case["describe"]
+    OUT.write_text(json.dumps({"cases": cases, "rules_cases": rules_cases}, sort_keys=True,
+                              separators=(",", ":")) + "\n")
     for case in cases:
         kinds = {}
         for r in case["results"]:
