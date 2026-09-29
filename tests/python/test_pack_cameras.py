@@ -174,13 +174,14 @@ class TalosPackCameraTests(unittest.TestCase):
                     if not isinstance(value, (bool, str)) else \
                     self.assertEqual(record["appearance"][key], value)
         self.assertEqual(record["scene"]["pool"]["dimensions_m"], [50.0, 22.86, 2.1336])
-        self.assertEqual(record["scene"]["robot_visuals"], 14)
+        self.assertEqual(record["scene"]["robot_visuals"], 15)
         files = {kind: {(item["pack"], item["id"]) for item in record["scene"]["files"]
                         if item["kind"] == kind} for kind in ("mesh", "texture")}
         visuals = {("robot", item["asset"]) for item in self.resolved.robot["visuals"]}
         self.assertEqual(files["mesh"], visuals | {("tasks", name) for name in (
             "gate_mesh", "gate_repair_mesh", "gate_rescue_mesh", "torpedo_mesh", "slalom_mesh",
-            "bin_mesh", "bin_vinyl_mesh", "bin_magnet_mesh", "octagon_buoy_mesh",
+            "bin_mesh", "bin_vinyl_mesh", "crate_lattice_mesh", "crate_liner_mesh", "magnet_housing_mesh",
+            "magnet_cover_mesh", "magnet_leds_mesh", "octagon_ring_mesh", "octagon_buoy_mesh",
             "octagon_compass_mesh", "octagon_hammer_and_wrench_mesh", "octagon_sos_mesh",
             "table_visual", "basket_helmet_visual", "basket_warning_visual")})
         self.assertEqual(files["texture"], {("tasks", name) for name in (

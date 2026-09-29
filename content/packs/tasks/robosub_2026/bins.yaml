@@ -22,15 +22,42 @@ props:
   parameters:
     collision_boxes: []   # the original has no robot proxies for the bins (payload walls are the crate regions)
     # markers.yaml marker7..13. Each vinyl placement overrides the mesh's diffuse texture by crate class
-    # (regions bin_vinyl1..4 class: blood/fire); the magnet housings/LEDs (glb) are not in this pack.
+    # (regions bin_vinyl1..4 class: blood/fire). The crate lattice/liner are generated from the crate region
+    # dimensions (tools/generate_course_geometry.py); the two magnet targets show the sensor-light housing
+    # (the original replaced the bin_magnet placeholder mesh by it), tilted by the face pose, with a clear
+    # cover and 16 LED lenses whose tint follows the target's indicator (region magnet_target1/2).
     visuals:
     - {asset: bin_mesh, frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
     - {asset: bin_vinyl_mesh, frame: bin_vinyl1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: bin_vinyl_blood_texture}
     - {asset: bin_vinyl_mesh, frame: bin_vinyl2, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: bin_vinyl_fire_texture}
     - {asset: bin_vinyl_mesh, frame: bin_vinyl3, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: bin_vinyl_fire_texture}
     - {asset: bin_vinyl_mesh, frame: bin_vinyl4, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: bin_vinyl_blood_texture}
-    - {asset: bin_magnet_mesh, frame: magnet_target1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-    - {asset: bin_magnet_mesh, frame: magnet_target2, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: crate_lattice_mesh, frame: bin_vinyl1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: crate_liner_mesh, frame: bin_vinyl1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], material: liner}
+    - {asset: crate_lattice_mesh, frame: bin_vinyl2, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: crate_liner_mesh, frame: bin_vinyl2, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], material: liner}
+    - {asset: crate_lattice_mesh, frame: bin_vinyl3, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: crate_liner_mesh, frame: bin_vinyl3, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], material: liner}
+    - {asset: crate_lattice_mesh, frame: bin_vinyl4, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: crate_liner_mesh, frame: bin_vinyl4, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], material: liner}
+    - {asset: magnet_housing_mesh, frame: magnet_target1, position_m: [0, 0, 0], orientation_wxyz: [0.9238795325112867, 0.0, -0.3826834323650898, 0.0]}
+    - {asset: magnet_cover_mesh, frame: magnet_target1, position_m: [0, 0, 0], orientation_wxyz: [0.9238795325112867, 0.0, -0.3826834323650898, 0.0], material: clear}
+    - asset: magnet_leds_mesh
+      frame: magnet_target1
+      position_m: [0, 0, 0]
+      orientation_wxyz: [0.9238795325112867, 0.0, -0.3826834323650898, 0.0]
+      material: emissive
+      radiance: 200.0
+      indicator: {region: magnet_target1, color_rgb: {red: [1.0, 0.001, 0.002], green: [0.002, 1.0, 0.004]}}
+    - {asset: magnet_housing_mesh, frame: magnet_target2, position_m: [0, 0, 0], orientation_wxyz: [0.9238795325112867, 0.0, -0.3826834323650898, 0.0]}
+    - {asset: magnet_cover_mesh, frame: magnet_target2, position_m: [0, 0, 0], orientation_wxyz: [0.9238795325112867, 0.0, -0.3826834323650898, 0.0], material: clear}
+    - asset: magnet_leds_mesh
+      frame: magnet_target2
+      position_m: [0, 0, 0]
+      orientation_wxyz: [0.9238795325112867, 0.0, -0.3826834323650898, 0.0]
+      material: emissive
+      radiance: 200.0
+      indicator: {region: magnet_target2, color_rgb: {red: [1.0, 0.001, 0.002], green: [0.002, 1.0, 0.004]}}
 
 regions:
 - id: bin_vinyl1

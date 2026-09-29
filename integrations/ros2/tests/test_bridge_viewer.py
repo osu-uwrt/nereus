@@ -320,7 +320,7 @@ class ScenarioAndRateTest(unittest.TestCase):
             self.assertEqual(set(assets), declared)
             for path in assets.values():
                 self.assertTrue(Path(path).is_absolute() and Path(path).is_file(), path)
-        self.assertNotIn("robot_magnet_mesh", document["asset_paths"]["robot"])  # still missing
+        self.assertIn("robot_magnet_mesh", document["asset_paths"]["robot"])
         self.assertIn("projectile_mesh", document["asset_paths"]["robot"])
         self.assertIn("pill_visual", document["asset_paths"]["tasks"])
 

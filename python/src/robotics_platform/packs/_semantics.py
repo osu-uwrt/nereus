@@ -225,6 +225,8 @@ def robot(data: dict[str, Any]) -> list[str]:
             problems.append(f"/visuals/{index}/asset: unknown asset '{visual['asset']}'")
         if "texture" in visual and visual["texture"] not in asset_ids:
             problems.append(f"/visuals/{index}/texture: unknown asset '{visual['texture']}'")
+        if "indicator" in visual:
+            problems.append(f"/visuals/{index}/indicator: only task visuals follow indicators")
         frame(visual["frame"], f"/visuals/{index}/frame")
     mechanisms = {item["id"]: item for item in data["mechanisms"]}
     duplicates((item["id"] for item in data["mechanisms"]), "mechanism", problems)
@@ -350,6 +352,20 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
                 problems.append(f"/props/{identifier}/visuals: unknown texture asset '{visual['texture']}'")
             if visual["frame"] not in frames:
                 problems.append(f"/props/{identifier}/visuals: unknown frame '{visual['frame']}'")
+            if "radiance" in visual and visual.get("material") != "emissive":
+                problems.append(f"/props/{identifier}/visuals: radiance requires material emissive")
+            indicator = visual.get("indicator")
+            if indicator is not None:
+                where = f"/props/{identifier}/visuals/indicator"
+                region = regions.get(indicator["region"])
+                if visual.get("material") != "emissive":
+                    problems.append(f"{where}: requires material emissive")
+                if region is None or "indicator" not in region["parameters"]:
+                    problems.append(f"{where}: region '{indicator['region']}' has no indicator")
+                else:
+                    missing = sorted(set(region["parameters"]["indicator"].values()) - set(indicator["color_rgb"]))
+                    if missing:
+                        problems.append(f"{where}/color_rgb: no color for {missing}")
         cutouts = parameters.get("cutouts")
         if cutouts is not None:
             region = regions.get(cutouts["region"])

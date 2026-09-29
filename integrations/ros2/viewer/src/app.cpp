@@ -738,6 +738,14 @@ VisualState App::buildState() {
     for (const auto &[key, record] : ros_->magnetLights) {
         MarkerDraw draw;
         const bool green = record.marker.color.g > record.marker.color.r;
+        // A pack LED visual follows the indicator itself (marker namespace = indicator region); the emissive
+        // box is only the fallback for scenarios without one.
+        state.indicatorLatched[key.first] = green;
+        bool packLed = false;
+        for (const auto &led : model_->pack().indicatorVisuals())
+            packLed = packLed || led.region == key.first;
+        if (packLed)
+            continue;
         draw.emissive = true;
         draw.radiance = radiance;
         draw.tint = green ? glm::vec4(.002f, 1.f, .004f, 1.f) : glm::vec4(1.f, .001f, .002f, 1.f);

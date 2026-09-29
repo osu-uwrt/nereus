@@ -131,7 +131,11 @@ class SessionCameraSink final : public CameraSink {
         std::vector<rendering::Instance> dynamic;
         if (anyDemand())
             dynamic = dynamicInstances();
-        cameras_->request(snapshot.elapsed.count(), ros_ns, root, dynamic);
+        std::map<std::string, bool> latched; // task indicator latch states for LED visuals
+        if (!cameras_->scene().indicatorVisuals().empty())
+            for (const auto &item : session_.indicators())
+                latched[item.at("region").get<std::string>()] = item.at("latched").get<bool>();
+        cameras_->request(snapshot.elapsed.count(), ros_ns, root, dynamic, {}, latched);
     }
 
     void setDemand(const std::string &stream, bool wanted) override {

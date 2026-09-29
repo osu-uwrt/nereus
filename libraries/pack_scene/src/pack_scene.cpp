@@ -257,6 +257,31 @@ void PackScene::buildTasks() {
                 r::Instance item;
                 item.mesh = meshAsset;
                 item.transform = toMatrix(spatial::compose(world_task, task_asset)).cast<float>();
+                const auto material = visual.value("material", std::string("asset"));
+                if (material == "liner")
+                    item.material = r::SurfaceMaterial::Liner;
+                else if (material == "clear")
+                    item.material = r::SurfaceMaterial::Clear;
+                else if (material == "emissive") {
+                    item.material = r::SurfaceMaterial::Emissive;
+                    item.radiance = visual.value("radiance", 60.f);
+                    item.casts_shadow = false;
+                }
+                if (visual.contains("indicator")) {
+                    // The tint follows the region's indicator: initial colour at reset, latched colour once latched.
+                    const auto &indicator = visual.at("indicator");
+                    const auto &names = regions.at(indicator.at("region").get<std::string>()).at("parameters").at("indicator");
+                    IndicatorVisual follower;
+                    follower.task = id;
+                    follower.region = indicator.at("region").get<std::string>();
+                    follower.instance = static_.instances.size();
+                    for (const auto &[state, target] : {std::pair{"initial", &follower.initial}, {"latched", &follower.latched}}) {
+                        const auto rgb = vector3(indicator.at("color_rgb").at(names.at(state).get<std::string>()));
+                        *target = Eigen::Vector4f(float(rgb.x()), float(rgb.y()), float(rgb.z()), 1.f);
+                    }
+                    item.tint = follower.initial;
+                    indicators_.push_back(std::move(follower));
+                }
                 static_.instances.push_back(std::move(item));
             }
             if (panel) {
@@ -276,8 +301,14 @@ void PackScene::buildTasks() {
 }
 
 r::Scene PackScene::compose(const Matrix4d &world_from_root, const std::vector<r::Instance> &dynamic,
-                            const std::vector<RobotOverride> &overrides) const {
+                            const std::vector<RobotOverride> &overrides,
+                            const std::map<std::string, bool> &latched) const {
     r::Scene scene = static_;
+    for (const auto &item : indicators_) {
+        const auto found = latched.find(item.region);
+        if (found != latched.end())
+            scene.instances[item.instance].tint = found->second ? item.latched : item.initial;
+    }
     scene.instances.reserve(static_.instances.size() + robot_.size() + dynamic.size());
     for (std::size_t i = 0; i < robot_.size(); ++i) {
         if (!robot_[i].mesh)
@@ -306,6 +337,7 @@ Json PackScene::describe() const {
             {"texture_overrides", textures_},
             {"moving_props_with_visuals", props},
             {"props_without_visuals", unrendered_},
+            {"indicator_visuals", indicators_.size()},
             {"warnings", warnings_}};
 }
 } // namespace robotics::pack_scene
