@@ -13,8 +13,10 @@ target_include_directories(rp_session PUBLIC
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_include_directories(rp_session SYSTEM PRIVATE ${BULLET_INCLUDE_DIRS})
+# PyBullet is a double-precision Bullet build; the prop world matches it (Debian ships both).
+target_compile_definitions(rp_session PRIVATE BT_USE_DOUBLE_PRECISION)
 target_link_libraries(rp_session PUBLIC rp_sensors rp_spatial nlohmann_json::nlohmann_json
-                      PRIVATE ${BULLET_LIBRARIES})
+                      PRIVATE BulletDynamics-float64 BulletCollision-float64 LinearMath-float64)
 rp_project_options(rp_session)
 
 # Compiled competition rules, selected by name from task packs (extensions/rules/<name>/*.cpp).
