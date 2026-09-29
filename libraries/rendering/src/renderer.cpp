@@ -4,12 +4,16 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
+#include <functional>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <limits>
 #include <map>
+#include <png.h>
 #include <stdexcept>
+#include <system_error>
 #include <utility>
 
 namespace robotics::rendering {
@@ -131,6 +135,145 @@ void checkGl(const char *operation) {
         throw std::runtime_error(std::string(operation) + " failed with OpenGL error " +
                                  std::to_string(error));
 }
+constexpr std::uintmax_t maximum_image_bytes = 256u * 1024 * 1024;
+constexpr int maximum_image_side = 16384;
+constexpr std::size_t maximum_cutouts = 4; // scene.frag / shadow.frag holes[4]
+
+struct PngInput {
+    const std::vector<unsigned char> *bytes = nullptr;
+    std::size_t offset = 0;
+};
+struct PngOutput {
+    int width = 0, height = 0;
+    std::vector<std::uint8_t> rgba; // Bottom row first (OpenGL upload order).
+    std::vector<png_bytep> rows;
+    const char *error = nullptr;
+    char message[160] = {}; // libpng's reason, copied before its longjmp.
+};
+[[noreturn]] void pngError(png_structp png, png_const_charp text) {
+    auto *out = static_cast<PngOutput *>(png_get_error_ptr(png));
+    std::snprintf(out->message, sizeof out->message, "%s", text ? text : "invalid PNG data");
+    out->error = out->message;
+    png_longjmp(png, 1);
+}
+void pngWarning(png_structp, png_const_charp) {} // Ancillary-chunk warnings are not errors.
+void readPngBytes(png_structp png, png_bytep data, png_size_t length) {
+    auto *input = static_cast<PngInput *>(png_get_io_ptr(png));
+    if (length > input->bytes->size() - input->offset)
+        png_error(png, "truncated PNG");
+    std::copy_n(input->bytes->data() + input->offset, length, data);
+    input->offset += length;
+}
+// No non-trivial locals: libpng errors longjmp back to this frame. Output storage is
+// owned by the caller, so every allocation is released by ordinary C++ destruction.
+bool decodePng(png_structp png, png_infop info, int maximum_side, PngOutput *out) {
+    if (setjmp(png_jmpbuf(png)))
+        return false;
+    png_read_info(png, info);
+    const auto width = png_get_image_width(png, info), height = png_get_image_height(png, info);
+    const int depth = png_get_bit_depth(png, info), type = png_get_color_type(png, info);
+    if (width == 0 || height == 0 || width > static_cast<png_uint_32>(maximum_side) ||
+        height > static_cast<png_uint_32>(maximum_side) ||
+        std::uintmax_t{width} * height * 4 > maximum_image_bytes) {
+        out->error = "PNG dimensions exceed the texture limits";
+        return false;
+    }
+    if (depth == 16) {
+        out->error = "16-bit PNG textures are not supported";
+        return false;
+    }
+    if (type == PNG_COLOR_TYPE_PALETTE)
+        png_set_palette_to_rgb(png);
+    if (type == PNG_COLOR_TYPE_GRAY && depth < 8)
+        png_set_expand_gray_1_2_4_to_8(png);
+    if (png_get_valid(png, info, PNG_INFO_tRNS))
+        png_set_tRNS_to_alpha(png);
+    if (type == PNG_COLOR_TYPE_GRAY || type == PNG_COLOR_TYPE_GRAY_ALPHA)
+        png_set_gray_to_rgb(png);
+    if (!(type & PNG_COLOR_MASK_ALPHA) && !png_get_valid(png, info, PNG_INFO_tRNS))
+        png_set_filler(png, 0xFF, PNG_FILLER_AFTER);
+    png_set_interlace_handling(png);
+    png_read_update_info(png, info);
+    if (png_get_rowbytes(png, info) != std::size_t{width} * 4) {
+        out->error = "unsupported PNG pixel layout";
+        return false;
+    }
+    out->width = static_cast<int>(width);
+    out->height = static_cast<int>(height);
+    out->rgba.resize(std::size_t{width} * height * 4);
+    out->rows.resize(height);
+    for (png_uint_32 y = 0; y < height; ++y) // Flip: the original viewer's cv::flip(.., 0).
+        out->rows[y] = out->rgba.data() + std::size_t{height - 1 - y} * width * 4;
+    png_read_image(png, out->rows.data());
+    png_read_end(png, nullptr);
+    return true;
+}
+PngOutput loadPng(const std::filesystem::path &path, int maximum_side) {
+    std::error_code error;
+    const auto size = std::filesystem::file_size(path, error);
+    if (error || size > maximum_image_bytes)
+        throw std::invalid_argument("cannot read bounded texture: " + path.string());
+    std::vector<unsigned char> bytes(static_cast<std::size_t>(size));
+    std::ifstream input(path, std::ios::binary);
+    if (!input.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(size)))
+        throw std::invalid_argument("cannot read texture: " + path.string());
+    if (bytes.size() < 8 || png_sig_cmp(bytes.data(), 0, 8))
+        throw std::invalid_argument("texture is not a PNG image: " + path.string());
+    PngOutput output;
+    png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, &output, pngError, pngWarning);
+    png_infop info = png ? png_create_info_struct(png) : nullptr;
+    if (!info) {
+        png_destroy_read_struct(&png, nullptr, nullptr);
+        throw std::runtime_error("PNG decoder allocation failed");
+    }
+    PngInput source{&bytes, 0};
+    png_set_read_fn(png, &source, readPngBytes);
+    bool ok = false;
+    try {
+        ok = decodePng(png, info, maximum_side, &output);
+    } catch (...) {
+        // Vector allocations may throw without passing through libpng's error handler.
+        png_destroy_read_struct(&png, &info, nullptr);
+        throw;
+    }
+    png_destroy_read_struct(&png, &info, nullptr);
+    if (!ok)
+        throw std::invalid_argument(std::string(output.error ? output.error : "invalid PNG data") +
+                                    ": " + path.string());
+    output.rows.clear();
+    return output;
+}
+struct Texture {
+    GLuint id = 0;
+    Texture() = default;
+    Texture(const Texture &) = delete;
+    Texture &operator=(const Texture &) = delete;
+    ~Texture() {
+        glDeleteTextures(1, &id);
+    }
+};
+std::shared_ptr<Texture> uploadTexture(const std::filesystem::path &path, int maximum_side) {
+    const auto image = loadPng(path, maximum_side);
+    auto texture = std::make_shared<Texture>();
+    glGenTextures(1, &texture->id);
+    glBindTexture(GL_TEXTURE_2D, texture->id);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    glPixelStorei(GL_UNPACK_SWAP_BYTES, GL_FALSE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, image.width, image.height, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, image.rgba.data());
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    checkGl("texture upload");
+    return texture;
+}
+using TextureLoader = std::function<std::shared_ptr<Texture>(const std::filesystem::path &)>;
 struct Buffers {
     GLuint vao = 0, vbo = 0, ebo = 0;
     ~Buffers() {
@@ -145,18 +288,24 @@ struct Mesh {
     Bounds bounds;
     glm::vec4 color{1};
     GLuint texture = 0;
-    std::vector<glm::vec3> holes;
-    explicit Mesh(const Submesh &input) {
+    std::shared_ptr<Texture> image; // Shared by submeshes using the same file.
+    std::vector<glm::vec3> holes;   // (u, v, radius) per cutout.
+    Mesh(const Submesh &input, const TextureLoader &load) {
         if (input.vertices.empty() || input.indices.empty() || input.indices.size() % 3 ||
             input.indices.size() > static_cast<std::size_t>(std::numeric_limits<GLsizei>::max()) ||
             input.vertices.size() >
                 static_cast<std::size_t>(std::numeric_limits<GLsizeiptr>::max()) / sizeof(Vertex))
             throw std::invalid_argument("invalid GPU triangle mesh size");
-        if (input.material.diffuse_texture)
-            throw std::invalid_argument("image resource upload is not implemented yet");
         if (!input.material.base_color.allFinite() ||
             (input.material.base_color.array() < 0).any() || input.material.base_color.w() > 1)
             throw std::invalid_argument("invalid mesh color/opacity");
+        if (input.material.cutouts.size() > maximum_cutouts)
+            throw std::invalid_argument("at most four UV cutouts per submesh");
+        for (const auto &cutout : input.material.cutouts) {
+            if (!cutout.center.allFinite() || !std::isfinite(cutout.radius) || cutout.radius <= 0)
+                throw std::invalid_argument("invalid UV cutout");
+            holes.emplace_back(cutout.center.x(), cutout.center.y(), cutout.radius);
+        }
         color = glm::make_vec4(input.material.base_color.data());
         for (const auto &v : input.vertices)
             if (!v.position.allFinite() || !v.normal.allFinite() || !v.uv.allFinite() ||
@@ -166,6 +315,11 @@ struct Mesh {
             if (index >= input.vertices.size())
                 throw std::invalid_argument("invalid GPU vertex index");
             bounds.include(vector(input.vertices[index].position));
+        }
+        if (input.material.diffuse_texture) {
+            image = load(*input.material.diffuse_texture);
+            texture = image->id;
+            color = glm::vec4(1); // Original viewer: a diffuse texture replaces the base color.
         }
         count = static_cast<GLsizei>(input.indices.size());
         glGenVertexArrays(1, &gpu.vao);
@@ -296,6 +450,22 @@ struct Renderer::Resources {
         bool used = false;
     };
     std::map<const MeshAsset *, Cached> cache;
+    // Deduplicates uploads while any cached mesh still references the image.
+    std::map<std::filesystem::path, std::weak_ptr<Texture>> textures;
+    std::shared_ptr<Texture> texture(const std::filesystem::path &path) {
+        std::error_code error;
+        auto key = std::filesystem::weakly_canonical(path, error);
+        if (error)
+            key = path.lexically_normal();
+        if (auto found = textures.find(key); found != textures.end())
+            if (auto existing = found->second.lock())
+                return existing;
+        for (auto it = textures.begin(); it != textures.end();)
+            it = it->second.expired() ? textures.erase(it) : std::next(it);
+        auto uploaded = uploadTexture(key, std::min(maximum_texture, maximum_image_side));
+        textures[key] = uploaded;
+        return uploaded;
+    }
     ~Resources() {
         for (auto id : {sceneProgram, waterProgram, shadowProgram, postProgram, bloomProgram})
             glDeleteProgram(id);
@@ -335,8 +505,11 @@ struct Renderer::Resources {
         if (found == cache.end()) {
             Cached next;
             next.source = input.mesh;
+            const TextureLoader load = [this](const std::filesystem::path &path) {
+                return texture(path);
+            };
             for (const auto &part : input.mesh->submeshes)
-                next.meshes.push_back(std::make_shared<Mesh>(part));
+                next.meshes.push_back(std::make_shared<Mesh>(part, load));
             found = cache.emplace(input.mesh.get(), std::move(next)).first;
         }
         found->second.used = true;
@@ -733,6 +906,37 @@ Capture Renderer::capture() const {
     glReadPixels(0, 0, result.width, result.height, GL_RGBA, GL_UNSIGNED_BYTE, result.rgba.data());
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     checkGl("frame capture");
+    return result;
+}
+ImageCapture Renderer::captureImage(bool color, bool depth) const {
+    const auto &f = resources_->f;
+    if (!resources_->frame_valid)
+        throw std::logic_error("capture requires a rendered frame");
+    ImageCapture result;
+    result.width = f.final.width;
+    result.height = f.final.height;
+    const auto pixels = static_cast<std::size_t>(result.width) * result.height;
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    glPixelStorei(GL_PACK_SWAP_BYTES, GL_FALSE);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1); // RGB8 rows are not 4-byte aligned in general.
+    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
+    if (color) { // Same source as the original sensor: tone-mapped final color.
+        result.rgb.resize(pixels * 3);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, f.final.fbo);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glReadPixels(0, 0, result.width, result.height, GL_RGB, GL_UNSIGNED_BYTE,
+                     result.rgb.data());
+    }
+    if (depth) { // Opaque pass depth: the water surface never occludes sensor depth.
+        result.depth.resize(pixels);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, f.opaque.fbo);
+        glReadPixels(0, 0, result.width, result.height, GL_DEPTH_COMPONENT, GL_FLOAT,
+                     result.depth.data());
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    checkGl("image capture");
     return result;
 }
 } // namespace robotics::rendering

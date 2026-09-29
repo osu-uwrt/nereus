@@ -22,16 +22,19 @@ provenance:
   - {path: riptide_simulator/c_simulator/collision_files/objects/torpedo.urdf, sha256: ed100751619615eb7e9f83c229c04ef65f3074897b3022352a83e6d69dcf016f, hash_basis: worktree}
   - {path: riptide_simulator/c_simulator/tasks/2026/config/markers.yaml, sha256: 40e09e9f3cd9c756e97be01d1808519d097debf3e34d77890b2e7145727b86d5, hash_basis: worktree}
 
-# Step-3 camera assets for defined tasks; declared only (status missing). Import rules to keep:
+# Step-3 camera assets for defined tasks; copied byte-for-byte (cp) from riptide_gui riptide_meshes/meshes/.
+# Verified at copy time (2026-09-29): riptide_gui HEAD == 907c9ded53b0cd6fe7461d8d80c40a4fa9fbc4fc and
+# `git status --porcelain` clean for meshes/{gate,gate_repair,gate_rescue,torpedo}. DAE texture <init_from>
+# basenames resolve next to each model.dae (gate has no textures). Import rules to keep:
 # Assimp Collada IGNORE_UP_DIRECTION=true, node hierarchy, white texture tint, pack-relative textures.
 assets:
-- {id: gate_mesh, path: assets/gate/model.dae, required_from_step: 3, status: missing, source: "riptide_gui riptide_meshes/meshes/gate/model.dae @907c9ded"}
-- {id: gate_repair_mesh, path: assets/gate_repair/model.dae, required_from_step: 3, status: missing, source: "riptide_gui riptide_meshes/meshes/gate_repair/model.dae @907c9ded"}
-- {id: gate_repair_texture, path: assets/gate_repair/Task1_SurveyRepair_Fixed.png, required_from_step: 3, status: missing, source: "riptide_gui riptide_meshes/meshes/gate_repair/Task1_SurveyRepair_Fixed.png @907c9ded"}
-- {id: gate_rescue_mesh, path: assets/gate_rescue/model.dae, required_from_step: 3, status: missing, source: "riptide_gui riptide_meshes/meshes/gate_rescue/model.dae @907c9ded"}
-- {id: gate_rescue_texture, path: assets/gate_rescue/Task1_SearchRescue_Fixed.png, required_from_step: 3, status: missing, source: "riptide_gui riptide_meshes/meshes/gate_rescue/Task1_SearchRescue_Fixed.png @907c9ded"}
-- {id: torpedo_mesh, path: assets/torpedo/model.dae, required_from_step: 3, status: missing, source: "riptide_gui riptide_meshes/meshes/torpedo/model.dae @907c9ded"}
-- {id: torpedo_texture, path: assets/torpedo/Task4_ver1_Fixed.png, required_from_step: 3, status: missing, source: "riptide_gui riptide_meshes/meshes/torpedo/Task4_ver1_Fixed.png @907c9ded"}
+- {id: gate_mesh, path: assets/gate/model.dae, required_from_step: 3, status: present, sha256: 32c407fcb9fcd9c6aff01273de63219b41d79a2565715c85eeaa49071b60ede5, source: "riptide_gui riptide_meshes/meshes/gate/model.dae @907c9ded"}
+- {id: gate_repair_mesh, path: assets/gate_repair/model.dae, required_from_step: 3, status: present, sha256: 14133dacc620198f7ae3ac7f98301237177f2c3498d5da76cc2bab2ee59e9953, source: "riptide_gui riptide_meshes/meshes/gate_repair/model.dae @907c9ded"}
+- {id: gate_repair_texture, path: assets/gate_repair/Task1_SurveyRepair_Fixed.png, required_from_step: 3, status: present, sha256: 5066157d498876da3b0366d0a1872684b1f7bc38884f80a929917716ef7a1928, source: "riptide_gui riptide_meshes/meshes/gate_repair/Task1_SurveyRepair_Fixed.png @907c9ded"}
+- {id: gate_rescue_mesh, path: assets/gate_rescue/model.dae, required_from_step: 3, status: present, sha256: 1c3b5f5d13539ab5c3540136c0c42e861d52a78a805365ba5db00516c65315a8, source: "riptide_gui riptide_meshes/meshes/gate_rescue/model.dae @907c9ded"}
+- {id: gate_rescue_texture, path: assets/gate_rescue/Task1_SearchRescue_Fixed.png, required_from_step: 3, status: present, sha256: b672a1d01c0468532a2cb87d5a466f6406db494f48daf09b738d4528cbb218a0, source: "riptide_gui riptide_meshes/meshes/gate_rescue/Task1_SearchRescue_Fixed.png @907c9ded"}
+- {id: torpedo_mesh, path: assets/torpedo/model.dae, required_from_step: 3, status: present, sha256: 0d45476fb0c24d9acf508b5cad95060a51b85373ed5c131813541ca685ed754e, source: "riptide_gui riptide_meshes/meshes/torpedo/model.dae @907c9ded"}
+- {id: torpedo_texture, path: assets/torpedo/Task4_ver1_Fixed.png, required_from_step: 3, status: present, sha256: b6a5a8bc9ef0cde09a055296f9746b61be9b8d6961fe5504b46350649dbf4336, source: "riptide_gui riptide_meshes/meshes/torpedo/Task4_ver1_Fixed.png @907c9ded"}
 
 tasks: [gate.yaml, torpedo.yaml]   # pack-relative task include files (kind task)
 

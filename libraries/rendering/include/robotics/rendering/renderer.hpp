@@ -14,11 +14,23 @@ struct Capture {
     std::vector<std::uint8_t> rgba;
     std::vector<float> opaque_rgba, opaque_depth, composite_rgba, composite_depth;
 };
+// Sensor-sized readback: final tone-mapped RGB8 and opaque-pass depth (nonlinear [0,1],
+// before the water surface is composited). Rows start at the bottom; omitted outputs are
+// empty vectors.
+struct ImageCapture {
+    int width = 0, height = 0;
+    std::vector<std::uint8_t> rgb;
+    std::vector<float> depth;
+};
 // Context-owned OpenGL 3.3 renderer. Caller initializes GLEW, keeps the same context
 // current on the owning thread, and destroys Renderer before the context.
 // Does not create a window, read a clock, or own simulation/transport state.
 // Draw resets relevant GL state, then leaves state changed and framebuffer zero bound.
 // Meshes must remain immutable while shared. Unused GPU assets are released each draw.
+// Diffuse textures are 8-bit PNG files (at most 16384 pixels per side and 256 MiB),
+// uploaded like the original viewer: rows flipped, sRGB internal format, trilinear
+// mipmaps, repeat wrapping, raw stored values (no gamma chunk conversion), and a
+// textured submesh drawn with an opaque white base color.
 class Renderer {
   public:
     explicit Renderer(const std::filesystem::path &shader_directory);
@@ -29,6 +41,9 @@ class Renderer {
                        int height);
     // Requires the most recent draw to have completed successfully.
     Capture capture() const; // Explicit synchronous readback; no per-frame CPU copy otherwise.
+    // Requires the most recent draw to have completed successfully. Resets pixel-pack
+    // state like capture() and leaves framebuffer zero bound for reading.
+    ImageCapture captureImage(bool color = true, bool depth = true) const;
 
   private:
     struct Resources;

@@ -37,10 +37,17 @@ Step 2 progress:
   passed two trial pairs and independent Opus evidence review. New physical
   depth RMS 3.18–3.83 mm; heading RMS 0.27–0.38 degrees; real-time operation.
 
-Step 3 next:
+Step 3 progress (independent Opus review pending; Claude session limit interrupted it):
 
+- [x] Optional camera projection, owned image/depth processing, original depth noise
+  and JPEG encoding; 12 CPU/frame tests pass in release and ASan/UBSan builds.
+- [x] Renderer PNG textures, UV cutouts and camera readback; eight GPU contracts
+  pass on the current machine, with an installed camera/renderer consumer checked.
+- [x] Import declared Talos and gate/torpedo sensor-scene assets with verified hashes;
+  use the original rectified calibration and calibrated stereo baseline.
+- [ ] Finish independent review of camera processing and stereo calibration.
+- [ ] Compose sensor scenes from pack data, including robot visual placement.
 - [ ] Execute the existing robot-pack camera/stereo definitions offscreen.
-- [ ] Import the declared Talos/2026 assets required by the sensor scene.
 - [ ] Publish calibrated, synchronized image/CameraInfo products through the bridge.
 - [ ] Run actual UWRT perception on those products and review its output.
 

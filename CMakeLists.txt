@@ -7,6 +7,7 @@ include(CTest)
 option(RP_BUILD_SCENE_RENDERER "Build context-owned OpenGL scene rendering" OFF)
 option(RP_BUILD_RENDER_CAPTURE "Build a standalone fixed-scene capture tool" OFF)
 option(RP_BUILD_MESH_ASSETS "Build neutral CPU mesh loading" OFF)
+option(RP_BUILD_CAMERAS "Build optional calibrated camera image processing" OFF)
 option(RP_INSTALL_REFERENCE_VISUALS "Install original reference mesh packs" OFF)
 option(RP_BUILD_SIMULATION "Build simulation libraries" ON)
 option(RP_BUILD_VISUALIZATION "Build neutral visualization and viewer IO libraries" OFF)
@@ -53,6 +54,9 @@ function(rp_project_options target)
 endfunction()
 
 add_subdirectory(libraries/spatial)
+if(RP_BUILD_CAMERAS)
+  add_subdirectory(libraries/cameras)
+endif()
 
 if(RP_BUILD_SIMULATION)
 add_library(rp_simulation

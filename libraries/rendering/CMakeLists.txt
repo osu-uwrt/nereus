@@ -26,10 +26,11 @@ endif()
 if(RP_BUILD_SCENE_RENDERER)
   find_package(OpenGL REQUIRED)
   find_package(GLEW REQUIRED)
+  find_package(PNG REQUIRED)
   add_library(rp_scene_rendering src/scene.cpp src/renderer.cpp)
   add_library(RoboticsPlatform::scene_rendering ALIAS rp_scene_rendering)
   set_target_properties(rp_scene_rendering PROPERTIES EXPORT_NAME scene_rendering)
-  target_link_libraries(rp_scene_rendering PUBLIC rp_mesh_assets PRIVATE OpenGL::GL GLEW::GLEW)
+  target_link_libraries(rp_scene_rendering PUBLIC rp_mesh_assets PRIVATE OpenGL::GL GLEW::GLEW PNG::PNG)
   target_include_directories(rp_scene_rendering SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/third_party/glm)
   rp_project_options(rp_scene_rendering)
   install(TARGETS rp_scene_rendering EXPORT RoboticsPlatformTargets
@@ -39,4 +40,15 @@ if(RP_BUILD_SCENE_RENDERER)
   install(DIRECTORY shaders/ DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform/shaders)
   install(FILES ${PROJECT_SOURCE_DIR}/third_party/glm/glm/copying.txt
     DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform/legal RENAME glm-license.txt)
+  if(BUILD_TESTING)
+    find_package(glfw3 REQUIRED CONFIG)
+    add_executable(renderer_image_tests tests/renderer_image_test.cpp)
+    target_link_libraries(renderer_image_tests PRIVATE rp_scene_rendering glfw
+      GLEW::GLEW OpenGL::GL PNG::PNG GTest::gtest_main)
+    target_compile_definitions(renderer_image_tests PRIVATE
+      RP_RENDERING_SHADERS="${CMAKE_CURRENT_SOURCE_DIR}/shaders"
+      RP_PACK_CONTENT="${PROJECT_SOURCE_DIR}/content/packs")
+    rp_project_options(renderer_image_tests)
+    gtest_discover_tests(renderer_image_tests DISCOVERY_MODE PRE_TEST)
+  endif()
 endif()

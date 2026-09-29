@@ -10,10 +10,19 @@ struct Vertex {
     Eigen::Vector3f position, normal;
     Eigen::Vector2f uv;
 };
+// Circular opening in texture coordinates: fragments with |uv - center| < radius are
+// discarded from color, depth and shadow passes (for example perforated panels).
+struct UvCutout {
+    Eigen::Vector2f center = Eigen::Vector2f::Zero();
+    float radius = 0;
+};
 struct Material {
     Eigen::Vector4f base_color = Eigen::Vector4f::Ones();
     // External image reference only; decoding/GPU ownership belongs to the renderer.
     std::optional<std::filesystem::path> diffuse_texture;
+    // Per-submesh render data supplied by scene composition; the loader leaves it empty.
+    // The renderer accepts at most four cutouts per submesh.
+    std::vector<UvCutout> cutouts;
 };
 struct Submesh {
     std::vector<Vertex> vertices;

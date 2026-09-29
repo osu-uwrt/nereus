@@ -30,21 +30,32 @@ provenance:
   - {path: content/robots/talos_navigation.yaml, sha256: 14ce5067fc0f890ef78f9f3e13b8158bb44aa0536ade236f79843e783963d746}
   parameter_status: unvalidated_prior   # hydrodynamics/actuators/payloads; not hardware identification
 
-# Pack-relative asset paths, declared for later steps only. status missing: no binary is copied in
-# step 1; loaders must reject a missing asset once its required_from_step is active.
+# Pack-relative assets; unresolved mechanism assets remain listed for step 4.
+# Milestone numbers describe the plan and never select runtime behavior.
 assets:
-- {id: body_mesh, path: assets/visual/Talos3_body.glb, required_from_step: 3, status: missing, source: "robotics_platform content/visuals/talos/Talos3_body.glb (orig camera_faker/models/talos3/Talos3_body.glb @07647eeb)"}
-- {id: rotor_VUS, path: assets/visual/rotors/VUS.glb, required_from_step: 3, status: missing, source: "robotics_platform content/visuals/talos/rotors/VUS.glb"}
-- {id: rotor_VUP, path: assets/visual/rotors/VUP.glb, required_from_step: 3, status: missing, source: "robotics_platform content/visuals/talos/rotors/VUP.glb"}
-- {id: rotor_HUS, path: assets/visual/rotors/HUS.glb, required_from_step: 3, status: missing, source: "robotics_platform content/visuals/talos/rotors/HUS.glb"}
-- {id: rotor_HUP, path: assets/visual/rotors/HUP.glb, required_from_step: 3, status: missing, source: "robotics_platform content/visuals/talos/rotors/HUP.glb"}
-- {id: rotor_HLS, path: assets/visual/rotors/HLS.glb, required_from_step: 3, status: missing, source: "robotics_platform content/visuals/talos/rotors/HLS.glb"}
-- {id: rotor_HLP, path: assets/visual/rotors/HLP.glb, required_from_step: 3, status: missing, source: "robotics_platform content/visuals/talos/rotors/HLP.glb"}
-- {id: rotor_VLS, path: assets/visual/rotors/VLS.glb, required_from_step: 3, status: missing, source: "robotics_platform content/visuals/talos/rotors/VLS.glb"}
-- {id: rotor_VLP, path: assets/visual/rotors/VLP.glb, required_from_step: 3, status: missing, source: "robotics_platform content/visuals/talos/rotors/VLP.glb"}
-- {id: claw_static_mesh, path: assets/visual/claw/assembly_static.glb, required_from_step: 3, status: missing, source: "riptide_simulator camera_faker/models/claw/assembly_static.glb @07647eeb"}   # DFC view? (O7)
-- {id: claw_left_mesh, path: assets/visual/claw/assembly_left.glb, required_from_step: 3, status: missing, source: "riptide_simulator camera_faker/models/claw/assembly_left.glb @07647eeb"}
-- {id: claw_right_mesh, path: assets/visual/claw/assembly_right.glb, required_from_step: 3, status: missing, source: "riptide_simulator camera_faker/models/claw/assembly_right.glb @07647eeb"}
+# Visual assets copied byte-for-byte (cp); sha256 verified by the loader. No pose fields: the robot schema has no
+# visual placement section. Placement evidence for the consumer:
+#  - Body/rotors: all GLB vertices, pivots and axes are in the CAD/model origin (frame `cad` below);
+#    content/visuals/talos/provenance/thrusters.yaml (rotors[].pivot/axis/direction/mesh, metres) and provenance/README.md.
+#  - Claw: camera_faker/src/pool_viewer/renderer.cpp:488-501 loads gripper.glb (left pad, clawAsset), gripper_right.glb,
+#    assembly_static.glb, assembly_left.glb, assembly_right.glb, each at identity (glm::mat4(1)) so vertices are
+#    already in the claw mount frame; renderer.cpp:652-663 clawPose(mount, left, right) draws them as
+#    mount * local * identity, local = translate(0, +left, 0) for names containing "left" and translate(0, -right, 0)
+#    for "right" (jaw travel along the claw-mount Y axis); static assembly has no local offset.
+- {id: body_mesh, path: assets/visual/Talos3_body.glb, required_from_step: 3, status: present, sha256: 5827668235d30dcde556d2cd1cf2c3352bf71adaeeaa1bc9840925d9eaa2460d, source: "robotics_platform content/visuals/talos/Talos3_body.glb (orig camera_faker/models/talos3/Talos3_body.glb @07647eeb)"}
+- {id: rotor_VUS, path: assets/visual/rotors/VUS.glb, required_from_step: 3, status: present, sha256: bcefa0cd37a3c3166cee03e33dcf3fa55342f239aba5b5a28e0c82fb64631f4d, source: "robotics_platform content/visuals/talos/rotors/VUS.glb"}
+- {id: rotor_VUP, path: assets/visual/rotors/VUP.glb, required_from_step: 3, status: present, sha256: 7b34f2f1be6b251fc94b00b46de65bb5071014b4eb355cc0ff6b32d3b0c76be3, source: "robotics_platform content/visuals/talos/rotors/VUP.glb"}
+- {id: rotor_HUS, path: assets/visual/rotors/HUS.glb, required_from_step: 3, status: present, sha256: d11d3770a54ea4feb67b85cfd008f48c58c76703132305010d1e68ddf276651e, source: "robotics_platform content/visuals/talos/rotors/HUS.glb"}
+- {id: rotor_HUP, path: assets/visual/rotors/HUP.glb, required_from_step: 3, status: present, sha256: 75f47aa49472d9399f466a44a03f6a9fdc7b91a4e170ea171d591b7d622c4f7b, source: "robotics_platform content/visuals/talos/rotors/HUP.glb"}
+- {id: rotor_HLS, path: assets/visual/rotors/HLS.glb, required_from_step: 3, status: present, sha256: 4382429ecd19663cf270bd50eabe8db373ed52e022700da559b6bd004358804b, source: "robotics_platform content/visuals/talos/rotors/HLS.glb"}
+- {id: rotor_HLP, path: assets/visual/rotors/HLP.glb, required_from_step: 3, status: present, sha256: 6c07417e1a4c56b1939c733af482689cd7f04faf82a52503436600d51d13d9f9, source: "robotics_platform content/visuals/talos/rotors/HLP.glb"}
+- {id: rotor_VLS, path: assets/visual/rotors/VLS.glb, required_from_step: 3, status: present, sha256: a1ea85ced8ca686c06d5a272cfb1ac9fd9ec5d40a1f746ef56364c7bf7869ba8, source: "robotics_platform content/visuals/talos/rotors/VLS.glb"}
+- {id: rotor_VLP, path: assets/visual/rotors/VLP.glb, required_from_step: 3, status: present, sha256: e9abcc47da85069b25cbdc780f1a9f75ab56317b523297626970246be7bf98ca, source: "robotics_platform content/visuals/talos/rotors/VLP.glb"}
+- {id: claw_static_mesh, path: assets/visual/claw/assembly_static.glb, required_from_step: 3, status: present, sha256: 3a8761e95d245ea160bac7da3bcac257331a16048958fdd046670246fda1eaed, source: "riptide_simulator camera_faker/models/claw/assembly_static.glb @07647eeb"}   # DFC view? (O7)
+- {id: claw_left_mesh, path: assets/visual/claw/assembly_left.glb, required_from_step: 3, status: present, sha256: 60ff5d30068cd11e8b0fd61a986335385f4816a65534902cbfd0c878b6313e70, source: "riptide_simulator camera_faker/models/claw/assembly_left.glb @07647eeb"}
+- {id: claw_right_mesh, path: assets/visual/claw/assembly_right.glb, required_from_step: 3, status: present, sha256: e9e644e9a62afac91e719d05d0775c9d2cc7a3ff82c77631921915d9bcd3aeba, source: "riptide_simulator camera_faker/models/claw/assembly_right.glb @07647eeb"}
+- {id: claw_left_pad_mesh, path: assets/visual/claw/gripper.glb, required_from_step: 3, status: present, sha256: fd7ce8d8334a92da3060b74c0f4b85d45ed35a2bb937eb7e4b8f09302fd3405c, source: "riptide_simulator camera_faker/models/claw/gripper.glb @07647eeb"}   # left pad (renderer.cpp:491 loads clawAsset)
+- {id: claw_right_pad_mesh, path: assets/visual/claw/gripper_right.glb, required_from_step: 3, status: present, sha256: f3267ef51e31de7942ab96561efa01931c838bd099ed8b13833aa06a1411e936, source: "riptide_simulator camera_faker/models/claw/gripper_right.glb @07647eeb"}   # right pad (renderer.cpp:492-493)
 - {id: launcher_mesh, path: assets/visual/payloads/launcher.glb, required_from_step: 4, status: missing, source: "riptide_simulator camera_faker/models/payloads/launcher.glb @07647eeb"}
 - {id: projectile_mesh, path: assets/visual/payloads/projectile.glb, required_from_step: 4, status: missing, source: "riptide_simulator camera_faker/models/payloads/projectile.glb @07647eeb"}
 - {id: claw_pad_left, path: assets/collision/claw_pad.obj, required_from_step: 4, status: missing, source: "riptide_simulator c_simulator/collision_files/tasks/claw_pad.obj @07647eeb"}
@@ -113,12 +124,12 @@ frames:
   - {parent: cad, child: hydrophone_port, position_m: [-0.305, 0.325, -0.075], orientation_wxyz: [1, 0, 0, 0]}
   - {parent: cad, child: hydrophone_starboard, position_m: [-0.315, -0.325, -0.075], orientation_wxyz: [1, 0, 0, 0]}
   # NEW. Camera optical frames: original fixed rotation rpy(-pi/2, 0, -pi/2) under each camera link
-  # (physics_simulator.cpp publishState, camera_faker main.cpp). Right optical frame = left + baseline
-  # along optical +X (ZED convention; open question O6).
+  # (physics_simulator.cpp publishState, camera_faker main.cpp). Right optical frame = left + rectified
+  # baseline along optical +X (ZED convention; open question O6); value equals sensors ffc/dfc baseline_m.
   - {parent: ffc_mount, child: ffc_left_optical, position_m: [0, 0, 0], orientation_wxyz: [0.5, -0.5, 0.5, -0.5]}
-  - {parent: ffc_left_optical, child: ffc_right_optical, position_m: [0.050, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+  - {parent: ffc_left_optical, child: ffc_right_optical, position_m: [0.04975591649077412, 0, 0], orientation_wxyz: [1, 0, 0, 0]}   # = rectified baseline_m (ffc)
   - {parent: dfc_mount, child: dfc_left_optical, position_m: [0, 0, 0], orientation_wxyz: [0.5, -0.5, 0.5, -0.5]}
-  - {parent: dfc_left_optical, child: dfc_right_optical, position_m: [0.045, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+  - {parent: dfc_left_optical, child: dfc_right_optical, position_m: [0.05030758651145167, 0, 0], orientation_wxyz: [1, 0, 0, 0]}   # = rectified baseline_m (dfc)
 
 # Effective original physics proxies (talos.urdf box origins are COM-relative).
 collision_boxes:
@@ -210,11 +221,20 @@ sensors:
   period_ns: 66666667          # grab_frame_rate 15 Hz (ffc_config.yaml); lattice rounds to 66/134 ms
   latency_ns: 0
   parameters:
-    baseline_m: 0.050          # talos.yaml cameras[ffc].baseline (charuco T = -49.746 mm)
+    # Rectified stereo parameters (calibration tirpak_ffc_charuco_3.yaml, Size 1920x1200 == resolution_px, no scaling).
+    # Method: cv2.stereoRectify(K_LEFT, D_LEFT, K_RIGHT, D_RIGHT, Size, R, T, CALIB_ZERO_DISPARITY, alpha 0), as
+    # camera_faker camera.hpp:131 (call) and 145-148 (fx,fy,cx,cy = P[0,0],P[1,1],P[0,2],P[1,2]); OpenCV 4.10.0.
+    # P1 and P2 share fx,fy,cx,cy, so both intrinsics_* are the rectified values. Baseline = -P2[0,3]/P2[0,0]
+    # = 49.75591649077412 mm (calibration T is in mm, |T| = 49.7559 mm); talos.yaml nominal baseline was 0.050 m.
+    # Published CameraInfo uses these rectified values with zero distortion.
+    # Raw K_LEFT  = fx 1701.5228274850651, fy 1702.38974652801, cx 935.1500437132862, cy 579.3540600385955
+    # Raw K_RIGHT = fx 1698.3287694267367, fy 1699.664166238939, cx 944.3162080348961, cy 590.0641457266676
+    # Raw D_RIGHT = [0.2759779552328478, -0.008533485244699875, 0.0, 0.0, -0.868687260703704]
+    baseline_m: 0.04975591649077412
     resolution_px: [1920, 1200]      # HD1200 grab_resolution
-    intrinsics_left: {fx: 1701.5228274850651, fy: 1702.3897465280099, cx: 935.15004371328621, cy: 579.35406003859555}
-    intrinsics_right: {fx: 1698.3287694267367, fy: 1699.6641662389391, cx: 944.31620803489614, cy: 590.06414572666756}
-    distortion_left_plumb_bob: [0.2678975458895328, 0.060526966446929266, 0.0, 0.0, -1.0363393179270073]   # calibration metadata only; rectified outputs publish zero D (O5)
+    intrinsics_left: {fx: 1863.9341697853888, fy: 1863.9341697853888, cx: 955.8471374511719, cy: 584.7962646484375}
+    intrinsics_right: {fx: 1863.9341697853888, fy: 1863.9341697853888, cx: 955.8471374511719, cy: 584.7962646484375}
+    distortion_left_plumb_bob: [0.2678975458895328, 0.060526966446929266, 0.0, 0.0, -1.0363393179270073]   # raw calibration metadata only; rectified outputs publish zero D (O5)
     outputs: [rgb_left, depth_left, camera_info]
     depth:
       min_range_m: 0.15
@@ -230,11 +250,20 @@ sensors:
   period_ns: 66666667          # 15 Hz
   latency_ns: 0
   parameters:
-    baseline_m: 0.045
+    # Rectified stereo parameters (calibration dfc_charuco_test.yaml, Size 1920x1200 == resolution_px, no scaling).
+    # Method: cv2.stereoRectify(K_LEFT, D_LEFT, K_RIGHT, D_RIGHT, Size, R, T, CALIB_ZERO_DISPARITY, alpha 0), as
+    # camera_faker camera.hpp:131 (call) and 145-148 (fx,fy,cx,cy = P[0,0],P[1,1],P[0,2],P[1,2]); OpenCV 4.10.0.
+    # P1 and P2 share fx,fy,cx,cy, so both intrinsics_* are the rectified values. Baseline = -P2[0,3]/P2[0,0]
+    # = 50.30758651145167 mm (calibration T is in mm, |T| = 50.3076 mm); talos.yaml nominal baseline was 0.045 m.
+    # Published CameraInfo uses these rectified values with zero distortion.
+    # Raw K_LEFT  = fx 1708.5053974906311, fy 1678.9579416970594, cx 955.8252400838678, cy 616.5398589377248
+    # Raw K_RIGHT = fx 1714.2065310272428, fy 1680.0645526326848, cx 964.2105180096831, cy 594.2566643655323
+    # Raw D_RIGHT = [0.2358914896564815, -0.11300807135219121, -0.0010622670919948295, 0.00937432162663741, 0.0]
+    baseline_m: 0.05030758651145167
     resolution_px: [1920, 1200]
-    intrinsics_left: {fx: 1708.5053974906311, fy: 1678.9579416970594, cx: 955.82524008386781, cy: 616.53985893772483}
-    intrinsics_right: {fx: 1714.2065310272428, fy: 1680.0645526326848, cx: 964.21051800968314, cy: 594.25666436553229}
-    distortion_left_plumb_bob: [0.23711268288264142, -0.14781371703855056, -0.0006042261836638719, 0.0013987545571711227, 0.0]
+    intrinsics_left: {fx: 1857.5388723099845, fy: 1857.5388723099845, cx: 974.8830642700195, cy: 604.2220611572266}
+    intrinsics_right: {fx: 1857.5388723099845, fy: 1857.5388723099845, cx: 974.8830642700195, cy: 604.2220611572266}
+    distortion_left_plumb_bob: [0.23711268288264142, -0.14781371703855056, -0.0006042261836638719, 0.0013987545571711227, 0.0]   # raw calibration metadata only
     outputs: [rgb_left, depth_left, camera_info]
     depth:
       min_range_m: 0.15

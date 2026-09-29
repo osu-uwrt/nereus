@@ -15,6 +15,31 @@ part of step 3. Do not restructure unrelated components.
 
 Current step: **3 — offscreen cameras/stereo and the real perception gate.**
 Step 2 passed the repeated real-controller/EKF hold comparison and Opus review.
+
+The first camera increment adds optional CPU camera geometry and image processing
+(`RP_BUILD_CAMERAS`), with optical frames, rectified stereo projection, owned RGB
+and depth buffers, JPEG encoding, and the original empirical depth-noise model.
+It builds without simulation, ROS or OpenGL. The existing scene renderer now
+loads PNG task textures, applies UV cutouts and reads just camera RGB/depth.
+Talos and gate/torpedo sensor-scene assets are copied into their packs with hashes.
+Camera calibration now uses the old pipeline's rectified projection rather than
+raw calibration intrinsics; the right-eye spacing uses the calibrated baseline.
+No camera stream is enabled yet. Robot visual placement, scene composition,
+offscreen hosting, acquisition scheduling and bridge images/TF remain unfinished.
+
+Validation: `ctest --test-dir build/camera-renderer --output-on-failure` passed
+24 cases, including eight GPU contracts on this machine. The 12 CPU camera/frame
+cases also passed ASan/UBSan in `build/cameras-asan`. An installed CMake consumer
+linked the camera and renderer libraries without simulation. All 79 pack-tooling
+tests, pack validation and asset hash checks pass. These checks do not establish
+the real-perception gate.
+Opus implemented the renderer change and delegated asset/calibration imports to
+Sonnet. Codex integrated and tested them. Opus's independent camera-library review
+was interrupted by Claude Code's session usage limit (reported reset: 7 a.m.
+America/New_York, September 29). Resume that review before accepting the increment;
+no joint approval or perception result is claimed. UI and visual comparison stay
+frozen. Remaining camera work must keep rendering off the 500 Hz physics loop.
+
 Step 1 passed joint review. `proposals/step1/` contains nine proposed JSON Schemas
 and eight YAML documents: Talos robot, 2026 pool, gate/torpedo task definitions,
 task manifest, UWRT bridge, scenario and the exception ledger. One task-pack
