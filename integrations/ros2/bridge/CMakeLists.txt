@@ -52,4 +52,14 @@ if(BUILD_TESTING)
     gtest_discover_tests(bridge_${test_name} DISCOVERY_MODE PRE_TEST
       PROPERTIES FIXTURES_REQUIRED session_resolved)
   endforeach()
+  # Live FastDDS comparison with the Python bridge; needs a sourced ROS 2 and the Python packages.
+  find_program(RP_BRIDGE_ROS_PYTHON python3 PATHS /usr/bin NO_DEFAULT_PATH)
+  if(RP_BRIDGE_ROS_PYTHON)
+    add_test(NAME bridge_live_smoke
+      COMMAND ${RP_BRIDGE_ROS_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/live_smoke.py
+              $<TARGET_FILE:robotics-sim-ros> ${rp_resolved_talos}
+              ${PROJECT_SOURCE_DIR}/content/packs/scenarios/talos_uwrt)
+    set_tests_properties(bridge_live_smoke PROPERTIES FIXTURES_REQUIRED session_resolved TIMEOUT 300
+      RUN_SERIAL TRUE LABELS live)
+  endif()
 endif()

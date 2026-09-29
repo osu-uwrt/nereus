@@ -2,12 +2,19 @@
 
     ros2 launch integrations/uwrt/launch/sim.launch.py [stack:=false] [viewer:=false]
         [scenario:=<pack folder>] [output:=<run dir>] [rmw:=rmw_fastrtps_cpp]
+        [bridge:=python|cpp] [cameras:=true|false] [always_cameras:=true|false]
+
+bridge:=cpp runs the rclcpp simulator (build/ros-viewer/.../robotics-sim-ros) on the pack resolved
+with `python -m robotics_platform.packs resolve`; cameras:=false passes --no-cameras and
+always_cameras:=true renders every camera output regardless of subscribers.
 
 Run records (resolved.json, execution.json, summary.json, tasks.json) go to `output`
 (default /tmp/robotics_sim/<timestamp>). Ctrl-C stops everything and writes the records.
 """
 
 import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -31,14 +38,32 @@ def _processes(context):
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
     output = LC("output").perform(context) or f"/tmp/robotics_sim/{time.strftime('%Y%m%d-%H%M%S')}"
     Path(output).parent.mkdir(parents=True, exist_ok=True)
-    python_path = os.pathsep.join(
-        [str(ROOT / "integrations/ros2/python"), str(ROOT / "python/src"),
-         os.environ.get("PYTHONPATH", "")])
-    actions.append(ExecuteProcess(
-        cmd=["python3", "-m", "robotics_platform_ros", LC("scenario").perform(context),
-             "--output", output],
-        cwd=str(ROOT), additional_env={"PYTHONPATH": python_path}, output="screen",
-        sigterm_timeout="15", name="simulator"))
+    scenario = LC("scenario").perform(context)
+    if LC("bridge").perform(context) == "cpp":
+        binary = LC("bridge_binary").perform(context)
+        resolved = f"{output}.resolved.json"
+        subprocess.run(
+            [sys.executable, "-m", "robotics_platform.packs", "resolve", scenario, "-o", resolved],
+            check=True, cwd=str(ROOT),
+            env={**os.environ, "PYTHONPATH": os.pathsep.join(
+                [str(ROOT / "python/src"), os.environ.get("PYTHONPATH", "")])})
+        command = [binary, resolved, "--output", output]
+        if LC("cameras").perform(context).lower() in ("false", "0", "no"):
+            command.append("--no-cameras")
+        elif LC("always_cameras").perform(context).lower() in ("true", "1", "yes"):
+            command.append("--always-cameras")
+        actions.append(ExecuteProcess(cmd=command, cwd=str(ROOT), output="screen",
+                                      sigterm_timeout="15", name="simulator"))
+    else:
+        python_path = os.pathsep.join(
+            [str(ROOT / "integrations/ros2/python"), str(ROOT / "python/src"),
+             os.environ.get("PYTHONPATH", "")])
+        cmd = ["python3", "-m", "robotics_platform_ros", scenario, "--output", output]
+        if LC("cameras").perform(context).lower() in ("false", "0", "no"):
+            cmd.append("--no-cameras")
+        actions.append(ExecuteProcess(
+            cmd=cmd, cwd=str(ROOT), additional_env={"PYTHONPATH": python_path}, output="screen",
+            sigterm_timeout="15", name="simulator"))
     actions.append(IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(ROOT / "integrations/uwrt/acceptance/mission_stack.launch.py")),
         condition=IfCondition(LC("stack"))))
@@ -54,6 +79,13 @@ def generate_launch_description():
         DeclareLaunchArgument("output", default_value=""),
         DeclareLaunchArgument("stack", default_value="true", description="launch the UWRT stack"),
         DeclareLaunchArgument("viewer", default_value="true", description="launch the pool viewer"),
+        DeclareLaunchArgument("bridge", default_value="python", description="simulator bridge: python or cpp"),
+        DeclareLaunchArgument("bridge_binary", default_value=str(
+            ROOT / "build/ros-viewer/integrations/ros2/bridge/robotics-sim-ros"),
+            description="robotics-sim-ros executable used by bridge:=cpp"),
+        DeclareLaunchArgument("cameras", default_value="true", description="run camera acquisition"),
+        DeclareLaunchArgument("always_cameras", default_value="false",
+                              description="cpp bridge: render cameras regardless of subscribers"),
         DeclareLaunchArgument("rmw", default_value="rmw_fastrtps_cpp",
                               description="RMW for every process; empty keeps the shell's"),
         OpaqueFunction(function=_processes),
