@@ -1,5 +1,42 @@
 # Implementation status
 
+## Current priority: real-stack mission through data packs (2026-09-29)
+
+This section supersedes the historical next-step notes below. Complete
+RepairCompTree through the real UWRT controllers, EKF and perception, checking
+all descendant tasks against physical outcomes. Robot, pool, tasks and bridge
+inputs are YAML-and-asset folders; a scenario selects them plus initial state and
+seed. User Python is restricted to task/scoring hooks. No user code is required
+for robots, pools, sensors or bridge wiring.
+
+Visual work stopped at local commit `9081760`. UI, LEDs, radiance and visual
+fidelity stay deferred until step 5 passes. Offscreen camera work is explicitly
+part of step 3. Do not restructure unrelated components.
+
+Current step: **1 — schemas and concrete packs only; no implementation changes.**
+The deliverable is proposed robot/pool/task/scenario/bridge schemas, concrete
+Talos and 2026 pool/gate/torpedo data, UWRT wiring, and a list of necessary task
+Python hooks and custom-message converters with reasons. No schema gate has passed.
+
+The user replaced human approval with joint Codex/Claude Code execution. Claude
+uses `claude-opus-5-5` with high effort. It may delegate bounded mechanical work
+to `claude-sonnet-5-5`; the exact model was checked successfully. Codex and Opus
+retain architecture, difficult integration, review and gate decisions. Delegate
+assignments have separate file ownership and short evidence-based handoffs.
+Codex owns integration, runtime evidence and commits. Claude drafts concrete
+packs, later task-scoring hooks and guides, and independently reviews gate evidence.
+Use short file/diff references in the same Claude session. Review each gate's
+concrete evidence and proceed without human approval; a review does not replace
+runtime tests. Report each gate in at most 15 lines. If a blocker cannot be resolved
+within the agreed scope, report it rather than inventing a passing gate.
+
+Readable meeting notes, decisions and gate reviews live in the locally ignored
+`collaboration_logs/` folder, never in Git. Raw diagnostic output stays under
+`build/`. Keep changes small, validate against the current gate, and commit locally
+with a one-line message. The checklist owns the ordered gates and deferred
+follow-ups. Only this file, that checklist and the three requested final guides
+receive new prose documentation.
+
 This file distinguishes delivered code from the architecture's future work.
 The active full-refactor ledger is [REIMPLEMENTATION_CHECKLIST.md](REIMPLEMENTATION_CHECKLIST.md).
 

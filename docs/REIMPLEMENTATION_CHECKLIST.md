@@ -1,15 +1,44 @@
 # Full simulator reimplementation acceptance checklist
 
-Status: active implementation. This is the working ledger for the user's request
-on 2026-09-28 to continue until Talos, the robot stack, original water appearance,
-props/tasks, operator panels, and the complete RepairCompTree work on the new
-platform. Check a box only after its acceptance evidence is recorded. Local Git
-commits only; the original workspace remains the reference, not a runtime dependency.
+Status: the 2026-09-29 data-pack/real-stack plan below supersedes earlier
+next-increment lists. Historical acceptance evidence remains below. Local commits
+only; no pushes. No UI or visual-fidelity work until step 5 is complete.
 
-Delivery priority: original simulator replacement first, RViz replacement expansion
-second, broader team/industry reuse third. Generalized ownership/dependency contracts
-remain mandatory through every increment. Prefer work that closes concrete original
-simulator gaps over unrelated viewer/platform expansion.
+## Current execution gates
+
+- [ ] 1. Schemas only: robot, pool, tasks, scenario and bridge; actual Talos,
+  2026 pool, gate and torpedo data; UWRT bridge wiring; list every necessary task
+  Python hook and custom-message converter with its reason. Claude review before code.
+- [ ] 2. Generic YAML bridge, UWRT config and required converters: the existing
+  controllers and EKF hold depth and heading about as well as the old simulator.
+- [ ] 3. Robot-pack offscreen camera and stereo products: real perception runs on them.
+- [ ] 4. Task runtime, launcher/dropper/claw mechanisms, all 2026 task packs and full
+  reset: each task scores correctly in a scripted run.
+- [ ] 5. RepairCompTree through the real stack with every descendant outcome checked;
+  then a synthetic AUV on a different topic layout, a new pool and a new task,
+  all without simulator code changes; one-page robot, pool and task guides.
+
+The user delegated approval to Codex and Claude Code, using Opus 5.5/high. Agree
+ownership, have the other partner review each gate's evidence, and continue without
+human approval. Stop and report genuine blockers; do not work around a wrong gate.
+Claude may delegate bounded mechanical work to Sonnet 5.5, with separate file
+ownership; Codex and Opus retain difficult work and validation. Keep readable meeting
+notes in the Git-ignored `collaboration_logs/` directory; raw output stays in `build/`.
+
+Before every change: does it move the current step toward its gate? If not, defer
+it below. Add types/fields only for concrete Talos/2026 needs. Preserve existing
+dependency boundaries; no unrelated restructuring, plugin frameworks or generic
+event buses. Packs own folder-relative YAML/assets; schemas and type introspection
+come from loader definitions; load/save is lossless; runs record resolved config.
+User Python is only a task-pack hook taking read-only state/events and returning
+score changes/new events, with no runtime or stepping access. Bridge wiring is data;
+only required custom-message converters live in `integrations/uwrt`.
+
+## Deferred follow-ups
+
+- Resume UI, LEDs, radiance and visual-fidelity work only after step 5 passes.
+- Revisit broad RViz and industry expansion after the simulator/data-only gates.
+- Keep future training use possible; do not implement RL or general sonar now.
 
 ## Reference and fidelity policy
 
@@ -210,29 +239,10 @@ reset, observation ownership, headless operation and instance isolation are reta
 for future training integrations. Full RViz feature parity is broader than the
 selected live-robot workflows required here.
 
-## Current next increment and review loop
+## Review loop
 
-1. Source-linked review matrix is recorded; full reference capture remains open.
-2. Read-only pose transport and application composition are validated. Explicit
-   simulation controls remain open and separate from recording playback.
-3. Stage forcing and actuator calibration/stop interfaces are verified in their
-   bounded reference/contracts. Static compound contacts are integrated and validated.
-   Named body mounts are now resolved for sensors and live visualization. The
-   original renderer is connected to the optional interactive viewport through
-   neutral scene/source inputs. Fixed body/pool captures match the original pipeline.
-   Rotor observations now drive the interactive scene independently of polling.
-   Original LED geometry and source color bindings now have fixed-image comparisons.
-   Next: indicator command ownership and acquisition sampling, then complete
-   mechanism/course geometry and animated visual comparisons.
-   Reusable per-view GPU targets/shared preparation precede camera integration.
-   Depth reporting now passes its captured original comparisons. Cameras follow the
-   extracted renderer; other device/adapter work stays in the sensor conversion map.
-   The original Talos
-   dynamics capture now covers every tick of the three bounded physics cases;
-   task/prop contacts and full mission references remain open.
-4. Re-evaluate this order after each validated commit against concrete dependencies.
-
-For every increment: state its acceptance target, implement, test appropriate
-contracts and installed boundaries, review, commit locally, update this ledger and
-STATUS.md, and check the next step against delivered code. No intermediate milestone
-is the full completion of this checklist.
+Only the ordered current execution gates at the top determine the next increment.
+State the gate, make the smallest relevant change, validate, obtain peer review,
+commit locally, and update STATUS.md and this checklist. Report each gate in no
+more than 15 lines: done, proof command, remaining failures and open questions.
+No intermediate milestone constitutes full simulator acceptance.
