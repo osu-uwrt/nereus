@@ -18,6 +18,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <thread>
 
@@ -64,6 +65,31 @@ struct PhaseTimer {
         profiler.add(phase, std::chrono::duration<double>(Clock::now() - begin).count());
     }
 };
+
+// Removes the providers that only exist with the simulator (type sim.* / ros.simulation_rate) and every
+// panel, tool or overlay bound to them, so a real-robot session shows no dead controls.
+void dropSimulatorPanels(YAML::Node &document) {
+    std::set<std::string> gone;
+    if (auto providers = document["providers"]) {
+        for (const auto &entry : providers) {
+            const auto type = entry.second["type"].as<std::string>("");
+            if (type.rfind("sim.", 0) == 0 || type == "ros.simulation_rate")
+                gone.insert(entry.first.as<std::string>());
+        }
+        for (const auto &name : gone)
+            providers.remove(name);
+    }
+    for (const char *group : {"panels", "tools", "overlays"}) {
+        auto list = document[group];
+        if (!list || !list.IsSequence())
+            continue;
+        YAML::Node kept(YAML::NodeType::Sequence);
+        for (const auto &item : list)
+            if (!gone.count(item["provider"].as<std::string>("")))
+                kept.push_back(item);
+        document[group] = kept;
+    }
+}
 
 // Observer-only look: never touches the bridge's sensor renders.
 struct Look {
@@ -261,7 +287,7 @@ class App {
     double profileCachedAt_ = -1;
     std::string profileText_;
     bool profileSync() const {
-        return opt_.profile || showProfile_;
+        return opt_.profileSync;
     }
     std::vector<glm::mat4> lastLoaded_;
     int argc_;
@@ -285,12 +311,21 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     showMpc_ = opt_.mpcPath;
     if (!demoMode_) {
         rclcpp::init(argc, argv);
-        const bool simTime = opt_.useSimTime.value_or(true);
+        // Without a simulator (real robot) there is no /clock: default to wall time.
+        const bool estimateOnly =
+            (!opt_.poseSource.empty() ? opt_.poseSource : lookup(config_, {"pose", "source"}).as<std::string>("auto")) ==
+            "estimate";
+        const bool simTime = opt_.useSimTime.value_or(!estimateOnly);
         node_ = std::make_shared<rclcpp::Node>("robotics_pool_viewer",
                                                rclcpp::NodeOptions().parameter_overrides(
                                                    {rclcpp::Parameter("use_sim_time", simTime)}));
     }
     ros_ = std::make_unique<RosSide>(node_);
+    ros_->configurePose(
+        parsePoseSource(!opt_.poseSource.empty() ? opt_.poseSource
+                                                 : lookup(config_, {"pose", "source"}).as<std::string>("auto")),
+        opt_.truthDelay >= 0 ? opt_.truthDelay : lookup(config_, {"pose", "truth_delay_s"}).as<double>(.02),
+        opt_.otherDelay >= 0 ? opt_.otherDelay : lookup(config_, {"pose", "other_delay_s"}).as<double>(.06));
     const int width = lookup(config_, {"window", "width"}).as<int>(1480),
               height = lookup(config_, {"window", "height"}).as<int>(940);
     window_ = std::make_unique<Window>(width, height,
@@ -508,6 +543,7 @@ void App::loadScenario(const std::string &json) {
     SceneModelOptions options;
     options.config = config_;
     options.configDirectory = configDir_;
+    options.robotOnly = opt_.robotOnly;
     model_ = std::make_unique<SceneModel>(*scenario_, options, thrusters_, lights_);
     ros_->attach(*scenario_, config_, lights_, thrusters_, !demoMode_);
     look_.appearance = scenario_->appearance;
@@ -567,7 +603,10 @@ void App::buildPanels() {
     context.focus = [this](const std::string &name) { focus(name); };
     if (opt_.showScorecard)
         context.initialWindows.push_back("run");
-    composition_ = std::make_unique<panels::Composition>(YAML::LoadFile(configured), context, registry_);
+    auto document = YAML::LoadFile(configured);
+    if (ros_->poseSource() == PoseSource::Estimate)
+        dropSimulatorPanels(document); // real robot: no simulator run / rate controls
+    composition_ = std::make_unique<panels::Composition>(document, context, registry_);
     for (const auto &entry : composition_->providers())
         if (auto run = std::dynamic_pointer_cast<panels::Run>(entry.second)) {
             runTracking_ = run;
@@ -586,7 +625,7 @@ void App::updatePose() {
         return;
     }
     bool first = false;
-    if (ros_->updateTruth(body_, first)) {
+    if (ros_->updatePose(body_, first)) {
         if (first) {
             const auto p = presetFor(focusName_);
             if (p.target == "vehicle" || p.target == "mechanism" || p.target == "mechanisms")
@@ -904,7 +943,13 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
         feed.wantDepth = !feed.wantDepth;
         ros_->refreshCameras();
     }
-    if (!demoMode_) {
+    // Local rendering needs the simulator's truth pose; without it the card is the ROS image topic.
+    const bool canLocal = demoMode_ || ros_->truthActive();
+    if (!demoMode_ && !canLocal) {
+        ImGui::PushFont(window_->small);
+        ImGui::TextDisabled("ROS image topic (no simulator truth pose)");
+        ImGui::PopFont();
+    } else if (!demoMode_) {
         bool ros = feed.rosMode;
         if (ImGui::Checkbox("What the stack sees (ROS)", &ros)) {
             feed.rosMode = ros;
@@ -919,7 +964,7 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
     ImGui::PushFont(window_->small);
     ImGui::TextColored(muted, "%s  /  %d x %d", camera.model.c_str(), camera.k.width, camera.k.height);
     const bool depthShown = feed.wantDepth && tex.depth;
-    const bool local = demoMode_ || !feed.rosMode;
+    const bool local = demoMode_ || (canLocal && !feed.rosMode);
     ImGui::TextDisabled("Preview: %d x %d", depthShown ? tex.depthWidth : tex.rgbWidth,
                         depthShown ? tex.depthHeight : tex.rgbHeight);
     ImGui::PopFont();
@@ -938,7 +983,7 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
         draw->AddRectFilled(pos, {pos.x + w, pos.y + h}, IM_COL32(4, 13, 19, 255));
     }
     cardVisible_[index] = ImGui::IsItemVisible();
-    const bool ready = demoMode_ || ros_->truthFresh();
+    const bool ready = demoMode_ || !local || ros_->poseFresh();
     if (!ready || !texture) {
         auto *draw = ImGui::GetWindowDrawList();
         if (texture)
@@ -1103,7 +1148,7 @@ void App::drawSceneSettings(float sidebar, float left) {
         const float width = ImGui::GetContentRegionAvail().x;
         ImGui::BeginChild("environment", {width, 0}, ImGuiChildFlags_None);
         for (const auto &control : scenario_->ui["mechanism_controls"]) {
-            ImGui::BeginDisabled(demoMode_);
+            ImGui::BeginDisabled(demoMode_ || !ros_->truthActive()); // simulator-only commands
             if (ImGui::Button(control["label"].as<std::string>().c_str()))
                 ros_->publishMechanism(control["topic"].as<std::string>(), control["value"].as<bool>(true));
             ImGui::EndDisabled();
@@ -1307,7 +1352,7 @@ void App::drawInterface(double time, float dt) {
     ImGui::TextUnformatted(headerSubtitle.c_str());
     const float statusWidth = ImGui::CalcTextSize(status_.c_str()).x + 2 * ImGui::GetStyle().FramePadding.x;
     ImGui::SameLine(W - 18 - statusWidth);
-    pill(status_, demoMode_ ? ImVec4(.94f, .73f, .35f, 1) : (ros_->truthFresh() ? cyan : muted));
+    pill(status_, demoMode_ ? ImVec4(.94f, .73f, .35f, 1) : (ros_->poseFresh() ? cyan : muted));
     ImGui::Separator();
     if (!scenario_) {
         ImGui::Dummy({1, 40});
@@ -1551,31 +1596,34 @@ void App::drawInterface(double time, float dt) {
 void App::renderLocalCards(double t, const rendering::Scene &mainScene) {
     if (!scenario_ || !model_ || !(demoMode_ || opt_.localCameras) || !cameraSidebarVisible_)
         return;
-    if (!demoMode_ && !ros_->truthFresh())
-        return; // no pose to render from yet
+    if (!demoMode_ && !(ros_->truthActive() && ros_->poseFresh()))
+        return; // no simulator truth pose to render from
     const std::size_t count = std::min(scenario_->cameras.size(), cards_.size());
-    std::size_t index = count;
-    for (std::size_t n = 0; n < count && index == count; ++n) {
+    std::vector<std::size_t> todo;
+    for (std::size_t n = 0; n < count; ++n) {
         const std::size_t i = (nextCardTurn_ + n) % count;
-        const bool ros = !demoMode_ && i < ros_->feeds.size() && ros_->feeds[i].rosMode;
+        const bool ros = !demoMode_ && i < ros_->feeds.size() && ros_->feeds[i].rosMode; // truthActive checked above
         const bool depthShown = i < ros_->feeds.size() && ros_->feeds[i].wantDepth && cards_[i].depth;
-        if (!ros && !depthShown && cardVisible_[i] && t >= cardDue_[i])
-            index = i;
+        if (opt_.legacyCards ? (!ros && t >= cardDue_[0]) : (!ros && !depthShown && cardVisible_[i] && t >= cardDue_[i])) {
+            todo.push_back(i);
+            if (!opt_.legacyCards)
+                break;
+        }
     }
-    if (index == count)
+    if (todo.empty())
         return;
-    nextCardTurn_ = index + 1;
-    cardDue_[index] = t + (demoMode_ ? .25 : .1);
+    nextCardTurn_ = todo.back() + 1;
+    for (auto i : todo)
+        cardDue_[opt_.legacyCards ? 0 : i] = t + (demoMode_ ? .25 : .1);
     PhaseTimer timer{profiler_, Phase::Cards, profileSync()};
     rendering::Scene ownScene;
-    if (!observer_.walls) { // the robot's camera sees the pool whatever the observer hides
+    if (!observer_.walls || opt_.legacyCards) { // the robot's camera sees the pool whatever the observer hides
         auto state = buildState();
         state.showWalls = true;
         ownScene = model_->build(state);
     }
-    const rendering::Scene &scene = observer_.walls ? mainScene : ownScene;
-    {
-        const std::size_t i = index;
+    const rendering::Scene &scene = observer_.walls && !opt_.legacyCards ? mainScene : ownScene;
+    for (const auto i : todo) {
         const auto &camera = scenario_->cameras[i];
         auto k = camera.k;
         const int w = 480, h = std::max(16, int(std::lround(480.0 * k.height / k.width)));
@@ -1588,7 +1636,7 @@ void App::renderLocalCards(double t, const rendering::Scene &mainScene) {
         const auto v = sensorView(body_ * camera.opticalInBase, k);
         const rendering::View renderView{toEigen(v.view), toEigen(v.projection), Eigen::Vector3f(v.eye.x, v.eye.y, v.eye.z)};
         auto appearance = look_.appearance;
-        appearance.preview = true;
+        appearance.preview = !opt_.legacyCards;
         const auto frame = renderer_->draw(scene, renderView, appearance, float(t), w, h);
         auto &card = cards_[i];
         if (!card.rgb || card.rgbWidth != w || card.rgbHeight != h) {

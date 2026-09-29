@@ -135,6 +135,13 @@ inline std::string profileReport(const std::vector<FrameSample> &s, double secon
                   s.size(), seconds > 0 ? double(s.size()) / seconds : 0., f.mean, f.p50, f.p95, f.p99, f.max, w.mean,
                   w.p99, w.max);
     std::string out = line;
+    // "No frame noticeably above the median": frames longer than 1.25x the median interval.
+    std::size_t spikes = 0;
+    for (const auto &x : s)
+        if (x.frame * 1000 > 1.25 * f.p50)
+            ++spikes;
+    std::snprintf(line, sizeof(line), " | >1.25x median: %zu (%.1f%%)", spikes, 100. * double(spikes) / double(s.size()));
+    out += line;
     out += "\n  phases ms mean/p99/max:";
     for (int i = 0; i < kPhaseCount; ++i) {
         const auto d = phaseDistribution(s, Phase(i));

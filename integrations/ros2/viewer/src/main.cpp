@@ -25,8 +25,11 @@ void usage() {
         "  --hidden --frames N --screenshot out.png   render N frames, save a PNG, exit\n"
         "  --render-rate HZ       optional frame cap (default: none, vsync paces)\n"
         "  --no-vsync             disable vsync (swap interval 0)\n"
-        "  --profile              log frame time mean/p50/p95/p99/max and per-phase cost every 5 s (F3 toggles\n"
-        "                         the on-screen readout)\n"
+        "  --profile              log frame time mean/p50/p95/p99/max and per-phase CPU cost every 5 s\n"
+        "                         (F3 toggles the on-screen readout)\n"
+        "  --legacy-cards         A/B aid: render both local cards together every 0.1 s with the full pipeline\n"
+        "  --profile-sync         --profile plus glFinish after the main/card draws so phases include GPU time\n"
+        "                         (serializes CPU and GPU: use for attribution, not for the frame-time numbers)\n"
         "  --pose-source auto|truth|estimate  robot pose: simulator truth when fresh (auto), always truth, or\n"
         "                         the localization estimate (real robot: no simulator, no bridge)\n"
         "  --display-delay S      seconds behind the latest truth stamp shown (default 0.02)\n"
@@ -93,8 +96,12 @@ int main(int argc, char **argv) {
         }
         else if (arg == "--no-vsync")
             options.vsync = false;
+        else if (arg == "--legacy-cards")
+            options.legacyCards = true;
         else if (arg == "--profile")
             options.profile = true;
+        else if (arg == "--profile-sync") // phase costs include GPU time; drains the GL queue every frame
+            options.profile = options.profileSync = true;
         else if (arg == "--robot-only")
             options.robotOnly = true;
         else if (arg == "--pose-source")

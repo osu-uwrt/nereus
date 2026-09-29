@@ -31,7 +31,7 @@ std::shared_ptr<const r::MeshAsset> SceneModel::mesh(const std::filesystem::path
 
 SceneModel::SceneModel(const Scenario &scenario, const SceneModelOptions &options, const ThrusterVisuals &thrusters,
                        const StatusLights &lights)
-    : scenario_(scenario), thrusters_(thrusters), lights_(lights) {
+    : robotOnly_(options.robotOnly), scenario_(scenario), thrusters_(thrusters), lights_(lights) {
     // Pool, task visuals (cutouts, texture overrides) and robot visuals: the shared pack composition.
     if (!scenario.resolved)
         throw std::runtime_error("scenario document cannot be composed: " + scenario.resolvedError);
@@ -189,6 +189,11 @@ r::Scene SceneModel::build(const VisualState &state) const {
         dynamic.push_back(std::move(instance));
     }
     r::Scene scene = pack_->compose(worldFromRoot(state.body), dynamic, overrides);
+    if (robotOnly_) { // static scene = pool + task visuals; robot and dynamic instances follow it
+        for (std::size_t i = 0; i < pack_->staticScene().instances.size() && i < scene.instances.size(); ++i)
+            scene.instances[i].visible = false;
+        scene.water.reset();
+    }
     if (!state.showWalls)
         for (std::size_t i = 1; i <= 4 && i < pack_->poolInstanceCount(); ++i)
             scene.instances[i].visible = false;

@@ -22,6 +22,7 @@ struct ExtraVisual {
 struct SceneModelOptions {
     YAML::Node config;                   // host viewer document
     std::filesystem::path configDirectory; // for relative resources (calibration board texture)
+    bool robotOnly = false;                // hide pool, water and course visuals (real-robot use)
 };
 class SceneModel {
   public:
@@ -53,6 +54,7 @@ class SceneModel {
         int rotor = -1;
         int clawSide = 0; // -1 right, +1 left
     };
+    bool robotOnly_ = false;
     const Scenario &scenario_;
     const ThrusterVisuals &thrusters_;
     const StatusLights &lights_;

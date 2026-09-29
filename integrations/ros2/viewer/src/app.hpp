@@ -27,6 +27,8 @@ struct Options {
     double renderRate = 0;          // frame cap in Hz; 0 = uncapped (vsync paces; hidden runs use 30)
     bool vsync = true;              // swap interval 1 (ignored for --hidden)
     bool profile = false;           // log frame-time statistics every few seconds
+    bool legacyCards = false;       // A/B aid: both cards every 0.1 s through the full render pipeline
+    bool profileSync = false;       // also glFinish after main/card draws so phases include GPU time
     double truthDelay = -1;         // seconds behind the latest truth stamp (<0: host yaml, default 0.02)
     double otherDelay = -1;         // same for estimate / other TF frames (default 0.06)
     std::string poseSource;         // auto | truth | estimate (empty: host yaml, default auto)

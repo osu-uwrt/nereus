@@ -179,7 +179,7 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
 
 void RosSide::subscribeCamera(CameraFeed &feed) {
     const auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable();
-    if (!feed.camera->rgbTopic.empty() && !feed.rgbSub && camerasWanted_ && feed.rosMode) {
+    if (!feed.camera->rgbTopic.empty() && !feed.rgbSub && camerasWanted_ && wantsRos(feed)) {
         if (!feed.decoder)
             feed.decoder = std::make_unique<AsyncJpegDecoder>(kPreviewWidth);
         feed.rgbSub = node_->create_subscription<sensor_msgs::msg::CompressedImage>(
@@ -220,7 +220,7 @@ void RosSide::subscribeCamera(CameraFeed &feed) {
             });
     if (!feed.wantDepth || !camerasWanted_)
         feed.depthSub.reset();
-    if (!camerasWanted_ || !feed.rosMode)
+    if (!camerasWanted_ || !wantsRos(feed))
         feed.rgbSub.reset();
 }
 
@@ -246,28 +246,107 @@ void RosSide::publishMechanism(const std::string &topic, bool value) {
     it->second->publish(msg);
 }
 
-bool RosSide::updateTruth(glm::mat4 &body, bool &first) {
+PoseSource parsePoseSource(const std::string &text) {
+    if (text == "auto")
+        return PoseSource::Auto;
+    if (text == "truth")
+        return PoseSource::Truth;
+    if (text == "estimate")
+        return PoseSource::Estimate;
+    throw std::runtime_error("pose_source must be auto, truth or estimate (got '" + text + "')");
+}
+
+void RosSide::configurePose(PoseSource source, double truthDelay, double otherDelay) {
+    source_ = source;
+    truthDelay_ = std::clamp(truthDelay, 0., 1.);
+    otherDelay_ = std::clamp(otherDelay, 0., 1.);
+    usingTruth_ = source != PoseSource::Estimate;
+}
+
+double RosSide::wallSeconds() const {
+    return std::chrono::duration<double>(Clock::now() - origin_).count();
+}
+
+// Newest stamp of `frame` in the fixed frame; feeds the display clock and the wall-clock staleness test.
+void RosSide::probe(Probe &p, const std::string &frame) {
+    p.changed = false;
+    try {
+        const auto t = buffer_->lookupTransform(scenario_->mapFrame, frame, tf2::TimePointZero);
+        const double stamp = rclcpp::Time(t.header.stamp).seconds();
+        p.seen = true;
+        if (stamp != p.stamp) {
+            p.stamp = stamp;
+            p.wall = Clock::now();
+            p.changed = true;
+            p.clock.observe(stamp, wallSeconds());
+        }
+    } catch (const tf2::TransformException &) {
+    }
+    p.fresh = p.seen && std::chrono::duration<double>(Clock::now() - p.wall).count() < 1.;
+}
+
+bool RosSide::lookupAt(const std::string &frame, double t, bool useTime, glm::mat4 &out) {
+    const auto &map = scenario_->mapFrame;
+    if (frame == map) {
+        out = glm::mat4(1);
+        return true;
+    }
+    if (useTime) {
+        try {
+            out = matrixOf(buffer_->lookupTransform(map, frame, rclcpp::Time(int64_t(t * 1e9), RCL_ROS_TIME)).transform);
+            return true;
+        } catch (const tf2::TransformException &) {
+        } // outside the buffered range for this frame: fall back to its latest transform
+    }
+    try {
+        out = matrixOf(buffer_->lookupTransform(map, frame, tf2::TimePointZero).transform);
+        return true;
+    } catch (const tf2::TransformException &) {
+        return false;
+    }
+}
+
+bool RosSide::updatePose(glm::mat4 &body, bool &first) {
     first = false;
+    haveTime_ = false;
     if (!scenario_ || !live_)
         return false;
-    bool fresh = false, updated = false;
-    try {
-        const auto t = buffer_->lookupTransform(scenario_->mapFrame, scenario_->truthBaseFrame, tf2::TimePointZero);
-        const double stamp = rclcpp::Time(t.header.stamp).seconds();
-        if (stamp != lastPoseStamp_) {
-            first = lastPoseStamp_ < 0;
-            lastPoseWall_ = Clock::now();
-            lastPoseStamp_ = stamp;
-            body = matrixOf(t.transform);
-            updated = true;
-        }
-        fresh = std::chrono::duration<double>(Clock::now() - lastPoseWall_).count() < 1.;
-        status_ = fresh ? "PHYSICS CONNECTED" : "POSE STALE";
-    } catch (const tf2::TransformException &) {
-        status_ = "WAITING FOR PHYSICS";
+    probe(truth_, scenario_->truthBaseFrame);
+    probe(estimate_, scenario_->estimateBaseFrame);
+    bool truth;
+    switch (source_) {
+    case PoseSource::Truth: truth = true; break;
+    case PoseSource::Estimate: truth = false; break;
+    default: // simulator truth while it is alive, else the estimate; before any pose, truth until proven absent
+        truth = truth_.fresh || (!estimate_.fresh && (truth_.seen || !estimate_.seen));
     }
-    fresh_ = fresh;
-    return updated;
+    const bool switched = truth != usingTruth_;
+    usingTruth_ = truth;
+    if (switched) {
+        delivered_ = false; // refocus on the new source
+        refreshCameras();   // without truth the cards fall back to the ROS image topics
+    }
+    Probe &src = truth ? truth_ : estimate_;
+    if (!src.seen) {
+        fresh_ = false;
+        status_ = source_ == PoseSource::Auto ? "WAITING FOR POSE" : truth ? "WAITING FOR PHYSICS" : "WAITING FOR ESTIMATE";
+        return false;
+    }
+    fresh_ = src.fresh;
+    status_ = truth ? (src.fresh ? "PHYSICS CONNECTED" : "POSE STALE") : (src.fresh ? "ROBOT (ESTIMATE)" : "ESTIMATE STALE");
+    // One display clock (the active source's) serves the pose and every TF frame drawn this frame.
+    const double wall = wallSeconds();
+    truthTime_ = src.clock.at(wall, truthDelay_);
+    otherTime_ = src.clock.at(wall, otherDelay_);
+    haveTime_ = true;
+    glm::mat4 pose;
+    if (lookupAt(poseFrame(), truth ? truthTime_ : otherTime_, true, pose))
+        body = pose;
+    if (src.changed && !delivered_) {
+        first = true;
+        delivered_ = true;
+    }
+    return src.changed;
 }
 
 void RosSide::expire(std::map<MarkerKey, MarkerRecord> &records) {
@@ -358,7 +437,7 @@ void RosSide::captureDetections(bool show) {
         if (baseToCamera) {
             const rclcpp::Time stamp(m.header.stamp);
             glm::mat4 acquisition;
-            if (!truthAcquisitionPose(*buffer_, scenario_->mapFrame, scenario_->truthBaseFrame, stamp, *baseToCamera,
+            if (!truthAcquisitionPose(*buffer_, scenario_->mapFrame, poseFrame(), stamp, *baseToCamera,
                                       acquisition))
                 continue; // truth TF has not reached the stamp; retry next frame
             auto stamped = m;
@@ -401,7 +480,7 @@ void RosSide::captureMpc(bool wanted) {
             const auto estimated =
                 matrixOf(buffer_->lookupTransform(scenario_->estimateBaseFrame, mpcMessage_.header.frame_id, stamp).transform);
             const auto truth =
-                matrixOf(buffer_->lookupTransform(scenario_->mapFrame, scenario_->truthBaseFrame, stamp).transform);
+                matrixOf(buffer_->lookupTransform(scenario_->mapFrame, poseFrame(), stamp).transform);
             mpcPath.clear();
             for (const auto &pose : mpcMessage_.poses)
                 mpcPath.push_back(truth * estimated * poseOf(pose.pose));
@@ -436,22 +515,35 @@ void RosSide::captureTf(bool wanted, TfTree &tree, TfSnapshot &out) {
     }
     tree.update(parents);
     // Freeze the overlay before rendering: looking up each axis during drawing would sample a newer pose
-    // than the already-rendered vehicle.
+    // than the already-rendered vehicle. Frames are sampled at the same display time as the robot model
+    // (truth frames and their static children at the truth delay, everything else at the other delay),
+    // falling back to the latest transform where the buffer has no data at that time.
+    const auto &truthRoot = scenario_->truthBaseFrame;
+    const auto underTruth = [&](std::string name) {
+        for (int hops = 0; hops < 64 && !name.empty(); ++hops) {
+            if (name == truthRoot)
+                return true;
+            const auto it = parents.find(name);
+            if (it == parents.end())
+                return false;
+            name = it->second;
+        }
+        return false;
+    };
     for (const auto &[name, parent] : parents) {
         auto &frame = tree.frames.at(name);
-        try {
-            const auto pose = name == map ? glm::mat4(1)
-                                          : matrixOf(buffer_->lookupTransform(map, name, tf2::TimePointZero).transform);
+        glm::mat4 pose;
+        if (lookupAt(name, underTruth(name) && usingTruth_ ? truthTime_ : otherTime_, haveTime_, pose)) {
             frame.available = true;
             if (frame.enabled) {
                 out.frames[name] = pose;
                 ++out.resolved;
             }
-        } catch (const tf2::TransformException &) {
-            if (frame.enabled)
-                ++out.missing;
-        }
+        } else if (frame.enabled)
+            ++out.missing;
     }
+    if (!usingTruth_ || !truth_.seen)
+        return; // no simulator: nothing to compare the estimate against
     const auto fixed = [](double x, int decimals) {
         char text[32];
         std::snprintf(text, sizeof(text), "%.*f", decimals, x);

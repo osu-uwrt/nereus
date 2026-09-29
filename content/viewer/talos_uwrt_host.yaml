@@ -22,6 +22,18 @@ thruster_visuals_config: talos_uwrt_thruster_visuals.yaml
 
 initial_focus: Vehicle
 
+# Vehicle pose source and display smoothing (CLI: --pose-source, --display-delay, --estimate-delay).
+#   source: auto   simulator truth (map -> <namespace>/simulator base link) while it is fresh, else the
+#                  localization estimate (<namespace>/base_link): the same viewer serves a real robot.
+#           truth  always the simulator truth; estimate  always the estimate (also hides simulator-only
+#                  panels and defaults --use-sim-time to false).
+# Poses are sampled at a smooth display time: the newest stamp minus the delay, so 100 Hz truth and a 30 Hz
+# EKF interpolate instead of stepping. Frames without data at that time fall back to their latest transform.
+pose:
+  source: auto
+  truth_delay_s: 0.02
+  other_delay_s: 0.06
+
 # Visual-state streams, relative to the bridge namespace. Missing publishers are simply absent.
 # (thruster force and LED topics come from the two documents above.)
 topics:

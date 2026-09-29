@@ -3,6 +3,7 @@
 // decoding happens on a worker (results are collected in spin()).
 #pragma once
 #include "detection_pose.hpp"
+#include "display_clock.hpp"
 #include "jpeg_decode.hpp"
 #include "scenario.hpp"
 #include "status_lights.hpp"
@@ -31,6 +32,9 @@
 namespace robotics::ros_viewer::host {
 using Clock = std::chrono::steady_clock;
 using MarkerKey = std::pair<std::string, int>;
+// Where the robot model, camera poses, follow/focus and the course map take the vehicle pose from.
+enum class PoseSource { Auto, Truth, Estimate };
+PoseSource parsePoseSource(const std::string &); // throws on anything but auto|truth|estimate
 
 struct MarkerRecord {
     visualization_msgs::msg::Marker marker;
@@ -86,13 +90,33 @@ class RosSide {
         return node_ && node_->get_parameter("use_sim_time").as_bool();
     }
 
-    // Truth pose. Returns true when a new stamp arrived; `first` marks the first pose ever received.
-    bool updateTruth(glm::mat4 &body, bool &first);
+    // Display sampling: the robot pose (and every TF frame drawn) is looked up at a smooth display time that
+    // trails the newest data, `truthDelay` seconds for simulator truth and `otherDelay` for estimate / other
+    // frames (a 30 Hz EKF needs more than its period to interpolate).
+    void configurePose(PoseSource source, double truthDelay, double otherDelay);
+    // Vehicle pose from the active source at the display time. Returns true when a new stamp arrived;
+    // `first` marks the first pose of the run (or after a source switch).
+    bool updatePose(glm::mat4 &body, bool &first);
     const std::string &status() const {
         return status_;
     }
-    bool truthFresh() const {
+    // The active source's pose is arriving (wall-clock staleness under 1 s).
+    bool poseFresh() const {
         return fresh_;
+    }
+    // Active pose source is the simulator truth frame (false: the localization estimate, e.g. a real robot).
+    bool truthActive() const {
+        return usingTruth_;
+    }
+    bool truthSeen() const {
+        return truth_.seen;
+    }
+    PoseSource poseSource() const {
+        return source_;
+    }
+    // TF frame of the active pose source.
+    const std::string &poseFrame() const {
+        return usingTruth_ ? scenario_->truthBaseFrame : scenario_->estimateBaseFrame;
     }
     void captureDetections(bool show);
     void captureMpc(bool wanted);
@@ -123,6 +147,19 @@ class RosSide {
     void expire(std::map<MarkerKey, MarkerRecord> &);
     void subscribeCamera(CameraFeed &);
     glm::mat4 matrixOf(const geometry_msgs::msg::Transform &) const;
+    struct Probe {
+        bool seen = false, fresh = false, changed = false;
+        double stamp = -1;
+        Clock::time_point wall{};
+        DisplayClock clock;
+    };
+    void probe(Probe &, const std::string &frame);
+    double wallSeconds() const;
+    // Pose of `frame` in the fixed frame at stamp `t` (seconds), else the latest transform; false when unknown.
+    bool lookupAt(const std::string &frame, double t, bool useTime, glm::mat4 &out);
+    bool wantsRos(const CameraFeed &feed) const {
+        return feed.rosMode || !usingTruth_; // no simulator truth: only the ROS image topics exist
+    }
 
     rclcpp::Node::SharedPtr node_;
     std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
@@ -133,9 +170,13 @@ class RosSide {
     ThrusterVisuals *thrusters_ = nullptr;
     bool live_ = false, camerasWanted_ = true;
     std::string status_ = "WAITING FOR PHYSICS";
-    bool fresh_ = false;
-    double lastPoseStamp_ = -1;
-    Clock::time_point lastPoseWall_{};
+    bool fresh_ = false, usingTruth_ = true, delivered_ = false;
+    PoseSource source_ = PoseSource::Auto;
+    double truthDelay_ = .02, otherDelay_ = .06;
+    Probe truth_, estimate_;
+    bool haveTime_ = false;
+    double truthTime_ = 0, otherTime_ = 0; // display stamps of this frame (valid when haveTime_)
+    Clock::time_point origin_ = Clock::now();
     std::vector<rclcpp::SubscriptionBase::SharedPtr> subscriptions_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr scenarioSub_;
     rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr mpcSub_;
