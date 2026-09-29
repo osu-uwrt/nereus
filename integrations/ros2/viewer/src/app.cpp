@@ -79,7 +79,7 @@ void dropSimulatorPanels(YAML::Node &document) {
         for (const auto &name : gone)
             providers.remove(name);
     }
-    for (const char *group : {"panels", "tools", "overlays"}) {
+    for (const char *group : {"panels", "toolbar", "overlays"}) {
         auto list = document[group];
         if (!list || !list.IsSequence())
             continue;
@@ -211,7 +211,19 @@ class App {
     // --- UI
     void drawInterface(double time, float dt);
     void drawToolbar(float left, int &oldMode);
-    void drawSceneSettings(float sidebar, float left);
+    void registerHostItems();
+    void toolbarSceneSettings();
+    void drawSceneSettingsPopup();
+    void toolbarPoolViewer();
+    void toolbarView();
+    void toolbarFocus();
+    void toolbarFollow();
+    void toolbarLabels();
+    void toolbarTf();
+    void toolbarDetections();
+    void drawDetectionSettings(bool includeEnable);
+    void toolbarMpcPath();
+    void toolbarPreviewTask();
     void drawCameraCard(std::size_t index, float width, float maxHeight);
     void drawCourseMap(float width, float height, bool interactive);
     void drawMinimap(float width);
@@ -263,9 +275,10 @@ class App {
     Look look_;
     ObserverSettings observer_;
     bool openTfPopup_ = false, openObserverPopup_ = false, openDepth_ = false;
-    bool sceneSettingsOpen_ = false, showTf_ = false, tfNames_ = true, tfTreeOpen_ = false, detections_ = false,
+    bool openSceneSettings_ = false, showTf_ = false, tfNames_ = true, tfTreeOpen_ = false, detections_ = false,
          showMpc_ = false, largeMap_ = false, focusMap_ = false, demoMode_ = false;
-    float tfAxisLength_ = .12f, mapZoom_ = 1;
+    float tfAxisLength_ = .12f, mapZoom_ = 1, toolbarLeft_ = 0;
+    int toolbarOldMode_ = 0;
     ImVec2 mapPan_{0, 0};
     TfTree tfTree_;
     TfSnapshot tf_;
@@ -301,7 +314,7 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     configDir_ = configPath.parent_path();
     demoMode_ = opt_.demo;
     for (const auto &name : opt_.open) {
-        sceneSettingsOpen_ |= name == "scene-settings";
+        openSceneSettings_ |= name == "scene-settings";
         largeMap_ = focusMap_ = largeMap_ || name == "map";
         openTfPopup_ |= name == "tf";
         openObserverPopup_ |= name == "pool-viewer";
@@ -596,19 +609,19 @@ void App::buildPanels() {
     const std::string configured = opt_.panelsPath.empty()
                                        ? (configDir_ / lookup(config_, {"panels_config"}).as<std::string>("talos_uwrt_panels.yaml")).string()
                                        : opt_.panelsPath;
-    if (configured == "none" || !fs::exists(configured)) {
-        if (configured != "none")
-            std::cerr << "robotics-pool-viewer: panel composition " << configured << " not found; panels disabled\n";
-        return;
-    }
+    const bool haveConfig = configured != "none" && fs::exists(configured);
+    if (!haveConfig && configured != "none")
+        std::cerr << "robotics-pool-viewer: panel composition " << configured << " not found; panels disabled\n";
     panels::registerPanels(registry_);
+    registerHostItems();
     panelRos_.registerFactories(registry_);
     panels::Context context{trimSlashes(scenario_->ns), scenario_->mapFrame, demoMode_, ros_->useSimTime()};
     context.documents.emplace("task", YAML::Clone(scenario_->ui));
     context.focus = [this](const std::string &name) { focus(name); };
     if (opt_.showScorecard)
         context.initialWindows.push_back("run");
-    auto document = YAML::LoadFile(configured);
+    // Without panels the composition is empty (no sidebar) but still owns the default toolbar.
+    auto document = haveConfig ? YAML::LoadFile(configured) : YAML::Load("{schema_version: 1, providers: {}}");
     if (ros_->poseSource() == PoseSource::Estimate)
         dropSimulatorPanels(document); // real robot: no simulator run / rate controls
     composition_ = std::make_unique<panels::Composition>(document, context, registry_);
@@ -1154,76 +1167,84 @@ void App::drawMinimap(float width) {
     ImGui::EndChild();
 }
 
-void App::drawSceneSettings(float sidebar, float left) {
-    ImGui::SetNextWindowPos({sidebar + 18, 180}, ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize({std::min(left, 800.f), 390}, ImGuiCond_FirstUseEver);
-    if (ImGui::Begin("Scene settings", &sceneSettingsOpen_)) {
-        const float width = ImGui::GetContentRegionAvail().x;
-        ImGui::BeginChild("environment", {width, 0}, ImGuiChildFlags_None);
-        for (const auto &control : scenario_->ui["mechanism_controls"]) {
-            ImGui::BeginDisabled(demoMode_ || !ros_->truthActive()); // simulator-only commands
-            if (ImGui::Button(control["label"].as<std::string>().c_str()))
-                ros_->publishMechanism(control["topic"].as<std::string>(), control["value"].as<bool>(true));
-            ImGui::EndDisabled();
-        }
-        if (ImGui::BeginTabBar("Environment tabs")) {
-            if (ImGui::BeginTabItem("Lighting")) {
-                sectionHeading("UNDERWATER OPTICS");
-                auto &a = look_.appearance;
-                ImGui::Checkbox("Calibration board", &look_.tag);
-                ImGui::SetNextItemWidth(width * .17f);
-                ImGui::SliderFloat("Caustics", &a.caustics, 0, 1, "%.2f");
-                ImGui::SameLine();
-                ImGui::Checkbox("Surface", &a.surface);
-                ImGui::SameLine();
-                ImGui::Checkbox("Shadows", &a.shadows);
-                ImGui::Separator();
-                int profile = a.outdoor ? 1 : 0;
-                ImGui::SetNextItemWidth(120);
-                if (ImGui::Combo("Lighting", &profile, "Indoor\0Outdoor\0")) {
-                    a.outdoor = profile == 1;
-                    a.direct_light = a.outdoor ? 1.4f : 1.f;
-                    a.ambient_light = a.outdoor ? .6f : .9f;
-                }
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(130);
-                ImGui::SliderFloat("Brightness", &a.direct_light, 0, 4, "%.2f");
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(125);
-                ImGui::SliderFloat("Ambient", &a.ambient_light, 0, 2, "%.2f");
-                if (a.outdoor) {
-                    ImGui::SetNextItemWidth(160);
-                    ImGui::SliderFloat("Sun azimuth", &a.sun_azimuth, 0, 360, "%.0f deg");
-                    ImGui::SameLine();
-                    ImGui::SetNextItemWidth(140);
-                    ImGui::SliderFloat("Elevation", &a.sun_elevation, 5, 89, "%.0f deg");
-                    ImGui::SameLine();
-                    ImGui::SetNextItemWidth(120);
-                    ImGui::SliderFloat("Glare", &a.glare, 0, 2, "%.2f");
-                } else
-                    ImGui::TextDisabled("Diffuse indoor lighting. Switch to Outdoor to adjust sun and glare.");
-                ImGui::PushStyleColor(ImGuiCol_Text, muted);
-                ImGui::TextWrapped("Observer settings only: the bridge renders the robot cameras from the pool pack.");
-                ImGui::PopStyleColor();
-                ImGui::EndTabItem();
-            }
-            if (ImGui::BeginTabItem("Water appearance")) {
-                drawWaterControls();
-                ImGui::EndTabItem();
-            }
-            ImGui::EndTabBar();
-        }
-        ImGui::EndChild();
+void App::drawSceneSettingsPopup() {
+    const float width = ImGui::GetContentRegionAvail().x;
+    for (const auto &control : scenario_->ui["mechanism_controls"]) {
+        ImGui::BeginDisabled(demoMode_ || !ros_->truthActive()); // simulator-only commands
+        if (ImGui::Button(control["label"].as<std::string>().c_str()))
+            ros_->publishMechanism(control["topic"].as<std::string>(), control["value"].as<bool>(true));
+        ImGui::EndDisabled();
     }
-    ImGui::End();
+    if (ImGui::BeginTabBar("Environment tabs")) {
+        if (ImGui::BeginTabItem("Lighting")) {
+            sectionHeading("UNDERWATER OPTICS");
+            auto &a = look_.appearance;
+            ImGui::Checkbox("Calibration board", &look_.tag);
+            ImGui::SetNextItemWidth(width * .17f);
+            ImGui::SliderFloat("Caustics", &a.caustics, 0, 1, "%.2f");
+            ImGui::SameLine();
+            ImGui::Checkbox("Surface", &a.surface);
+            ImGui::SameLine();
+            ImGui::Checkbox("Shadows", &a.shadows);
+            ImGui::Separator();
+            int profile = a.outdoor ? 1 : 0;
+            ImGui::SetNextItemWidth(120);
+            if (ImGui::Combo("Lighting", &profile, "Indoor\0Outdoor\0")) {
+                a.outdoor = profile == 1;
+                a.direct_light = a.outdoor ? 1.4f : 1.f;
+                a.ambient_light = a.outdoor ? .6f : .9f;
+            }
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(130);
+            ImGui::SliderFloat("Brightness", &a.direct_light, 0, 4, "%.2f");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(125);
+            ImGui::SliderFloat("Ambient", &a.ambient_light, 0, 2, "%.2f");
+            if (a.outdoor) {
+                ImGui::SetNextItemWidth(160);
+                ImGui::SliderFloat("Sun azimuth", &a.sun_azimuth, 0, 360, "%.0f deg");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(140);
+                ImGui::SliderFloat("Elevation", &a.sun_elevation, 5, 89, "%.0f deg");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(120);
+                ImGui::SliderFloat("Glare", &a.glare, 0, 2, "%.2f");
+            } else
+                ImGui::TextDisabled("Diffuse indoor lighting. Switch to Outdoor to adjust sun and glare.");
+            ImGui::PushStyleColor(ImGuiCol_Text, muted);
+            ImGui::TextWrapped("Observer settings only: the bridge renders the robot cameras from the pool pack.");
+            ImGui::PopStyleColor();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Water appearance")) {
+            drawWaterControls();
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
 }
 
-void App::drawToolbar(float left, int &oldMode) {
-    const auto &s = *scenario_;
-    if (ImGui::Button("Scene settings"))
-        sceneSettingsOpen_ = !sceneSettingsOpen_;
-    if (composition_)
-        composition_->drawToolsToolbar("settings");
+void App::toolbarSceneSettings() {
+    if (ImGui::Button("Scene settings") || openSceneSettings_) {
+        openSceneSettings_ = false;
+        ImGui::OpenPopup("scene_settings");
+    }
+    // Anchored under the button and kept inside the window. A plain popup (no child window) so colour-picker
+    // sub-popups stack on it instead of dismissing it, and a fixed size so the tabs do not resize as they change.
+    const auto *viewport = ImGui::GetMainViewport();
+    const auto button = ImGui::GetItemRectMin();
+    const float y = ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y;
+    const float width = std::min(780.f, viewport->WorkSize.x - 16.f);
+    const float height = std::clamp(viewport->WorkPos.y + viewport->WorkSize.y - y - 8.f, 120.f, 400.f);
+    ImGui::SetNextWindowPos({std::clamp(button.x, viewport->WorkPos.x + 8.f, viewport->WorkPos.x + viewport->WorkSize.x - width - 8.f), y});
+    ImGui::SetNextWindowSize({width, height});
+    if (ImGui::BeginPopup("scene_settings")) {
+        drawSceneSettingsPopup();
+        ImGui::EndPopup();
+    }
+}
+
+void App::toolbarPoolViewer() {
     sameLineIfFits(ImGui::CalcTextSize("Pool Viewer").x + 2 * ImGui::GetStyle().FramePadding.x);
     if (ImGui::Button("Pool Viewer") || openObserverPopup_) {
         openObserverPopup_ = false;
@@ -1252,10 +1273,12 @@ void App::drawToolbar(float left, int &oldMode) {
             observer_.resetLighting();
         ImGui::EndPopup();
     }
-    if (composition_)
-        composition_->drawToolbar();
+}
+
+void App::toolbarView() {
+    const auto &s = *scenario_;
     ImGui::SetNextItemWidth(110);
-    oldMode = mode_;
+    toolbarOldMode_ = mode_;
     std::string views = "Orbit";
     views += '\0';
     views += "Free camera";
@@ -1266,7 +1289,7 @@ void App::drawToolbar(float left, int &oldMode) {
     }
     views += '\0';
     ImGui::Combo("##view", &mode_, views.c_str());
-    if (mode_ == 1 && oldMode != 1) {
+    if (mode_ == 1 && toolbarOldMode_ != 1) {
         // Continue from the last displayed view, including sensor-camera roll.
         const glm::mat4 cameraPose = glm::inverse(viewportView_.view);
         const glm::vec3 forward = -glm::normalize(glm::vec3(cameraPose[2]));
@@ -1277,8 +1300,11 @@ void App::drawToolbar(float left, int &oldMode) {
         const glm::vec3 up(cameraPose[1]);
         freeRoll_ = std::atan2(glm::dot(up, right), glm::dot(up, glm::cross(right, forward)));
     }
-    sameLineIfFits(left > 640 ? 132 : 110);
-    ImGui::SetNextItemWidth(left > 640 ? 132 : 110);
+}
+
+void App::toolbarFocus() {
+    sameLineIfFits(toolbarLeft_ > 640 ? 132 : 110);
+    ImGui::SetNextItemWidth(toolbarLeft_ > 640 ? 132 : 110);
     std::string focuses;
     for (const auto &name : focusNames_) {
         focuses += name;
@@ -1287,14 +1313,23 @@ void App::drawToolbar(float left, int &oldMode) {
     focuses += '\0';
     if (ImGui::Combo("##focus", &selectedFocus_, focuses.c_str()))
         focus(focusNames_.at(std::size_t(selectedFocus_)));
+}
+
+void App::toolbarFollow() {
     sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("Follow").x);
     if (!presetFor(focusName_).follow)
         follow_ = false;
     ImGui::BeginDisabled(!presetFor(focusName_).follow);
     ImGui::Checkbox("Follow", &follow_);
     ImGui::EndDisabled();
+}
+
+void App::toolbarLabels() {
     sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("Labels").x);
     ImGui::Checkbox("Labels", &labels_);
+}
+
+void App::toolbarTf() {
     sameLineIfFits(ImGui::CalcTextSize("TF").x + 2 * ImGui::GetStyle().FramePadding.x);
     if (ImGui::Button("TF") || openTfPopup_) {
         openTfPopup_ = false;
@@ -1308,41 +1343,75 @@ void App::drawToolbar(float left, int &oldMode) {
         ImGui::SetNextItemWidth(220);
         ImGui::SliderFloat("Axis length", &tfAxisLength_, .02f, 1.f, "%.2f m");
         ImGui::TextUnformatted("X: red   Y: green   Z: blue");
-        drawTfTree(tfTree_, s.mapFrame);
+        drawTfTree(tfTree_, scenario_->mapFrame);
         ImGui::TextDisabled("Axes show through objects. Unavailable frames cannot reach the fixed frame.");
         ImGui::TextDisabled("%s", demoMode_ ? "Preview: robot-pack frames at the preview pose."
                                             : "Raw ROS TF in the fixed frame, including localization drift.");
         ImGui::EndPopup();
     }
-    if (!demoMode_) {
-        sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
-                       ImGui::CalcTextSize("Detections").x);
-        ImGui::Checkbox("Detections", &detections_);
+}
+
+void App::drawDetectionSettings(bool includeEnable) {
+    if (includeEnable) {
+        ImGui::Checkbox("Show detections", &detections_);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Detector markers (%s), placed once when observed and then fixed in the world.\n"
                               "Truth: simulator pose at image capture. Estimate: TF at the image stamp.",
                               ros_->detectionTopic.c_str());
-        if (detections_ && ros_->truthPlacementAvailable()) {
-            // Truth/both only exist with a simulator; a real robot has the estimate alone.
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(110);
-            int placement = int(ros_->detectionMode());
-            if (ImGui::Combo("##detplace", &placement, "Pose source\0Truth\0Estimate\0Both\0"))
-                ros_->setDetectionMode(DetectionMode(placement));
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Detection placement: follow the pose source, simulator truth, localization\n"
-                                  "estimate (RViz-like TF), or both (truth solid, estimate cyan outline).");
-        }
-        sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
-                       ImGui::CalcTextSize("MPC path").x);
-        ImGui::Checkbox("MPC path", &showMpc_);
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Predicted MPC trajectory over its horizon (%s).\n"
-                              "Drawn relative to the simulator vehicle, so localization drift does not offset it.",
-                              ros_->mpcTopic.c_str());
     }
-    if (composition_)
-        composition_->drawToolsToolbar();
+    if (ros_->truthPlacementAvailable()) {
+        // Truth/both only exist with a simulator; a real robot has the estimate alone.
+        ImGui::BeginDisabled(!detections_);
+        ImGui::SetNextItemWidth(130);
+        int placement = int(ros_->detectionMode());
+        if (ImGui::Combo("Placement", &placement, "Pose source\0Truth\0Estimate\0Both\0"))
+            ros_->setDetectionMode(DetectionMode(placement));
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("Detection placement: follow the pose source, simulator truth, localization\n"
+                              "estimate (RViz-like TF), or both (truth solid, estimate cyan outline).");
+    }
+    bool keep = !ros_->honorDeleteAll();
+    if (ImGui::Checkbox("Keep detections (ignore DELETEALL)", &keep))
+        ros_->setHonorDeleteAll(!keep);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("The detector clears its markers every frame; keeping them lets each observation live out\n"
+                          "its lifetime.");
+}
+
+// Sidebar form: full settings plus the legend. Toolbar form (below): the checkbox and a dropdown of the rest.
+void App::toolbarDetections() {
+    if (demoMode_)
+        return;
+    sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
+                   ImGui::CalcTextSize("Detections").x + ImGui::GetFrameHeight() + 4);
+    ImGui::Checkbox("Detections", &detections_);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Detector markers (%s), placed once when observed and then fixed in the world.\n"
+                          "Truth: simulator pose at image capture. Estimate: TF at the image stamp.",
+                          ros_->detectionTopic.c_str());
+    ImGui::SameLine();
+    if (ImGui::ArrowButton("##detection_options", ImGuiDir_Down))
+        ImGui::OpenPopup("detection_options");
+    if (ImGui::BeginPopup("detection_options")) {
+        drawDetectionSettings(false);
+        ImGui::EndPopup();
+    }
+}
+
+void App::toolbarMpcPath() {
+    if (demoMode_)
+        return;
+    sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
+                   ImGui::CalcTextSize("MPC path").x);
+    ImGui::Checkbox("MPC path", &showMpc_);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Predicted MPC trajectory over its horizon (%s).\n"
+                          "Drawn relative to the simulator vehicle, so localization drift does not offset it.",
+                          ros_->mpcTopic.c_str());
+}
+
+void App::toolbarPreviewTask() {
     if (demoMode_ && !demoNames_.empty()) {
         ImGui::SameLine();
         std::string choices;
@@ -1354,6 +1423,63 @@ void App::drawToolbar(float left, int &oldMode) {
         if (ImGui::Combo("##previewtask", &selectedDemo_, choices.c_str()))
             previewPose(demoNames_.at(std::size_t(selectedDemo_)));
     }
+}
+
+void App::drawToolbar(float left, int &oldMode) {
+    toolbarLeft_ = left;
+    toolbarOldMode_ = mode_;
+    if (composition_)
+        composition_->drawToolbar();
+    oldMode = toolbarOldMode_;
+}
+
+// Host-provided toolbar items and panels: an explicit table, no static self-registration. Each type can be
+// listed in the composition's `toolbar:`; `detections` can also be a sidebar panel.
+void App::registerHostItems() {
+    struct HostPanel final : panels::Panel {
+        std::function<void()> bar, body;
+        void toolbar() override {
+            if (bar)
+                bar();
+        }
+        void draw() override {
+            if (body)
+                body();
+        }
+    };
+    const auto add = [this](const char *type, std::function<void()> bar, std::function<void()> body = {}) {
+        registry_.panels.emplace(
+            type, panels::ViewFactory<panels::Panel>{
+                      panels::Kind::Motion, [type](const YAML::Node &n) { panels::keys(n, {}, type); },
+                      [bar, body](const panels::Binding &) {
+                          auto panel = std::make_unique<HostPanel>();
+                          panel->bar = bar;
+                          panel->body = body;
+                          return std::unique_ptr<panels::Panel>(std::move(panel));
+                      },
+                      true, !body});
+    };
+    add("scene_settings", [this] { toolbarSceneSettings(); });
+    add("pool_viewer", [this] { toolbarPoolViewer(); });
+    add("view", [this] { toolbarView(); });
+    add("focus", [this] { toolbarFocus(); });
+    add("follow", [this] { toolbarFollow(); });
+    add("labels", [this] { toolbarLabels(); });
+    add("tf", [this] { toolbarTf(); });
+    add("mpc_path", [this] { toolbarMpcPath(); });
+    add("preview_task", [this] { toolbarPreviewTask(); });
+    add("detections", [this] { toolbarDetections(); },
+        [this] {
+            ImGui::BeginDisabled(demoMode_);
+            drawDetectionSettings(true);
+            ImGui::EndDisabled();
+            if (demoMode_)
+                ImGui::TextDisabled("Preview: no detector feed.");
+            ImGui::SeparatorText("Legend");
+            ImGui::TextUnformatted("Solid: simulator truth placement");
+            ImGui::TextColored(ImVec4(.25f, .9f, 1.f, .95f), "Cyan outline: estimate (TF), when both are shown");
+            ImGui::TextDisabled("Dim dashed: approximate estimate (TF lagged)");
+        });
 }
 
 void App::drawInterface(double time, float dt) {
@@ -1587,8 +1713,6 @@ void App::drawInterface(double time, float dt) {
                      IM_COL32(6, 18, 26, 205));
     d->AddText(window_->small, 12, {position.x + 14, position.y + viewHeight - 21}, color(white), controls);
     ImGui::EndChild();
-    if (sceneSettingsOpen_)
-        drawSceneSettings(sidebar, left);
     if (cameraSidebarVisible_) {
         ImGui::SetCursorScreenPos({W - 18 - side, contentOrigin.y});
         ImGui::BeginChild("right", {side, contentHeight}, ImGuiChildFlags_None);

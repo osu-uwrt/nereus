@@ -82,6 +82,7 @@ panels:
     type: autonomy
     title: Autonomy
     provider: mission
+  - {id: detections, type: detections, title: Detections, open: false}
 overlays:
   - id: target
     type: pose_gizmo
@@ -90,15 +91,22 @@ overlays:
     options:
       size_metres: 0.3
       hit_pixels: 20
-tools:
-  - id: run
-    type: run
-    provider: run
-    options: {profile: task}
-  - id: simulation
-    slot: settings
-    type: simulation
-    provider: simulation
+# Top bar, in order. Types: host items (scene_settings, pool_viewer, panels_menu, view, focus, follow, labels, tf,
+# detections, mpc_path, preview_task) and provider-backed tools (run, simulation; these name a provider).
+# Detection settings live in the sidebar "Detections" panel; add `- {type: detections}` here for a compact toggle.
+toolbar:
+  - {type: scene_settings}
+  - {id: simulation, type: simulation, provider: simulation}
+  - {type: pool_viewer}
+  - {type: panels_menu}
+  - {type: view}
+  - {type: focus}
+  - {type: follow}
+  - {type: labels}
+  - {type: tf}
+  - {type: mpc_path}
+  - {id: run, type: run, provider: run, options: {profile: task}}
+  - {type: preview_task}
 ownership:
   - motion: motion
     autonomy: mission

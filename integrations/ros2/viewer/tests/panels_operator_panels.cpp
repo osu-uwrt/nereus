@@ -16,6 +16,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <cassert>
+#include <functional>
 #include <thread>
 #include <unistd.h>
 #include <iostream>
@@ -35,11 +36,40 @@ int main(int argc, char **argv) {
     registerPanels(registry);
     RosProviders ros;
     ros.registerFactories(registry);
+    // Host items (scene_settings, detections, ...) live in the application; stand in for them here. The item
+    // after the simulation tool ("pool_viewer") records the simulation button's rectangle.
+    ImVec2 simulationButtonMin, simulationButtonMax;
+    struct Stub final : Panel {
+        std::function<void()> bar;
+        void toolbar() override {
+            if (bar)
+                bar();
+        }
+        void draw() override {}
+    };
     auto config = YAML::LoadFile(argv[1]);
+    for (const char *group : {"toolbar", "panels"})
+        for (const auto &item : config[group]) {
+            const auto type = item["type"].as<std::string>();
+            if (registry.panels.count(type))
+                continue;
+            registry.panels.emplace(
+                type, ViewFactory<Panel>{Kind::Motion, [](const YAML::Node &) {},
+                                         [&, type](const Binding &) {
+                                             auto stub = std::make_unique<Stub>();
+                                             if (type == "pool_viewer")
+                                                 stub->bar = [&] {
+                                                     simulationButtonMin = ImGui::GetItemRectMin();
+                                                     simulationButtonMax = ImGui::GetItemRectMax();
+                                                 };
+                                             return std::unique_ptr<Panel>(std::move(stub));
+                                         },
+                                         true, false});
+        }
     const auto toolsConfig = YAML::LoadFile(argv[2]);
     for (const auto &entry : toolsConfig["providers"])
         config["providers"][entry.first.as<std::string>()] = YAML::Clone(entry.second);
-    config["tools"] = YAML::Clone(toolsConfig["tools"]);
+    config["toolbar"] = YAML::Clone(toolsConfig["toolbar"]);
     config["providers"]["simulation"]["options"]["node"] = "mock";
     config["providers"]["simulation"]["options"]["request_timeout"] = .75;
     node->declare_parameter<double>("real_time_factor", 1.0);
@@ -345,16 +375,12 @@ ui:
     unsigned char *pixels;
     int width, height;
     io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
-    ImVec2 simulationButtonMin, simulationButtonMax;
     auto draw = [&](Composition &c) {
         ImGui::NewFrame();
         ImGui::SetNextWindowSize({320, 850});
         ImGui::Begin("test");
         c.setWidth(300);
-        c.drawToolsToolbar("settings");
-        simulationButtonMin = ImGui::GetItemRectMin();
-        simulationButtonMax = ImGui::GetItemRectMax();
-        c.drawToolsToolbar();
+        c.drawToolbar();
         c.drawSidebar(800);
         c.drawWindows();
         ImGui::End();
