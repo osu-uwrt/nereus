@@ -97,7 +97,7 @@ struct Look {
     bool tag = true;
 };
 struct ObserverSettings {
-    bool water = true, walls = true, reflections = false, shadows = true;
+    bool water = true, walls = true, floor = true, reflections = false, shadows = true;
     int lighting = 0; // 0 follows the scene, 1 indoor, 2 outdoor, 3 sterile
     float exposure = 1, brightness = 1, ambient = 1;
     void resetLighting() {
@@ -720,6 +720,7 @@ VisualState App::buildState() {
     state.claw = demoMode_ ? std::array<float, 2>{0.f, 0.f} : ros_->claw;
     state.showBoard = look_.tag;
     state.showWalls = observer_.walls;
+    state.showFloor = observer_.floor;
     const auto payloads = lookup(config_, {"payloads", "loaded_namespaces"});
     if (demoMode_) {
         for (const auto &entry : payloads)
@@ -1263,7 +1264,8 @@ void App::toolbarPoolViewer() {
     }
     if (ImGui::BeginPopup("observer_visibility")) {
         ImGui::Checkbox("Water", &observer_.water);
-        ImGui::Checkbox("Pool walls", &observer_.walls);
+        ImGui::Checkbox("Pool walls & deck", &observer_.walls);
+        ImGui::Checkbox("Pool floor", &observer_.floor);
         ImGui::Checkbox("Surface reflections", &observer_.reflections);
         ImGui::Checkbox("Frame stats (F3)", &showProfile_);
         ImGui::SeparatorText("Viewer lighting");
@@ -1765,12 +1767,13 @@ void App::renderLocalCards(double t, const rendering::Scene &mainScene) {
     }
     PhaseTimer timer{profiler_, Phase::Cards, profileSync()};
     rendering::Scene ownScene;
-    if (!observer_.walls || opt_.legacyCards) { // the robot's camera sees the pool whatever the observer hides
+    const bool poolHidden = !observer_.walls || !observer_.floor;
+    if (poolHidden || opt_.legacyCards) { // the robot's camera sees the pool whatever the observer hides
         auto state = buildState();
-        state.showWalls = true;
+        state.showWalls = state.showFloor = true;
         ownScene = model_->build(state);
     }
-    const rendering::Scene &scene = observer_.walls && !opt_.legacyCards ? mainScene : ownScene;
+    const rendering::Scene &scene = !poolHidden && !opt_.legacyCards ? mainScene : ownScene;
     for (const auto i : todo) {
         const auto &camera = scenario_->cameras[i];
         auto k = camera.k;

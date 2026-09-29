@@ -73,6 +73,7 @@ panels:
     provider: mapping
     open: false
     options: {parent_frame: world, tag_frame: estimated_origin_frame, samples: 10}
+  - {id: detections, type: detections, title: Vision, open: false}
   - id: actuators
     type: actuators
     title: Actuators
@@ -82,7 +83,6 @@ panels:
     type: autonomy
     title: Autonomy
     provider: mission
-  - {id: detections, type: detections, title: Detections, open: false}
 overlays:
   - id: target
     type: pose_gizmo
@@ -93,7 +93,7 @@ overlays:
       hit_pixels: 20
 # Top bar, in order. Types: host items (scene_settings, pool_viewer, panels_menu, view, focus, follow, labels, tf,
 # detections, mpc_path, preview_task) and provider-backed tools (run, simulation; these name a provider).
-# Detection settings live in the sidebar "Detections" panel; add `- {type: detections}` here for a compact toggle.
+# Detection settings live in the sidebar "Vision" panel; add `- {type: detections}` here for a compact toggle.
 toolbar:
   - {type: scene_settings}
   - {id: simulation, type: simulation, provider: simulation}

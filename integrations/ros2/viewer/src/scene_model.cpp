@@ -1,5 +1,6 @@
 #include "scene_model.hpp"
 #include <robotics/rendering/assets.hpp>
+#include <algorithm>
 #include <iostream>
 #include <set>
 
@@ -194,8 +195,12 @@ r::Scene SceneModel::build(const VisualState &state) const {
             scene.instances[i].visible = false;
         scene.water.reset();
     }
+    // Pool instance order (rendering/scene.hpp): floor, four walls, four decks, four coping strips.
+    const std::size_t pool = std::min(pack_->poolInstanceCount(), scene.instances.size());
+    if (!state.showFloor && pool > 0)
+        scene.instances[0].visible = false;
     if (!state.showWalls)
-        for (std::size_t i = 1; i <= 4 && i < pack_->poolInstanceCount(); ++i)
+        for (std::size_t i = 1; i <= 12 && i < pool; ++i)
             scene.instances[i].visible = false;
     return scene;
 }
