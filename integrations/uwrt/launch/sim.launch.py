@@ -79,7 +79,7 @@ def generate_launch_description():
         DeclareLaunchArgument("output", default_value=""),
         DeclareLaunchArgument("stack", default_value="true", description="launch the UWRT stack"),
         DeclareLaunchArgument("viewer", default_value="true", description="launch the pool viewer"),
-        DeclareLaunchArgument("bridge", default_value="python", description="simulator bridge: python or cpp"),
+        DeclareLaunchArgument("bridge", default_value="cpp", description="simulator bridge: cpp or python (reference)"),
         DeclareLaunchArgument("bridge_binary", default_value=str(
             ROOT / "build/ros-viewer/integrations/ros2/bridge/robotics-sim-ros"),
             description="robotics-sim-ros executable used by bridge:=cpp"),
