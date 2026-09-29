@@ -1,112 +1,99 @@
 # Robotics Platform
 
-A standalone underwater simulation library and an independent robotics viewer.
-This is a new local project with no dependency on the old Riptide simulator, ROS,
-or UWRT packages. Simulation runs headlessly; the optional desktop viewer uses
-ImGui, GLFW, and OpenGL and can be built without the simulation libraries.
+A config-driven underwater robot simulator and operator interface, built to test a real ROS 2 robot stack
+unchanged. Describe your robot, pool, course and ROS topics in YAML; the simulator publishes what your robot's
+sensors and cameras would, takes your controller's thruster commands, and scores the run. The same viewer drives
+the real robot.
 
-The first working slice provides a C++ plant, a strict YAML scenario loader,
-a command-line runner, and an installed-library example. The plant composes
-marine dynamics, delayed thrusters, and simple pool contacts behind explicit
-`command`, `advance`, `observe`, and `reset` operations.
+![Pool viewer on the RoboSub 2026 course](docs/images/viewer.jpg)
 
-A second library adds deterministic sensor scheduling, seeded noise, IMU, FOG,
-pressure/depth, and ideal bottom-track DVL models. Native robot/world/sensor
-[profiles](docs/PROFILES.md) compose these into standalone runs. See the [sensor API and example](docs/SENSOR_RUNTIME.md).
-An optional [Python API](docs/PYTHON.md) exposes profile loading, programmatic
-configuration, stepping/reset, and typed sensor streams. The [standalone viewer](docs/VIEWER.md)
-now supports local-data playback, frame axes, pose glyphs, and trajectories. ROS integrations,
-rendered meshes/images/clouds, cameras/stereo, task interactions, and training integrations remain future work. See [status](docs/STATUS.md) and the
-[architecture plan](docs/ARCHITECTURE_PLAN.md). [Sensor scope](docs/SENSORS.md)
-covers cameras, stereo cameras, IMUs, DVLs, FOGs, and pressure/depth sensors; sonar is deferred.
-The current example parameters
-are synthetic, not a calibrated prediction for any team's robot.
+- **Simulator** (`robotics-sim-ros`): 6-DOF marine dynamics, delayed thrusters, IMU/FOG/DVL/depth, stereo
+  cameras with depth and point clouds, claw/launcher/dropper/magnet mechanisms, contact props (Bullet), task
+  scoring. C++, runs at real time with cameras.
+- **Pool viewer** (`robotics-pool-viewer`): 3D scene, camera cards, motion control, autonomy, mapping,
+  detections and point clouds, run scorecard. Works against the simulator or a real robot.
+- **Packs**: all robot/pool/course/bridge data lives in `content/packs/`; nothing about your robot is in code.
 
-## Build and run
+## Setup
 
-Initial tested environment: Ubuntu 22.04, GCC 11, C++17, CMake 3.22+, Eigen 3.3+,
-yaml-cpp, and GoogleTest for tests. On Ubuntu:
+Tested on Ubuntu 22.04 with ROS 2 Humble.
 
 ```sh
-sudo apt-get install cmake g++ libeigen3-dev libyaml-cpp-dev libgtest-dev
-cmake --preset release
-cmake --build --preset release
-ctest --preset release
-./build/release/robotics-sim content/examples/profile_pool.yaml \
-  --sensors build/sensors.csv > build/trajectory.csv
+# System libraries
+sudo apt install cmake g++ libeigen3-dev libyaml-cpp-dev nlohmann-json3-dev libgtest-dev \
+  libbullet-dev libassimp-dev libglfw3-dev libglew-dev libegl-dev libpng-dev libjpeg-dev libopencv-dev
+# Pack tools (validation and resolving)
+pip install numpy "ruamel.yaml>=0.18" jsonschema referencing
+
+# Build (with ROS 2 and your robot workspace sourced; the UWRT integration needs riptide_msgs2)
+source /opt/ros/humble/setup.bash && source ~/osu-uwrt/release/install/setup.bash
+cmake --preset ros-viewer
+cmake --build --preset ros-viewer -j4
 ```
 
-The example advances three simulated seconds and emits one CSV row per tick,
-including the initial state, plus timestamped sensor observations in a separate CSV.
-Commands are scheduled in the YAML. There is no
-wall-time pacing, ROS clock, background thread, or GUI process.
+`COLCON_IGNORE` keeps colcon out of this folder; everything builds into `build/`. Use `-j2` on machines with
+little memory.
 
-For the numerical and sensor libraries without YAML, tests, or Python:
+## Run
 
 ```sh
-cmake --preset plant-only
-cmake --build --preset plant-only
+# Simulator + UWRT stack + viewer
+ros2 launch integrations/uwrt/launch/sim.launch.py
+#   stack:=false  viewer:=false  cameras:=false  rmw:=rmw_zenoh_cpp
+#   active_control_model:=mpc mpc_model:=sim     (MPC controller on the simulator plant)
+
+# Viewer against the real robot (no simulator)
+ros2 launch integrations/uwrt/launch/robot.launch.py
+#   robot_only:=true  (hide the simulated pool)   rmw:=...   config:=<viewer host yaml>
 ```
 
-`COLCON_IGNORE` keeps this project out of automatic recursive workspace discovery.
-Build it directly; all generated files stay in this project's `build/` directory.
+The launch files use your shell's RMW; UWRT runs Zenoh (`ros2 run rmw_zenoh_cpp rmw_zenohd`). Run records
+(resolved scenario, performance, task events) go to `/tmp/robotics_sim/<timestamp>/`. A run waits for **Start
+run** in the viewer before scoring.
 
-## Original mesh resources
+## How it fits together
 
-The optional [CPU mesh library and Talos pack](docs/MESH_ASSETS.md) preserve the
-original body/eight-rotor geometry, materials and transparency without a graphics
-or simulation dependency. The [original water/rendering pipeline](docs/RENDERING.md) now matches fixed
-body/pool captures. The [interactive scene viewer](docs/SCENE_VIEWER.md) renders
-these assets and animates the original rotors from source-owned observations.
-Complete visual assembly and original UI workflows remain in progress. Use
-`python3 tools/check_assets.py` for installed-pack validation.
+```
+content/packs/scenarios/<name>/scenario.yaml   picks a robot, pool, tasks and bridge; places the course
+   ├── robots/<robot>/robot.yaml     physics, frames, thrusters, sensors, mechanisms, visuals
+   ├── pools/<pool>/pool.yaml        pool size, walls, water, lighting
+   ├── tasks/<set>/tasks.yaml        task files, scoring rules, scorecard UI
+   └── bridges/<bridge>/bridge.yaml  ROS topics, services, TF and message field mapping
+        │  python -m robotics_platform.packs resolve   (validates, writes one resolved.json)
+        ▼
+robotics-sim-ros resolved.json  ◄── ROS 2 ──►  your robot stack   ◄── ROS 2 ──►  robotics-pool-viewer
+```
 
-## Standalone viewer
+| Folder | Contents |
+| --- | --- |
+| `content/packs/` | Robot, pool, task, bridge and scenario packs (the config you edit) |
+| `content/viewer/` | Viewer layout, panels and topics |
+| `libraries/` | C++ simulation, sensors, session (tasks, props), rendering, cameras |
+| `integrations/ros2/` | Simulator bridge and pool viewer |
+| `integrations/uwrt/` | UWRT launch files and acceptance scripts |
+| `extensions/rules/` | Competition scoring rules (C++) |
+| `python/` | Pack tools and the Python reference runtime |
+
+## Guides
+
+- [Using the viewer](docs/viewer.md)
+- [Adding a robot](docs/guides/robot.md)
+- [Pool and course layout](docs/guides/course.md)
+- [Tasks and scoring](docs/guides/tasks.md)
+- [Wiring your ROS stack](docs/guides/bridge.md)
+
+Check a pack after editing:
 
 ```sh
-sudo apt-get install libglfw3-dev libglew-dev libgl1-mesa-dev
-cmake --preset viewer
-cmake --build --preset viewer
-./build/viewer/robotics-viewer workspaces/local_demo.yaml
+PYTHONPATH=python/src python3 -m robotics_platform.packs validate content/packs/scenarios/talos_uwrt
 ```
 
-This preset builds without simulation or Python. Omit the workspace argument to
-start empty. See [viewer installation, controls, schemas, and extension contracts](docs/VIEWER.md).
-
-## Python
+## Tests
 
 ```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install .
-.venv/bin/python examples/python/run_profile.py
+ctest --test-dir build/ros-viewer -LE live -j2          # C++ (run a subset with -R <name>)
+cd tests/python && PYTHONPATH=../../python/src python3 -m pytest -q
 ```
 
-Building the wheel also requires Python development headers and the native Eigen/
-yaml-cpp dependencies. See [Python installation, contracts, and checks](docs/PYTHON.md).
-The C++ build remains independent; Python is enabled only for the wheel or with
-`RP_BUILD_PYTHON=ON`.
-
-## Install and consume
-
-```sh
-cmake --install build/release --prefix "$PWD/install"
-cmake -S examples/cpp_consumer -B build/consumer -DCMAKE_PREFIX_PATH="$PWD/install"
-cmake --build build/consumer
-./build/consumer/consumer
-./install/bin/robotics-sim install/share/robotics_platform/examples/empty_pool.yaml
-```
-
-CMake consumers link `RoboticsPlatform::simulation` or `RoboticsPlatform::sensors`.
-The optional config library exports `RoboticsPlatform::config`. Public headers contain no ROS or YAML types.
-See [API and numerical contracts](docs/PLANT.md), [contributing](CONTRIBUTING.md),
-and [design decisions](docs/decisions/0001-first-standalone-slice.md).
-
-## License and provenance
-
-This is local development, not a public release. The reused numerical source has
-unresolved license metadata; see [license status](LICENSE.md) and
-[provenance](docs/PROVENANCE.md). No new redistribution license is being asserted
-for the imported code. Resolve this before publishing the project.
-
-The optional [scene viewer](docs/SCENE_VIEWER.md) presents original Talos meshes and
-water from live or recorded source frames, without ROS or simulation in the viewer.
+Source and license records for content copied from the original UWRT simulator are in
+[docs/PROVENANCE.md](docs/PROVENANCE.md).

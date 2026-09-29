@@ -156,7 +156,6 @@ installed Assimp library. The scene renderer now privately vendors GLM as descri
 with the original pinned GLM headers in a temporary directory. The CPU wrapper
 records ordered mesh statistics without GL, ROS or new platform code. Its fixture
 manifest records exact source/archive/driver/capture/output hashes and tool versions.
-See [MESH_ASSETS.md](MESH_ASSETS.md) for comparison scope and installation boundaries.
 
 
 ## Original scene renderer and GLM
@@ -183,8 +182,7 @@ original renderer/shaders with a thin GLFW/CPU-output harness. Its timing helper
 shared harness code, not platform scene/rendering implementation. The recorded
 reference includes source and wrapper hashes, exact view matrices and output hashes;
 The capture output (`tools/capture_render_reference.py`, not kept in the repo) also
-records native implementation hashes and backend/performance evidence. See [RENDERING.md](RENDERING.md) for scope,
-reproduction, exact comparison and remaining integration.
+records native implementation hashes and backend/performance evidence.
 
 
 `libraries/visualization/src/animation.cpp` adapts the rotor RPM/integration and

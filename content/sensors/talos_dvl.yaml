@@ -1,4 +1,4 @@
-# Generated from pinned original content; see docs/reference/TALOS_PHYSICS_PACK.md.
+# Generated from pinned original content; see docs/PROVENANCE.md.
 # Original default velocity reporting: no floor, range or inclination gate.
 schema_version: 1
 kind: sensor

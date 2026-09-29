@@ -1,4 +1,4 @@
-# Generated from pinned original content; see docs/reference/TALOS_PHYSICS_PACK.md.
+# Generated from pinned original content; see docs/PROVENANCE.md.
 schema_version: 1
 kind: world
 surface_pressure_pa: 101325

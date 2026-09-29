@@ -1,4 +1,4 @@
-# Generated from pinned original content; see docs/reference/TALOS_PHYSICS_PACK.md.
+# Generated from pinned original content; see docs/PROVENANCE.md.
 # Scripted navigation-sensor example, not the competition mission.
 schema_version: 2
 robot: ../robots/talos_navigation.yaml
