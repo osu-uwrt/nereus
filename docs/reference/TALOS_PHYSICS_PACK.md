@@ -39,8 +39,8 @@ This adds two devices, not the complete robot sensor suite. DVL, pressure/depth,
 cameras/stereo and their reporting policies remain open. The three-second inertial
 example acquires 150 AHRS and 1500 FOG samples while preserving the sensor-free
 plant trajectory. Tests verify original mount/calibration/covariance settings,
-source-file removal and native reset replay. An independent original sensor-output
-fixture remains open; sample-by-sample equality to the old shared RNG is not claimed.
+source-file removal and native reset replay. An independent [prescribed-state sensor reference](SENSOR_KINEMATICS.md) now
+verifies AHRS/FOG formulas; complete trajectory/transport comparison remains open; sample-by-sample equality to the old shared RNG is not claimed.
 See [TALOS_SENSOR_CONVERSION.md](TALOS_SENSOR_CONVERSION.md) for conversion limits.
 
 ## Bounded delivery and remaining work

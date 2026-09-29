@@ -130,11 +130,12 @@ void bindSensors(py::module_ &m) {
              py::arg("parameters") = AttitudeParameters{});
     py::class_<Ahrs>(m, "Ahrs").def(py::init<Mount, AhrsParameters>(), py::arg("mount") = Mount{},
                                     py::arg("parameters") = AhrsParameters{});
-    py::class_<Fog>(m, "Fog").def(py::init<Mount, std::vector<Eigen::Vector3d>, NoiseParameters>(),
-                                  py::arg("mount") = Mount{},
-                                  py::arg("axes") =
-                                      std::vector<Eigen::Vector3d>{Eigen::Vector3d::UnitZ()},
-                                  py::arg("gyro_noise") = NoiseParameters{});
+    py::class_<Fog>(m, "Fog").def(
+        py::init<Mount, std::vector<Eigen::Vector3d>, NoiseParameters,
+                 std::optional<Eigen::Vector3d>>(),
+        py::arg("mount") = Mount{},
+        py::arg("axes") = std::vector<Eigen::Vector3d>{Eigen::Vector3d::UnitZ()},
+        py::arg("gyro_noise") = NoiseParameters{}, py::arg("reported_variance") = py::none());
     py::class_<Dvl>(m, "Dvl").def(
         py::init([](const DvlParameters &params, const simulation::Pool &pool) {
             return Dvl(params, PoolBottom(pool));

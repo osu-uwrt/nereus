@@ -1,0 +1,19 @@
+{
+  "sources_sha256": {
+    "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/src/robot_class.cpp": "8207b7b8c2cd83aaa11a1f8292fa481ec4212a3aabdb89f9fd8f80169ebd1719",
+    "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/src/physics_simulator.cpp": "d4b05d378425bfdb59773ba6b20f0db44f14469c2be4eb0ccdfb69824ff05e14",
+    "7f37bdd62ab90113844137a23806c89b23a8ab9b:riptide_descriptions/config/talos.yaml": "7f0c5a703e3974401a23ce316dbedde1327e974b16105d39a97c7a64837bd664",
+    "7f37bdd62ab90113844137a23806c89b23a8ab9b:riptide_descriptions/config/simulator.yaml": "34468cba811abc743c2ecb3aeb2b90c5d3acb548769d384aa6b0bfda24bde45b",
+    "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/robots/talos/config/sensors.yaml": "aa86fa92f929f1489c7db4732434f2083d7f507b7306874a30b71235d1490fdd",
+    "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/include/c_simulator/settings.h": "65f763f9d7bfb6270866f55050706d4316f88d03d253855c15c567e98d27e5d5"
+  },
+  "driver_sha256": "7963403b7f39f8bcd70c8bba81a927894fc406cb00d8904bcd20061df80166f6",
+  "capture_sha256": "1b5b953bd0d91f9a9425ce90665cdbf1656d2ca85a3cfe0f5c3de2c20b355833",
+  "fixture_sha256": "bc5feb0ac831387234b3e7a467fe64ab07e7ac10795dc3e543b5b2342d166671",
+  "compiler_flags": [
+    "-std=c++17",
+    "-O2"
+  ],
+  "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "scope": "24 prescribed COM states and body velocity derivatives. Extracted original setAccel, noise-disabled IMU/FOG, default no-lock-gate DVL, mounted depth and corrected base Z. Original YAML and settings only; no native profile/model/importer input. Excludes RNG equality, drift, schedules, plant integration, contacts, cameras and ROS transport."
+}

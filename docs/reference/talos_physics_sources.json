@@ -12,14 +12,14 @@
     "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/src/physics_simulator.cpp": "d4b05d378425bfdb59773ba6b20f0db44f14469c2be4eb0ccdfb69824ff05e14",
     "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/src/robot_class.cpp": "8207b7b8c2cd83aaa11a1f8292fa481ec4212a3aabdb89f9fd8f80169ebd1719"
   },
-  "importer_sha256": "98df531d930eca8c1e974f24b157913e226602412525d9953c571c04087e9847",
+  "importer_sha256": "654fba05460dd94c686aeb07de4f6f6f7c038ce6a3ee62ee96d7b515b354e854",
   "pyyaml_version": "6.0.1",
   "outputs_sha256": {
     "content/robots/talos_dynamics.yaml": "44546e303654fdac4836112f00f6cc430b9aa4bdc279546bfe91ca2cb187f953",
     "content/worlds/competition_pool.yaml": "4d1c73dd17b2c474ad825104da2f3d0dcfdb72dc1c8153ac1ad777a12178cd48",
     "content/examples/talos_pool.yaml": "b47fdcd680c845e8a4b1f69453b374ca5ee0727055c45bf506b6a5b0991d6af0",
     "content/sensors/talos_ahrs.yaml": "0eba97923884f6ef14857eba10e5932145c85a54e7ac0ce377a90d0b50554165",
-    "content/robots/talos_inertial.yaml": "5ce91c57d802ce8cfdab1801c048ed4081d752ed39ad354918102f1f7936c5df",
+    "content/robots/talos_inertial.yaml": "4b92292eb7378fbb2f2fa19f56255409f64234258485660ed2c333d83a8a6a06",
     "content/examples/talos_inertial_pool.yaml": "3ee0854523a8c52cb71ec27a1d83a448e669c662aa5056b34363c4164c51d866"
   }
 }

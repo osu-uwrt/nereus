@@ -549,3 +549,16 @@ TEST_F(Profiles, NativeTalosInertialAssemblyPreservesPlantAndScheduledAcquisitio
     EXPECT_EQ(replay->measurement.value->attitude.sensor_to_world.coeffs(),
               first->attitude.sensor_to_world.coeffs());
 }
+
+TEST_F(Profiles, FogReportedVarianceIsIndependentOfSamplingNoise) {
+    replace("robots/synthetic_auv.yaml", "parameters: {axes: [[0, 0, 1]]}",
+            "parameters: {axes: [[0, 0, 1]], reported_variance: [0.01, 0.02, 0.03]}");
+    auto runtime = robotics::config::makeRuntime(robotics::config::loadScenario(scenario()));
+    runtime->advance(10);
+    const auto sample = runtime->stream<robotics::sensors::FogReading>("fog")->latest();
+    ASSERT_TRUE(sample && sample->measurement.value);
+    EXPECT_DOUBLE_EQ(sample->measurement.value->covariance(0, 0), .03);
+    replace("robots/synthetic_auv.yaml", "reported_variance: [0.01, 0.02, 0.03]",
+            "reported_variance: [0, 0, -1]");
+    EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
+}

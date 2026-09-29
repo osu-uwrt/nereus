@@ -92,7 +92,7 @@ Attach ahrs(const sensors::Mount &mount, const YAML::Node &node, const std::stri
     };
 }
 Attach fog(const sensors::Mount &mount, const YAML::Node &node, const std::string &field) {
-    keys(node, {"axes", "gyro_noise"}, field);
+    keys(node, {"axes", "gyro_noise", "reported_variance"}, field);
     const auto list = node["axes"];
     if (!list.IsSequence() || list.size() == 0 || list.size() > 3) {
         throw std::invalid_argument(field + ".axes must contain one to three axes");
@@ -103,7 +103,11 @@ Attach fog(const sensors::Mount &mount, const YAML::Node &node, const std::strin
         wrapper["axis"] = list[i];
         axes.push_back(vector(wrapper, "axis", 3, field + ".axes[" + std::to_string(i) + "]"));
     }
-    const sensors::Fog model(mount, axes, noise(node["gyro_noise"], field + ".gyro_noise"));
+    std::optional<Eigen::Vector3d> reported;
+    if (node["reported_variance"])
+        reported = vector(node, "reported_variance", 3, field);
+    const sensors::Fog model(mount, axes, noise(node["gyro_noise"], field + ".gyro_noise"),
+                             reported);
     return [model](auto &runtime, const auto &device, const auto &, double) {
         runtime.add(device, model);
     };

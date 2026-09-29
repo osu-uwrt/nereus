@@ -785,3 +785,22 @@ TEST(Dvl, PlacedFloorIncludesBoundaryOriginsAndHitsWithoutExtendingItsFootprint)
                             rotation * Eigen::Vector3d(0, 5.000001, -3).normalized()));
     }
 }
+
+TEST(Fog, IndependentReportedVariancePreservesProjectionAndNoise) {
+    const std::vector<Eigen::Vector3d> axes{Eigen::Vector3d::UnitX(),
+                                            Eigen::Vector3d(1, 1, 0).normalized()};
+    Fog derived({}, axes, noisy()), reported({}, axes, noisy(), Eigen::Vector3d(4, 9, 16));
+    derived.reset(18, "fog");
+    reported.reset(18, "fog");
+    for (int i = 0; i < 10; ++i) {
+        const auto a = derived.sample(motion(), .01).value.value();
+        const auto b = reported.sample(motion(), .01).value.value();
+        EXPECT_EQ(a.angular_rates, b.angular_rates);
+        EXPECT_NEAR(b.covariance(0, 0), 4, 1e-12);
+        EXPECT_NEAR(b.covariance(1, 1), 6.5, 1e-12);
+        EXPECT_NEAR(b.covariance(0, 1), 4 / std::sqrt(2.), 1e-12);
+    }
+    for (const double invalid :
+         {-1., std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()})
+        EXPECT_THROW((Fog({}, axes, {}, Eigen::Vector3d(0, invalid, 0))), std::invalid_argument);
+}

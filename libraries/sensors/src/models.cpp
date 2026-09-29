@@ -211,9 +211,14 @@ Measurement<Ahrs::Reading> Ahrs::sample(const simulation::MotionSample &motion,
     return {Reading{std::move(*inertial.value), std::move(*attitude.value)}, {}};
 }
 
-Fog::Fog(Mount mount, std::vector<Eigen::Vector3d> axes, NoiseParameters gyro)
-    : mount_(std::move(mount)), gyro_(std::move(gyro)) {
+Fog::Fog(Mount mount, std::vector<Eigen::Vector3d> axes, NoiseParameters gyro,
+         std::optional<Eigen::Vector3d> reported_variance)
+    : mount_(std::move(mount)), gyro_(std::move(gyro)),
+      reported_variance_(std::move(reported_variance)) {
     normalizeMount(mount_);
+    if (reported_variance_ &&
+        (!reported_variance_->allFinite() || (reported_variance_->array() < 0).any()))
+        throw std::invalid_argument("FOG reported variances must be finite and nonnegative");
     if (axes.empty() || axes.size() > 3) {
         throw std::invalid_argument("FOG requires one to three axes");
     }
@@ -232,7 +237,10 @@ Measurement<Fog::Reading> Fog::sample(const simulation::MotionSample &motion,
     const Eigen::Vector3d rate =
         mount_.sensor_to_body.conjugate() * motion.state.body.angular_velocity +
         gyro_.sample(elapsed_seconds);
-    Reading result{axes_ * rate, axes_ * gyro_.covariance() * axes_.transpose()};
+    Eigen::Matrix3d covariance = gyro_.covariance();
+    if (reported_variance_)
+        covariance = reported_variance_->asDiagonal();
+    Reading result{axes_ * rate, axes_ * covariance * axes_.transpose()};
     if (!result.angular_rates.allFinite() || !result.covariance.allFinite()) {
         throw std::overflow_error("FOG measurement overflow");
     }

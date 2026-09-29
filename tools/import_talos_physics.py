@@ -270,6 +270,7 @@ def main():
                 "parameters": {
                     "axes": [[0, 0, 1]],
                     "gyro_noise": {"white_stddev": [0, 0, math.radians(0.01)]},
+                    "reported_variance": [0, 0, max(1e-9, math.radians(0.01) ** 2)],
                 },
             },
         ],

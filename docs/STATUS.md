@@ -573,3 +573,29 @@ This is native inertial assembly, not independent original sensor-output parity.
 Next: capture original inertial reporting, then resolve DVL/pressure policies and
 complete native devices before original scene/asset integration. Cameras, water
 rendering, LEDs/mechanisms, task/scoring and full robot-stack acceptance remain open.
+
+## Independent original inertial reporting reference
+
+A pinned-source capture now records 24 prescribed COM states/velocity derivatives
+and original noise-disabled IMU, FOG, DVL and depth reporting expressions. The
+AHRS/FOG model comparison verifies all 21 corresponding output fields within
+1e-12, including freefall residual, rotating lever arms, mounted orientation and
+reported uncertainty. Source/input/output provenance is recorded independently
+of native profiles/importers. [SENSOR_KINEMATICS.md](reference/SENSOR_KINEMATICS.md)
+identifies scope; DVL/depth outputs are captured acceptance inputs, not yet gates.
+
+FOG now supports explicit sensor-axis reported variance independently of sampling
+noise, before configured axis projection. C++, profiles and Python preserve
+nonorthogonal-axis correlations and noise sequences. Native Talos explicitly
+selects the original reported FOG variance, including for noise-disabled sampling.
+
+All 110 Release tests and relocated C++ consumers passed. Six focused FOG/Talos
+checks passed under ASan/UBSan without diagnostics, and the installed Python wheel
+passed 20 tests, Ruff and strict mypy. Independent read-only source/implementation
+review verified provenance, formula extraction and kinematic conventions and
+prompted an explicit finite-output assertion in the reference test.
+
+The fixture comparison configures original reporting values explicitly; native
+profile/settings assembly has separate tests. It does not establish acquisition,
+whole-trajectory, stochastic-sequence or ROS message parity. Remaining DVL/depth
+reporting models now have source-derived comparison inputs for the next increment.

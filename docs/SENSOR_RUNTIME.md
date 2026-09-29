@@ -152,6 +152,12 @@ axes in the sensor frame. Axes can be nonorthogonal, with corresponding covarian
 It reports rates, not integrated heading or an attitude estimate. No privileged yaw
 channel, Earth-rate model, temperature dependence, or manufacturer protocol exists.
 
+Optional FOG `reported_variance` supplies finite nonnegative diagonal variances in
+sensor axes before measurement-axis projection. The projected covariance therefore
+retains cross-axis correlations for nonorthogonal axes. This metadata is independent
+of generated noise and remains present when noise is disabled. Defaults continue
+to project the noise process covariance.
+
 **DVL:** computes the mounted point's velocity relative to the returned bottom's
 world velocity, then rotates it into the sensor frame. The narrow bottom query takes
 world origin/unit direction and returns an optional distance and bottom velocity.

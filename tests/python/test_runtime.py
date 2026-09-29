@@ -225,7 +225,10 @@ class RuntimeTests(unittest.TestCase):
     def test_all_models_work_without_profiles(self) -> None:
         runtime = passive()
         imu = runtime.add(rp.Device("imu", "imu"), rp.Imu())
-        fog = runtime.add(rp.Device("fog", "fog"), rp.Fog(axes=[[1, 0, 0], [0, 0, 1]]))
+        fog = runtime.add(
+            rp.Device("fog", "fog"),
+            rp.Fog(axes=[[1, 0, 0], [0, 0, 1]], reported_variance=[0.1, 0.2, 0.3]),
+        )
         dvl = runtime.add(rp.Device("dvl", "dvl"), rp.Dvl(rp.DvlParameters(), rp.Pool()))
         pressure = runtime.add(
             rp.Device("pressure", "pressure"),
@@ -239,6 +242,7 @@ class RuntimeTests(unittest.TestCase):
         assert im and im.value and fo and fo.value and dv and dv.value and pr and pr.value
         np.testing.assert_allclose(im.value.specific_force, [0, 0, 9.80665], atol=1e-12)
         self.assertEqual(fo.value.angular_rates.shape, (2,))
+        np.testing.assert_array_equal(fo.value.covariance, np.diag([0.1, 0.3]))
         self.assertAlmostEqual(dv.value.bottom_distance, 3)
         self.assertAlmostEqual(pr.value.depth, 2)
         self.assertEqual(len(imu.drain()), 1)

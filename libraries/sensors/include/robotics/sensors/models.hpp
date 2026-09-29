@@ -99,7 +99,7 @@ class Fog {
   public:
     using Reading = FogReading;
     explicit Fog(Mount mount = {}, std::vector<Eigen::Vector3d> axes = {Eigen::Vector3d::UnitZ()},
-                 NoiseParameters gyro = {});
+                 NoiseParameters gyro = {}, std::optional<Eigen::Vector3d> reported_variance = {});
     void reset(std::uint64_t seed, const std::string &id);
     Measurement<Reading> sample(const simulation::MotionSample &, double elapsed_seconds);
 
@@ -107,6 +107,7 @@ class Fog {
     Mount mount_;
     Eigen::Matrix<double, Eigen::Dynamic, 3> axes_;
     Noise3 gyro_;
+    std::optional<Eigen::Vector3d> reported_variance_; // Sensor axes, before projection.
 };
 
 struct BottomHit {

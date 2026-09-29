@@ -95,7 +95,7 @@ rules or overrides. All models require a parameters mapping, even when it is `{}
 | `imu` | `acceleration_noise`, `gyro_noise`, `reporting` |
 | `attitude` | `angle_stddev_rad`, `heading_drift_rad_s`, `heading_axis_world` (unit +Z), `reported_variance` |
 | `ahrs` | Required `inertial` mapping (raw IMU settings) and `attitude` mapping (attitude settings); each may be `{}` |
-| `fog` | Required `axes`: one to three unit vectors in sensor coordinates; `gyro_noise` |
+| `fog` | Required `axes`: one to three unit vectors in sensor coordinates; `gyro_noise`, optional sensor-axis diagonal `reported_variance` in (rad/s)² |
 | `dvl` | `bottom_axis` (default sensor −Z), `minimum_range_m` (0.1), `maximum_range_m` (50), `velocity_noise` |
 | `pressure` | `noise`, `reference_pressure_pa` (101325), `reference_density_kg_m3` (1000), `reference_gravity_m_s2` (9.80665), `minimum_pressure_pa` (0), `maximum_pressure_pa` (10000000) |
 

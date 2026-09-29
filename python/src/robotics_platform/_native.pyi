@@ -360,7 +360,11 @@ class Ahrs:
 
 class Fog:
     def __init__(
-        self, mount: Mount = ..., axes: Sequence[ArrayLike] = ..., gyro_noise: NoiseParameters = ...
+        self,
+        mount: Mount = ...,
+        axes: Sequence[ArrayLike] = ...,
+        gyro_noise: NoiseParameters = ...,
+        reported_variance: ArrayLike | None = ...,
     ) -> None: ...
 
 class Dvl:

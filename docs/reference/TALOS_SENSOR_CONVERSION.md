@@ -45,7 +45,8 @@ pose minus COM, with original RPY values unchanged.
   original reported variances (including sigma² when the old override is absent).
   Original noise-disabled mode disables heading drift too. The native Talos AHRS
   profile now selects the original noise-enabled values; independent original
-  sensor-output capture remains open.
+  [prescribed-state output capture](SENSOR_KINEMATICS.md) now verifies noise-disabled
+  AHRS and FOG formulas; full trajectory/acquisition and transport parity remain open.
 - DVL runs at 8 Hz with default noise standard deviation 0.001 m/s and independently
   reported variance 0.000001. Original velocity includes `omega × r` and sensor
   rotation. Default `dvl_max_tilt=0` disables lock loss entirely: the original
@@ -56,8 +57,8 @@ pose minus COM, with original RPY values unchanged.
   standard deviation 0.01 degree/s. Default reported variance is
   `max(1e-9, sigma_rad_s²)`; configuration may override it independently of noise.
   Native Talos now selects the original default FOG noise and covariance (the
-  noise variance exceeds the original floor). Arbitrary independent FOG covariance
-  override support remains open.
+  noise variance exceeds the original floor). The explicit independent covariance
+  override is now preserved even with sampling noise disabled.
 - Depth runs at 20 Hz with 0.010 m standard deviation. The original samples the mounted
   pressure point's world Z, adds scalar noise, then corrects to base_link Z using
   the same acquisition orientation and mounted offsets. It reports world/map Z

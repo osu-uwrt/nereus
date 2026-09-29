@@ -108,3 +108,10 @@ the importer verifies their exact source expressions before emitting neutral
 configuration. All additional source/output hashes remain in
 `reference/talos_physics_sources.json`. No original ROS node is copied into the
 platform or invoked at runtime.
+
+`tools/capture_sensor_reference.py` reads the same pinned original repositories and
+extracts sensor initialization/reporting expressions into a temporary non-ROS
+build. The prescribed kinematic inputs and outputs are recorded in
+`tests/fixtures/legacy_sensor_kinematics.csv`; its JSON records all source, script,
+driver and result hashes. [SENSOR_KINEMATICS.md](reference/SENSOR_KINEMATICS.md)
+identifies verified fields and pending DVL/depth comparison.
