@@ -98,7 +98,7 @@ contacts and mechanisms remain outside this comparison.
 
 The importer reads pinned Git objects, not uncommitted source files or ROS-expanded
 profiles. It requires Python3 and PyYAML (capture used6.0.1). Revisions, source hashes,
-output hashes and importer identity are in [talos_physics_sources.json](talos_physics_sources.json).
+output hashes and importer identity are written by the importer (not kept in the repo).
 
 ```sh
 python3 tools/import_talos_physics.py /path/to/riptide_simulator /path/to/riptide_core

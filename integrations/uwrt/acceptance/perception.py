@@ -7,7 +7,6 @@ prior; detections are compared to physical pack geometry using stamped simulatio
 from __future__ import annotations
 
 import argparse
-import copy
 import hashlib
 import json
 import math
@@ -44,22 +43,6 @@ def prepare(output):
             sensor["enabled"] = True
     with robot_path.open("w") as target:
         yaml.dump(robot, target)
-    bridge_path = packs / "bridges/uwrt_talos/bridge.yaml"
-    bridge = yaml.load(bridge_path)
-    proposals = yaml.load(ROOT / "proposals/step1/packs/bridges/uwrt_talos/bridge.yaml")
-    ids = {stream["id"] for stream in bridge["streams"]}
-    bridge["streams"].extend(
-        copy.deepcopy(
-            [
-                stream
-                for stream in proposals["streams"]
-                if stream["native"].startswith(("sensor:ffc.", "sensor:dfc."))
-                and stream["id"] not in ids
-            ]
-        )
-    )
-    with bridge_path.open("w") as target:
-        yaml.dump(bridge, target)
     scenario_path = packs / "scenarios/talos_uwrt/scenario.yaml"
     scenario = yaml.load(scenario_path)
     resolved = resolve_scenario(scenario_path)

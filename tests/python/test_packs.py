@@ -22,7 +22,7 @@ from robotics_platform.packs import (
 from robotics_platform.packs.__main__ import main
 from test_packs_fixtures import write_generic_packs
 
-TALOS = Path(__file__).resolve().parents[2] / "proposals" / "step1" / "packs"
+TALOS = Path(__file__).resolve().parents[2] / "content" / "packs"
 
 
 class DocumentTests(unittest.TestCase):
@@ -119,12 +119,11 @@ class ScenarioTests(unittest.TestCase):
         after = resolve_scenario(scenario).manifest()
         self.assertNotEqual(after["content_sha256"], before)
 
-    @unittest.skipUnless(TALOS.is_dir(), "repository proposal packs unavailable")
-    def test_talos_proposal_composition_records_gaps(self) -> None:
+    def test_talos_packs_resolve_strictly_and_round_trip(self) -> None:
         resolved = resolve_scenario(TALOS / "scenarios" / "talos_uwrt")
-        kinds = {(item["kind"], item["pack"]) for item in resolved.unresolved}
-        self.assertIn(("asset", "robot"), kinds)
-        self.assertIn(("hook_module", "tasks"), kinds)
+        # Every asset and hook is present; only declared-pending sensors/tasks remain unresolved.
+        kinds = {item["kind"] for item in resolved.unresolved}
+        self.assertLessEqual(kinds, {"pending_sensor", "pending_task"})
         self.assertEqual(resolved.run_options["role"], "repair")
         with self.assertRaises(PackError):
             resolve_scenario(TALOS / "scenarios" / "talos_uwrt", strict=True)

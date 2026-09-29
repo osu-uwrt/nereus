@@ -1,5 +1,6 @@
 """Pack-to-native translation must preserve the validated plant and sensor behavior."""
 
+import copy
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,26 +10,21 @@ import numpy as np
 import robotics_platform as rp
 from robotics_platform.pack_runtime import create_runtime
 from robotics_platform.packs import resolve_scenario
-from ruamel.yaml import YAML
 from test_packs_fixtures import write_generic_packs
 
 ROOT = Path(__file__).resolve().parents[2]
-PACKS = ROOT / "proposals/step1/packs"
+PACKS = ROOT / "content/packs"
 SENSORS = ["imu", "fog", "dvl", "depth"]
 
 
 def resolved_data():
-    # The factory consumes resolved values; pack-loader validation is tested separately.
-    yaml = YAML(typ="safe")
-
-    def read(path):
-        return yaml.load((PACKS / path).read_text())
-
+    # The factory consumes resolved values; tests edit this copy before building a runtime.
+    resolved = resolve_scenario(PACKS / "scenarios/talos_uwrt")
     return SimpleNamespace(
-        robot=read("robots/talos/robot.yaml"),
-        pool=read("pools/robosub_2026/pool.yaml"),
-        scenario=read("scenarios/talos_uwrt/scenario.yaml"),
-        task_definitions=[read(f"tasks/robosub_2026/{task}.yaml") for task in ("gate", "torpedo")],
+        robot=copy.deepcopy(resolved.robot),
+        pool=copy.deepcopy(resolved.pool),
+        scenario=copy.deepcopy(resolved.scenario),
+        task_definitions=copy.deepcopy(resolved.task_definitions),
     )
 
 
@@ -49,7 +45,6 @@ class GenericPackRuntimeTests(unittest.TestCase):
             self.assertEqual(result.streams["altitude"].stats.acquired, 2)
 
 
-@unittest.skipUnless(PACKS.is_dir(), "requires repository proposal fixtures")
 class PackRuntimeTests(unittest.TestCase):
     def test_resolved_scenario_constructs_native_runtime(self):
         resolved = resolve_scenario(PACKS / "scenarios/talos_uwrt")
@@ -64,7 +59,7 @@ class PackRuntimeTests(unittest.TestCase):
     def test_matches_existing_native_talos_under_commands(self):
         reference = rp.load_scenario(ROOT / "content/examples/talos_navigation_pool.yaml")
         data = resolved_data()
-        # The proposal writes the pool corner as exact zero; the earlier importer
+        # The pack writes the pool corner as exact zero; the earlier importer
         # retained a 1e-15 m rotation residual. Compare identical numeric inputs
         # because initial wall contact is sensitive to last-bit point ordering.
         data.scenario["pool_placement"]["position_m"][:2] = list(

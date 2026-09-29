@@ -87,7 +87,7 @@ riptide_core vehicle-description data. The offline importer strips transport and
 controller configuration, resolves CAD/COM offsets, and emits native physical
 parameters, rigid mounts and collision boxes. The example command schedule is new;
 sensors/visuals/tasks are not instantiated by this slice. Exact input revisions and
-source/output/importer hashes are in `reference/talos_physics_sources.json`.
+source/output/importer hashes are written by `tools/import_talos_physics.py` (not kept in the repo).
 See `reference/TALOS_PHYSICS_PACK.md` for reproduction and limits. These project
 sources retain the unresolved source/asset license review requirement before public
 redistribution; local implementation continues under the user's authorization.
@@ -108,8 +108,8 @@ The Talos importer also emits a separate inertial robot/example and reusable AHR
 profile from the same pinned physical data plus original vehicle/simulator sensor
 settings. Original FOG rate/noise/covariance defaults live in node construction;
 the importer verifies their exact source expressions before emitting neutral
-configuration. All additional source/output hashes remain in
-`reference/talos_physics_sources.json`. No original ROS node is copied into the
+configuration. All additional source/output hashes are written by
+`tools/import_talos_physics.py`. No original ROS node is copied into the
 platform or invoked at runtime.
 
 `tools/capture_sensor_reference.py` reads the same pinned original repositories and
@@ -174,16 +174,16 @@ adds only an explicit water-presence guard; present-water calculations are retai
 `third_party/glm/glm` contains the original vendored GLM 1.0.0 header distribution,
 unchanged from that pinned revision's `camera_faker/include/external/glm`. Its dual
 Happy Bunny/MIT notice is retained and installed with the renderer; it is a private
-implementation dependency. Per-file source/output hashes and importer hash are in
-`reference/render_resources.json`. Original renderer/shader license metadata remains
+implementation dependency. Per-file source/output hashes and importer hash are written by
+`tools/import_render_resources.py` (not kept in the repo). Original renderer/shader license metadata remains
 subject to the source review described above.
 
 The offline original-renderer capture reads pinned Git objects and builds the
 original renderer/shaders with a thin GLFW/CPU-output harness. Its timing helper is
 shared harness code, not platform scene/rendering implementation. The recorded
 reference includes source and wrapper hashes, exact view matrices and output hashes;
-`reference/rendering_baseline.json` also records native implementation hashes and
-the current backend/performance evidence. See [RENDERING.md](RENDERING.md) for scope,
+The capture output (`tools/capture_render_reference.py`, not kept in the repo) also
+records native implementation hashes and backend/performance evidence. See [RENDERING.md](RENDERING.md) for scope,
 reproduction, exact comparison and remaining integration.
 
 
@@ -194,7 +194,7 @@ The new API receives validated values and explicit clocks; resource/ROS loading
 and target-mask dispatch are not copied into the models. Pivot rotation uses the
 platform's double-precision spatial representation. `tools/capture_animation_reference.py`
 compiles the unchanged original headers independently and records source archive,
-harness and output hashes in `reference/animation_sources.json`. The fixture
+harness and output hashes in its output (not kept in the repo). The fixture
 parameters are copied from the original Talos thruster/status-light configurations.
 Source licensing remains subject to the original metadata review above.
 

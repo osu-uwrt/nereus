@@ -121,7 +121,7 @@ emission through the original clear hull. This covers the selected fixed views,
 not every possible camera, animated image or complete robot-stack timing.
 
 The source/output hashes and backend are recorded in
-[indicator_rendering_baseline.json](reference/indicator_rendering_baseline.json).
+the capture output of `tools/capture_render_reference.py` (not kept in the repo).
 The numerical 402-sample original indicator-mode reference remains separate from
 this geometry/shader check. Full ROS routing, acquisition-time sampling and reset
 integration must be validated when their owning adapters are implemented.

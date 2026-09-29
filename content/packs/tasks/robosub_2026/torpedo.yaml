@@ -2,7 +2,6 @@
 # Task-local frame: board centre, +X out of the printed face toward the approach side, +Z up.
 # Geometry: torpedo.urdf (robot proxy) and talos_tasks.yaml torpedo panel/holes (projectile hits,
 # shared with the shader cutouts). Logic: payload_model.torpedo_contact.
-# Working copy for the step-2 navigation bridge; the approved full contract is proposals/step1/packs.
 schema_version: 1
 kind: task
 id: torpedo

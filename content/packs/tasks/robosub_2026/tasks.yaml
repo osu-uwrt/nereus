@@ -1,6 +1,5 @@
 # Task pack = task include files + run rules + assets; runtime scoring is executed by robotics_platform.task_runtime + hooks/rules_2026.py.
 # No course layout (scenario-owned) and no robot names (capabilities by mechanism type only).
-# Working copy for the step-2 navigation bridge; the approved full contract is proposals/step1/packs.
 schema_version: 1
 kind: tasks
 id: robosub_2026

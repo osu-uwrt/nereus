@@ -9,3 +9,12 @@ compile_commands.json
 /.venv/
 /.mypy_cache/
 /.ruff_cache/
+/.pytest_cache/
+*.egg-info/
+# Local development links into build/ (python/src extension modules and content/shader symlinks)
+*.so
+/python/src/robotics_platform/content
+/python/src/robotics_platform/shaders
+# Local tooling state
+/.claude/
+/collaboration_logs/

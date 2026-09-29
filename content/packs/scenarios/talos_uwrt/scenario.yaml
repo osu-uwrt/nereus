@@ -1,6 +1,5 @@
 # Selects sibling packs (paths relative to THIS folder)
 # and owns everything run-specific: world frame, placements, initial state, seed, run options.
-# Working copy for the step-2 navigation bridge; the approved full contract is proposals/step1/packs.
 schema_version: 1
 kind: scenario
 id: talos_uwrt_repair_2026

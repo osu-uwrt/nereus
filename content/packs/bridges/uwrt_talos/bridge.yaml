@@ -3,7 +3,6 @@
 # {from, enum_map}; filters only field equality. Destination keys are ROS field paths on publish and
 # native argument names on subscribe; [i] indexes arrays. Native side: robot-pack ids and the native
 # reading fields of libraries/sensors/include/robotics/sensors/readings.hpp.
-# Navigation and camera runtime bindings; the approved full contract is proposals/step1/packs.
 schema_version: 1
 kind: bridge
 id: uwrt_talos

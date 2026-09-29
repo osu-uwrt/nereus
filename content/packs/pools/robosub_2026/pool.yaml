@@ -3,7 +3,6 @@
 # +Y along width, +Z up; water surface z = water_level_m. No robot, task or course layout here:
 # the scenario places this pool in its world frame (original map_origin_pool).
 # Current vectors keep world axes after placement (native world_placement semantics).
-# Working copy for the step-2 navigation bridge; the approved full contract is proposals/step1/packs.
 schema_version: 1
 kind: pool
 id: robosub_2026

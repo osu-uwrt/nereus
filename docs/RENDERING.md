@@ -104,7 +104,7 @@ GLFW and a C/C++ compiler. Ordinary builds, installed capture and contract check
 require no original workspace. Release comparison uses the original `-O2` build;
 debug/sanitizer comparison uses its `-O0` build. Comparisons run on the same GL
 backend; pixel equality across different GPUs/drivers/optimization modes is not
-claimed. [rendering_baseline.json](reference/rendering_baseline.json) records sources,
+claimed. `tools/capture_render_reference.py` records sources,
 outputs, native implementation hashes, backend and the measured release baseline.
 
 Six 640×400 scenes cover above water, underwater, near-surface, close transparent
