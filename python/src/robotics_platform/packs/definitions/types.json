@@ -1030,13 +1030,47 @@
           ],
           "additionalProperties": false,
           "description": "Render cutouts from a perforated_panel region on faces at these local x offsets in m."
+        },
+        "collision_meshes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "asset": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "frame": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "lateral_friction": {
+                "type": "number",
+                "minimum": 0
+              },
+              "restitution": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id",
+              "asset",
+              "frame",
+              "lateral_friction",
+              "restitution"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Optional concave triangle-mesh collision (Wavefront .obj asset, authored coordinates placed in the named frame); used by the rigid-body prop world."
         }
       },
       "required": [
         "collision_boxes"
       ],
       "additionalProperties": false,
-      "description": "Static task-local prop. Collision boxes in m in the task-local frame; visuals reference asset ids and frames (offsets in m); cutouts are optional.",
+      "description": "Static task-local prop. Collision boxes in m in the task-local frame; visuals reference asset ids and frames (offsets in m); cutouts are optional. collision_meshes are optional and only consumed by the rigid-body prop world.",
       "x-category": "prop"
     },
     "task_plane": {
@@ -1337,6 +1371,269 @@
       "additionalProperties": false,
       "description": "Declarative scoring: points (may be negative) awarded per firing of the named event, up to max_awards times if given. Currently unused by packs.",
       "x-category": "scoring"
+    },
+    "rigid_body": {
+      "type": "object",
+      "properties": {
+        "frame": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "collision_asset": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "mass_kg": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "volume_m3": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "expected_region": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "lateral_friction": {
+          "type": "number",
+          "minimum": 0
+        },
+        "spinning_friction": {
+          "type": "number",
+          "minimum": 0
+        },
+        "rolling_friction": {
+          "type": "number",
+          "minimum": 0
+        },
+        "restitution": {
+          "type": "number",
+          "minimum": 0
+        },
+        "linear_damping": {
+          "type": "number",
+          "minimum": 0
+        },
+        "angular_damping": {
+          "type": "number",
+          "minimum": 0
+        },
+        "collision_margin_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "ccd_swept_sphere_radius_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "contact_processing_threshold_m": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "frame",
+        "collision_asset",
+        "mass_kg",
+        "volume_m3",
+        "expected_region",
+        "lateral_friction",
+        "spinning_friction",
+        "rolling_friction",
+        "restitution",
+        "linear_damping",
+        "angular_damping",
+        "collision_margin_m",
+        "ccd_swept_sphere_radius_m",
+        "contact_processing_threshold_m"
+      ],
+      "additionalProperties": false,
+      "description": "Free dynamic prop. The collision shape is the convex hull of the .obj vertices centred on their bounds (centre = bounds midpoint). frame is the task-local pose of the mesh origin at reset; mass in kg, volume (buoyancy) in m^3, expected_region the box region that scores as correct. Friction/damping coefficients dimensionless except damping in 1/s; margins in m.",
+      "x-category": "prop"
+    },
+    "contact_world": {
+      "type": "object",
+      "properties": {
+        "gravity_m_s2": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "solver_iterations": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "rest_speed_m_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "rest_time_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "angular_drag_n_m_s_per_rad": {
+          "type": "number",
+          "minimum": 0
+        },
+        "drag_coefficient": {
+          "type": "number",
+          "minimum": 0
+        },
+        "claw_mechanism_type": {
+          "const": "claw"
+        }
+      },
+      "required": [
+        "gravity_m_s2",
+        "solver_iterations",
+        "rest_speed_m_s",
+        "rest_time_s",
+        "angular_drag_n_m_s_per_rad",
+        "drag_coefficient",
+        "claw_mechanism_type"
+      ],
+      "additionalProperties": false,
+      "description": "Rigid-body prop world settings for the task: gravity, Bullet solver iterations, rest detection (speed threshold in m/s held for rest_time_s), water angular drag in N m s/rad and the quadratic drag coefficient (force = -drag_coefficient * density * wet * area * v|v|). The world grasps with the robot mechanism of claw_mechanism_type.",
+      "x-category": "prop"
+    },
+    "box": {
+      "type": "object",
+      "properties": {
+        "frame": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "half_extents_xy_m": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "z_range_m": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "support_mesh": {
+          "$ref": "common.schema.json#/$defs/name"
+        }
+      },
+      "required": [
+        "frame",
+        "half_extents_xy_m",
+        "z_range_m",
+        "support_mesh"
+      ],
+      "additionalProperties": false,
+      "description": "Oriented containment volume in a task frame. A prop is inside when its bounds-extent-inflated xy stays strictly within half_extents_xy_m, z (frame axes, m) lies in the open interval z_range_m, and it touches support_mesh (a collision mesh id) or a prop that is itself inside.",
+      "x-category": "region"
+    },
+    "attach": {
+      "type": "object",
+      "properties": {
+        "mechanism_type": {
+          "const": "claw"
+        },
+        "emits": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "prop_id",
+              "mechanism_id"
+            ]
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "mechanism_type",
+        "emits"
+      ],
+      "additionalProperties": false,
+      "description": "Fired when a mechanism of the given type establishes a grasp on a prop.",
+      "x-category": "event"
+    },
+    "detach": {
+      "type": "object",
+      "properties": {
+        "mechanism_type": {
+          "const": "claw"
+        },
+        "emits": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "prop_id",
+              "mechanism_id",
+              "reason"
+            ]
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "mechanism_type",
+        "emits"
+      ],
+      "additionalProperties": false,
+      "description": "Fired when a grasp ends (released, slipped or reset).",
+      "x-category": "event"
+    },
+    "drop_into": {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "enum": [
+            "in_region",
+            "elsewhere"
+          ]
+        },
+        "regions": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/name"
+          },
+          "uniqueItems": true
+        },
+        "surfaces": {
+          "type": "object",
+          "properties": {
+            "floor": {
+              "$ref": "common.schema.json#/$defs/name"
+            },
+            "support": {
+              "$ref": "common.schema.json#/$defs/name"
+            }
+          },
+          "required": [
+            "floor",
+            "support"
+          ],
+          "additionalProperties": false,
+          "description": "Labels reported as the event region for outcome elsewhere: floor when resting on the pool floor, support otherwise."
+        },
+        "emits": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "prop_id",
+              "basket",
+              "expected_basket"
+            ]
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "outcome",
+        "regions",
+        "emits"
+      ],
+      "additionalProperties": false,
+      "description": "Fired when a released prop comes to rest. in_region: inside one of the box regions (regions; region names the one); elsewhere: at rest outside all of them (surfaces required).",
+      "x-category": "event"
     }
   }
 }

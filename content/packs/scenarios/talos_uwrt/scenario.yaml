@@ -42,6 +42,7 @@ pool_placement:
 task_placements:
 - {task: gate, position_m: [4.810167, -2.217889, -0.75], yaw_deg: 170.645069}
 - {task: torpedo, position_m: [18.35222, 2.480545, -1.372], yaw_deg: -169.835651}
+- {task: table, position_m: [19.290761, 9.007, -1.54], yaw_deg: 89.039804}
 
 contacts:
   model: box_scene
@@ -74,11 +75,6 @@ pending:
   required_from_step: 4
   blocker: bins task definition not written in step 1
   known: {frame: bin, position_m: [13.408019, 12.324713, -2.13], yaw_deg: -145.070841}
-- id: table_placement
-  category: task_placement
-  required_from_step: 4
-  blocker: table task definition not written in step 1
-  known: {frame: table, position_m: [19.290761, 9.007, -1.54], yaw_deg: 89.039804}
 - id: surface_placement
   category: task_placement
   required_from_step: 4

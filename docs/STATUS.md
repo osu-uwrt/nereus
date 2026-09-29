@@ -1162,3 +1162,12 @@ including independent original image comparisons, then remaining mechanisms and
 course content. LED ROS routing, full operator workflows, camera acquisition and
 physical RepairCompTree acceptance remain open. The replacement priority and
 independent robot/world/task/scoring boundaries are unchanged.
+
+Claw/table prop world (step 4): `robotics_platform.prop_world.PropWorld` ports the original
+`claw_world.py` (PyBullet CPU props, table/basket meshes, kinematic jaw pads, finite-force
+opposing-jaw grasp) as a pack-driven, ROS-free module with an optional `props` extra. The `table`
+task (`content/packs/tasks/robosub_2026/table.yaml`, new `rigid_body`/`contact_world` props, `box`
+region and `attach`/`detach`/`drop_into` event types) and its scenario placement replace the
+pending entries; claw pad collision assets are in the Talos pack. Tests script grasp, carry,
+basket/elsewhere drops, reset, independence and replay, and match the original ClawWorld to about
+1e-5 m on the same script. Scoring hooks, prop rendering and mechanism/bridge wiring are not done.

@@ -101,6 +101,8 @@ class TaskRuntime:
                     self._panels[identifier, region["id"]] = PerforatedPanel(
                         region["parameters"], placements[identifier])
                     continue
+                if region["type"] == "box":  # containment is judged by the rigid-body prop world
+                    continue
                 if region["type"] != "rectangular_portal":
                     raise ValueError(f"task {identifier}: unsupported region {region['type']!r}")
                 self._portals[identifier, region["id"]] = PortalTracker(
@@ -110,7 +112,7 @@ class TaskRuntime:
             for event in task["events"]:
                 if event["type"] == "contact" and event["parameters"]["with"] == "robot":
                     self._contacts.setdefault((identifier, event["parameters"]["prop"]), []).append(event)
-                elif event["type"] not in ("pass_through", "hit"):
+                elif event["type"] not in ("pass_through", "hit", "attach", "detach", "drop_into"):
                     raise ValueError(f"task {identifier}: unsupported event {event['type']!r}")
             for rule in task["scoring"]:
                 if rule["type"] != "event_points":
