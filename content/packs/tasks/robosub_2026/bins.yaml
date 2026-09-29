@@ -21,14 +21,14 @@ props:
   type: static_body
   parameters:
     collision_boxes: []   # the original has no robot proxies for the bins (payload walls are the crate regions)
-    # markers.yaml marker7..13. Per-class vinyl textures (renderer override) are not expressible yet:
-    # both textures ship with bin_vinyl_mesh, the magnet housings/LEDs (glb) are not in this pack.
+    # markers.yaml marker7..13. Each vinyl placement overrides the mesh's diffuse texture by crate class
+    # (regions bin_vinyl1..4 class: blood/fire); the magnet housings/LEDs (glb) are not in this pack.
     visuals:
     - {asset: bin_mesh, frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-    - {asset: bin_vinyl_mesh, frame: bin_vinyl1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-    - {asset: bin_vinyl_mesh, frame: bin_vinyl2, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-    - {asset: bin_vinyl_mesh, frame: bin_vinyl3, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-    - {asset: bin_vinyl_mesh, frame: bin_vinyl4, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: bin_vinyl_mesh, frame: bin_vinyl1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: bin_vinyl_blood_texture}
+    - {asset: bin_vinyl_mesh, frame: bin_vinyl2, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: bin_vinyl_fire_texture}
+    - {asset: bin_vinyl_mesh, frame: bin_vinyl3, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: bin_vinyl_fire_texture}
+    - {asset: bin_vinyl_mesh, frame: bin_vinyl4, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: bin_vinyl_blood_texture}
     - {asset: bin_magnet_mesh, frame: magnet_target1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
     - {asset: bin_magnet_mesh, frame: magnet_target2, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
 

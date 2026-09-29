@@ -5,15 +5,16 @@ find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(PNG REQUIRED)
 find_package(JPEG REQUIRED)
+find_package(Threads REQUIRED)
 
 # Logic that needs no GL context (tested by tests/host_*).
 add_library(rp_viewer_host_core STATIC scenario.cpp jpeg_decode.cpp)
 target_include_directories(rp_viewer_host_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
   ${PROJECT_SOURCE_DIR}/integrations/ros2/viewer/include)
-target_link_libraries(rp_viewer_host_core PUBLIC rp_glm rp_mesh_assets Eigen3::Eigen yaml-cpp
+target_link_libraries(rp_viewer_host_core PUBLIC rp_glm rp_mesh_assets rp_pack_scene Eigen3::Eigen yaml-cpp
   rclcpp::rclcpp tf2_ros::tf2_ros ${geometry_msgs_TARGETS} ${visualization_msgs_TARGETS}
   ${std_msgs_TARGETS} ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS}
-  PRIVATE JPEG::JPEG)
+  PRIVATE JPEG::JPEG Threads::Threads)
 target_compile_features(rp_viewer_host_core PUBLIC cxx_std_17)
 target_compile_definitions(rp_viewer_host_core PRIVATE RP_PACK_CONTENT="${PROJECT_SOURCE_DIR}/content/packs")
 
@@ -43,7 +44,7 @@ if(BUILD_TESTING)
     target_compile_options(host_${name}_test PRIVATE -UNDEBUG)
     add_test(NAME host_${name} COMMAND host_${name}_test)
   endforeach()
-  target_link_libraries(host_jpeg_test PRIVATE JPEG::JPEG)
+  target_link_libraries(host_jpeg_test PRIVATE JPEG::JPEG Threads::Threads)
   # Window/render smoke: needs a display; validates every ImGui frame and writes a screenshot.
   if(DEFINED ENV{DISPLAY} OR DEFINED ENV{WAYLAND_DISPLAY})
     add_test(NAME host_demo_capture COMMAND robotics-pool-viewer --demo

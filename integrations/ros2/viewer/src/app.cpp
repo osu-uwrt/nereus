@@ -179,7 +179,7 @@ class App {
     void sectionHeading(const char *text);
     std::string runTime() const;
     void saveCameraImages(const fs::path &screenshot);
-    void renderDemoCards(const rendering::Scene &, double t);
+    void renderLocalCards(double t);
 
     Options opt_;
     YAML::Node config_;
@@ -487,8 +487,10 @@ void App::loadScenario(const std::string &json) {
     look_.appearance = scenario_->appearance;
     look_.tag = lookup(config_, {"calibration_board", "visible"}).as<bool>(true);
     cards_.assign(scenario_->cameras.size(), {});
-    for (auto &feed : ros_->feeds)
+    for (auto &feed : ros_->feeds) {
         feed.wantDepth = openDepth_;
+        feed.rosMode = !opt_.localCameras && !demoMode_; // local cards render from this viewer's scene
+    }
     ros_->refreshCameras();
     // Focus / preview lists from the ui document, keeping only targets the scenario can resolve.
     focusNames_.clear();
@@ -874,9 +876,22 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
         feed.wantDepth = !feed.wantDepth;
         ros_->refreshCameras();
     }
+    if (!demoMode_) {
+        bool ros = feed.rosMode;
+        if (ImGui::Checkbox("What the stack sees (ROS)", &ros)) {
+            feed.rosMode = ros;
+            ros_->refreshCameras();
+            nextCard_ = 0; // render the local view immediately when switching back
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Off: this viewer renders the card from its own scene at the truth pose.\n"
+                              "On: the images the bridge publishes (rendered from the pack, with the\n"
+                              "sensor noise model) as the robot stack receives them.");
+    }
     ImGui::PushFont(window_->small);
     ImGui::TextColored(muted, "%s  /  %d x %d", camera.model.c_str(), camera.k.width, camera.k.height);
     const bool depthShown = feed.wantDepth && tex.depth;
+    const bool local = demoMode_ || !feed.rosMode;
     ImGui::TextDisabled("Preview: %d x %d", depthShown ? tex.depthWidth : tex.rgbWidth,
                         depthShown ? tex.depthHeight : tex.rgbHeight);
     ImGui::PopFont();
@@ -900,18 +915,27 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
         if (texture)
             draw->AddRectFilled(pos, {pos.x + w, pos.y + h}, IM_COL32(4, 13, 19, 175));
         draw->AddText({pos.x + 18, pos.y + 18}, color(muted),
-                      !ready ? "Awaiting vehicle pose" : demoMode_ ? "Preview: no camera stream" : "Awaiting camera image");
+                      !ready ? "Awaiting vehicle pose" : local && !depthShown ? "Rendering local view"
+                                                                              : "Awaiting camera image");
     }
     ImGui::PushFont(window_->small);
     const bool connected = !demoMode_ && feed.connected();
-    ImGui::TextColored(connected || demoMode_ ? cyan : muted, "%s",
-                       demoMode_ ? "PREVIEW ONLY" : connected ? "CONNECTED" : "NO SENSOR OUTPUT");
+    const bool depthFromRos = feed.wantDepth && !demoMode_;
+    ImGui::TextColored(
+        local && !depthFromRos ? cyan : connected ? cyan : muted, "%s",
+        demoMode_ ? "PREVIEW ONLY" : local && !depthFromRos ? "LOCAL VIEW" : connected ? "CONNECTED" : "NO SENSOR OUTPUT");
     ImGui::SameLine();
-    ImGui::TextDisabled("  %.1f Hz  |  %s", connected ? feed.hz : 0., feed.wantDepth ? "METRES" : "RECTIFIED RGB");
+    if (local && !depthFromRos)
+        ImGui::TextDisabled("  truth pose  |  RGB");
+    else
+        ImGui::TextDisabled("  %.1f Hz  |  %s", connected ? feed.hz : 0., feed.wantDepth ? "METRES" : "RECTIFIED RGB");
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Camera images are rendered and published by the simulator bridge.\n"
-                          "Depth is rendered geometry with the pack's sensor noise model.\n"
-                          "Topic: %s",
+        ImGui::SetTooltip(local && !depthFromRos
+                              ? "Rendered by this viewer from the truth pose (no sensor noise, no bridge latency).\n"
+                                "Enable \"What the stack sees (ROS)\" for the images the robot stack receives."
+                              : "Camera images are rendered and published by the simulator bridge.\n"
+                                "Depth is rendered geometry with the pack's sensor noise model.\n"
+                                "Topic: %s",
                           feed.wantDepth ? camera.depthTopic.c_str() : camera.rgbTopic.c_str());
     ImGui::PopFont();
     ImGui::EndChild();
@@ -1351,7 +1375,7 @@ void App::drawInterface(double time, float dt) {
         viewportView_ = view;
     }
     const auto scene = model_->build(buildState());
-    renderDemoCards(scene, time);
+    renderLocalCards(time);
     const rendering::View renderView{toEigen(view.view), toEigen(view.projection), Eigen::Vector3f(view.eye.x, view.eye.y, view.eye.z)};
     const auto appearance = observer_.apply(look_.appearance);
     const auto frame = renderer_->draw(scene, renderView, appearance, float(time), rw, rh);
@@ -1458,12 +1482,20 @@ void App::drawInterface(double time, float dt) {
         composition_->drawWindows();
 }
 
-// Scene preview has no bridge, so the camera cards show this viewer's own render from each sensor pose.
-void App::renderDemoCards(const rendering::Scene &scene, double t) {
-    if (!demoMode_ || t < nextCard_ || !scenario_)
+// Local camera cards: this viewer's own render from each sensor pose (the truth pose live, the fixed preview
+// pose in demo mode). Scene preview has no bridge; live cards can switch to the bridge's images per card.
+void App::renderLocalCards(double t) {
+    if (t < nextCard_ || !scenario_ || !model_ || !(demoMode_ || opt_.localCameras) || !cameraSidebarVisible_)
         return;
-    nextCard_ = t + .25;
+    if (!demoMode_ && !ros_->truthFresh())
+        return; // no pose to render from yet
+    nextCard_ = t + (demoMode_ ? .25 : .1);
+    auto state = buildState();
+    state.showWalls = true; // the robot's camera sees the pool whatever the observer hides
+    const auto scene = model_->build(state);
     for (std::size_t i = 0; i < scenario_->cameras.size() && i < cards_.size(); ++i) {
+        if (!demoMode_ && i < ros_->feeds.size() && ros_->feeds[i].rosMode)
+            continue;
         const auto &camera = scenario_->cameras[i];
         auto k = camera.k;
         const int w = 480, h = std::max(16, int(std::lround(480.0 * k.height / k.width)));
@@ -1504,6 +1536,20 @@ void App::saveCameraImages(const fs::path &screenshot) {
         return;
     for (std::size_t i = 0; i < ros_->feeds.size() && i < cards_.size(); ++i) {
         const auto &feed = ros_->feeds[i];
+        if (feed.rgb.empty() && cards_[i].rgb && cards_[i].flipped) { // locally rendered card: read it back
+            const auto &card = cards_[i];
+            std::vector<std::uint8_t> bottomUp(std::size_t(card.rgbWidth) * std::size_t(card.rgbHeight) * 3), rgb;
+            glBindTexture(GL_TEXTURE_2D, card.rgb);
+            glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, bottomUp.data());
+            const std::size_t row = std::size_t(card.rgbWidth) * 3;
+            for (int y = card.rgbHeight - 1; y >= 0; --y)
+                rgb.insert(rgb.end(), bottomUp.begin() + std::ptrdiff_t(std::size_t(y) * row),
+                           bottomUp.begin() + std::ptrdiff_t(std::size_t(y + 1) * row));
+            writePng(screenshot.parent_path() / (screenshot.stem().string() + "-" + feed.camera->id + ".png"),
+                     card.rgbWidth, card.rgbHeight, rgb);
+            continue;
+        }
         if (feed.rgb.empty())
             continue;
         writePng(screenshot.parent_path() / (screenshot.stem().string() + "-" + feed.camera->id + ".png"),

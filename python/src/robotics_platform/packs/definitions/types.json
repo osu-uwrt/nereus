@@ -984,6 +984,9 @@
         },
         "orientation_wxyz": {
           "$ref": "common.schema.json#/$defs/quaternion"
+        },
+        "texture": {
+          "$ref": "common.schema.json#/$defs/name"
         }
       },
       "required": [
@@ -993,7 +996,7 @@
         "orientation_wxyz"
       ],
       "additionalProperties": false,
-      "description": "Rigid mesh placement: the asset id is drawn in its authored coordinates, offset by position_m (m) and orientation_wxyz in the named frame of the owning pack."
+      "description": "Rigid mesh placement: the asset id is drawn in its authored coordinates, offset by position_m (m) and orientation_wxyz in the named frame of the owning pack. Optional texture is the id of a PNG asset of the same pack that replaces the diffuse texture of the mesh's textured submeshes (of every submesh when none is textured) for this placement only."
     },
     "static_body": {
       "type": "object",

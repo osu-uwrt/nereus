@@ -72,3 +72,9 @@ status_lights, thruster_visuals, camera_geometry (+ frame graph), jpeg, scenario
 - Loaded payload rounds are drawn from the mechanism slot poses (`payloads.loaded_namespaces`), released rounds and
   props from marker poses; magnet lights are emissive boxes at the marker pose/scale rather than bin LED meshes.
 - In `--demo` the camera cards show this viewer's own render from each sensor pose (there is no stream).
+- `--local-cameras` (default on; `--local-cameras false` restores topic-only cards): with a scenario document the
+  RGB of each camera card is rendered by this viewer from the truth pose at preview size (10 Hz) and no image topic
+  is subscribed; the card checkbox "What the stack sees (ROS)" switches that card to the bridge's images. Depth
+  always comes from the topic. In ROS mode JPEGs are decoded on a worker thread (newest frame wins), never on the
+  UI/spin thread. Pool, task visuals (cutouts, per-visual `texture`) and robot visuals are composed by
+  `libraries/pack_scene` (`rp_pack_scene`), the same code the simulator cameras (`libraries/session_cameras`) use.
