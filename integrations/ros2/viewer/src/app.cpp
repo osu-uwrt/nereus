@@ -1,0 +1,1482 @@
+#include "app.hpp"
+#include "overlay_draw.hpp"
+#include "ros_side.hpp"
+#include "scene_model.hpp"
+#include "viewer_input.hpp"
+#include "window.hpp"
+#include "robotics/ros_viewer/panel_layout.hpp"
+#include "robotics/ros_viewer/panels/composition.hpp"
+#include "robotics/ros_viewer/panels/ros_providers.hpp"
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+#include <robotics/rendering/renderer.hpp>
+#include <imgui_internal.h>
+#include <algorithm>
+#include <cmath>
+#include <deque>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <thread>
+
+namespace robotics::ros_viewer::host {
+namespace {
+namespace fs = std::filesystem;
+namespace panels = robotics::ros_viewer::panels;
+
+const ImVec4 cyan(.32f, .86f, .82f, 1), muted(.47f, .57f, .64f, 1), white(.87f, .92f, .95f, 1);
+ImU32 color(ImVec4 c) {
+    return ImGui::ColorConvertFloat4ToU32(c);
+}
+ImTextureID textureID(GLuint t) {
+    return static_cast<ImTextureID>(t);
+}
+std::string fixed(double x, int decimals = 1) {
+    std::ostringstream s;
+    s << std::fixed << std::setprecision(decimals) << x;
+    return s.str();
+}
+std::string trimSlashes(std::string s) {
+    while (!s.empty() && s.front() == '/')
+        s.erase(s.begin());
+    return s;
+}
+fs::path contentDirectory() {
+#ifdef RP_VIEWER_CONTENT
+    return RP_VIEWER_CONTENT;
+#else
+    return fs::current_path();
+#endif
+}
+
+// Observer-only look: never touches the bridge's sensor renders.
+struct Look {
+    rendering::Appearance appearance;
+    bool tag = true;
+};
+struct ObserverSettings {
+    bool water = true, walls = true, reflections = false, shadows = true;
+    int lighting = 0; // 0 follows the scene, 1 indoor, 2 outdoor, 3 sterile
+    float exposure = 1, brightness = 1, ambient = 1;
+    void resetLighting() {
+        shadows = true;
+        lighting = 0;
+        exposure = brightness = ambient = 1;
+    }
+    rendering::Appearance apply(rendering::Appearance scene) const {
+        scene.reflections = reflections;
+        scene.shadows = scene.shadows && shadows;
+        scene.exposure *= exposure;
+        scene.direct_light *= brightness;
+        scene.ambient_light *= ambient;
+        if (lighting)
+            scene.outdoor = lighting == 2;
+        if (lighting == 3) {
+            // Ambient-only observer preset; independent of scene lighting.
+            scene.outdoor = false;
+            scene.shadows = false;
+            scene.direct_light = 0;
+            scene.ambient_light = .8f * ambient;
+            scene.exposure = .8f * exposure;
+            scene.caustics = 0;
+            scene.glare = 0;
+        }
+        if (!water) {
+            scene.surface = false;
+            scene.caustics = 0;
+            scene.water.absorption.setZero();
+            scene.water.scattering = 0;
+            scene.water.distance_scale = 0;
+        }
+        return scene;
+    }
+};
+
+struct FocusPreset {
+    std::string target = "landmark"; // course | vehicle | mechanism | mechanisms | landmark
+    std::string mechanism, yawFrom = "landmark_facing";
+    std::vector<std::string> mechanisms;
+    glm::vec3 offset{0};
+    float distance = 3.4f, distanceScale = 0, zOffset = 0, pitch = .28f, yaw = 0, yawOffset = 0;
+    bool follow = true, labels = true;
+};
+void overlay(FocusPreset &p, const YAML::Node &n) {
+    if (!n || !n.IsMap())
+        return;
+    p.target = n["target"].as<std::string>(p.target);
+    p.mechanism = n["mechanism"].as<std::string>(p.mechanism);
+    if (n["mechanisms"]) {
+        p.mechanisms.clear();
+        for (const auto &m : n["mechanisms"])
+            p.mechanisms.push_back(m.as<std::string>());
+    }
+    if (n["offset"])
+        p.offset = vec3(n["offset"]);
+    p.distance = n["distance"].as<float>(p.distance);
+    p.distanceScale = n["distance_scale"].as<float>(p.distanceScale);
+    p.zOffset = n["z_offset"].as<float>(p.zOffset);
+    p.pitch = n["pitch"].as<float>(p.pitch);
+    p.yaw = n["yaw"].as<float>(p.yaw);
+    p.yawOffset = n["yaw_offset"].as<float>(p.yawOffset);
+    p.yawFrom = n["yaw_from"].as<std::string>(p.yawFrom);
+    p.follow = n["follow"].as<bool>(p.follow);
+    p.labels = n["labels"].as<bool>(p.labels);
+}
+
+struct CardTexture {
+    GLuint rgb = 0, depth = 0;
+    int rgbWidth = 0, rgbHeight = 0, depthWidth = 0, depthHeight = 0;
+    bool flipped = false; // rendered (bottom-up) rather than decoded (top-down)
+};
+void upload(GLuint &texture, int &tw, int &th, const std::vector<std::uint8_t> &rgb, int w, int h) {
+    if (!texture)
+        glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, rgb.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    tw = w;
+    th = h;
+}
+} // namespace
+
+class App {
+  public:
+    explicit App(const Options &, int argc, char **argv);
+    ~App();
+    int loop();
+
+  private:
+    // --- setup
+    void loadScenario(const std::string &json);
+    void buildPanels();
+    FocusPreset presetFor(const std::string &name) const;
+    bool focusable(const std::string &name) const;
+    void focus(const std::string &name);
+    glm::vec3 focusTarget(const std::string &name) const;
+    void previewPose(const std::string &name);
+    // --- per frame
+    double clockSeconds() const;
+    void step(double t);
+    void updatePose();
+    VisualState buildState();
+    SensorView viewFor(float aspect, float dt, bool hovered, float viewportHeight, bool &dragging);
+    void handleViewInput(float dt, bool hovered, float viewportHeight);
+    void focusAtCursor(const SensorView &, const rendering::RenderedFrame &, ImVec2 origin, float w, float h);
+    void demoTf();
+    // --- UI
+    void drawInterface(double time, float dt);
+    void drawToolbar(float left, int &oldMode);
+    void drawSceneSettings(float sidebar, float left);
+    void drawCameraCard(std::size_t index, float width, float maxHeight);
+    void drawCourseMap(float width, float height, bool interactive);
+    void drawMinimap(float width);
+    void drawWaterControls();
+    void pill(const std::string &text, ImVec4 tint);
+    void sectionHeading(const char *text);
+    std::string runTime() const;
+    void saveCameraImages(const fs::path &screenshot);
+
+    Options opt_;
+    YAML::Node config_;
+    fs::path configDir_;
+    std::unique_ptr<Window> window_;
+    std::unique_ptr<rendering::Renderer> renderer_;
+    rclcpp::Node::SharedPtr node_;
+    std::unique_ptr<RosSide> ros_;
+    std::optional<Scenario> scenario_;
+    std::unique_ptr<SceneModel> model_;
+    StatusLights lights_;
+    ThrusterVisuals thrusters_;
+    std::string pendingScenario_;
+    std::size_t loadedHash_ = 0;
+    // panels
+    panels::Registry registry_;
+    panels::RosProviders panelRos_;
+    std::unique_ptr<panels::Composition> composition_;
+    std::shared_ptr<panels::Run> runTracking_;
+    YAML::Node runScore_;
+    // view state
+    glm::mat4 body_{1};
+    glm::vec3 target_{10, 4, -.8f}, freeEye_{-2, -5, 2};
+    float yaw_ = -2.45f, pitch_ = .57f, distance_ = 19, freeYaw_ = .5f, freePitch_ = -.2f, freeRoll_ = 0;
+    bool follow_ = false, labels_ = true, mouseCaptured_ = false;
+    double lastMouseX_ = 0, lastMouseY_ = 0;
+    int mode_ = 0; // 0 orbit, 1 free, 2+ sensor camera
+    std::string focusName_ = "Vehicle";
+    std::vector<std::string> focusNames_{"Course", "Vehicle"}, demoNames_;
+    int selectedFocus_ = 0, selectedDemo_ = 0;
+    bool orbitInteracting_ = false, orbitPanDrag_ = false;
+    int orbitDragButton_ = -1;
+    Clock::time_point orbitZoomUntil_{};
+    SensorView viewportView_;
+    rendering::RenderedFrame lastFrame_;
+    bool haveFrame_ = false;
+    GLuint readFbo_ = 0;
+    // settings
+    Look look_;
+    ObserverSettings observer_;
+    bool sceneSettingsOpen_ = false, showTf_ = false, tfNames_ = true, tfTreeOpen_ = false, detections_ = false,
+         showMpc_ = false, largeMap_ = false, focusMap_ = false, demoMode_ = false;
+    float tfAxisLength_ = .12f, mapZoom_ = 1;
+    ImVec2 mapPan_{0, 0};
+    TfTree tfTree_;
+    TfSnapshot tf_;
+    std::deque<glm::vec3> trail_;
+    std::string status_ = "WAITING FOR SCENARIO";
+    std::vector<CardTexture> cards_;
+    double nextCard_ = 0;
+    // layout
+    float cameraSidebarWidth_ = 0, toolbarHeight_ = 80;
+    bool cameraSidebarVisible_ = true, cameraSidebarResized_ = false;
+    PanelEdge panelEdge_, cameraEdge_;
+    Clock::time_point start_;
+    double frameSeconds_ = 0;
+    std::vector<glm::mat4> lastLoaded_;
+    int argc_;
+    char **argv_;
+};
+
+App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(argc), argv_(argv) {
+    fs::path configPath = opt_.configPath.empty() ? contentDirectory() / "talos_uwrt_host.yaml" : fs::path(opt_.configPath);
+    config_ = YAML::LoadFile(configPath.string());
+    configDir_ = configPath.parent_path();
+    demoMode_ = opt_.demo;
+    showTf_ = opt_.showTf;
+    detections_ = opt_.detections;
+    showMpc_ = opt_.mpcPath;
+    if (!demoMode_) {
+        rclcpp::init(argc, argv);
+        const bool simTime = opt_.useSimTime.value_or(true);
+        node_ = std::make_shared<rclcpp::Node>("robotics_pool_viewer",
+                                               rclcpp::NodeOptions().parameter_overrides(
+                                                   {rclcpp::Parameter("use_sim_time", simTime)}));
+    }
+    ros_ = std::make_unique<RosSide>(node_);
+    const int width = lookup(config_, {"window", "width"}).as<int>(1480),
+              height = lookup(config_, {"window", "height"}).as<int>(940);
+    window_ = std::make_unique<Window>(width, height,
+                                       lookup(config_, {"branding", "window_title"}).as<std::string>("Robotics Pool Viewer"),
+                                       opt_.hidden);
+    fs::path shaders = opt_.shaders;
+#ifdef RP_RENDERING_SHADERS
+    if (shaders.empty())
+        shaders = RP_RENDERING_SHADERS;
+#endif
+    if (shaders.empty())
+        shaders = fs::canonical("/proc/self/exe").parent_path().parent_path() / "share/robotics_platform/shaders";
+    renderer_ = std::make_unique<rendering::Renderer>(shaders);
+    glGenFramebuffers(1, &readFbo_);
+    start_ = Clock::now();
+    if (opt_.renderRate <= 0 || opt_.renderRate > 240)
+        throw std::runtime_error("render rate must be in (0,240]");
+
+    if (!opt_.scenarioFile.empty()) {
+        std::ifstream file(opt_.scenarioFile);
+        if (!file)
+            throw std::runtime_error("cannot read scenario " + opt_.scenarioFile);
+        std::stringstream text;
+        text << file.rdbuf();
+        loadScenario(text.str());
+    } else if (demoMode_) {
+        throw std::runtime_error("--demo needs --scenario FILE (there is no bridge to publish a scene)");
+    } else {
+        const std::string topic = !opt_.scenarioTopic.empty()
+                                      ? opt_.scenarioTopic
+                                      : lookup(config_, {"scenario_topic"}).as<std::string>("/talos/simulator/scenario");
+        ros_->watchScenario(topic, [this](const std::string &json) { pendingScenario_ = json; });
+    }
+}
+
+App::~App() {
+    panelRos_.stop();
+    composition_.reset();
+    model_.reset();
+    for (auto &card : cards_) {
+        if (card.rgb)
+            glDeleteTextures(1, &card.rgb);
+        if (card.depth)
+            glDeleteTextures(1, &card.depth);
+    }
+    if (readFbo_)
+        glDeleteFramebuffers(1, &readFbo_);
+    renderer_.reset();
+    ros_.reset();
+    window_.reset();
+    if (node_) {
+        node_.reset();
+        rclcpp::shutdown();
+    }
+}
+
+FocusPreset App::presetFor(const std::string &name) const {
+    FocusPreset preset;
+    const auto presets = lookup(config_, {"focus_presets"});
+    if (!presets)
+        return preset;
+    overlay(preset, presets["default"]);
+    for (const auto &entry : presets) {
+        const auto key = entry.first.as<std::string>();
+        if (key == "default")
+            continue;
+        const bool glob = !key.empty() && key.back() == '*';
+        if (key == name || (glob && name.rfind(key.substr(0, key.size() - 1), 0) == 0))
+            overlay(preset, entry.second);
+    }
+    return preset;
+}
+
+bool App::focusable(const std::string &name) const {
+    const auto p = presetFor(name);
+    if (p.target == "landmark")
+        return scenario_ && scenario_->landmarks.count(name);
+    if (p.target == "mechanism")
+        return scenario_ && scenario_->mechanism(p.mechanism);
+    if (p.target == "mechanisms")
+        return scenario_ && !p.mechanisms.empty() && scenario_->mechanism(p.mechanisms.front());
+    return true;
+}
+
+glm::vec3 App::focusTarget(const std::string &name) const {
+    const auto p = presetFor(name);
+    if (!scenario_)
+        return glm::vec3(body_[3]);
+    if (p.target == "mechanism")
+        if (const auto *m = scenario_->mechanism(p.mechanism))
+            return glm::vec3(body_ * m->frameInBase * glm::vec4(p.offset, 1));
+    if (p.target == "mechanisms") {
+        glm::vec3 sum(0);
+        int count = 0;
+        for (const auto &id : p.mechanisms)
+            if (const auto *m = scenario_->mechanism(id))
+                for (const auto &slot : m->slotsInBase) {
+                    sum += glm::vec3(slot[3]);
+                    ++count;
+                }
+        if (count)
+            return glm::vec3(body_ * glm::vec4(sum / float(count), 1));
+    }
+    if (p.target == "landmark") {
+        const auto it = scenario_->landmarks.find(name);
+        if (it != scenario_->landmarks.end())
+            return glm::vec3(it->second.world[3]);
+    }
+    return glm::vec3(body_[3]);
+}
+
+void App::focus(const std::string &name) {
+    if (!scenario_)
+        return;
+    const auto p = presetFor(name);
+    const auto &s = *scenario_;
+    if (p.target == "course") {
+        const auto center = s.poolToWorld * glm::vec4(s.poolLength / 2, s.poolWidth / 2, 0, 1);
+        target_ = glm::vec3(center.x, center.y, s.waterLevel + p.zOffset);
+        distance_ = std::max(s.poolLength, s.poolWidth) * p.distanceScale;
+    } else {
+        target_ = focusTarget(name);
+        distance_ = p.distance;
+    }
+    pitch_ = p.pitch;
+    float base = p.yaw;
+    if (p.yawFrom == "vehicle_heading")
+        base = heading(body_);
+    else if (p.yawFrom == "landmark_facing") {
+        const auto it = s.landmarks.find(name);
+        base = it == s.landmarks.end() ? yaw_ : std::atan2(it->second.world[0].y, it->second.world[0].x);
+    }
+    yaw_ = base + p.yawOffset;
+    focusName_ = name;
+    for (std::size_t i = 0; i < focusNames_.size(); ++i)
+        if (focusNames_[i] == name)
+            selectedFocus_ = int(i);
+    mode_ = 0;
+    follow_ = p.follow;
+}
+
+void App::previewPose(const std::string &name) {
+    if (!scenario_)
+        return;
+    for (std::size_t i = 0; i < demoNames_.size(); ++i)
+        if (demoNames_[i] == name)
+            selectedDemo_ = int(i);
+    const auto it = scenario_->landmarks.find(name);
+    if (it == scenario_->landmarks.end())
+        throw std::runtime_error("Unknown demo task: " + name);
+    const glm::vec3 at(it->second.world[3]), normal(it->second.world[0]);
+    const float facing = std::atan2(-normal.y, -normal.x);
+    glm::vec3 position = at + normal * 2.f;
+    const auto preview = lookup(scenario_->ui, {"previews", name.c_str()});
+    if (preview && preview["depth"])
+        position.z = -preview["depth"].as<float>();
+    if (preview && preview["camera"])
+        if (const auto *camera = scenario_->camera(preview["camera"].as<std::string>())) {
+            position.x = at.x;
+            position.y = at.y;
+            position -= glm::vec3(pose({}, {0, 0, facing}) * glm::vec4(glm::vec3(camera->mountInBase[3]), 0));
+        }
+    body_ = pose(position, {0, 0, facing});
+}
+
+void App::loadScenario(const std::string &json) {
+    const std::size_t hash = std::hash<std::string>{}(json);
+    if (hash == loadedHash_)
+        return;
+    auto parsed = parseScenario(json, config_, opt_.packDir);
+    loadedHash_ = hash;
+    // Replace dependents before the scenario they point to.
+    model_.reset();
+    lights_ = {};
+    thrusters_ = {};
+    scenario_.emplace(std::move(parsed));
+    const auto resolve = [&](const char *key, const char *fallback) {
+        return configDir_ / lookup(config_, {key}).as<std::string>(fallback);
+    };
+    const auto lightsPath = resolve("status_lights_config", "talos_uwrt_status_lights.yaml");
+    if (fs::exists(lightsPath))
+        lights_ = StatusLights(YAML::LoadFile(lightsPath.string()));
+    const auto thrusterPath = resolve("thruster_visuals_config", "talos_uwrt_thruster_visuals.yaml");
+    if (fs::exists(thrusterPath) && !scenario_->thrusterOrder.empty())
+        thrusters_ = ThrusterVisuals(YAML::LoadFile(thrusterPath.string()), scenario_->thrusterOrder);
+    SceneModelOptions options;
+    options.config = config_;
+    options.configDirectory = configDir_;
+    model_ = std::make_unique<SceneModel>(*scenario_, options, thrusters_, lights_);
+    ros_->attach(*scenario_, config_, lights_, thrusters_, !demoMode_);
+    look_.appearance = scenario_->appearance;
+    look_.tag = lookup(config_, {"calibration_board", "visible"}).as<bool>(true);
+    cards_.assign(scenario_->cameras.size(), {});
+    // Focus / preview lists from the ui document, keeping only targets the scenario can resolve.
+    focusNames_.clear();
+    for (const auto &name : scenario_->ui["focus"])
+        if (focusable(name.as<std::string>()))
+            focusNames_.push_back(name.as<std::string>());
+    if (focusNames_.empty())
+        focusNames_ = {"Course", "Vehicle"};
+    demoNames_.clear();
+    for (const auto &name : scenario_->ui["demo_targets"])
+        if (scenario_->landmarks.count(name.as<std::string>()))
+            demoNames_.push_back(name.as<std::string>());
+    window_->setTitle(lookup(config_, {"branding", "window_title"}).as<std::string>(scenario_->robotId + " | " + scenario_->poolId));
+    if (demoMode_) {
+        const auto p = lookup(config_, {"preview", "pose"});
+        body_ = p ? pose(vec3(p), {0, 0, p[5].as<float>(0)}) : pose({3, -2, -.75f}, {0, 0, -.14f});
+        const std::string task = !opt_.demoTask.empty() ? opt_.demoTask
+                                                        : lookup(config_, {"preview", "task"}).as<std::string>("");
+        if (!task.empty() && scenario_->landmarks.count(task))
+            previewPose(task);
+    }
+    if (!composition_)
+        buildPanels();
+    std::string initial = !opt_.initialFocus.empty() ? opt_.initialFocus
+                                                     : lookup(config_, {"initial_focus"}).as<std::string>("Vehicle");
+    if (!focusable(initial))
+        initial = "Vehicle";
+    focus(initial);
+    if (!opt_.initialView.empty()) {
+        mode_ = opt_.initialView == "free" ? 1 : 0;
+        for (std::size_t i = 0; i < scenario_->cameras.size(); ++i)
+            if (scenario_->cameras[i].id == opt_.initialView)
+                mode_ = int(i) + 2;
+    }
+    status_ = demoMode_ ? "SCENE PREVIEW" : "WAITING FOR PHYSICS";
+}
+
+void App::buildPanels() {
+    const std::string configured = opt_.panelsPath.empty()
+                                       ? (configDir_ / lookup(config_, {"panels_config"}).as<std::string>("talos_uwrt_panels.yaml")).string()
+                                       : opt_.panelsPath;
+    if (configured == "none" || !fs::exists(configured)) {
+        if (configured != "none")
+            std::cerr << "robotics-pool-viewer: panel composition " << configured << " not found; panels disabled\n";
+        return;
+    }
+    panels::registerPanels(registry_);
+    panelRos_.registerFactories(registry_);
+    panels::Context context{trimSlashes(scenario_->ns), scenario_->mapFrame, demoMode_, ros_->useSimTime()};
+    context.documents.emplace("task", YAML::Clone(scenario_->ui));
+    context.focus = [this](const std::string &name) { focus(name); };
+    if (opt_.showScorecard)
+        context.initialWindows.push_back("run");
+    composition_ = std::make_unique<panels::Composition>(YAML::LoadFile(configured), context, registry_);
+    for (const auto &entry : composition_->providers())
+        if (auto run = std::dynamic_pointer_cast<panels::Run>(entry.second)) {
+            runTracking_ = run;
+            break;
+        }
+    panelRos_.start();
+}
+
+double App::clockSeconds() const {
+    return demoMode_ ? std::chrono::duration<double>(Clock::now() - start_).count() : ros_->now();
+}
+
+void App::updatePose() {
+    if (demoMode_) {
+        status_ = "SCENE PREVIEW";
+        return;
+    }
+    bool first = false;
+    if (ros_->updateTruth(body_, first)) {
+        if (first) {
+            const auto p = presetFor(focusName_);
+            if (p.target == "vehicle" || p.target == "mechanism" || p.target == "mechanisms")
+                focus(focusName_);
+        }
+        const glm::vec3 position(body_[3]);
+        if (trail_.empty() || glm::distance(trail_.back(), position) > .06f) {
+            trail_.push_back(position);
+            if (trail_.size() > 1200)
+                trail_.pop_front();
+        }
+    }
+    status_ = ros_->status();
+}
+
+void App::demoTf() {
+    tf_ = {};
+    if (!scenario_)
+        return;
+    const auto &s = *scenario_;
+    std::map<std::string, std::string> parents;
+    parents[s.mapFrame] = "";
+    parents[s.estimateBaseFrame] = s.mapFrame;
+    for (const auto &frame : s.frames.names()) {
+        if (frame == s.baseId)
+            continue;
+        parents[s.rosFrame(frame)] = s.estimateBaseFrame;
+    }
+    tfTree_.update(parents);
+    const auto place = [&](const std::string &name, const glm::mat4 &pose) {
+        auto &frame = tfTree_.frames.at(name);
+        frame.available = true;
+        if (frame.enabled) {
+            tf_.frames[name] = pose;
+            ++tf_.resolved;
+        }
+    };
+    place(s.mapFrame, glm::mat4(1));
+    place(s.estimateBaseFrame, body_);
+    for (const auto &frame : s.frames.names())
+        if (frame != s.baseId)
+            place(s.rosFrame(frame), body_ * s.frames.relative(s.baseId, frame));
+}
+
+void App::step(double t) {
+    if (!scenario_)
+        return;
+    updatePose();
+    if (showTf_ || tfTreeOpen_) {
+        if (demoMode_)
+            demoTf();
+        else
+            ros_->captureTf(true, tfTree_, tf_);
+    } else
+        tf_ = {};
+    ros_->captureDetections(detections_ && !demoMode_);
+    ros_->captureMpc(showMpc_ && !demoMode_);
+    thrusters_.advance(clockSeconds());
+    (void)t;
+}
+
+VisualState App::buildState() {
+    VisualState state;
+    state.body = body_;
+    for (const auto &rotor : thrusters_.rotors)
+        state.rotorSpin.push_back(rotor.transform());
+    const double now = clockSeconds();
+    for (const auto &light : lights_.lights)
+        state.lightColor.push_back(light.state.color(now));
+    state.claw = demoMode_ ? std::array<float, 2>{0.f, 0.f} : ros_->claw;
+    state.showBoard = look_.tag;
+    state.showWalls = observer_.walls;
+    const auto payloads = lookup(config_, {"payloads", "loaded_namespaces"});
+    if (demoMode_) {
+        for (const auto &entry : payloads)
+            for (const auto &mount : model_->payloadMounts(entry.second.as<std::string>()))
+                state.loadedPayloads.push_back(body_ * mount);
+        return state;
+    }
+    for (const auto &[key, record] : ros_->props) {
+        if (record.mesh.empty())
+            continue;
+        MarkerDraw draw;
+        draw.mesh = record.mesh;
+        draw.world = record.attached ? body_ * record.pose : record.pose;
+        draw.scale = {float(record.marker.scale.x), float(record.marker.scale.y), float(record.marker.scale.z)};
+        state.markers.push_back(std::move(draw));
+    }
+    for (const auto &[key, record] : ros_->projectiles) {
+        const auto ns = lookup(payloads, {key.first.c_str()});
+        if (ns) {
+            // Loaded rounds follow this frame's robot pose like the launcher, not the sampled marker pose.
+            const auto mounts = model_->payloadMounts(ns.as<std::string>());
+            if (key.second >= 0 && std::size_t(key.second) < mounts.size()) {
+                state.loadedPayloads.push_back(body_ * mounts[std::size_t(key.second)]);
+                continue;
+            }
+        }
+        if (record.mesh.empty())
+            continue;
+        MarkerDraw draw;
+        draw.mesh = record.mesh;
+        draw.world = record.attached ? body_ * record.pose : record.pose;
+        draw.scale = {float(record.marker.scale.x), float(record.marker.scale.y), float(record.marker.scale.z)};
+        state.markers.push_back(std::move(draw));
+    }
+    const auto radiance = lookup(config_, {"magnet_lights", "led_radiance"}).as<float>(60.f);
+    for (const auto &[key, record] : ros_->magnetLights) {
+        MarkerDraw draw;
+        const bool green = record.marker.color.g > record.marker.color.r;
+        draw.emissive = true;
+        draw.radiance = radiance;
+        draw.tint = green ? glm::vec4(.002f, 1.f, .004f, 1.f) : glm::vec4(1.f, .001f, .002f, 1.f);
+        draw.world = record.attached ? body_ * record.pose : record.pose;
+        draw.scale = {float(record.marker.scale.x), float(record.marker.scale.y), float(record.marker.scale.z)};
+        state.markers.push_back(std::move(draw));
+    }
+    return state;
+}
+
+// --------------------------------------------------------------------------------------------- input
+
+void App::handleViewInput(float dt, bool hovered, float viewportHeight) {
+    auto &io = ImGui::GetIO();
+    GLFWwindow *glfw = window_->handle();
+    if (mouseCaptured_ &&
+        (mode_ != 1 || ImGui::IsKeyPressed(ImGuiKey_Escape) || !glfwGetWindowAttrib(glfw, GLFW_FOCUSED))) {
+        mouseCaptured_ = false;
+        glfwSetInputMode(glfw, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    }
+    if (mode_ == 1 && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !mouseCaptured_) {
+        mouseCaptured_ = true;
+        glfwSetInputMode(glfw, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        if (glfwRawMouseMotionSupported())
+            glfwSetInputMode(glfw, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        glfwGetCursorPos(glfw, &lastMouseX_, &lastMouseY_);
+    }
+    if (mode_ == 1 && mouseCaptured_) {
+        double x, y;
+        glfwGetCursorPos(glfw, &x, &y);
+        freeYaw_ -= float(x - lastMouseX_) * .003f;
+        if (y != lastMouseY_)
+            freePitch_ = glm::clamp(freePitch_ - float(y - lastMouseY_) * .003f, -1.55f, 1.55f);
+        lastMouseX_ = x;
+        lastMouseY_ = y;
+        glm::vec3 forward(std::cos(freeYaw_), std::sin(freeYaw_), 0), left(-forward.y, forward.x, 0), motion(0);
+        if (glfwGetKey(glfw, GLFW_KEY_W) == GLFW_PRESS)
+            motion += forward;
+        if (glfwGetKey(glfw, GLFW_KEY_S) == GLFW_PRESS)
+            motion -= forward;
+        if (glfwGetKey(glfw, GLFW_KEY_A) == GLFW_PRESS)
+            motion += left;
+        if (glfwGetKey(glfw, GLFW_KEY_D) == GLFW_PRESS)
+            motion -= left;
+        if (glfwGetKey(glfw, GLFW_KEY_SPACE) == GLFW_PRESS)
+            motion.z += 1;
+        if (glfwGetKey(glfw, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+            motion.z -= 1;
+        if (glm::length(motion) > 0)
+            freeEye_ += glm::normalize(motion) * dt * (io.KeyCtrl ? 8.f : 2.5f);
+    }
+    orbitInteracting_ = false;
+    if (mode_ != 0 || !glfwGetWindowAttrib(glfw, GLFW_FOCUSED) ||
+        (orbitDragButton_ >= 0 && !ImGui::IsMouseDown(orbitDragButton_)))
+        orbitDragButton_ = -1;
+    if (mode_ == 0) {
+        if (hovered && orbitDragButton_ < 0)
+            for (int button : {ImGuiMouseButton_Left, ImGuiMouseButton_Right, ImGuiMouseButton_Middle})
+                if (ImGui::IsMouseClicked(button)) {
+                    orbitDragButton_ = button;
+                    orbitPanDrag_ = button != ImGuiMouseButton_Left || io.KeyShift;
+                }
+        orbitInteracting_ = orbitDragButton_ >= 0;
+        if (orbitDragButton_ >= 0 && !ImGui::IsMouseClicked(orbitDragButton_)) {
+            if (orbitPanDrag_ && (io.MouseDelta.x != 0 || io.MouseDelta.y != 0)) {
+                follow_ = false; // panning detaches the camera from its target
+                target_ += orbitPan(viewportView_.view, viewportView_.projection, distance_, viewportHeight,
+                                    {io.MouseDelta.x, io.MouseDelta.y});
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+            } else if (!orbitPanDrag_) {
+                yaw_ -= io.MouseDelta.x * .005f;
+                pitch_ = glm::clamp(pitch_ + io.MouseDelta.y * .005f, -1.55f, 1.55f);
+            }
+        }
+        if (hovered && io.MouseWheel != 0) {
+            distance_ = glm::clamp(distance_ * std::exp(-io.MouseWheel * .1f), .15f, 75.f);
+            orbitZoomUntil_ = Clock::now() + std::chrono::milliseconds(140);
+        }
+    }
+    orbitInteracting_ = mode_ == 0 && (orbitInteracting_ || Clock::now() < orbitZoomUntil_);
+}
+
+SensorView App::viewFor(float aspect, float dt, bool hovered, float viewportHeight, bool &) {
+    handleViewInput(dt, hovered, viewportHeight);
+    if (follow_)
+        target_ = focusTarget(focusName_);
+    if (mode_ >= 2 && scenario_ && std::size_t(mode_ - 2) < scenario_->cameras.size()) {
+        const auto &camera = scenario_->cameras[std::size_t(mode_ - 2)];
+        (void)aspect; // the sensor keeps its own aspect; drawInterface resizes the intrinsics to the image
+        return sensorView(body_ * camera.opticalInBase, camera.k);
+    }
+    glm::vec3 eye, at, up(0, 0, 1);
+    if (mode_ == 1) {
+        eye = freeEye_;
+        at = eye + glm::vec3(std::cos(freeYaw_) * std::cos(freePitch_), std::sin(freeYaw_) * std::cos(freePitch_),
+                             std::sin(freePitch_));
+        const glm::vec3 right(std::sin(freeYaw_), -std::cos(freeYaw_), 0);
+        up = std::cos(freeRoll_) * glm::cross(right, at - eye) + std::sin(freeRoll_) * right;
+    } else {
+        eye = target_ + distance_ * glm::vec3(std::cos(yaw_) * std::cos(pitch_), std::sin(yaw_) * std::cos(pitch_),
+                                              std::sin(pitch_));
+        at = target_;
+    }
+    return {eye, glm::lookAt(eye, at, up), glm::perspective(glm::radians(53.f), aspect, .05f, 100.f)};
+}
+
+void App::focusAtCursor(const SensorView &view, const rendering::RenderedFrame &frame, ImVec2 origin, float width,
+                        float height) {
+    if (mode_ != 0)
+        return;
+    const auto mouse = ImGui::GetIO().MousePos;
+    const glm::vec2 cursor(mouse.x - origin.x, mouse.y - origin.y), size(width, height);
+    OverlayFocusPicker picker(view.projection * view.view, size, cursor);
+    if (showTf_)
+        for (const auto &[name, frameMatrix] : tf_.frames)
+            for (int axis = 0; axis < 3; ++axis)
+                picker.segment(glm::vec3(frameMatrix[3]), glm::vec3(frameMatrix[3] + frameMatrix[axis] * tfAxisLength_),
+                               glm::vec3(frameMatrix[3]));
+    if (detections_)
+        for (const auto &placed : ros_->placedDetections) {
+            const auto &m = placed.marker;
+            if (m.color.a <= 0)
+                continue;
+            using visualization_msgs::msg::Marker;
+            if (m.type == Marker::CUBE)
+                picker.quad(placed.pose, {float(m.scale.x) * .5f, float(m.scale.y) * .5f});
+            else if (m.type == Marker::ARROW)
+                picker.segment(glm::vec3(placed.pose[3]), glm::vec3(placed.pose * glm::vec4(float(m.scale.x), 0, 0, 1)),
+                               glm::vec3(placed.pose[3]));
+        }
+    if (showMpc_)
+        for (std::size_t i = 1; i < ros_->mpcPath.size(); ++i)
+            picker.segment(glm::vec3(ros_->mpcPath[i - 1][3]), glm::vec3(ros_->mpcPath[i][3]),
+                           glm::vec3(ros_->mpcPath[i - 1][3]));
+    glm::vec3 point;
+    if (!picker.result(point)) {
+        const auto uv = cursor / size;
+        if (uv.x < 0 || uv.x >= 1 || uv.y < 0 || uv.y >= 1 || !frame.depth_texture)
+            return;
+        GLint previous = 0;
+        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previous);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, readFbo_);
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, frame.depth_texture, 0);
+        float depth = 1;
+        if (glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE)
+            glReadPixels(int(uv.x * float(frame.width)), frame.height - 1 - int(uv.y * float(frame.height)), 1, 1,
+                         GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, GLuint(previous));
+        if (!depthPoint(view.projection * view.view, uv, depth, point) &&
+            !focusPlanePoint(view.projection * view.view, view.eye, target_, uv, point))
+            return;
+    }
+    const auto offset = view.eye - point;
+    const float nextDistance = glm::length(offset);
+    if (!std::isfinite(nextDistance) || nextDistance < 1e-4f)
+        return;
+    target_ = point;
+    distance_ = nextDistance;
+    follow_ = false;
+    yaw_ = std::atan2(offset.y, offset.x);
+    pitch_ = glm::clamp(std::asin(offset.z / distance_), -1.55f, 1.55f);
+}
+
+// ------------------------------------------------------------------------------------------- widgets
+
+void App::pill(const std::string &text, ImVec4 tint) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(tint.x * .15f, tint.y * .15f, tint.z * .15f, 1));
+    ImGui::PushStyleColor(ImGuiCol_Text, tint);
+    ImGui::Button(text.c_str());
+    ImGui::PopStyleColor(2);
+}
+void App::sectionHeading(const char *text) {
+    ImGui::PushFont(window_->small);
+    ImGui::TextColored(muted, "%s", text);
+    ImGui::PopFont();
+}
+std::string App::runTime() const {
+    const double seconds = runScore_ && runScore_["elapsed"] ? runScore_["elapsed"].as<double>() : 0.;
+    char value[64];
+    std::snprintf(value, sizeof(value), "%02d:%04.1f", int(seconds) / 60, std::fmod(seconds, 60.));
+    return value;
+}
+
+void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
+    auto &feed = ros_->feeds[index];
+    auto &tex = cards_[index];
+    const auto &camera = *feed.camera;
+    if (feed.rgbDirty) {
+        upload(tex.rgb, tex.rgbWidth, tex.rgbHeight, feed.rgb, feed.rgbWidth, feed.rgbHeight);
+        tex.flipped = false;
+        feed.rgbDirty = false;
+    }
+    if (feed.depthDirty) {
+        upload(tex.depth, tex.depthWidth, tex.depthHeight, feed.depth, feed.depthWidth, feed.depthHeight);
+        feed.depthDirty = false;
+    }
+    ImGui::PushID(camera.id.c_str());
+    ImGui::BeginChild("camera", {width, 0}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(cyan, "%s", camera.title.c_str());
+    ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 62);
+    if (ImGui::Button(feed.wantDepth ? "DEPTH" : "RGB", {62, 0})) {
+        feed.wantDepth = !feed.wantDepth;
+        ros_->refreshCameras();
+    }
+    ImGui::PushFont(window_->small);
+    ImGui::TextColored(muted, "%s  /  %d x %d", camera.model.c_str(), camera.k.width, camera.k.height);
+    const bool depthShown = feed.wantDepth && tex.depth;
+    ImGui::TextDisabled("Preview: %d x %d", depthShown ? tex.depthWidth : tex.rgbWidth,
+                        depthShown ? tex.depthHeight : tex.rgbHeight);
+    ImGui::PopFont();
+    const float available = ImGui::GetContentRegionAvail().x;
+    const float w = std::min(available, maxHeight * float(camera.k.width) / float(camera.k.height));
+    const float h = w * float(camera.k.height) / float(camera.k.width);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (available - w) / 2);
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const GLuint texture = depthShown ? tex.depth : tex.rgb;
+    if (texture) {
+        const bool flip = !depthShown && tex.flipped;
+        ImGui::Image(textureID(texture), {w, h}, flip ? ImVec2(0, 1) : ImVec2(0, 0), flip ? ImVec2(1, 0) : ImVec2(1, 1));
+    } else {
+        ImGui::Dummy({w, h});
+        auto *draw = ImGui::GetWindowDrawList();
+        draw->AddRectFilled(pos, {pos.x + w, pos.y + h}, IM_COL32(4, 13, 19, 255));
+    }
+    const bool ready = demoMode_ || ros_->truthFresh();
+    if (!ready || !texture) {
+        auto *draw = ImGui::GetWindowDrawList();
+        if (texture)
+            draw->AddRectFilled(pos, {pos.x + w, pos.y + h}, IM_COL32(4, 13, 19, 175));
+        draw->AddText({pos.x + 18, pos.y + 18}, color(muted),
+                      !ready ? "Awaiting vehicle pose" : demoMode_ ? "Preview: no camera stream" : "Awaiting camera image");
+    }
+    ImGui::PushFont(window_->small);
+    const bool connected = !demoMode_ && feed.connected();
+    ImGui::TextColored(connected || demoMode_ ? cyan : muted, "%s",
+                       demoMode_ ? "PREVIEW ONLY" : connected ? "CONNECTED" : "NO SENSOR OUTPUT");
+    ImGui::SameLine();
+    ImGui::TextDisabled("  %.1f Hz  |  %s", connected ? feed.hz : 0., feed.wantDepth ? "METRES" : "RECTIFIED RGB");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Camera images are rendered and published by the simulator bridge.\n"
+                          "Depth is rendered geometry with the pack's sensor noise model.\n"
+                          "Topic: %s",
+                          feed.wantDepth ? camera.depthTopic.c_str() : camera.rgbTopic.c_str());
+    ImGui::PopFont();
+    ImGui::EndChild();
+    ImGui::PopID();
+}
+
+void App::drawWaterControls() {
+    auto edited = look_.appearance.water;
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 3));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 3));
+    ImGui::SetNextItemWidth(240);
+    ImGui::ColorEdit3("Water tint", edited.tint.data());
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Clear blue")) {
+        edited = {};
+        edited.tint = {.015f, .16f, .24f};
+        edited.absorption = {.075f, .02f, .012f};
+        edited.scattering = .045f;
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Pool"))
+        edited = {};
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Green / murky")) {
+        edited = {};
+        edited.tint = {.07f, .22f, .10f};
+        edited.absorption = {.20f, .06f, .12f};
+        edited.scattering = .25f;
+    }
+    ImGui::Columns(4, "water controls", false);
+    auto slider = [&](const char *label, float &v, float lo, float hi, const char *format) {
+        ImGui::TextUnformatted(label);
+        ImGui::SetNextItemWidth(-10);
+        ImGui::SliderFloat((std::string("##water ") + label).c_str(), &v, lo, hi, format);
+        ImGui::NextColumn();
+    };
+    slider("Haze / scattering", edited.scattering, 0, 1, "%.3f /m");
+    slider("Distance strength", edited.distance_scale, 0, 5, "%.2f x");
+    slider("Distance exponent", edited.distance_power, .25f, 3, "%.2f");
+    slider("Clear distance", edited.clear_distance, 0, 10, "%.2f m");
+    slider("Red absorption", edited.absorption[0], 0, 1, "%.3f /m");
+    slider("Green absorption", edited.absorption[1], 0, 1, "%.3f /m");
+    slider("Blue absorption", edited.absorption[2], 0, 1, "%.3f /m");
+    ImGui::TextDisabled("More red absorption\nmakes distant objects\nlook bluer.");
+    ImGui::Columns(1);
+    ImGui::TextDisabled("Tint and haze accumulate along the underwater sightline. These settings change only this "
+                        "viewer's rendering;");
+    ImGui::TextDisabled("the robot cameras are rendered by the bridge from the pool pack. Exponent 1 / clear distance 0: "
+                        "exponential attenuation.");
+    look_.appearance.water = edited;
+    ImGui::PopStyleVar(2);
+}
+
+void App::drawCourseMap(float width, float height, bool interactive) {
+    const auto &s = *scenario_;
+    const ImVec2 a = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton("course canvas", {width, height});
+    const bool hovered = ImGui::IsItemHovered();
+    auto &io = ImGui::GetIO();
+    if (interactive && hovered) {
+        mapZoom_ = glm::clamp(mapZoom_ * std::exp(io.MouseWheel * .15f), 1.f, 8.f);
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+            mapPan_.x += io.MouseDelta.x;
+            mapPan_.y += io.MouseDelta.y;
+        }
+    }
+    const float length = s.poolLength, poolWidth = s.poolWidth;
+    const float scale = std::min((width - 36) / length, (height - 36) / poolWidth) * (interactive ? mapZoom_ : 1.f);
+    const ImVec2 center(a.x + width / 2 + (interactive ? mapPan_.x : 0), a.y + height / 2 + (interactive ? mapPan_.y : 0));
+    auto poolXY = [&](glm::vec2 p) {
+        return ImVec2(center.x + (p.x - length / 2) * scale, center.y - (p.y - poolWidth / 2) * scale);
+    };
+    auto xy = [&](glm::vec3 p) { return poolXY(glm::vec2(s.worldToPool * glm::vec4(p, 1))); };
+    auto *d = ImGui::GetWindowDrawList();
+    d->AddRectFilled(a, {a.x + width, a.y + height}, IM_COL32(9, 24, 32, 255), 5);
+    d->PushClipRect(a, {a.x + width, a.y + height}, true);
+    d->AddRectFilled(poolXY({0, poolWidth}), poolXY({length, 0}), IM_COL32(13, 40, 50, 255));
+    for (int i = 0; i <= length; i += 5)
+        d->AddLine(poolXY({float(i), 0}), poolXY({float(i), poolWidth}), IM_COL32(35, 64, 74, 255));
+    for (int i = 0; i <= poolWidth; i += 5)
+        d->AddLine(poolXY({0, float(i)}), poolXY({length, float(i)}), IM_COL32(35, 64, 74, 255));
+    d->AddRect(poolXY({0, poolWidth}), poolXY({length, 0}), IM_COL32(94, 154, 166, 255), 0, 0, 2);
+    for (std::size_t i = 1; i < trail_.size(); ++i)
+        d->AddLine(xy(trail_[i - 1]), xy(trail_[i]), IM_COL32(53, 134, 143, 200), 1.5f);
+    int index = 0;
+    for (const auto &entry : s.ui["map_landmarks"]) {
+        const std::string key = entry.IsScalar() ? entry.as<std::string>() : entry["name"].as<std::string>();
+        const std::string label = entry.IsScalar() ? key : entry["label"].as<std::string>(key);
+        const bool hiddenInMinimap = !entry.IsScalar() && entry["hidden_in_minimap"].as<bool>(false);
+        const bool relabelMinimap = !entry.IsScalar() && entry["minimap_label"];
+        const auto found = s.landmarks.find(key);
+        if (found == s.landmarks.end())
+            continue;
+        const auto p = xy(glm::vec3(found->second.world[3]));
+        const float font = interactive ? 16 : 12;
+        const ImVec2 textAt(p.x + 7, p.y + (index++ % 2 ? -19 : 4));
+        d->AddCircleFilled(p, interactive ? 5 : 4, color(cyan));
+        if (interactive || !hiddenInMinimap)
+            d->AddText(interactive ? window_->normal : window_->small, font, textAt, color(white),
+                       (!interactive && relabelMinimap ? entry["minimap_label"].as<std::string>() : key).c_str());
+        (void)label;
+        if (interactive && hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
+            ImGui::GetMouseDragDelta().x * ImGui::GetMouseDragDelta().x +
+                    ImGui::GetMouseDragDelta().y * ImGui::GetMouseDragDelta().y <
+                9 &&
+            std::hypot(io.MousePos.x - p.x, io.MousePos.y - p.y) < 12)
+            focus(key);
+    }
+    const auto p = xy(glm::vec3(body_[3]));
+    const auto tip = xy(glm::vec3(body_[3]) + glm::vec3(body_[0]) * 1.3f);
+    d->AddCircleFilled(p, 6, IM_COL32(255, 208, 96, 255));
+    d->AddLine(p, tip, IM_COL32(255, 208, 96, 255), 3);
+    d->AddText(window_->small, 12, {p.x + 8, p.y - 15}, IM_COL32(255, 208, 96, 255), s.robotId.c_str());
+    d->PopClipRect();
+}
+
+void App::drawMinimap(float width) {
+    ImGui::BeginChild("map", {width, 0}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+    ImGui::AlignTextToFramePadding();
+    sectionHeading("COURSE MAP");
+    ImGui::SameLine();
+    if (ImGui::Button("Expand"))
+        largeMap_ = focusMap_ = true;
+    const auto available = ImGui::GetContentRegionAvail();
+    // Scale both canvas dimensions with the sidebar so height cannot cap the map's growth.
+    const float aspect = scenario_->poolWidth / scenario_->poolLength;
+    drawCourseMap(available.x, std::max(120.f, 36.f + (available.x - 36.f) * aspect), false);
+    ImGui::EndChild();
+}
+
+void App::drawSceneSettings(float sidebar, float left) {
+    ImGui::SetNextWindowPos({sidebar + 18, 180}, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize({std::min(left, 800.f), 390}, ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Scene settings", &sceneSettingsOpen_)) {
+        const float width = ImGui::GetContentRegionAvail().x;
+        ImGui::BeginChild("environment", {width, 0}, ImGuiChildFlags_None);
+        for (const auto &control : scenario_->ui["mechanism_controls"]) {
+            ImGui::BeginDisabled(demoMode_);
+            if (ImGui::Button(control["label"].as<std::string>().c_str()))
+                ros_->publishMechanism(control["topic"].as<std::string>(), control["value"].as<bool>(true));
+            ImGui::EndDisabled();
+        }
+        if (ImGui::BeginTabBar("Environment tabs")) {
+            if (ImGui::BeginTabItem("Lighting")) {
+                sectionHeading("UNDERWATER OPTICS");
+                auto &a = look_.appearance;
+                ImGui::Checkbox("Calibration board", &look_.tag);
+                ImGui::SetNextItemWidth(width * .17f);
+                ImGui::SliderFloat("Caustics", &a.caustics, 0, 1, "%.2f");
+                ImGui::SameLine();
+                ImGui::Checkbox("Surface", &a.surface);
+                ImGui::SameLine();
+                ImGui::Checkbox("Shadows", &a.shadows);
+                ImGui::Separator();
+                int profile = a.outdoor ? 1 : 0;
+                ImGui::SetNextItemWidth(120);
+                if (ImGui::Combo("Lighting", &profile, "Indoor\0Outdoor\0")) {
+                    a.outdoor = profile == 1;
+                    a.direct_light = a.outdoor ? 1.4f : 1.f;
+                    a.ambient_light = a.outdoor ? .6f : .9f;
+                }
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(130);
+                ImGui::SliderFloat("Brightness", &a.direct_light, 0, 4, "%.2f");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(125);
+                ImGui::SliderFloat("Ambient", &a.ambient_light, 0, 2, "%.2f");
+                if (a.outdoor) {
+                    ImGui::SetNextItemWidth(160);
+                    ImGui::SliderFloat("Sun azimuth", &a.sun_azimuth, 0, 360, "%.0f deg");
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(140);
+                    ImGui::SliderFloat("Elevation", &a.sun_elevation, 5, 89, "%.0f deg");
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(120);
+                    ImGui::SliderFloat("Glare", &a.glare, 0, 2, "%.2f");
+                } else
+                    ImGui::TextDisabled("Diffuse indoor lighting. Switch to Outdoor to adjust sun and glare.");
+                ImGui::TextDisabled("Observer settings only: the bridge renders the robot cameras from the pool pack.");
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Water appearance")) {
+                drawWaterControls();
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
+        ImGui::EndChild();
+    }
+    ImGui::End();
+}
+
+void App::drawToolbar(float left, int &oldMode) {
+    const auto &s = *scenario_;
+    if (ImGui::Button("Scene settings"))
+        sceneSettingsOpen_ = !sceneSettingsOpen_;
+    if (composition_)
+        composition_->drawToolsToolbar("settings");
+    sameLineIfFits(ImGui::CalcTextSize("Pool Viewer").x + 2 * ImGui::GetStyle().FramePadding.x);
+    if (ImGui::Button("Pool Viewer"))
+        ImGui::OpenPopup("observer_visibility");
+    if (ImGui::BeginPopup("observer_visibility")) {
+        ImGui::Checkbox("Water", &observer_.water);
+        ImGui::Checkbox("Pool walls", &observer_.walls);
+        ImGui::Checkbox("Surface reflections", &observer_.reflections);
+        ImGui::SeparatorText("Viewer lighting");
+        ImGui::BeginDisabled(observer_.lighting == 3);
+        ImGui::Checkbox("Shadows", &observer_.shadows);
+        ImGui::EndDisabled();
+        ImGui::SetNextItemWidth(160);
+        ImGui::Combo("Lighting", &observer_.lighting, "Scene lighting\0Indoor\0Outdoor\0Sterile\0");
+        ImGui::SetNextItemWidth(160);
+        ImGui::SliderFloat("Exposure", &observer_.exposure, .4f, 2.f, "%.2fx");
+        ImGui::BeginDisabled(observer_.lighting == 3);
+        ImGui::SetNextItemWidth(160);
+        ImGui::SliderFloat("Brightness", &observer_.brightness, 0.f, 4.f, "%.2fx");
+        ImGui::EndDisabled();
+        ImGui::SetNextItemWidth(160);
+        ImGui::SliderFloat("Ambient", &observer_.ambient, 0.f, 3.f, "%.2fx");
+        if (ImGui::Button("Reset lighting", {-1, 30}))
+            observer_.resetLighting();
+        ImGui::EndPopup();
+    }
+    if (composition_)
+        composition_->drawToolbar();
+    ImGui::SetNextItemWidth(110);
+    oldMode = mode_;
+    std::string views = "Orbit";
+    views += '\0';
+    views += "Free camera";
+    views += '\0';
+    for (const auto &camera : s.cameras) {
+        views += camera.id;
+        views += '\0';
+    }
+    views += '\0';
+    ImGui::Combo("##view", &mode_, views.c_str());
+    if (mode_ == 1 && oldMode != 1) {
+        // Continue from the last displayed view, including sensor-camera roll.
+        const glm::mat4 cameraPose = glm::inverse(viewportView_.view);
+        const glm::vec3 forward = -glm::normalize(glm::vec3(cameraPose[2]));
+        freeEye_ = viewportView_.eye;
+        freeYaw_ = std::atan2(forward.y, forward.x);
+        freePitch_ = std::atan2(forward.z, glm::length(glm::vec2(forward)));
+        const glm::vec3 right(std::sin(freeYaw_), -std::cos(freeYaw_), 0);
+        const glm::vec3 up(cameraPose[1]);
+        freeRoll_ = std::atan2(glm::dot(up, right), glm::dot(up, glm::cross(right, forward)));
+    }
+    sameLineIfFits(left > 640 ? 132 : 110);
+    ImGui::SetNextItemWidth(left > 640 ? 132 : 110);
+    std::string focuses;
+    for (const auto &name : focusNames_) {
+        focuses += name;
+        focuses += '\0';
+    }
+    focuses += '\0';
+    if (ImGui::Combo("##focus", &selectedFocus_, focuses.c_str()))
+        focus(focusNames_.at(std::size_t(selectedFocus_)));
+    sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("Follow").x);
+    if (!presetFor(focusName_).follow)
+        follow_ = false;
+    ImGui::BeginDisabled(!presetFor(focusName_).follow);
+    ImGui::Checkbox("Follow", &follow_);
+    ImGui::EndDisabled();
+    sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("Labels").x);
+    ImGui::Checkbox("Labels", &labels_);
+    sameLineIfFits(ImGui::CalcTextSize("TF").x + 2 * ImGui::GetStyle().FramePadding.x);
+    if (ImGui::Button("TF"))
+        ImGui::OpenPopup("TF display");
+    tfTreeOpen_ = false;
+    if (ImGui::BeginPopup("TF display")) {
+        tfTreeOpen_ = true;
+        ImGui::Checkbox("Show TF frames", &showTf_);
+        ImGui::Checkbox("Frame names", &tfNames_);
+        ImGui::SetNextItemWidth(220);
+        ImGui::SliderFloat("Axis length", &tfAxisLength_, .02f, 1.f, "%.2f m");
+        ImGui::TextUnformatted("X: red   Y: green   Z: blue");
+        drawTfTree(tfTree_, s.mapFrame);
+        ImGui::TextDisabled("Axes show through objects. Unavailable frames cannot reach the fixed frame.");
+        ImGui::TextDisabled("%s", demoMode_ ? "Preview: robot-pack frames at the preview pose."
+                                            : "Raw ROS TF in the fixed frame, including localization drift.");
+        ImGui::EndPopup();
+    }
+    if (!demoMode_) {
+        sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
+                       ImGui::CalcTextSize("Detections").x);
+        ImGui::Checkbox("Detections", &detections_);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Camera detections use the simulator pose at image capture.\n"
+                              "Each observation stays fixed in the simulated world.");
+        sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
+                       ImGui::CalcTextSize("MPC path").x);
+        ImGui::Checkbox("MPC path", &showMpc_);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Predicted MPC trajectory over its horizon (%s).\n"
+                              "Drawn relative to the simulator vehicle, so localization drift does not offset it.",
+                              ros_->mpcTopic.c_str());
+    }
+    if (composition_)
+        composition_->drawToolsToolbar();
+    if (demoMode_ && !demoNames_.empty()) {
+        ImGui::SameLine();
+        std::string choices;
+        for (const auto &name : demoNames_) {
+            choices += name;
+            choices += '\0';
+        }
+        choices += '\0';
+        if (ImGui::Combo("##previewtask", &selectedDemo_, choices.c_str()))
+            previewPose(demoNames_.at(std::size_t(selectedDemo_)));
+    }
+}
+
+void App::drawInterface(double time, float dt) {
+    auto &io = ImGui::GetIO();
+    const float W = io.DisplaySize.x, H = io.DisplaySize.y;
+    ImGui::SetNextWindowPos({0, 0});
+    ImGui::SetNextWindowSize({W, H});
+    ImGui::Begin("Riptide", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar |
+                     ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::SetScrollY(0);
+    const std::string headerTitle = lookup(config_, {"branding", "header"}).as<std::string>(scenario_ ? scenario_->robotId : "");
+    const std::string headerSubtitle = lookup(config_, {"branding", "subtitle"}).as<std::string>(scenario_ ? scenario_->id : "");
+    ImGui::PushFont(window_->title);
+    ImGui::TextUnformatted(headerTitle.c_str());
+    ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::TextColored(muted, " / ");
+    ImGui::SameLine();
+    ImGui::TextUnformatted(headerSubtitle.c_str());
+    const float statusWidth = ImGui::CalcTextSize(status_.c_str()).x + 2 * ImGui::GetStyle().FramePadding.x;
+    ImGui::SameLine(W - 18 - statusWidth);
+    pill(status_, demoMode_ ? ImVec4(.94f, .73f, .35f, 1) : (ros_->truthFresh() ? cyan : muted));
+    ImGui::Separator();
+    if (!scenario_) {
+        ImGui::Dummy({1, 40});
+        ImGui::TextColored(muted, "Waiting for the bridge scenario document (%s) ...",
+                           !opt_.scenarioTopic.empty()
+                               ? opt_.scenarioTopic.c_str()
+                               : lookup(config_, {"scenario_topic"}).as<std::string>("/talos/simulator/scenario").c_str());
+        ImGui::End();
+        return;
+    }
+    if (runTracking_)
+        runScore_.reset(runTracking_->state().score);
+    const auto contentOrigin = ImGui::GetCursorScreenPos();
+    const float contentHeight = H - contentOrigin.y - 12;
+    const bool configuredPanels = composition_ && !composition_->empty();
+    bool hasPanels = configuredPanels && composition_->sidebarVisible();
+    float panelWidth = configuredPanels ? composition_->width(W) : 0;
+    if (!cameraSidebarResized_)
+        cameraSidebarWidth_ = glm::clamp(W * .29f, 335.f, 445.f);
+    const float sidebarBudget = W - 36 - (configuredPanels ? 16 : 0) - 16 - 360;
+    const float maxPanelWidth =
+        std::max(300.f, std::min(600.f, sidebarBudget - (cameraSidebarVisible_ ? cameraSidebarWidth_ : 0)));
+    panelWidth = glm::clamp(panelWidth, 300.f, maxPanelWidth);
+    if (configuredPanels) {
+        const float previous = panelWidth;
+        if (panelEdge_.draw(contentOrigin, contentHeight, hasPanels, panelWidth, maxPanelWidth) != hasPanels)
+            composition_->toggleSidebar();
+        composition_->setWidth(panelWidth, panelWidth != previous);
+        hasPanels = composition_->sidebarVisible();
+    }
+    const float sidebar = configuredPanels ? (hasPanels ? panelWidth : 0) + 16 : 0;
+    const float maxCameraWidth = std::max(300.f, std::min(600.f, sidebarBudget - (hasPanels ? panelWidth : 0)));
+    cameraSidebarWidth_ = glm::clamp(cameraSidebarWidth_, 300.f, maxCameraWidth);
+    const float previousCameraWidth = cameraSidebarWidth_;
+    ImGui::PushID("camera_sidebar");
+    cameraSidebarVisible_ = cameraEdge_.draw({W - 18, contentOrigin.y}, contentHeight, cameraSidebarVisible_,
+                                             cameraSidebarWidth_, maxCameraWidth, true);
+    ImGui::PopID();
+    if (cameraSidebarWidth_ != previousCameraWidth)
+        cameraSidebarResized_ = true;
+    ros_->setCamerasWanted(cameraSidebarVisible_);
+    const float side = cameraSidebarVisible_ ? cameraSidebarWidth_ : 0;
+    const float left = W - 36 - sidebar - side - 16;
+    if (hasPanels) {
+        ImGui::SetCursorScreenPos(contentOrigin);
+        composition_->drawSidebar(contentHeight);
+    }
+    ImGui::SetCursorScreenPos({contentOrigin.x + sidebar, contentOrigin.y});
+    ImGui::BeginChild("left", {left, contentHeight}, ImGuiChildFlags_None,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::SetScrollY(0);
+    ImGui::BeginChild("toolbar", {left, toolbarHeight_}, ImGuiChildFlags_None,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    int oldMode = mode_;
+    drawToolbar(left, oldMode);
+    toolbarHeight_ = std::max(80.f, ImGui::GetCursorPosY());
+    ImGui::EndChild();
+    const float viewHeight = std::max(1.f, ImGui::GetContentRegionAvail().y);
+    const ImVec2 position = ImGui::GetCursorScreenPos();
+    bool hovered = ImGui::IsMouseHoveringRect(position, {position.x + left, position.y + viewHeight});
+    // Dropdowns can overlap the viewport. Selecting Free camera must not also consume that click as a
+    // mouse-capture request.
+    hovered = hovered && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && mode_ == oldMode &&
+              !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+    panels::Viewport panelView{viewportView_.projection,
+                               viewportView_.view,
+                               viewportView_.eye,
+                               {position.x, position.y},
+                               {left, viewHeight},
+                               hovered && mode_ == 0,
+                               bool(glfwGetWindowAttrib(window_->handle(), GLFW_FOCUSED))};
+    const bool dragging = composition_ && mode_ == 0 && composition_->input(panelView);
+    bool unused = false;
+    SensorView view = viewFor(left / viewHeight, dt, hovered && !dragging, viewHeight, unused);
+    viewportView_ = view;
+    // Keep sensor aspect ratios when a camera view is promoted to the large viewport.
+    float iw = left, ih = viewHeight;
+    const SensorCamera *sensor = mode_ >= 2 ? &scenario_->cameras[std::size_t(mode_ - 2)] : nullptr;
+    if (sensor) {
+        const float aspect = float(sensor->k.width) / float(sensor->k.height);
+        ih = std::min(viewHeight, left / aspect);
+        iw = ih * aspect;
+    }
+    const int rw = std::max(16, int(iw)), rh = std::max(16, int(ih));
+    // A sensor view keeps its own field of view at any displayed size.
+    if (sensor) {
+        auto k = sensor->k;
+        k.fx *= double(rw) / k.width;
+        k.cx *= double(rw) / k.width;
+        k.fy *= double(rh) / k.height;
+        k.cy *= double(rh) / k.height;
+        k.width = rw;
+        k.height = rh;
+        view = sensorView(body_ * sensor->opticalInBase, k);
+        viewportView_ = view;
+    }
+    const auto scene = model_->build(buildState());
+    const rendering::View renderView{toEigen(view.view), toEigen(view.projection), Eigen::Vector3f(view.eye.x, view.eye.y, view.eye.z)};
+    const auto appearance = observer_.apply(look_.appearance);
+    const auto frame = renderer_->draw(scene, renderView, appearance, float(time), rw, rh);
+    lastFrame_ = frame;
+    haveFrame_ = true;
+    if (mode_ == 0 && hovered && !dragging && !io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F))
+        focusAtCursor(view, frame, position, left, viewHeight);
+    const ImVec2 imagePos(position.x + (left - iw) / 2, position.y + (viewHeight - ih) / 2);
+    ImGui::SetCursorScreenPos(imagePos);
+    ImGui::Image(textureID(frame.color_texture), {iw, ih}, {0, 1}, {1, 0});
+    const ScreenRect rect{imagePos, iw, ih};
+    const auto vp = view.projection * view.view;
+    if (showTf_) {
+        TfOverlay overlay;
+        overlay.snapshot = &tf_;
+        overlay.axisLength = tfAxisLength_;
+        overlay.names = tfNames_;
+        overlay.font = window_->small;
+        overlay.caption = demoMode_ ? "TF preview from robot pack"
+                                    : "ROS TF in " + scenario_->mapFrame + ": " + std::to_string(tf_.resolved) +
+                                          " frames, " + std::to_string(tf_.missing) + " unavailable";
+        drawTfAxes(overlay, vp, rect);
+    }
+    if (detections_ && !demoMode_)
+        drawDetections(ros_->placedDetections, vp, rect);
+    if (showMpc_ && !demoMode_)
+        drawMpcPath(ros_->mpcPath, vp, rect);
+    if (composition_ && mode_ == 0) {
+        panelView.projection = view.projection;
+        panelView.view = view.view;
+        panelView.eye = view.eye;
+        composition_->drawOverlays(panelView);
+    }
+    auto *d = ImGui::GetWindowDrawList();
+    d->AddRect(position, {position.x + left, position.y + viewHeight}, IM_COL32(38, 62, 72, 255), 5, 0, 1);
+    // Orbit focus marker while dragging or zooming without Follow.
+    if (mode_ == 0 && orbitInteracting_ && !follow_) {
+        ImVec2 p;
+        if (projectToScreen(vp, {position, left, viewHeight}, glm::vec4(target_, 1), p)) {
+            d->AddCircleFilled(p, 9, IM_COL32(80, 220, 210, 60));
+            d->AddCircle(p, 9, IM_COL32(80, 220, 210, 200), 0, 2);
+        }
+    }
+    d->AddRectFilled({position.x + 14, position.y + 14}, {position.x + 237, position.y + 43}, IM_COL32(8, 22, 29, 225), 4);
+    d->AddText(window_->small, 12, {position.x + 25, position.y + 22}, color(white),
+               (scenario_->poolId + " / " + fixed(scenario_->poolLength, 1) + " x " + fixed(scenario_->poolWidth, 2) + " m")
+                   .c_str());
+    if (runScore_ && runScore_["total"]) {
+        std::string readout = fixed(runScore_["total"].as<double>(), 1) + " pts   /   " + runTime();
+        if (runScore_["running"].as<bool>(false))
+            readout += "  RUNNING";
+        d->AddRectFilled({position.x + left - 310, position.y + 12}, {position.x + left - 12, position.y + 43},
+                         IM_COL32(8, 22, 29, 225), 4);
+        d->AddText(window_->small, 14, {position.x + left - 298, position.y + 21}, color(cyan), readout.c_str());
+    }
+    if (labels_ && mode_ < 2 && presetFor(focusName_).labels) {
+        for (const auto &key : focusNames_) {
+            const auto found = scenario_->landmarks.find(key);
+            if (found == scenario_->landmarks.end())
+                continue;
+            glm::vec4 p = view.projection * view.view * (found->second.world * glm::vec4(0, 0, .5, 1));
+            if (p.w <= 0)
+                continue;
+            p /= p.w;
+            if (std::abs(p.x) > .94 || std::abs(p.y) > .85 || p.z > 1)
+                continue;
+            const ImVec2 at(position.x + (p.x * .5f + .5f) * left, position.y + (.5f - p.y * .5f) * viewHeight);
+            d->AddCircleFilled(at, 3, color(cyan));
+            d->AddLine(at, {at.x + 10, at.y - 14}, color(cyan));
+            d->AddRectFilled({at.x + 9, at.y - 31}, {at.x + 105, at.y - 11}, IM_COL32(8, 22, 29, 215), 3);
+            d->AddText(window_->small, 12, {at.x + 16, at.y - 28}, color(white), key.c_str());
+        }
+    }
+    const char *controls = mode_ == 1 ? "CLICK  mouse look    WASD  move    SPACE / SHIFT  up / down    CTRL  fast    ESC  release"
+                                      : "LEFT DRAG  orbit   RIGHT / MIDDLE DRAG  pan   SCROLL  zoom   F  focus cursor";
+    d->AddRectFilled({position.x, position.y + viewHeight - 30}, {position.x + left, position.y + viewHeight},
+                     IM_COL32(6, 18, 26, 205));
+    d->AddText(window_->small, 12, {position.x + 14, position.y + viewHeight - 21}, color(white), controls);
+    ImGui::EndChild();
+    if (sceneSettingsOpen_)
+        drawSceneSettings(sidebar, left);
+    if (cameraSidebarVisible_) {
+        ImGui::SetCursorScreenPos({W - 18 - side, contentOrigin.y});
+        ImGui::BeginChild("right", {side, contentHeight}, ImGuiChildFlags_None);
+        const float cardWidth = ImGui::GetContentRegionAvail().x;
+        for (std::size_t i = 0; i < ros_->feeds.size(); ++i)
+            drawCameraCard(i, cardWidth, cardWidth);
+        drawMinimap(cardWidth);
+        ImGui::PushFont(window_->small);
+        ImGui::TextWrapped("%s", demoMode_ ? "Scene preview. Start the simulator bridge to stream live cameras."
+                                            : "Images are rendered by the bridge at the physics pose. Observer controls "
+                                              "do not move the vehicle.");
+        ImGui::PopFont();
+        ImGui::EndChild();
+    }
+    ImGui::End();
+    if (composition_)
+        composition_->drawWindows();
+}
+
+void App::saveCameraImages(const fs::path &screenshot) {
+    if (screenshot.empty() || !scenario_)
+        return;
+    for (std::size_t i = 0; i < ros_->feeds.size() && i < cards_.size(); ++i) {
+        const auto &feed = ros_->feeds[i];
+        if (feed.rgb.empty())
+            continue;
+        writePng(screenshot.parent_path() / (screenshot.stem().string() + "-" + feed.camera->id + ".png"),
+                 feed.rgbWidth, feed.rgbHeight, feed.rgb);
+    }
+}
+
+int App::loop() {
+    int frames = 0;
+    auto previous = start_;
+    while (!window_->closing() && (demoMode_ || rclcpp::ok())) {
+        const auto frameStart = Clock::now();
+        const double t = std::chrono::duration<double>(frameStart - start_).count();
+        const float dt = float(std::min(std::chrono::duration<double>(frameStart - previous).count(), .1));
+        previous = frameStart;
+        ros_->spin();
+        if (!pendingScenario_.empty()) {
+            const auto json = std::move(pendingScenario_);
+            pendingScenario_.clear();
+            try {
+                loadScenario(json);
+            } catch (const std::exception &error) {
+                std::cerr << "robotics-pool-viewer: rejecting scenario document: " << error.what() << '\n';
+            }
+        }
+        if (composition_)
+            composition_->touch();
+        step(t);
+        window_->beginFrame();
+        drawInterface(t, dt);
+        if (largeMap_ && scenario_) {
+            ImGui::SetNextWindowSize({1000, 620}, ImGuiCond_FirstUseEver);
+            if (focusMap_) {
+                ImGui::SetNextWindowFocus();
+                ImGui::SetNextWindowCollapsed(false);
+                focusMap_ = false;
+            }
+            if (ImGui::Begin("Course map", &largeMap_)) {
+                ImGui::TextDisabled("SCROLL zoom / DRAG pan / CLICK a task to focus the pool view");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Fit pool")) {
+                    mapZoom_ = 1;
+                    mapPan_ = {0, 0};
+                }
+                auto space = ImGui::GetContentRegionAvail();
+                drawCourseMap(space.x, std::max(100.f, space.y), true);
+            }
+            ImGui::End();
+        }
+        if (opt_.frames > 0 && window_->imguiErrors() > 0)
+            throw std::runtime_error("ImGui validation failed during capture run");
+        ++frames;
+        const bool last = opt_.frames > 0 && frames >= opt_.frames;
+        window_->present(last, opt_.screenshot);
+        if (last) {
+            saveCameraImages(opt_.screenshot);
+            break;
+        }
+        std::this_thread::sleep_until(frameStart + std::chrono::duration_cast<Clock::duration>(
+                                                       std::chrono::duration<double>(1. / opt_.renderRate)));
+    }
+    return 0;
+}
+
+int run(const Options &options, int argc, char **argv) {
+    App app(options, argc, argv);
+    return app.loop();
+}
+} // namespace robotics::ros_viewer::host

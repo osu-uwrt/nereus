@@ -1,0 +1,27 @@
+# Talos status LED bars for the ROS pool viewer (three emitters under the clear top of the port hull).
+# Ported from riptide_simulator c_simulator/robots/talos/config/status_lights.yaml (docs/PROVENANCE.md).
+# Poses are xyz + roll/pitch/yaw (radians) in the named robot-pack frame (the CAD origin frame `cad`),
+# metres; visual estimate from the supplied Talos photograph and CAD hull bounds.
+schema_version: 1
+input:
+  type: riptide_msgs2/msg/LedCommand
+  topic: command/led
+frame: cad
+# Short detection pulse, then resume the underlying status command.
+flash_duration: 0.15
+lights:
+  - id: port_hull_aft
+    target_mask: 2  # ALU board; accepts TARGET_ALU and TARGET_ALL
+    pose: [-0.181, 0.1573, 0.094, 0, 0, 0]
+    size: [0.012, 0.055, 0.003]
+    radiance: 240  # Four times the task magnet LEDs; drives stronger HDR bloom.
+  - id: port_hull_middle
+    target_mask: 2
+    pose: [-0.143, 0.1573, 0.094, 0, 0, 0]
+    size: [0.012, 0.055, 0.003]
+    radiance: 240
+  - id: port_hull_fore
+    target_mask: 2
+    pose: [-0.105, 0.1573, 0.094, 0, 0, 0]
+    size: [0.012, 0.055, 0.003]
+    radiance: 240

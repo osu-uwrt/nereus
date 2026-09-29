@@ -1,0 +1,119 @@
+# Host configuration of robotics-pool-viewer for the Talos + UWRT stack.
+# Everything the bridge does not describe in the scenario document lives here: window branding,
+# camera card names, focus presets, landmark map, viewer-only robot visuals, topic names of the
+# visual-state streams, and the fallback task `ui` block (used until the task pack carries one).
+# Nothing here names a file of the old simulator; hardcoded names of the old pool_viewer became data
+# (docs/reference/POOL_VIEWER_INVENTORY.md section 6).
+schema_version: 1
+
+# Latched std_msgs/String scenario document published by the bridge (transient_local, reliable, depth 1).
+scenario_topic: /talos/simulator/scenario
+
+window: {width: 1480, height: 940}
+branding:
+  window_title: "Riptide | RoboSub Pool"
+  header: RIPTIDE
+  subtitle: ROBOSUB SIMULATION
+
+# Sibling documents (relative to this file).
+panels_config: talos_uwrt_panels.yaml
+status_lights_config: talos_uwrt_status_lights.yaml
+thruster_visuals_config: talos_uwrt_thruster_visuals.yaml
+
+initial_focus: Vehicle
+
+# Visual-state streams, relative to the bridge namespace. Missing publishers are simply absent.
+# (thruster force and LED topics come from the two documents above.)
+topics:
+  claw_joints: simulator/claw_joints
+  magnet_lights: simulator/magnet_lights
+  task_objects: simulator/task_objects
+  projectiles: simulator/projectiles
+  detections: yolo_orientation/visualization_marker_array
+  mpc_path: controller/mpc/predicted_path
+
+# Camera card names by robot-pack sensor id; sensors without an entry are titled by index and id.
+cameras:
+  ffc: {title: "01  FORWARD CAMERA", model: "ZED X MINI"}
+  dfc: {title: "02  DOWNWARD CAMERA", model: "ZED X MINI"}
+
+# Camera presets of the Focus combo. `default` applies to every other resolvable landmark; keys ending in
+# `*` match a name prefix. target: course | vehicle | mechanism | mechanisms | landmark.
+focus_presets:
+  default: {target: landmark, distance: 3.4, pitch: 0.28, yaw_from: landmark_facing, follow: true, labels: true}
+  Course: {target: course, distance_scale: 0.65, z_offset: -0.6, pitch: 0.64, yaw: -2.5, yaw_from: absolute, follow: false}
+  Vehicle: {target: vehicle, distance: 1.9, pitch: 0.32, yaw_from: vehicle_heading}
+  Claw: {target: mechanism, mechanism: claw, offset: [0, 0, 0.06], distance: 0.65, pitch: 0.1, yaw_from: vehicle_heading, yaw_offset: 0.5, labels: false}
+  Payloads: {target: mechanisms, mechanisms: [torpedo_launcher, dropper], distance: 0.48, pitch: -0.18, yaw_from: vehicle_heading, yaw_offset: 0.06, labels: false}
+  table: {distance: 3.7}
+  "magnet_target*": {distance: 0.32, pitch: 0.6}
+
+# Scene preview (--demo): vehicle pose x, y, z, roll, pitch, yaw (radians); optional preview landmark.
+preview:
+  pose: [3.0, -2.0, -0.75, 0, 0, -0.14]
+
+# Robot-pack assets that the pack lists but does not place as visuals (launcher body, robot magnet).
+extra_visuals:
+  - {asset: launcher_mesh, frame: cad}
+  - {asset: robot_magnet_mesh, mechanism: magnet, at_tip: true}
+
+# Claw jaws: pack visuals (by asset id) that translate along the frame's +Y (left) / -Y (right) with
+# simulator/claw_joints = [left_m, right_m].
+claw:
+  left_assets: [claw_left_mesh, claw_left_pad_mesh]
+  right_assets: [claw_right_mesh, claw_right_pad_mesh]
+
+# Payload rounds: projectile mesh (robot-pack asset id; unit length, scaled by the mechanism's projectile
+# size) and which simulator/projectiles marker namespaces are rounds still seated in a launcher slot
+# (marker id = slot index) -> mechanism id.
+payloads:
+  mesh_asset: projectile_mesh
+  loaded_namespaces: {torpedo_loaded: torpedo_launcher, dropper_loaded: dropper}
+
+# Magnet targets: emissive lights drawn at the marker pose/scale of simulator/magnet_lights.
+magnet_lights:
+  led_radiance: 60
+
+# Real calibration board (printed face normal = local +X). Toggle: Scene settings > Lighting.
+calibration_board:
+  texture: assets/calibration_board.png
+  size_m: [0.6096, 0.9144]
+  position_m: [0.002, 0.0, -0.345]
+  visible: true
+
+# Fallback task `ui` block (task pack `ui`, when present, overrides key by key). `focus` and
+# `demo_targets` name landmarks (task placements/frames) and presets above; names the scenario cannot
+# resolve are hidden. map_landmarks: name, optional minimap label, or hidden_in_minimap.
+ui:
+  title: RoboSub 2026 scorecard
+  run_options:
+    - {key: role, label: Intended role, type: choice, default: repair,
+       choices: [{value: repair, label: Survey & Repair}, {value: rescue, label: Search & Rescue}]}
+    - {key: heading_coin, label: Heading coin flip, type: bool, default: true}
+    - {key: role_coin, label: Role coin flip, type: bool, default: true}
+  focus: [Course, Vehicle, gate, torpedo, bin, table, Payloads, Claw, octagon]
+  demo_targets: [gate, torpedo, bin, table]
+  manual_adjustment: true
+  score_note: Pinger awards await future acoustic integration. No session countdown or automatic time bonus is applied to individual runs.
+  score_fields:
+    - {key: basket_count, label: Objects in both baskets}
+    - {key: time_bonus_eligible, label: Time-bonus prerequisites met}
+  previews:
+    gate: {depth: 0.75}
+    bin: {depth: 0.55, camera: dfc}
+    table: {depth: 0.55, camera: dfc}
+  run_inspections:
+    - {label: Inspect launcher, target: Payloads}
+    - {label: Inspect claw, target: Claw}
+    - {label: Inspect lights, target: magnet_target1}
+  status_fields:
+    - {key: intended_role, label: Assigned role}
+    - {key: role, label: Scored role}
+  map_landmarks:
+    - gate
+    - {name: slalom_front, minimap_label: slalom}
+    - {name: slalom_back, hidden_in_minimap: true}
+    - torpedo
+    - bin
+    - table
+    - octagon
