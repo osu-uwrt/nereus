@@ -17,7 +17,7 @@
     "camera_faker/models/talos3/material_repairs.json": "bc021630f3861b90710b5b35e8680e38e14a9613272b093f9409fbfe8d5d340c",
     "camera_faker/models/talos3/README.md": "1554f7d3f540d77c9db105afc69943c381c3040f201974eeca7c01ef4cd34dd9"
   },
-  "importer_sha256": "80d113a8ba83bd1410099d9c560f68a506c3e39771af70e0208d53c11884599f",
+  "importer_sha256": "044baba6358062c18e4a06266bc668d2d5070952a45909687d52824e56544265",
   "outputs_sha256": {
     "content/visuals/talos/Talos3_body.glb": "5827668235d30dcde556d2cd1cf2c3352bf71adaeeaa1bc9840925d9eaa2460d",
     "content/visuals/talos/rotors/VUS.glb": "bcefa0cd37a3c3166cee03e33dcf3fa55342f239aba5b5a28e0c82fb64631f4d",
@@ -32,7 +32,8 @@
     "content/visuals/talos/provenance/material_repairs.json": "bc021630f3861b90710b5b35e8680e38e14a9613272b093f9409fbfe8d5d340c",
     "content/visuals/talos/provenance/README.md": "1554f7d3f540d77c9db105afc69943c381c3040f201974eeca7c01ef4cd34dd9",
     "content/visuals/talos/provenance/thrusters.yaml": "ed5733e949f5a64d12e1d674cf2bb3ba6d17bf06ddb6f86f3a2867386f49aaf3",
-    "content/visuals/talos/inventory.json": "849180ec5a2bb385f5251a783a25173e9d0dc092f7a54296ab71dbb40f5bdebe"
+    "content/visuals/talos/inventory.json": "849180ec5a2bb385f5251a783a25173e9d0dc092f7a54296ab71dbb40f5bdebe",
+    "content/visuals/scenes/talos_rotors.yaml": "da311638331209d3eae617ecd1f9eb96e83778764cc87267f18b865dea2ebb5f"
   },
   "license_status": "Unresolved original asset metadata; local use authorized. See docs/PROVENANCE.md before public redistribution."
 }

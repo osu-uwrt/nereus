@@ -4,6 +4,7 @@
 #include <exception>
 #include <mutex>
 #include <robotics/config/scenario.hpp>
+#include <robotics/visualization/animation.hpp>
 #include <robotics/visualization/live_source.hpp>
 #include <thread>
 
@@ -13,7 +14,8 @@ namespace robotics::runner {
 class RunningScenario {
   public:
     RunningScenario(config::Scenario scenario,
-                    std::shared_ptr<visualization::LivePoseSource> destination, bool paced = true);
+                    std::shared_ptr<visualization::LivePoseSource> destination, bool paced = true,
+                    std::optional<visualization::RotorRig> rotors = std::nullopt);
     ~RunningScenario();
     RunningScenario(const RunningScenario &) = delete;
     RunningScenario &operator=(const RunningScenario &) = delete;
@@ -23,7 +25,8 @@ class RunningScenario {
 
   private:
     void run(config::Scenario scenario,
-             const std::shared_ptr<visualization::LivePoseSource> &destination, bool paced);
+             const std::shared_ptr<visualization::LivePoseSource> &destination, bool paced,
+             std::optional<visualization::RotorRig> rotors);
     std::mutex mutex_;
     std::condition_variable wake_;
     bool stopped_{false};

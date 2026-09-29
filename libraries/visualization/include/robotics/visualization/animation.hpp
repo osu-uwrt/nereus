@@ -22,6 +22,16 @@ struct RotorAnimation {
     std::size_t input_count{1};
     std::vector<RotorInput> rotors{{0, 1}};
 };
+struct RotorMount {
+    std::string parent_frame, child_frame;
+    Eigen::Vector3d pivot{Eigen::Vector3d::Zero()}, axis{Eigen::Vector3d::UnitX()};
+};
+struct RotorRig {
+    std::vector<std::string> inputs; // Named force channels, independent of plant ordering.
+    RotorAnimation animation;
+    std::vector<RotorMount> mounts; // Same order as animation.rotors.
+};
+void validate(const RotorRig &rig);
 // An explicit source-clock integrator, not a render-frame clock. One owner supplies
 // realized forces and timestamps; dropped display samples must not drive integration.
 // Angles are radians, wrapped by remainder to [-pi,pi]. Rewind clears phase/forces.

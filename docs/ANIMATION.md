@@ -3,8 +3,8 @@
 The neutral visualization library exposes `RotorAnimator`, `pivotRotation()` and
 `Indicator` in `robotics/visualization/animation.hpp`. They reproduce the original
 rotor/LED state calculations without robot identifiers, ROS message types, resource
-loading, graphics or wall clocks. This increment establishes the state models;
-the interactive Talos rotors are still stationary and LEDs are not yet assembled.
+loading, graphics or wall clocks. The simulation adapter now publishes moving
+rotor frames for the interactive scene. LEDs are not yet assembled.
 
 ## Rotor timing and ownership
 
@@ -36,6 +36,39 @@ both the pivot and points on the shaft. Compose this transform beneath the body/
 mount exactly once. It uses Eigen/double quaternion arithmetic, whereas the original
 uses float GLM matrices and casts the angle to float. The current 1e-6 matrix
 comparison is numerical parity, not proof of byte-identical animated images.
+
+## Moving frames and simulation composition
+
+`LivePoseOptions::moving_frames` declares parent/child edges. Each `PoseUpdate`
+contains exactly one local pose for each edge in that order, alongside the body
+pose at the same timestamp and producer generation. The entire batch is validated
+before delivery. Queue overflow, reconnect and reset apply to complete batches;
+retained snapshots stay immutable. Pending, drain and latest packet buffers are
+allocated at construction. Frame histories are rebuilt on the consumer outside the
+producer mutex. The existing 128-edge/100000-total-sample frame-graph bounds apply
+to the combined topology and configured history capacity.
+
+`RotorRig` binds named force inputs, animation settings and local shaft mounts.
+The strict version-1 YAML loader is `viewer::loadRotorRig()`. It contains no robot
+physics, mesh paths or transport topics. The imported Talos rig preserves original
+curve coefficients, input order, directions, pivots and axes; reproduce it with
+`tools/import_talos_visuals.py` and verify using `--check`.
+
+`integrations::SimulationPosePublisher` maps the rig's input names to declared
+plant channels and integrates every realized-force observation before lossy viewer
+delivery. Construct it as the sole producer for its `LivePoseSource`. Animated
+observations must have consecutive ticks and increasing source timestamps within a
+generation. A new generation clears phase. Missing ticks, malformed forces and
+invalid geometry reject before committing animation. Two preallocated animator
+buffers make this transactional without allocating a new candidate each tick.
+Neither graphics polling nor connection state affects integration or simulation.
+
+The application composes this adapter with `--rotors RIG.yaml` and the scene's
+moving-frame groups. See [SCENE_VIEWER.md](SCENE_VIEWER.md) for the animated Talos
+command. Frame history provides rigid-pose interpolation, not unwrapped rotor
+phase reconstruction; fast spins between retained samples can alias. The live
+scene resolves at its newest complete batch. Future camera acquisition must observe
+animation directly at acquisition time, independently of display history.
 
 ## Indicator commands
 
@@ -85,8 +118,7 @@ Additional tests cover rejected-packet timeout preservation, explicit reset,
 independent instances and shaft invariance. The installed viewer extension exercises
 both models without a window or simulation.
 
-Next: source-owned animation observations and scene bindings, original LED bar
-geometry/material/radiance, realized-force delivery from the simulation adapter,
+Next: original LED bar geometry/material/radiance and source color bindings,
 then animated renderer comparisons. ROS target routing, complete Talos mechanisms,
 camera acquisition and full-stack acceptance remain open. The original source-clock
 formulas are preserved; whole-stack delivery/scheduling is not yet validated here.

@@ -1,4 +1,5 @@
 #pragma once
+#include <robotics/visualization/animation.hpp>
 #include <robotics/visualization/camera.hpp>
 #include <robotics/visualization/display.hpp>
 
@@ -19,6 +20,7 @@ struct Workspace {
     Camera camera;
     std::filesystem::path scene; // Optional neutral visual document; no simulation configuration.
 };
+visualization::RotorRig loadRotorRig(const std::filesystem::path &path);
 Workspace emptyWorkspace();
 Workspace loadWorkspace(const std::filesystem::path &path);
 std::string serializeWorkspace(const Workspace &workspace,

@@ -7,13 +7,14 @@
 namespace robotics::runner {
 RunningScenario::RunningScenario(config::Scenario scenario,
                                  std::shared_ptr<visualization::LivePoseSource> destination,
-                                 bool paced) {
+                                 bool paced, std::optional<visualization::RotorRig> rotors) {
     if (!destination)
         throw std::invalid_argument("simulation presentation source is required");
-    worker_ = std::thread(
-        [this, scenario = std::move(scenario), destination = std::move(destination), paced] {
+    worker_ =
+        std::thread([this, scenario = std::move(scenario), destination = std::move(destination),
+                     paced, rotors = std::move(rotors)] {
             try {
-                run(scenario, destination, paced);
+                run(scenario, destination, paced, std::move(rotors));
             } catch (...) {
                 failure_ = std::current_exception();
             }
@@ -43,13 +44,18 @@ void RunningScenario::join() {
 }
 void RunningScenario::run(config::Scenario scenario,
                           const std::shared_ptr<visualization::LivePoseSource> &destination,
-                          bool paced) {
+                          bool paced, std::optional<visualization::RotorRig> rotors) {
     auto runtime = config::makeRuntime(scenario);
     if (scenario.ticks > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max() /
                                                     scenario.plant.timestep.count()))
         throw std::overflow_error("scenario duration overflows simulation clock");
     const auto observers = telemetry(*runtime, scenario.sensors, nullptr);
-    integrations::publishSimulationPose(*destination, runtime->observe());
+    std::vector<std::string> force_ids;
+    for (const auto &thruster : scenario.plant.thrusters)
+        force_ids.push_back(thruster.id);
+    integrations::SimulationPosePublisher publisher(*destination, std::move(force_ids),
+                                                    std::move(rotors));
+    publisher.publish(runtime->observe());
     using Clock = std::chrono::steady_clock;
     const auto started = Clock::now();
     std::size_t command = 0;
@@ -70,7 +76,7 @@ void RunningScenario::run(config::Scenario scenario,
         }
         if (command < scenario.commands.size() && scenario.commands[command].tick == tick)
             runtime->command(scenario.commands[command++].forces);
-        integrations::publishSimulationPose(*destination, runtime->advance());
+        publisher.publish(runtime->advance());
         for (const auto &observe : observers)
             observe();
     }

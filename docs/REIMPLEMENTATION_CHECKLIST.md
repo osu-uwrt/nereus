@@ -136,7 +136,10 @@ body/pool content from source frames.
 - [ ] Texture/cutout/overlay inputs and complete scene acceptance through that pipeline.
 - [ ] Same meshes/textures/material corrections and task cutouts through content data.
 - [x] Neutral source-clock rotor and indicator state models; original captured phases,
-  pivot matrices and LED colors verified (ANIMATION.md). Scene delivery remains open.
+  pivot matrices and LED colors verified (ANIMATION.md).
+- [x] Source-owned rotor motion through atomic body/moving-frame batches, named
+  plant channels and original imported Talos rig; drops/reconnect do not change phase.
+  LED scene bindings and animated pixel comparisons remain open.
 - [ ] Same Talos 3D mesh/materials with thruster/rotor motion, direction and speed
   driven by explicit state; LEDs and all other status/mechanism visuals reproduce
   the original observable state transitions without robot-name logic in the renderer.
@@ -214,8 +217,9 @@ selected live-robot workflows required here.
    Named body mounts are now resolved for sensors and live visualization. The
    original renderer is connected to the optional interactive viewport through
    neutral scene/source inputs. Fixed body/pool captures match the original pipeline.
-   Next: connect the verified rotor/indicator models through source-owned animation
-   observations and scene bindings; then complete LED/mechanism/course geometry.
+   Rotor observations now drive the interactive scene independently of polling.
+   Next: source color bindings and original LED geometry/radiance, then complete
+   mechanism/course geometry and animated visual comparisons.
    Reusable per-view GPU targets/shared preparation precede camera integration.
    Depth reporting now passes its captured original comparisons. Cameras follow the
    extracted renderer; other device/adapter work stays in the sensor conversion map.

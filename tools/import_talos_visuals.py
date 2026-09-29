@@ -55,6 +55,26 @@ def main():
         },
     }
     outputs[destination + "inventory.json"] = (json.dumps(inventory, indent=2) + "\n").encode()
+    ordered = sorted(rotors, key=lambda rotor: rotor["input_index"])
+    if [rotor["input_index"] for rotor in ordered] != list(range(len(ordered))):
+        raise ValueError("pinned rotor channels must have contiguous input indices")
+    rig = {
+        "version": 1,
+        "inputs": [rotor["id"] for rotor in ordered],
+        **inventory["rotor_animation"],
+        "rotors": [
+            {
+                "input": ordered[rotor["input_index"]]["id"],
+                "parent_frame": "cad",
+                "child_frame": "rotor_mesh/" + rotor["id"],
+                **{key: rotor[key] for key in ("pivot", "axis", "direction")},
+            }
+            for rotor in rotors
+        ],
+    }
+    outputs["content/visuals/scenes/talos_rotors.yaml"] = yaml.safe_dump(
+        rig, sort_keys=False
+    ).encode()
     manifest = {
         "source_repository": "https://github.com/osu-uwrt/riptide_simulator",
         "source_revision": REVISION,

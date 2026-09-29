@@ -125,7 +125,7 @@ def main():
                                 str(installed / "share/robotics_platform/examples/profile_pool.yaml"),
                                 "--sensors", str(temp / "profile-sensors.csv")],
                                cwd=temp, env=env, stdout=output, check=True)
-            if args.preset.startswith("simulation-view"):
+            if args.preset.startswith(("simulation-view", "simulator-viewer")):
                 adapter_consumer = temp / "simulation-view"
                 shutil.copytree(ROOT / "examples/simulation_view", adapter_consumer)
                 run([cmake, "-S", adapter_consumer, "-B", temp / "adapter-build",

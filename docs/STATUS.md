@@ -787,3 +787,44 @@ has stationary rotors and no LED assembly: next is source-owned animation delive
 and generic scene bindings, followed by original LED geometry/radiance and animated
 render comparisons. Delivery must integrate every force sample independently of
 lossy display queues. See [ANIMATION.md](ANIMATION.md) for the ownership contract.
+
+## Source-owned moving rotors
+
+The live source now accepts complete body/moving-frame batches at one source time.
+All poses are validated before delivery; queue overflow, producer reset and
+reconnect preserve complete batches. Pending/drain/latest storage is preallocated,
+and immutable frame histories are rebuilt outside the producer lock.
+
+A neutral named-input rotor rig contains the original force/RPM curves, pivots,
+axes and directions. The offline Talos importer now reproduces this rig alongside
+the unchanged meshes and records its hash. The simulation adapter maps plant
+channels by ID and processes every observation before lossy delivery. Consecutive
+ticks are required while animating; generation changes clear phase. Preallocated
+staging preserves accepted state after invalid forces, geometry or resets.
+
+`robotics-sim-view --rotors` composes this provider with the new animated Talos/pool
+scene. All eight original meshes follow their individual moving frames. The
+standalone recording and body-only examples remain available. Shader/render-pass
+behavior is unchanged. No robot identity, force integration, ROS interface or plant
+configuration was added to the renderer or standalone viewer.
+
+Validation includes named-channel reorder, queue loss/reconnect/reset equivalence,
+malformed-batch atomicity, retained snapshot isolation, topology/history bounds,
+error recovery, and exact unchanged dynamics/noisy sensors with animation attached.
+The actual Talos scenario verifies every rotor moves about its original shaft and
+resolves through world/COM/CAD frames. A 200-frame live scene run reaches three
+seconds; its captured original body/pool/water image was inspected. This is not a
+pixel-equality claim for animated rotor poses. Original phase/matrix references
+remain the numerical fidelity evidence.
+
+Release and ASan/UBSan combined builds pass 168 tests and relocated installed
+consumers, including animated-frame delivery through the installed API. The
+standalone viewer passes 32 tests and its isolated relocated consumer. Changed
+implementation files pass clang-tidy; the importer verifies all 16 pinned outputs.
+Read-only review found no remaining blocker in this increment.
+
+Next: generic source color bindings and the original LED bars/material/radiance,
+including independent original image comparisons, then remaining mechanisms and
+course content. LED ROS routing, full operator workflows, camera acquisition and
+physical RepairCompTree acceptance remain open. The replacement priority and
+independent robot/world/task/scoring boundaries are unchanged.

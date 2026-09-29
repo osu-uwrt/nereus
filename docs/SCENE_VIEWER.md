@@ -3,8 +3,9 @@
 The optional scene build connects the original mesh/water renderer to the native
 viewer. It runs independently of simulation and ROS, using the same source frame
 contract for recordings and live pose sources. The supplied Talos example contains
-the original body and eight stationary rotors, plus the original pool geometry and
-water passes. Rotor/LED/mechanism animation, complete course content, original
+the original body and eight rotors, plus the original pool geometry and water
+passes. The live simulation example animates rotors from realized forces; the
+recording example retains static rotors. LED/mechanism animation, complete course content, original
 operator panels and camera products remain separate required work.
 
 ## Run a recording or simulation
@@ -33,12 +34,15 @@ cmake --preset simulator-viewer -DRP_BUILD_SCENE_RENDERER=ON \
   -DRP_INSTALL_REFERENCE_VISUALS=ON
 cmake --build --preset simulator-viewer
 build/simulator-viewer/robotics-sim-view content/examples/talos_navigation_pool.yaml \
-  --scene content/visuals/scenes/talos_pool.yaml --shaders libraries/rendering/shaders
+  --rotors content/visuals/scenes/talos_rotors.yaml \
+  --scene content/visuals/scenes/talos_animated_pool.yaml --shaders libraries/rendering/shaders
 ```
 
 This remains the finite scripted scenario worker, without interactive simulation
 controls. `--scene` supplies presentation data only and cannot alter plant physics.
-The existing simulation adapter supplies `world`→`com`→`cad` frames; the recording
+The optional rotor rig supplies moving frames beneath `cad`. Its named force
+channels are independent of plant order; all original samples are integrated even
+when the viewer drops updates. The simulation adapter supplies `world`→`com`→`cad` frames; the recording
 fixture independently supplies its own body→CAD mount. The viewer knows neither
 body origin conventions nor robot names.
 

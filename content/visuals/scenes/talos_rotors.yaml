@@ -1,0 +1,121 @@
+version: 1
+inputs:
+- VUS
+- VUP
+- HUS
+- HUP
+- HLS
+- HLP
+- VLS
+- VLP
+timeout: 0.5
+force_deadband: 0.01
+speed_scale: 1.0
+force_to_rpm:
+  forward:
+  - -475.886186
+  - 32.327429
+  - -324.744664
+  - 1443.832105
+  reverse:
+  - 257.460623
+  - 42.948545
+  - -24.402056
+  - -986.338071
+rotors:
+- input: VUS
+  parent_frame: cad
+  child_frame: rotor_mesh/VUS
+  pivot:
+  - -0.134
+  - -0.37158089
+  - 0.24382236
+  axis:
+  - 1.0
+  - 0.0
+  - -0.0
+  direction: -1
+- input: VUP
+  parent_frame: cad
+  child_frame: rotor_mesh/VUP
+  pivot:
+  - -0.134
+  - 0.43998086
+  - 0.24382232
+  axis:
+  - 1.0
+  - 0.0
+  - -0.0
+  direction: 1
+- input: HUS
+  parent_frame: cad
+  child_frame: rotor_mesh/HUS
+  pivot:
+  - -0.13982523
+  - -0.2597391
+  - 0.1407391
+  axis:
+  - 0.0
+  - 0.70710678
+  - 0.70710678
+  direction: 1
+- input: HUP
+  parent_frame: cad
+  child_frame: rotor_mesh/HUP
+  pivot:
+  - -0.13982472
+  - 0.32793908
+  - 0.14093908
+  axis:
+  - 0.0
+  - -0.70710678
+  - 0.70710678
+  direction: -1
+- input: HLS
+  parent_frame: cad
+  child_frame: rotor_mesh/HLS
+  pivot:
+  - -0.13962457
+  - -0.25980261
+  - -0.14080261
+  axis:
+  - 0.0
+  - 0.70710678
+  - -0.70710678
+  direction: -1
+- input: HLP
+  parent_frame: cad
+  child_frame: rotor_mesh/HLP
+  pivot:
+  - -0.13962401
+  - 0.32800257
+  - -0.14100257
+  axis:
+  - 0.0
+  - -0.70710678
+  - -0.70710678
+  direction: 1
+- input: VLS
+  parent_frame: cad
+  child_frame: rotor_mesh/VLS
+  pivot:
+  - -0.134
+  - -0.37170786
+  - -0.24382233
+  axis:
+  - 1.0
+  - 0.0
+  - -0.0
+  direction: 1
+- input: VLP
+  parent_frame: cad
+  child_frame: rotor_mesh/VLP
+  pivot:
+  - -0.134
+  - 0.44010785
+  - -0.24382233
+  axis:
+  - 1.0
+  - 0.0
+  - -0.0
+  direction: -1

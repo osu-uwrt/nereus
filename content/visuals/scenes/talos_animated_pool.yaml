@@ -1,0 +1,66 @@
+version: 1
+groups:
+- id: pool
+  frame: world
+  pool:
+    dimensions:
+    - 50
+    - 22.86
+    - 2.1336
+    water_level: 0
+    deck_height: 0.305288888
+    pose:
+      position:
+      - 0
+      - 19.5136
+      - 0
+      orientation_wxyz:
+      - 0.7071067811865476
+      - 0
+      - 0
+      - -0.7071067811865476
+- id: vehicle
+  source: simulation
+  frame: cad
+  instances:
+  - mesh: ../talos/Talos3_body.glb
+- id: VUS
+  source: simulation
+  frame: rotor_mesh/VUS
+  instances:
+  - mesh: ../talos/rotors/VUS.glb
+- id: VUP
+  source: simulation
+  frame: rotor_mesh/VUP
+  instances:
+  - mesh: ../talos/rotors/VUP.glb
+- id: HUS
+  source: simulation
+  frame: rotor_mesh/HUS
+  instances:
+  - mesh: ../talos/rotors/HUS.glb
+- id: HUP
+  source: simulation
+  frame: rotor_mesh/HUP
+  instances:
+  - mesh: ../talos/rotors/HUP.glb
+- id: HLS
+  source: simulation
+  frame: rotor_mesh/HLS
+  instances:
+  - mesh: ../talos/rotors/HLS.glb
+- id: HLP
+  source: simulation
+  frame: rotor_mesh/HLP
+  instances:
+  - mesh: ../talos/rotors/HLP.glb
+- id: VLS
+  source: simulation
+  frame: rotor_mesh/VLS
+  instances:
+  - mesh: ../talos/rotors/VLS.glb
+- id: VLP
+  source: simulation
+  frame: rotor_mesh/VLP
+  instances:
+  - mesh: ../talos/rotors/VLP.glb

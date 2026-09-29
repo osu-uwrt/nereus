@@ -335,3 +335,44 @@ TEST(Workspace, RejectsInvalidNestedValuesAndRetainsResolvedData) {
     ASSERT_TRUE(source.snapshot().data);
     EXPECT_EQ(source.snapshot().data->streams.at("pose").size(), 61);
 }
+
+TEST(Workspace, RotorRigBindsNamedInputsAndRejectsMalformedDocuments) {
+    Temporary temp;
+    const auto path = temp.directory / "rotors.yaml";
+    const std::string valid = R"(version: 1
+inputs: [left, right]
+timeout: 0.5
+force_deadband: 0.01
+speed_scale: 1
+force_to_rpm: {forward: [0, 1, 2, 3], reverse: [0, 4, 5, 6]}
+rotors:
+  - {input: right, parent_frame: body, child_frame: rotor, pivot: [1, 2, 3], axis: [0, 0, 2], direction: -1}
+)";
+    const auto write = [&](const std::string &text) { std::ofstream(path) << text; };
+    write(valid);
+    const auto rig = ui::loadRotorRig(path);
+    ASSERT_EQ(rig.animation.rotors.size(), 1U);
+    EXPECT_EQ(rig.animation.rotors.front().index, 1U);
+    EXPECT_EQ(rig.animation.rotors.front().direction, -1);
+    EXPECT_EQ(rig.mounts.front().pivot, Eigen::Vector3d(1, 2, 3));
+    for (const auto &[from, to] : std::vector<std::pair<std::string, std::string>>{
+             {"input: right", "input: absent"},
+             {"[left, right]", "[left, left]"},
+             {"axis: [0, 0, 2]", "axis: [0, 0, 0]"},
+             {"[0, 1, 2, 3]", "[0, 1, 2]"},
+             {"speed_scale: 1", "speed_scale: .nan"},
+             {"timeout: 0.5", "timeout: -1"},
+             {"direction: -1", "direction: 0"},
+             {"version: 1", "version: 2"},
+             {"child_frame: rotor", "child_frame: body"},
+             {"timeout: 0.5", "unexpected: 5\ntimeout: 0.5"}}) {
+        SCOPED_TRACE(from);
+        auto text = valid;
+        text.replace(text.find(from), from.size(), to);
+        write(text);
+        EXPECT_THROW(ui::loadRotorRig(path), std::invalid_argument);
+    }
+    write(valid + "  - {input: left, parent_frame: body, child_frame: rotor, pivot: [0, 0, 0], "
+                  "axis: [1, 0, 0], direction: 1}\n");
+    EXPECT_THROW(ui::loadRotorRig(path), std::invalid_argument);
+}

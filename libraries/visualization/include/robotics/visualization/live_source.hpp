@@ -5,7 +5,11 @@ namespace robotics::visualization {
 struct PoseUpdate {
     std::uint64_t generation{0}; // Producer epoch; increase before rewinding its clock.
     Time time_ns{0};
-    Pose pose; // Body frame into the configured world frame.
+    Pose pose;                        // Body frame into the configured world frame.
+    std::vector<Pose> moving_poses{}; // Complete configured moving-frame batch, same timestamp.
+};
+struct MovingFrame {
+    std::string parent, child;
 };
 struct LivePoseOptions {
     std::string id;
@@ -16,6 +20,7 @@ struct LivePoseOptions {
     std::size_t queue_capacity{64};
     std::size_t history_capacity{1000};
     std::vector<spatial::FixedFrame> fixed_frames{}; // Immutable source-owned mount/world frames.
+    std::vector<MovingFrame> moving_frames{}; // Ordered per-update poses, without topology changes.
 };
 // One producer calls publish; one presentation thread calls snapshot/disconnect/reconnect.
 // Join both callers before destruction.
@@ -27,6 +32,8 @@ class LivePoseSource final : public Source {
     ~LivePoseSource() override;
     LivePoseSource(const LivePoseSource &) = delete;
     LivePoseSource &operator=(const LivePoseSource &) = delete;
+    const std::vector<MovingFrame> &
+    movingFrames() const; // Immutable configuration, source lifetime.
     void publish(const PoseUpdate &update);
     SourceSnapshot snapshot() const override;
     void disconnect() override;

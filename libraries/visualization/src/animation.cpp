@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <stdexcept>
 #include <utility>
 
@@ -29,6 +30,25 @@ RotorAnimator::RotorAnimator(RotorAnimation configuration) : config_(std::move(c
             throw std::invalid_argument("invalid rotor input index or direction");
     forces_.resize(config_.input_count);
     angles_.resize(config_.rotors.size());
+}
+void validate(const RotorRig &rig) {
+    (void)RotorAnimator(rig.animation);
+    if (rig.inputs.size() != rig.animation.input_count ||
+        rig.mounts.size() != rig.animation.rotors.size())
+        throw std::invalid_argument("rotor rig dimensions do not match animation");
+    const auto valid_name = [](const std::string &name) {
+        return !name.empty() && name.size() <= 256;
+    };
+    std::set<std::string> inputs, children;
+    for (const auto &id : rig.inputs)
+        if (!valid_name(id) || !inputs.insert(id).second)
+            throw std::invalid_argument("rotor force channel names must be unique and nonempty");
+    for (const auto &mount : rig.mounts) {
+        if (!valid_name(mount.parent_frame) || !valid_name(mount.child_frame) ||
+            mount.parent_frame == mount.child_frame || !children.insert(mount.child_frame).second)
+            throw std::invalid_argument("invalid rotor frame binding");
+        (void)pivotRotation(mount.pivot, mount.axis, 0);
+    }
 }
 double RotorAnimator::rpm(double force) const {
     if (!std::isfinite(force))

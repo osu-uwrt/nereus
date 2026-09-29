@@ -1,6 +1,7 @@
 #include "../simulator/telemetry.hpp"
 #include "running_scenario.hpp"
 #include <gtest/gtest.h>
+#include <robotics/viewer/workspace.hpp>
 
 using namespace robotics;
 
@@ -53,4 +54,31 @@ TEST(ScenarioExecution, WorkerFailurePropagatesToOwner) {
     runner::RunningScenario execution(scenario, source, false);
     EXPECT_THROW(execution.join(), std::invalid_argument);
     EXPECT_TRUE(execution.finished());
+}
+
+TEST(ScenarioExecution, OriginalTalosRigMovesEveryRotorFromRealizedForces) {
+    const auto content = std::filesystem::path(RP_CONTENT);
+    const auto scenario = config::loadScenario(content / "examples/talos_navigation_pool.yaml");
+    const auto rig = viewer::loadRotorRig(content / "visuals/scenes/talos_rotors.yaml");
+    ASSERT_EQ(rig.mounts.size(), 8U);
+    visualization::LivePoseOptions options{"simulation", "clock"};
+    options.body_frame = scenario.body_frames.root();
+    options.fixed_frames = scenario.body_frames.edges();
+    for (const auto &mount : rig.mounts)
+        options.moving_frames.push_back({mount.parent_frame, mount.child_frame});
+    auto source = std::make_shared<visualization::LivePoseSource>(options);
+    runner::RunningScenario execution(scenario, source, false, rig);
+    execution.join();
+    const auto view = source->snapshot();
+    ASSERT_TRUE(view.data);
+    EXPECT_EQ(view.time_ns,
+              static_cast<std::int64_t>(scenario.ticks) * scenario.plant.timestep.count());
+    for (const auto &mount : rig.mounts) {
+        const auto pose =
+            view.data->frames->lookup(mount.parent_frame, mount.child_frame, view.time_ns).pose;
+        ASSERT_TRUE(pose) << mount.child_frame;
+        EXPECT_FALSE(pose->rotation.isApprox(Eigen::Quaterniond::Identity())) << mount.child_frame;
+        EXPECT_TRUE(spatial::apply(*pose, mount.pivot).isApprox(mount.pivot, 1e-12));
+        EXPECT_TRUE(view.data->frames->lookup("world", mount.child_frame, view.time_ns).pose);
+    }
 }

@@ -77,6 +77,49 @@ YAML::Node vectorNode(const Eigen::Vector3d &vector) {
     return result;
 }
 } // namespace
+v::RotorRig loadRotorRig(const std::filesystem::path &path) {
+    try {
+        const auto root = document(path);
+        fields(root, {"version", "inputs", "timeout", "force_deadband", "speed_scale",
+                      "force_to_rpm", "rotors"});
+        v::RotorRig rig;
+        sequence(root["inputs"], 256);
+        for (const auto &input : root["inputs"])
+            rig.inputs.push_back(name(input));
+        rig.animation.input_count = rig.inputs.size();
+        rig.animation.timeout = root["timeout"].as<double>();
+        rig.animation.speed_scale = root["speed_scale"].as<double>();
+        rig.animation.curve.deadband = root["force_deadband"].as<double>();
+        fields(root["force_to_rpm"], {"forward", "reverse"});
+        for (const auto *direction : {"forward", "reverse"}) {
+            const auto curve = root["force_to_rpm"][direction];
+            sequence(curve, 4);
+            if (curve.size() != 4)
+                throw std::invalid_argument("RPM curve requires four coefficients");
+            auto &target = std::string(direction) == "forward" ? rig.animation.curve.forward
+                                                               : rig.animation.curve.reverse;
+            for (std::size_t i = 0; i < 4; ++i)
+                target[i] = curve[i].as<double>();
+        }
+        sequence(root["rotors"], 256);
+        rig.animation.rotors.clear();
+        for (const auto &rotor : root["rotors"]) {
+            fields(rotor, {"input", "parent_frame", "child_frame", "pivot", "axis", "direction"});
+            const auto id = name(rotor["input"]);
+            const auto found = std::find(rig.inputs.begin(), rig.inputs.end(), id);
+            if (found == rig.inputs.end())
+                throw std::invalid_argument("unknown rotor force channel: " + id);
+            rig.animation.rotors.push_back({static_cast<std::size_t>(found - rig.inputs.begin()),
+                                            rotor["direction"].as<double>()});
+            rig.mounts.push_back({name(rotor["parent_frame"]), name(rotor["child_frame"]),
+                                  vector(rotor["pivot"]), vector(rotor["axis"])});
+        }
+        v::validate(rig);
+        return rig;
+    } catch (const std::exception &error) {
+        throw std::invalid_argument(path.string() + ": " + error.what());
+    }
+}
 Workspace emptyWorkspace() {
     Workspace result;
     v::DisplaySettings grid;

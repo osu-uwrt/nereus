@@ -136,7 +136,9 @@ historical conversion metadata from simulator revision
 `07647eebe706f96ea7b76db3cc9802735a146698`, under `camera_faker/models/talos3`.
 `provenance/manifest.json` records per-file source/output hashes and the offline
 importer's hash. `inventory.json` removes transport settings and retains authored
-CAD pivots, axes, order and force/RPM settings. It is not a complete robot assembly.
+CAD pivots, axes, order and force/RPM settings. The same importer produces
+`content/visuals/scenes/talos_rotors.yaml`, a transport-free named-input rig, and
+records its output hash in the manifest. It is not a complete robot assembly.
 Original source/asset licensing remains unresolved as described above; local work
 is authorized and public redistribution still requires that review.
 
