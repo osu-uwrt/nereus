@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Proposed scenario pack",
+  "description": "Step 1 proposal; generated-from-loader schemas and resolved-config dumps are step 2+. Selects sibling robot/pool/tasks/bridge pack folders and owns world frame, placements, initial state, seed and run options. Task ids, run option keys/values and world-frame use are semantic checks against the selected packs.",
+  "type": "object",
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "scenario"},
+    "id": {"$ref": "common.schema.json#/$defs/name"},
+    "description": {"type": "string"},
+    "provenance": {"$ref": "common.schema.json#/$defs/provenance"},
+    "assets": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/asset"}},
+    "robot": {"$ref": "common.schema.json#/$defs/pack_path"},
+    "pool": {"$ref": "common.schema.json#/$defs/pack_path"},
+    "tasks": {"$ref": "common.schema.json#/$defs/pack_path"},
+    "bridge": {"$ref": "common.schema.json#/$defs/pack_path", "description": "Optional: headless runs omit the bridge."},
+    "seed": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+    "timestep_ns": {"type": "integer", "minimum": 1},
+    "sensor_noise": {"type": "boolean"},
+    "world_frame": {"$ref": "common.schema.json#/$defs/name", "description": "World frame id: ENU, +Z up, z = 0 at the water surface."},
+    "pool_placement": {"$ref": "common.schema.json#/$defs/upright_placement"},
+    "task_placements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "task": {"$ref": "common.schema.json#/$defs/name"},
+          "position_m": {"$ref": "common.schema.json#/$defs/vector3"},
+          "yaw_deg": {"$ref": "common.schema.json#/$defs/yaw_deg"}
+        },
+        "required": ["task", "position_m", "yaw_deg"],
+        "additionalProperties": false
+      }
+    },
+    "contacts": {
+      "type": "object",
+      "properties": {
+        "model": {"enum": ["disabled", "sphere_pool", "box_scene"]},
+        "restitution": {"type": "number", "minimum": 0, "maximum": 1},
+        "friction": {"type": "number", "minimum": 0}
+      },
+      "required": ["model", "restitution", "friction"],
+      "additionalProperties": false
+    },
+    "initial": {
+      "type": "object",
+      "properties": {
+        "frame": {"$ref": "common.schema.json#/$defs/name", "description": "Robot frame whose world pose is given (native state frame: com)."},
+        "position_m": {"$ref": "common.schema.json#/$defs/vector3"},
+        "orientation_wxyz": {"$ref": "common.schema.json#/$defs/quaternion"},
+        "linear_velocity_m_s": {"$ref": "common.schema.json#/$defs/vector3", "description": "Body axes."},
+        "angular_velocity_rad_s": {"$ref": "common.schema.json#/$defs/vector3", "description": "Body axes."}
+      },
+      "required": ["frame", "position_m", "orientation_wxyz", "linear_velocity_m_s", "angular_velocity_rad_s"],
+      "additionalProperties": false
+    },
+    "run": {
+      "type": "object",
+      "properties": {
+        "auto_start": {"type": "boolean"},
+        "options": {
+          "type": "object",
+          "propertyNames": {"$ref": "common.schema.json#/$defs/name"},
+          "additionalProperties": {"type": ["string", "boolean"]},
+          "description": "Values for the selected task pack's run_options (semantic check)."
+        }
+      },
+      "required": ["auto_start", "options"],
+      "additionalProperties": false
+    },
+    "pending": {"$ref": "common.schema.json#/$defs/pending"}
+  },
+  "required": ["schema_version", "kind", "id", "robot", "pool", "tasks", "seed", "timestep_ns",
+               "sensor_noise", "world_frame", "pool_placement", "task_placements", "contacts", "initial", "run"],
+  "additionalProperties": false
+}

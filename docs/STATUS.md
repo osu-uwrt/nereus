@@ -13,10 +13,28 @@ Visual work stopped at local commit `9081760`. UI, LEDs, radiance and visual
 fidelity stay deferred until step 5 passes. Offscreen camera work is explicitly
 part of step 3. Do not restructure unrelated components.
 
-Current step: **1 — schemas and concrete packs only; no implementation changes.**
-The deliverable is proposed robot/pool/task/scenario/bridge schemas, concrete
-Talos and 2026 pool/gate/torpedo data, UWRT wiring, and a list of necessary task
-Python hooks and custom-message converters with reasons. No schema gate has passed.
+Current step: **2 — generic bridge and the real controller/EKF hold gate.**
+Step 1 passed joint review. `proposals/step1/` contains nine proposed JSON Schemas
+and eight YAML documents: Talos robot, 2026 pool, gate/torpedo task definitions,
+task manifest, UWRT bridge, scenario and the exception ledger. One task-pack
+Python scoring hook is declared for step 4; no custom ROS converter is currently
+necessary because the required bindings use typed declarative field mappings.
+
+Local proposal checks: `python3 build/check_step1.py` validates all eight documents;
+`check_step1_sources.py` confirms native Talos body/thruster/navigation-sensor data;
+`check_step1_references.py` checks selected packs, frames, assets and endpoint ids;
+`check_step1_provenance.py` checks 37 source records, including 11 against declared
+Git revisions; `check_step1_rejections.py` rejects 11 invalid mutations. Eight
+provenance-free documents and a sensor-only bridge also passed schema validation.
+These are local review helpers under ignored `build/`, not shipped loader tools.
+Opus reviewed the contract and approved after the independent provenance check.
+
+No loader, generated production schema, bridge or runtime behavior is delivered
+by this schema gate. Declared camera/task assets and the scoring-hook body remain
+explicitly absent until their steps. The random-pinger mission branch needs a
+sensor model and source positions in step 4; it is recorded as blocker B1 in the
+exception ledger. Step 2 must prove depth/heading holds through the real stack,
+with an old-simulator baseline; static schema checks do not satisfy that gate.
 
 The user replaced human approval with joint Codex/Claude Code execution. Claude
 uses `claude-opus-5-5` with high effort. It may delegate bounded mechanical work

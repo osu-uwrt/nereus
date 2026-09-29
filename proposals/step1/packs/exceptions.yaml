@@ -1,0 +1,144 @@
+# DRAFT Stage-1 data ledger. Every user-code exception (Python task hook) and every custom ROS
+# converter candidate, with decision, reason, source evidence and stage. Plus open questions and
+# source-fidelity traps referenced as O#/T# from the pack files. Data only; not documentation.
+schema_version: 1
+kind: exceptions_ledger
+id: step1_talos_uwrt_2026
+
+task_hooks:
+- id: H1
+  pack: tasks/robosub_2026
+  declaration: {module: hooks.rules_2026, function: evaluate}
+  decision: required
+  stage: 4
+  reason: >-
+    2026 scoring is a cross-task state machine: award-max rows; eligibility after first gate pass;
+    role from gate crossing side (drives torpedo/bin target class and facing icons); heading/role
+    coin bonuses; style from rotation accumulated inside the approach radius; torpedo shot cap,
+    launch-order large->small sequence and release-distance bonus; unique-class bins; light cap;
+    pinger first/second stage machine; basket turn counting; surface/facing dwell; breach ends run.
+    Not expressible as event_points without a YAML expression language.
+  evidence:
+  - riptide_simulator/c_simulator/tasks/2026/behavior/scoring.py (RunScore, CourseJudge)
+  - riptide_simulator/c_simulator/tasks/2026/behavior/node.py (payload_released, event, clock)
+  inputs:
+  - 'immutable run state per step: reference pose, envelope vertices in world, run options, task frames'
+  - ordered task and mechanism events since the previous call
+  outputs:
+  - score row changes
+  - 'derived events: gate.role_assigned, run.ended'
+  single_hook_rationale: rules cross tasks (gate side -> slalom, role -> torpedo/bins); one module per pack
+
+converters:
+- id: C1
+  message: riptide_msgs2/msg/KillSwitchReport (in, command/software_kill)
+  decision: not_required
+  mapping: "accept_if kill_switch_id == 1; killed <- switch_asserting_kill"
+  requires_generic_feature: accept_if equality filter
+  fallback_if_feature_rejected: compiled converter integrations/uwrt/kill_switch_report
+  evidence: physics_simulator.cpp killSwitchCallback; mechanisms.py kill; riptide_msgs/msg/KillSwitchReport.msg
+- id: C2
+  message: riptide_msgs2/msg/DshotPartialTelemetry (out, state/thrusters/telemetry)
+  decision: not_required
+  mapping: "two 2 Hz constant streams, start_thruster_num 0 and 4, esc_telemetry[i].thruster_ready true, disabled_flags 0"
+  requires_generic_feature: constants + indexed nested array field paths
+  fallback_if_feature_rejected: compiled converter integrations/uwrt/dshot_partial_telemetry
+  why_mandatory_stream: controller_overseer.py escPowerCheckTimer stops active control without telemetry
+  evidence: physics_simulator.cpp pubThrusterTelemetry; controller_overseer.py thrusterTelemetryCB
+- id: C3
+  message: riptide_msgs2/msg/ActuatorStatus (out, state/actuator/status)
+  decision: not_required
+  mapping: "enum_map from native claw/launcher/dropper state names to UWRT uint8 constants; rack_state const 2"
+  requires_generic_feature: enum_map value table
+  requires_native: mechanism state enums {disarmed,busy,loaded,empty} / claw {disarmed,opening,closing,opened,closed}; shared cooldown group (T4)
+  fallback_if_feature_rejected: compiled converter integrations/uwrt/actuator_status
+  evidence: node.py publish(); riptide_msgs/msg/ActuatorStatus.msg
+- id: C4
+  message: sensor_msgs/msg/CompressedImage, Image, CameraInfo (out, cameras)
+  decision: not_required
+  mapping: "generic image options (jpeg quality 93, format 'rgb8; jpeg compressed bgr8'; depth 32FC1); CameraInfo zero D and identity R as typed array constants"
+  evidence: camera_faker main.cpp publishers; yolo_orientation.py create_subscriptions
+- id: C5
+  message: robot_localization/srv/SetPose (server set_sim_pose, client /talos/set_pose)
+  decision: not_required
+  mapping: standard service fields; TF lookup for non-map frames
+  note: adds robot_localization interface package to the generic bridge build (not UWRT-specific)
+  evidence: physics_simulator.cpp setSim/alignEkf
+- id: C6
+  message: std_msgs/msg/Float32 (in, command/actuator/claw_move_s)
+  decision: not_required
+  mapping: "data -> claw.timed_move signed_duration_s; sign/zero semantics are the claw type's"
+  evidence: mechanisms.py claw_timed
+- id: C7
+  message: std_msgs/msg/UInt16 on controller/stunt_state (BT action named PublishInt8)
+  decision: no_converter_no_cast
+  reason: >-
+    Stack-internal only. PublishInt8.btaction.hpp publishes std_msgs/UInt16; complete_controller
+    subscribes UInt16 (Sub_complete_controller_440) and publishes controller/running_stunt_state UInt16;
+    TriggerControllerStunt uses UInt16. Types agree at runtime; only the node name says Int8. The
+    simulator bridge binds neither topic. Do not "fix" by casting; any future binding declares UInt16.
+  evidence: riptide_autonomy bt_actions/PublishInt8.btaction.hpp:44; TriggerControllerStunt.btaction.hpp:46-47; complete_controller slros2_initialize.h:49,69
+- id: C8
+  message: std_msgs/msg/Float32 (out, /talos/ivc/pinger/selected_freq_amp_stream) and Int32 (in, ivc/pinger/set_freq_khz)
+  decision: not_required
+  reason: standard types; the missing piece is a native acoustic_amplitude sensor model (O3, B1), not a converter. Streams are pending, not active.
+  evidence: riptide_acoustics Acoustics.cpp; riptide_hardware pinger_broker.cpp
+
+stack_contracts_not_bridged:   # interfaces RepairCompTree uses that the stack itself serves
+- {interface: /talos/acoustics/start_sample|stop_sample|buffer_0_closer, owner: riptide_acoustics}
+- {interface: /talos/mapping/*, owner: riptide_mapping2}
+- {interface: 'set_camera_is_dfc|set_slalom_type|set_table_pair_enabled', owner: perception}
+- {interface: controller/*, owner: complete_controller + controller_overseer}
+
+blockers:
+- id: B1
+  stage: 4
+  blocks: [random_pinger subtree]
+  item: robot pending sensor pinger + bridge pending pinger_streams
+  reason: no original amplitude model, stream rate or acoustic source placement (O3); not an active sensor
+
+pending_builtin_types:   # user-listed types without step-1 instances; schemas added with their first instance
+- {category: region, type: box, required_from_step: 4, first_user: bins/table}
+- {category: region, type: surface, required_from_step: 4, first_user: surface}
+- {category: event, type: drop_into, required_from_step: 4, first_user: bins/table}
+- {category: event, type: attach, required_from_step: 4, first_user: table}
+- {category: event, type: surface, required_from_step: 4, first_user: surface}
+- {category: event, type: timeout, required_from_step: 4, first_user: payload age / dwell}
+- {category: prop, type: rigid_body, required_from_step: 4, first_user: table props}
+- {category: sensor, type: acoustic_amplitude, required_from_step: 4, first_user: pinger (B1)}
+
+open_questions:
+- {id: O1, stage: 2, status: resolved_in_source, question: "map<->world TF owner: riptide_mapping mapping.launch.py:74-102 launches chameleon_tf world_to_map (identity start, Z/roll/pitch locked, XY/yaw free); navigation.launch owns static world->odom. Bridge looks both up live and never publishes them. Live verification remains step 2."}
+- {id: O2, stage: 2, question: "state/kill is published only after a KillSwitchReport id=1; WaitForKillSwitch blocks until state/kill=false. Scripted runs must publish the un-kill message (harness step), unchanged from original?"}
+- {id: O3, stage: 4, question: "No original pinger amplitude model or source positions exist. Need a declared model (rate, spreading, noise) and acoustic source placements that make the two 10 s window averages decisive."}
+- {id: O4, stage: 4, question: "RandomPingerTree sets is_table := buffer_0_closer, with buffer 0 sampled at pre_torpedo_pose (louder at torpedo => table first). Intended, or an inverted stack bug to report (not fix)?"}
+- {id: O5, stage: 3, status: resolved_in_source, question: "camera_faker main.cpp:1102-1155 / camera_processor.cpp:15: CameraInfo plumb_bob D zero, R identity, P [fx,0,cx,0,0,fy,cy,0,0,0,1,0]; JPEG quality 93, format 'rgb8; jpeg compressed bgr8'; depth 32FC1. Applied in bridge pack."}
+- {id: O6, stage: 3, question: "Stereo right-camera frame convention; only left rgb/depth are consumed, so right outputs are unbridged."}
+- {id: O7, stage: 3, question: "Which robot parts (claw, launcher, magnet) are visible in FFC/DFC and therefore needed as Stage-3 robot assets."}
+- {id: O8, stage: 3, question: "Detector weights rs26_ffc_finals_ncnn_model / dfc_rs_26_ncnn_model are external inputs; record hashes for perception evidence."}
+- {id: O9, stage: 4, question: "Should hook results be published for the riptide_jev evaluator (original simulator/run_score String JSON), or only dumped natively?"}
+- {id: O10, stage: 2, status: partially_resolved, question: "All 30 cited sources hashed from the 2026-09-29 worktree (build/claude-diagnostics/source-hashes.json). Nine match the importer's pinned Git objects (hash_basis git_revision); the rest are hash_basis worktree and their equality to the pinned revisions is unverified."}
+
+fidelity_traps:
+- {id: T1, where: scenario, trap: "Course truth equals the robot prior map (mapping.yaml == riptide_mapping2 config.yaml); zero prior error hides perception/mapping weakness."}
+- {id: T2, where: gate, trap: "Repair half is gate-local -Y (gate_repair y=-0.75); role from the reference-origin crossing y sign, not the envelope."}
+- {id: T3, where: gate, trap: "Gate mesh drawn at [0,-1.5,0] while collision is centred; top bar at local z 0.6096 (world -0.14) but scoring top is local 0.75 (world 0.0)."}
+- {id: T4, where: robot mechanisms, trap: "Torpedo and dropper share one busy_until; a dropper cooldown rejects torpedo fire while torpedo_state still reads CHARGED."}
+- {id: T5, where: robot mechanisms, trap: "Torpedo slots apply +/- baseline/2 (0.0365125) before slot offsets; dropper slots do not."}
+- {id: T6, where: robot mechanisms, trap: "Claw pinch reference (talos_tasks claw.pose) differs from claw_mount/talos/claw_link (talos.yaml) by ~4.5 cm in z."}
+- {id: T7, where: torpedo, trap: "Mapping hole priors (fire_hole_large y -0.030 z 0.217; blood_* identical to fire_*) do not match physics holes from uv (fire_large y -0.206 z 0.054)."}
+- {id: T8, where: torpedo, trap: "Robot proxy is a 1.2 m x 1.2 m x 5 cm box; projectile panel is 0.6096 m square, zero thickness; projectiles never hit the proxy."}
+- {id: T9, where: table/claw, trap: "Claw pads and table props run in a private PyBullet world (claw_world.py); friction/hold priors were tuned there."}
+- {id: T10, where: imu, trap: "IMU reports gravity 9.755455 (EKF calibration) while the plant uses 9.80665; removing it leaves a 0.051 m/s^2 residual."}
+- {id: T11, where: depth, trap: "depth/pose is base_link world z in frame map from one noisy mounted-point sample, not pressure; unbounded above water."}
+- {id: T12, where: clock, trap: "ROS time epoch is wall time at start and never rewinds; original task node resets tasks if sim time goes backwards."}
+- {id: T13, where: safety, trap: "Robot starts killed; thruster commands while killed enqueue zero forces (not dropped); kill also disarms mechanisms."}
+- {id: T14, where: scoring envelope, trap: "Envelope = 8 corners of each collision box plus magnet tip, expressed relative to base_link; judged against base_link truth pose."}
+- {id: T15, where: bins (Stage 4), trap: "Bin drop_into/wall logic applies to every payload kind; torpedoes can land in bins but only dropper payloads can score success."}
+- {id: T16, where: all physics, trap: "Hydrodynamic, payload and claw values are unvalidated priors; acceptance is old-sim equivalence, not hardware."}
+- {id: T17, where: ekf, trap: "EKF takes yaw rate only from gyro/twist angular.z (cov[35]); IMU yaw and yaw rate are disabled in imu0_config."}
+- {id: T18, where: bridge, trap: "Controller topics are hardcoded absolute /talos/... in generated code; the bridge namespace must be /talos."}
+- {id: T19, where: bridge, trap: "pinger_broker (freq selection) is launched only by hardware.launch.py, not in simulation; default 30 kHz applies."}
+- {id: T20, where: stack, trap: "PublishInt8 action publishes UInt16 (C7)."}
+- {id: T21, where: dvl, trap: "8 Hz on the 2 ms lattice acquires at 126/250/376 ms; original dvl_max_tilt 0 means bottom lock is never lost."}
+- {id: T22, where: tasks runtime, trap: "Original task node integrates payloads in 2 ms substeps from simulator/time and gates actions on wall-clock truth freshness (<=1 s); the native runtime is synchronous, so freshness checks become unnecessary, not ported."}

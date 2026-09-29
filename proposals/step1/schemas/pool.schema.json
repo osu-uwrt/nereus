@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Proposed pool pack",
+  "description": "Step 1 proposal, not implemented runtime support; generated-from-loader schemas are step 2+. Pool-local geometry and water only: no robot, task or course layout.",
+  "type": "object",
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "pool"},
+    "id": {"$ref": "common.schema.json#/$defs/name"},
+    "description": {"type": "string"},
+    "provenance": {"$ref": "common.schema.json#/$defs/provenance"},
+    "assets": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/asset"}},
+    "type": {"const": "rectangular_pool"},
+    "parameters": {"$ref": "types.schema.json#/$defs/rectangular_pool"},
+    "collision_boxes": {
+      "type": "array",
+      "items": {"$ref": "common.schema.json#/$defs/collision_box"},
+      "minItems": 1,
+      "description": "Static contact boxes in pool-local coordinates."
+    },
+    "water_optics": {"$ref": "types.schema.json#/$defs/water_optics"},
+    "pending": {"$ref": "common.schema.json#/$defs/pending"}
+  },
+  "required": ["schema_version", "kind", "id", "assets", "type", "parameters", "collision_boxes"],
+  "additionalProperties": false
+}

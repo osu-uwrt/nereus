@@ -1,0 +1,56 @@
+# DRAFT Stage-1 proposal. Task include file (kind task), referenced from tasks.yaml.
+# Task-local frame: origin at the gate centre line, +X toward the approach (start) side, +Z up.
+# The scenario places it. Geometry: collision_files/objects/gate.urdf; judge: scoring.py CourseJudge.
+schema_version: 1
+kind: task
+id: gate
+description: Start gate with role halves; forward pass and reverse (return-home) pass.
+
+# Task-local named frames (original mapping gate_repair/gate_rescue, parent gate_frame).
+frames:
+- {id: gate_repair, position_m: [0.0, -0.75, 0.5], orientation_wxyz: [1, 0, 0, 0]}   # repair = local -Y (T2)
+- {id: gate_rescue, position_m: [0.0, 0.75, 0.5], orientation_wxyz: [1, 0, 0, 0]}
+
+props:
+- id: gate_structure
+  type: static_body
+  parameters:
+    # Robot contact proxies (gate.urdf boxes). Physical bars are NOT the scoring region.
+    collision_boxes:
+    - {id: top_bar, size_m: [0.0762, 3.048, 0.0762], center_m: [0, 0, 0.6096], orientation_wxyz: [1, 0, 0, 0]}
+    - {id: divider, size_m: [0.0762, 0.0762, 0.6096], center_m: [0, 0, 0.3048], orientation_wxyz: [1, 0, 0, 0]}
+    - {id: post_neg_y, size_m: [0.0762, 0.0762, 1.524], center_m: [0, -1.524, -0.1524], orientation_wxyz: [1, 0, 0, 0]}
+    - {id: post_pos_y, size_m: [0.0762, 0.0762, 1.524], center_m: [0, 1.524, -0.1524], orientation_wxyz: [1, 0, 0, 0]}
+    # Step-3 camera visuals; offsets from tasks/2026/config/markers.yaml.
+    visuals:
+    - {asset: gate_mesh, frame: task, position_m: [0.0, -1.5, 0.0], orientation_wxyz: [1, 0, 0, 0]}   # T3
+    - {asset: gate_repair_mesh, frame: gate_repair, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: gate_rescue_mesh, frame: gate_rescue, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+
+regions:
+- id: gate_opening
+  type: rectangular_portal
+  parameters:
+    plane: {axis: x, offset_m: 0.0}
+    # config/tasks.yaml scoring: every scoring_envelope vertex strictly inside (gate-local).
+    bounds_local: {abs_y_lt_m: 1.5, z_lt_m: 0.75}  # gate_half_width, gate_top (world z 0.0 here)
+    world_floor_clearance: true                    # every envelope vertex above the pool floor
+    crossing_reference: robot_reference_origin     # interpolated sign change of reference-origin local x
+    fit_checks: [envelope_at_crossing_point_with_current_orientation, envelope_at_completion]
+    traversal: full_envelope                       # side counts only when all vertices share it
+    approach_radius_m: 3.0                         # attempt opens/closes here (style tracking)
+    max_pose_step_m: 2.0                           # larger reference-origin jump resets the judge
+
+events:
+- id: forward_pass
+  type: pass_through
+  parameters: {region: gate_opening, from_side: positive, to_side: negative, emits: [crossing_point_local, envelope_top_world]}
+- id: reverse_pass
+  type: pass_through
+  parameters: {region: gate_opening, from_side: negative, to_side: positive, emits: [crossing_point_local, envelope_top_world]}
+- id: structure_contact             # informational; the original awards/penalises nothing
+  type: contact
+  parameters: {prop: gate_structure, with: robot}
+
+# Gate/home points are role-, coin-, style- and eligibility-dependent: owned by the pack hook.
+scoring: []

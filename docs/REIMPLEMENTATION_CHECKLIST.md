@@ -6,9 +6,10 @@ only; no pushes. No UI or visual-fidelity work until step 5 is complete.
 
 ## Current execution gates
 
-- [ ] 1. Schemas only: robot, pool, tasks, scenario and bridge; actual Talos,
+- [x] 1. Schemas only: robot, pool, tasks, scenario and bridge; actual Talos,
   2026 pool, gate and torpedo data; UWRT bridge wiring; list every necessary task
-  Python hook and custom-message converter with its reason. Claude review before code.
+  Python hook and custom-message converter with its reason. Joint source/schema
+  review passed; production loaders and runtime checks remain in later gates.
 - [ ] 2. Generic YAML bridge, UWRT config and required converters: the existing
   controllers and EKF hold depth and heading about as well as the old simulator.
 - [ ] 3. Robot-pack offscreen camera and stereo products: real perception runs on them.

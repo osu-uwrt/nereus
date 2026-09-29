@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Proposed exceptions ledger",
+  "description": "Step 1 proposal; generated-from-loader schemas are step 2+. Data ledger of every user-code exception (Python task hook), every custom ROS converter candidate, stack contracts not bridged, blockers, pending built-in types, open questions and source-fidelity traps. Cross-references (O#/T#/B# ids cited from pack files, pack paths) are semantic checks.",
+  "type": "object",
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "exceptions_ledger"},
+    "id": {"$ref": "common.schema.json#/$defs/name"},
+    "task_hooks": {"type": "array", "items": {"$ref": "#/$defs/task_hook"}},
+    "converters": {"type": "array", "items": {"$ref": "#/$defs/converter"}},
+    "stack_contracts_not_bridged": {"type": "array", "items": {"$ref": "#/$defs/stack_contract"}},
+    "blockers": {"type": "array", "items": {"$ref": "#/$defs/blocker"}},
+    "pending_builtin_types": {"type": "array", "items": {"$ref": "#/$defs/pending_builtin_type"}},
+    "open_questions": {"type": "array", "items": {"$ref": "#/$defs/open_question"}},
+    "fidelity_traps": {"type": "array", "items": {"$ref": "#/$defs/fidelity_trap"}}
+  },
+  "required": [
+    "schema_version", "kind", "id", "task_hooks", "converters", "stack_contracts_not_bridged",
+    "blockers", "pending_builtin_types", "open_questions", "fidelity_traps"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "text": {"type": "string", "minLength": 1},
+    "text_list": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1
+    },
+    "task_hook": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "pattern": "^H[0-9]+$"},
+        "pack": {"type": "string", "minLength": 1},
+        "declaration": {
+          "type": "object",
+          "properties": {
+            "module": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$"},
+            "function": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}
+          },
+          "required": ["module", "function"],
+          "additionalProperties": false
+        },
+        "decision": {"enum": ["required"]},
+        "stage": {"$ref": "common.schema.json#/$defs/step"},
+        "reason": {"$ref": "#/$defs/text"},
+        "evidence": {"$ref": "#/$defs/text_list"},
+        "inputs": {"$ref": "#/$defs/text_list"},
+        "outputs": {"$ref": "#/$defs/text_list"},
+        "single_hook_rationale": {"$ref": "#/$defs/text"}
+      },
+      "required": [
+        "id", "pack", "declaration", "decision", "stage", "reason", "evidence", "inputs",
+        "outputs", "single_hook_rationale"
+      ],
+      "additionalProperties": false
+    },
+    "converter": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "pattern": "^C[0-9]+$"},
+        "message": {"$ref": "#/$defs/text"},
+        "decision": {"enum": ["not_required", "required", "no_converter_no_cast"]},
+        "mapping": {"$ref": "#/$defs/text"},
+        "reason": {"$ref": "#/$defs/text"},
+        "requires_generic_feature": {"$ref": "#/$defs/text"},
+        "requires_native": {"$ref": "#/$defs/text"},
+        "fallback_if_feature_rejected": {"$ref": "#/$defs/text"},
+        "why_mandatory_stream": {"$ref": "#/$defs/text"},
+        "note": {"$ref": "#/$defs/text"},
+        "evidence": {"$ref": "#/$defs/text"}
+      },
+      "required": ["id", "message", "decision", "evidence"],
+      "additionalProperties": false,
+      "anyOf": [
+        {"required": ["mapping"]},
+        {"required": ["reason"]}
+      ]
+    },
+    "stack_contract": {
+      "type": "object",
+      "properties": {
+        "interface": {"$ref": "#/$defs/text"},
+        "owner": {"$ref": "#/$defs/text"}
+      },
+      "required": ["interface", "owner"],
+      "additionalProperties": false
+    },
+    "blocker": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "pattern": "^B[0-9]+$"},
+        "stage": {"$ref": "common.schema.json#/$defs/step"},
+        "blocks": {"$ref": "#/$defs/text_list"},
+        "item": {"$ref": "#/$defs/text"},
+        "reason": {"$ref": "#/$defs/text"}
+      },
+      "required": ["id", "stage", "blocks", "item", "reason"],
+      "additionalProperties": false
+    },
+    "pending_builtin_type": {
+      "type": "object",
+      "properties": {
+        "category": {"enum": ["region", "event", "prop", "sensor"]},
+        "type": {"$ref": "common.schema.json#/$defs/name"},
+        "required_from_step": {"$ref": "common.schema.json#/$defs/step"},
+        "first_user": {"$ref": "#/$defs/text"}
+      },
+      "required": ["category", "type", "required_from_step", "first_user"],
+      "additionalProperties": false
+    },
+    "open_question": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "pattern": "^O[0-9]+$"},
+        "stage": {"$ref": "common.schema.json#/$defs/step"},
+        "status": {"enum": ["resolved_in_source", "partially_resolved", "open"]},
+        "question": {"$ref": "#/$defs/text"}
+      },
+      "required": ["id", "stage", "question"],
+      "additionalProperties": false
+    },
+    "fidelity_trap": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "pattern": "^T[0-9]+$"},
+        "where": {"$ref": "#/$defs/text"},
+        "trap": {"$ref": "#/$defs/text"}
+      },
+      "required": ["id", "where", "trap"],
+      "additionalProperties": false
+    }
+  }
+}

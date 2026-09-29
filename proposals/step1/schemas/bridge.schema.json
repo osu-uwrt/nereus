@@ -1,0 +1,369 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Proposed bridge pack",
+  "description": "Step 1 proposal; generated-from-loader schemas are step 2+. Generic YAML ROS 2 bridge binding a robot pack to an external stack. No user code: field maps accept only {from}, {constant} or {from, enum_map}; filters are field equality only. Semantic checks (not JSON Schema): thrusters.order and input_scales have equal length; stream/service ids referenced by kill, reset, placement and reply_stream exist; native endpoints resolve against the robot pack; frame_names keys are robot-pack frame ids; converter names refer to entries in converters.",
+  "type": "object",
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "bridge"},
+    "id": {"$ref": "common.schema.json#/$defs/name"},
+    "description": {"type": "string"},
+    "provenance": {"$ref": "common.schema.json#/$defs/provenance"},
+    "assets": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/asset"}},
+    "requires_robot": {"$ref": "common.schema.json#/$defs/name"},
+    "namespace": {"type": "string", "pattern": "^/[A-Za-z0-9_/]*[A-Za-z0-9_]$"},
+    "frame_names": {
+      "type": "object",
+      "propertyNames": {"$ref": "common.schema.json#/$defs/name"},
+      "additionalProperties": {"$ref": "#/$defs/ros_name"},
+      "description": "Native frame id to ROS frame name."
+    },
+    "clock": {"$ref": "#/$defs/clock"},
+    "thrusters": {"$ref": "#/$defs/thrusters"},
+    "tf": {"$ref": "#/$defs/tf"},
+    "kill": {"$ref": "#/$defs/kill"},
+    "reset": {"$ref": "#/$defs/reset"},
+    "placement": {"$ref": "#/$defs/placement"},
+    "streams": {"type": "array", "items": {"$ref": "#/$defs/stream"}},
+    "services": {"type": "array", "items": {"$ref": "#/$defs/service"}},
+    "converters": {"type": "array", "items": {"$ref": "#/$defs/converter"}},
+    "pending": {"$ref": "common.schema.json#/$defs/pending"}
+  },
+  "required": ["schema_version", "kind", "id", "assets", "namespace", "clock", "streams"],
+  "$comment": "Capability blocks (frame_names, thrusters, tf, kill, reset, placement, services, converters) are optional: a sensor-only bridge declares none of them; each is strictly typed when present.",
+  "additionalProperties": false,
+  "$defs": {
+    "ros_name": {
+      "type": "string",
+      "pattern": "^/?[A-Za-z_~][A-Za-z0-9_/~]*$",
+      "description": "ROS topic, service or frame name; relative names resolve under the bridge namespace."
+    },
+    "ros_frame": {
+      "type": "string",
+      "pattern": "^[A-Za-z_~][A-Za-z0-9_/~]*$",
+      "description": "ROS frame name; no leading slash."
+    },
+    "message_type": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]+/msg/[A-Za-z0-9_]+$"
+    },
+    "service_type": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]+/srv/[A-Za-z0-9_]+$"
+    },
+    "field_path": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\[[0-9]+\\])*(\\.[A-Za-z_][A-Za-z0-9_]*(\\[[0-9]+\\])*)*$",
+      "description": "Dotted field path with integer indexes. No expressions."
+    },
+    "scalar_value": {
+      "type": ["string", "number", "boolean"]
+    },
+    "constant_value": {
+      "oneOf": [
+        {"$ref": "#/$defs/scalar_value"},
+        {"type": "array", "items": {"type": "number"}, "minItems": 1},
+        {"type": "array", "items": {"type": "boolean"}, "minItems": 1}
+      ],
+      "description": "Literal scalar or homogeneous numeric/boolean array (e.g. CameraInfo d, r). Array length must match the destination field (semantic check)."
+    },
+    "field_value": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {"from": {"$ref": "#/$defs/field_path"}},
+          "required": ["from"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {"constant": {"$ref": "#/$defs/constant_value"}},
+          "required": ["constant"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "from": {"$ref": "#/$defs/field_path"},
+            "enum_map": {
+              "type": "object",
+              "propertyNames": {"$ref": "common.schema.json#/$defs/name"},
+              "additionalProperties": {"type": "integer"},
+              "minProperties": 1
+            }
+          },
+          "required": ["from", "enum_map"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "field_map": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/field_path"},
+      "additionalProperties": {"$ref": "#/$defs/field_value"},
+      "description": "Destination field path to source. Destination keys are ROS field paths on publish and native argument names on subscribe. A whole-vector/matrix source assigned to a whole ROS field uses standard semantics: native vector3 -> geometry x,y,z; native 3x3 matrix -> row-major float64[9]. Quaternions are never assigned whole; map w/x/y/z components explicitly to avoid implicit ordering."
+    },
+    "native_endpoint": {
+      "type": "string",
+      "anyOf": [
+        {"const": "timer"},
+        {"pattern": "^(sensor|state|event|command|estimate):[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"}
+      ]
+    },
+    "clock": {
+      "type": "object",
+      "properties": {
+        "topic": {"const": "/clock"},
+        "epoch": {"enum": ["zero", "system_time_at_start"]},
+        "rate_hz": {"type": "number", "exclusiveMinimum": 0},
+        "reset_policy": {"enum": ["preserve_ros_epoch_and_time", "restart_from_epoch"]},
+        "publish_before_data": {"const": true},
+        "real_time_factor": {"type": "number", "exclusiveMinimum": 0},
+        "qos": {"$ref": "common.schema.json#/$defs/qos"}
+      },
+      "required": ["topic", "epoch", "rate_hz", "reset_policy", "publish_before_data", "real_time_factor", "qos"],
+      "additionalProperties": false
+    },
+    "thrusters": {
+      "type": "object",
+      "properties": {
+        "order": {
+          "type": "array",
+          "items": {"$ref": "common.schema.json#/$defs/name"},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "input_unit": {"const": "N"},
+        "input_scales": {"type": "array", "items": {"type": "number"}},
+        "reject": {
+          "type": "array",
+          "items": {"enum": ["wrong_length", "nonfinite"]},
+          "uniqueItems": true
+        }
+      },
+      "required": ["order", "input_unit", "input_scales", "reject"],
+      "additionalProperties": false,
+      "description": "order and input_scales must have equal length (semantic check)."
+    },
+    "tf": {
+      "type": "object",
+      "properties": {
+        "publish": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "parent": {"$ref": "#/$defs/ros_frame"},
+              "child": {"$ref": "#/$defs/ros_frame"},
+              "native": {"$ref": "#/$defs/native_endpoint"},
+              "rate_hz": {"type": "number", "exclusiveMinimum": 0}
+            },
+            "required": ["parent", "child", "native", "rate_hz"],
+            "additionalProperties": false
+          }
+        },
+        "lookup": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "parent": {"$ref": "#/$defs/ros_frame"},
+              "child": {"$ref": "#/$defs/ros_frame"},
+              "owner": {"type": "string", "minLength": 1}
+            },
+            "required": ["parent", "child", "owner"],
+            "additionalProperties": false
+          }
+        },
+        "never_publish": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      },
+      "required": ["publish", "lookup", "never_publish"],
+      "additionalProperties": false
+    },
+    "kill": {
+      "type": "object",
+      "properties": {
+        "command_stream": {"$ref": "common.schema.json#/$defs/name"},
+        "state_stream": {"$ref": "common.schema.json#/$defs/name"}
+      },
+      "required": ["command_stream", "state_stream"],
+      "additionalProperties": false,
+      "description": "Values are stream ids (semantic check)."
+    },
+    "reset": {
+      "type": "object",
+      "properties": {
+        "robot_service": {"$ref": "common.schema.json#/$defs/name", "description": "Plant to start pose only (command:robot.reset_to_start)."},
+        "tasks_service": {"$ref": "common.schema.json#/$defs/name", "description": "Task/scoring state only (command:tasks.reset)."},
+        "full_service": {"$ref": "common.schema.json#/$defs/name", "description": "Whole scenario: plant, sensors, mechanisms, contacts, tasks, scores (command:scenario.reset)."}
+      },
+      "minProperties": 1,
+      "additionalProperties": false,
+      "description": "Distinct reset scopes; values are service ids (semantic check)."
+    },
+    "placement": {
+      "type": "object",
+      "properties": {
+        "set_service": {"$ref": "common.schema.json#/$defs/name"},
+        "sync_service": {"$ref": "common.schema.json#/$defs/name"},
+        "estimator_alignment": {
+          "type": "object",
+          "properties": {
+            "client": {"$ref": "#/$defs/ros_name"},
+            "service_type": {"$ref": "#/$defs/service_type"},
+            "triggers": {
+              "type": "array",
+              "items": {"enum": ["startup", "placement", "reset_to_start", "full_reset"]},
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Neutral runtime operations after which the external estimator is seeded; never during a run."
+            },
+            "estimate_stream": {"$ref": "common.schema.json#/$defs/name"},
+            "pose": {"const": "reference_frame"},
+            "covariance_diagonal": {"type": "number", "exclusiveMinimum": 0}
+          },
+          "required": ["client", "service_type", "triggers", "estimate_stream", "pose", "covariance_diagonal"],
+          "additionalProperties": false,
+          "description": "Optional: robots without an external estimator omit it."
+        }
+      },
+      "minProperties": 1,
+      "additionalProperties": false,
+      "description": "set_service, sync_service and estimate_stream are service/stream ids (semantic check)."
+    },
+    "stream": {
+      "type": "object",
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/name"},
+        "direction": {"enum": ["publish", "subscribe"]},
+        "topic": {"$ref": "#/$defs/ros_name"},
+        "message_type": {"$ref": "#/$defs/message_type"},
+        "native": {"$ref": "#/$defs/native_endpoint"},
+        "frame_id": {
+          "anyOf": [{"const": ""}, {"$ref": "#/$defs/ros_frame"}]
+        },
+        "rate_hz": {"type": "number", "minimum": 0},
+        "qos": {"$ref": "common.schema.json#/$defs/qos"},
+        "fields": {"$ref": "#/$defs/field_map", "minProperties": 1},
+        "accept_if": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": {"$ref": "#/$defs/field_path"},
+              "equals": {"$ref": "#/$defs/scalar_value"}
+            },
+            "required": ["field", "equals"],
+            "additionalProperties": false
+          }
+        },
+        "reply_stream": {"$ref": "common.schema.json#/$defs/name"},
+        "image": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "compression": {"const": "jpeg"},
+                "quality": {"type": "integer", "minimum": 1, "maximum": 100},
+                "source_encoding": {"enum": ["rgb8", "bgr8"]},
+                "compressed_encoding": {"enum": ["rgb8", "bgr8"]}
+              },
+              "required": ["compression", "quality", "source_encoding", "compressed_encoding"],
+              "additionalProperties": false,
+              "description": "Generic image_transport JPEG: CompressedImage.format = '<source_encoding>; jpeg compressed <compressed_encoding>'."
+            },
+            {
+              "type": "object",
+              "properties": {"encoding": {"enum": ["32FC1", "16UC1", "rgb8", "bgr8"]}},
+              "required": ["encoding"],
+              "additionalProperties": false,
+              "description": "Uncompressed sensor_msgs/Image encoding."
+            }
+          ]
+        },
+        "converter": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Compiled converter maintained in integrations/uwrt for custom messages only, never user code."
+        }
+      },
+      "required": ["id", "direction", "topic", "message_type", "native", "frame_id", "rate_hz", "qos", "fields"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"direction": {"const": "subscribe"}}, "required": ["direction"]},
+          "then": {
+            "properties": {"rate_hz": {"const": 0}},
+            "not": {"required": ["image"]}
+          }
+        },
+        {
+          "if": {"properties": {"direction": {"const": "publish"}}, "required": ["direction"]},
+          "then": {"not": {"required": ["accept_if"]}}
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "anyOf": [{"const": "timer"}, {"pattern": "^state:"}]
+              }
+            },
+            "required": ["native"]
+          },
+          "then": {"properties": {"rate_hz": {"exclusiveMinimum": 0}}}
+        },
+        {
+          "if": {
+            "properties": {"native": {"pattern": "^event:"}},
+            "required": ["native"]
+          },
+          "then": {"properties": {"rate_hz": {"const": 0}}}
+        }
+      ],
+      "description": "Rate zero means event/receipt-driven, never a free-running timer. reply_stream is a stream id (semantic check)."
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/name"},
+        "service": {"$ref": "#/$defs/ros_name"},
+        "service_type": {"$ref": "#/$defs/service_type"},
+        "action": {"$ref": "#/$defs/native_endpoint"},
+        "request": {"$ref": "#/$defs/field_map"},
+        "response": {"$ref": "#/$defs/field_map"},
+        "placement": {
+          "type": "object",
+          "properties": {
+            "pose_source": {"enum": ["request", "estimate"]},
+            "keep_velocity": {"type": "boolean"},
+            "becomes_start_pose": {"type": "boolean"},
+            "align_estimator": {"type": "boolean"}
+          },
+          "required": ["pose_source", "keep_velocity", "becomes_start_pose", "align_estimator"],
+          "additionalProperties": false
+        },
+        "required_from_step": {"$ref": "common.schema.json#/$defs/step", "description": "Declared contract whose native action arrives in a later step."},
+        "converter": {"$ref": "common.schema.json#/$defs/name"}
+      },
+      "required": ["id", "service", "service_type", "action", "request", "response"],
+      "additionalProperties": false
+    },
+    "converter": {
+      "type": "object",
+      "properties": {
+        "name": {"$ref": "common.schema.json#/$defs/name"},
+        "package": {"const": "integrations/uwrt"},
+        "message_type": {"$ref": "#/$defs/message_type"},
+        "service_type": {"$ref": "#/$defs/service_type"},
+        "reason": {"type": "string", "minLength": 1}
+      },
+      "required": ["name", "package", "reason"],
+      "additionalProperties": false,
+      "oneOf": [
+        {"required": ["message_type"]},
+        {"required": ["service_type"]}
+      ],
+      "description": "Compiled converter for custom messages/services only; never user code."
+    }
+  }
+}
