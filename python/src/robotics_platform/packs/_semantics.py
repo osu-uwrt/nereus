@@ -362,6 +362,8 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
             where = f"/props/{identifier}"
             _known(parameters["frame"], frames, where, "frame", problems)
             _asset(parameters["collision_asset"], asset_ids, where, problems)
+            if "visual_asset" in parameters:
+                _asset(parameters["visual_asset"], asset_ids, where, problems)
             target = regions.get(parameters["expected_region"])
             if target is None or target["type"] != "box":
                 problems.append(f"{where}/expected_region: must name a box region")

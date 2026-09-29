@@ -190,6 +190,7 @@ class TaskRuntime:
                     self._targets[key] = ProximityTarget(
                         parameters, placed(parameters),
                         _probe_point(resolved.robot, parameters["probe_mechanism_type"]))
+                    self._targets[key].indicator = dict(parameters.get("indicator", {}))
                 elif kind == "surface":
                     positions = {name: placed({"frame": name}).translation
                                  for name in parameters["facing"]["targets"]}
@@ -220,13 +221,20 @@ class TaskRuntime:
             source = path.read_bytes()
             if hashlib.sha256(source).hexdigest() != resolved.source_sha256.get(path):
                 raise ValueError(f"task hook is not the resolved source: {path}")
-            self._hook_sources.append((path, source, hook["function"], _freeze(hook["parameters"])))
+            self._hook_sources.append((path, source, hook["function"], _freeze(hook["parameters"]),
+                                       hook.get("status_function"), hook.get("feed_function")))
         self.reset()
 
-    def reset(self) -> None:
-        """Clear this observer and scoring state; the owner resets other components."""
+    def reset(self, time_ns: int = 0) -> None:
+        """Clear this observer and scoring state; the owner resets other components.
+
+        time_ns is the owner's current simulation time: a scenario that auto-starts its run
+        starts it now.
+        """
         self._hooks = []
-        for path, source, function, parameters in self._hook_sources:
+        self._status_hooks: list[tuple[Any, Any]] = []
+        self._feed_hooks: list[tuple[Any, Any]] = []
+        for path, source, function, parameters, status, feed in self._hook_sources:
             namespace = {"__name__": f"pack_hook_{hashlib.sha256(source).hexdigest()}",
                          "__file__": str(path)}
             exec(compile(source, str(path), "exec"), namespace)
@@ -234,6 +242,12 @@ class TaskRuntime:
             if not callable(callback):
                 raise ValueError(f"task hook {path}:{function} is not callable")
             self._hooks.append((callback, parameters))
+            for name, table in ((status, self._status_hooks), (feed, self._feed_hooks)):
+                if name is not None:
+                    extra = namespace.get(name)
+                    if not callable(extra):
+                        raise ValueError(f"task hook {path}:{name} is not callable")
+                    table.append((extra, parameters))
         for tracker in (*self._portals.values(), *self._targets.values(),
                         *self._surfaces.values(), *self._turns.values()):
             tracker.reset()
@@ -242,10 +256,10 @@ class TaskRuntime:
         self._award_counts: dict[tuple[str, str], int] = {}
         self._active_contacts: set[tuple[str, str]] = set()
         self._projectiles: dict[int, _Projectile] = {}
-        self._last_time = 0
+        self._last_time = _time(time_ns)
         self._failed = False
-        self._run = {"running": self._auto_start, "ended": False, "started_ns": 0,
-                     "options": dict(self._options), "seed": self._seed}
+        self._run = {"running": self._auto_start, "ended": False, "started_ns": time_ns,
+                     "stopped_ns": None, "options": dict(self._options), "seed": self._seed}
 
     def snapshot(self) -> Mapping[str, Any]:
         return _freeze({"run": self._run, "scores": self._scores, "history": self._history,
@@ -255,11 +269,18 @@ class TaskRuntime:
                         "latched": {f"{task}/{region}": target.latched
                                     for (task, region), target in self._targets.items()}})
 
-    def start(self, time_ns: int) -> None:
-        """Start a fresh scoring run at the caller's current simulation time."""
+    def start(self, time_ns: int, options: Mapping[str, Any] | None = None) -> None:
+        """Start a fresh scoring run at the caller's current simulation time.
+
+        options override the scenario's run options for this run only; every key must be a
+        declared option and the owner validates values (see Session.run_start).
+        """
         self._check_time(time_ns)
-        self.reset()
-        self._last_time = time_ns
+        unknown = set(options or ()) - self._options.keys()
+        if unknown:
+            raise ValueError(f"unknown run options {sorted(unknown)}")
+        self.reset(time_ns)
+        self._run["options"].update(options or {})
         self._run.update(running=True, started_ns=time_ns)
 
     def stop(self, time_ns: int) -> tuple[Mapping[str, Any], ...]:
@@ -274,8 +295,36 @@ class TaskRuntime:
             self._failed = True
             raise
         self._last_time = time_ns
-        self._run["running"] = False
+        if self._run["running"]:
+            self._run.update(running=False, stopped_ns=time_ns)
         return result
+
+    def describe(self) -> dict[str, Any]:
+        """Extra scalar run-score fields declared by the pack hooks (status_function)."""
+        fields: dict[str, Any] = {}
+        state = self.snapshot()
+        for callback, parameters in self._status_hooks:
+            fields.update(json.loads(json.dumps(callback(state, parameters), allow_nan=False)))
+        return fields
+
+    def feed(self, events: Sequence[Mapping[str, Any]], context: Mapping[str, Any]
+             ) -> list[dict[str, Any]]:
+        """Operator event-feed items (pack feed_function) for events already committed."""
+        items: list[dict[str, Any]] = []
+        state = self.snapshot()
+        for callback, parameters in self._feed_hooks:
+            items += json.loads(json.dumps(
+                callback(state, _freeze(list(events)), _freeze(context), parameters),
+                allow_nan=False))
+        return items
+
+    def indicators(self) -> list[dict[str, Any]]:
+        """Latched proximity targets with their world face pose, for lights and viewers."""
+        return [{"task": task, "region": region,
+                 "position_m": tuple(float(v) for v in target.face_world.translation),
+                 "orientation_wxyz": tuple(float(v) for v in target.face_world.orientation_wxyz),
+                 "latched": bool(target.latched), "colors": dict(target.indicator)}
+                for (task, region), target in self._targets.items()]
 
     def record(self, time_ns: int, events: Sequence[Mapping[str, Any]]
                ) -> tuple[Mapping[str, Any], ...]:

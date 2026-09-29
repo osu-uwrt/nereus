@@ -61,6 +61,7 @@ class Payload:
     max_age_ns: int
     active: bool = True
     outcome: str = ""
+    slot: int = 0
 
 
 @dataclass(frozen=True)
@@ -100,6 +101,7 @@ class Session:
         """``tasks=None`` observes tasks when the scenario selects any; robots without
         mechanisms and scenarios without tasks run as plain navigation plants."""
         self.resolved, self.pack = resolved, pack
+        self._task_pack: Mapping[str, Any] = getattr(resolved, "tasks", None) or {}
         self.runtime = pack.runtime
         self.robot = resolved.robot
         self.timestep_ns = int(pack.parameters.timestep_ns)
@@ -153,6 +155,13 @@ class Session:
         self.payloads: dict[int, Payload] = {}
         self._next_payload = 0
         self.last_step = Step(self.runtime.observe())
+        # Operator run state (not part of scoring): manual adjustment, status text, outcome
+        # counters and the not-yet-published event feed.
+        self.run_adjustment = 0.0
+        self.run_message = ""
+        counters = self._task_pack.get("outcome_counters", [])
+        self.task_counters: dict[str, int] = dict.fromkeys(counters, 0)
+        self._feed_queue: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------ time
 
@@ -177,6 +186,7 @@ class Session:
         if self.tasks is not None:
             events += self.tasks.observe(now, self.reference_pose(snapshot.body))
         self.last_step = Step(snapshot, tuple(events))
+        self._ingest(events)
         return self.last_step
 
     def _propagate(
@@ -334,6 +344,7 @@ class Session:
             state,
             now,
             round(projectile.get("max_age_s", 30) * 1e9),
+            slot=release.slot_index,
         )
         self._next_payload += 1
         self.payloads[payload.identifier] = payload
@@ -352,6 +363,7 @@ class Session:
             self.last_step = Step(
                 self.last_step.snapshot, self.last_step.task_events + tuple(events)
             )
+            self._ingest(events)
         return result
 
     def mechanism_state(self) -> MechanismState | None:
@@ -369,10 +381,14 @@ class Session:
         self.payloads.clear()
         if self.mechanisms is not None:
             self.mechanisms.reload_all(killed=self.killed)
+        self.run_adjustment = 0.0
+        self.task_counters = dict.fromkeys(self.task_counters, 0)
         if self.tasks is not None:
-            self.tasks.reset()
+            self.tasks.reset(self.time_ns)
         for world in self.prop_worlds:
             world.reset()
+        self.run_message = self._message("reset", "Tasks and run reset")
+        self._feed_queue.append(self._reset_event())
         return True, "All tasks reset; ammunition reloaded and actuators disarmed"
 
     def full_reset(self, seed: int | None = None) -> Any:
@@ -383,8 +399,236 @@ class Session:
         self.start_state = self.pack.initial
         self._reset_owned_state()
         if self.tasks is not None:
-            self.tasks.reset()
+            self.tasks.reset(self.time_ns)
         for world in self.prop_worlds:
             world.reset()
         self.last_step = Step(snapshot)
+        self._feed_queue.append(self._reset_event())
         return snapshot
+
+    # ------------------------------------------------------------------ run control
+
+    def _message(self, key: str, default: str) -> str:
+        return str(self._task_pack.get("run_messages", {}).get(key, default))
+
+    def _reset_event(self) -> dict[str, Any]:
+        return {"kind": "tasks", "result": "reset", "target": "", "time": self.time_ns / 1e9}
+
+    def _record(self, events: Sequence[Mapping[str, Any]]) -> None:
+        """Keep events produced outside advance() with the current step's events."""
+        if events:
+            self.last_step = Step(
+                self.last_step.snapshot, self.last_step.task_events + tuple(events)
+            )
+            self._ingest(events)
+
+    def _ingest(self, events: Sequence[Mapping[str, Any]]) -> None:
+        """Translate committed task events into operator feed items and outcome counters."""
+        if not events or self.tasks is None:
+            return
+        context = {
+            "payloads": {
+                item.identifier: {
+                    "mechanism_id": item.mechanism_id,
+                    "mechanism_type": item.mechanism_type,
+                    "slot": item.slot,
+                }
+                for item in self.payloads.values()
+            }
+        }
+        for item in self.tasks.feed(events, context):
+            if item["result"] in self.task_counters:
+                self.task_counters[item["result"]] += 1
+            self._feed_queue.append(item)
+
+    def take_feed(self) -> list[dict[str, Any]]:
+        """Operator event-feed items produced since the last call, oldest first."""
+        items, self._feed_queue = self._feed_queue, []
+        return items
+
+    @property
+    def running(self) -> bool:
+        return self.tasks is not None and bool(self.tasks.snapshot()["run"]["running"])
+
+    def run_start(self, options: Mapping[str, Any] | None = None) -> CommandResult:
+        """Operator start: reset all tasks, then start a fresh scored run with these options.
+
+        Options must be declared run options of the task pack with a valid value; missing
+        ones keep the scenario's values. Rejected while a run is in progress.
+        """
+        if self.tasks is None:
+            return CommandResult(False, "Course scoring is not configured")
+        if self.running:
+            return CommandResult(False, "Stop the current run first")
+        declared = {item["key"]: item for item in self._task_pack["run_options"]}
+        chosen: dict[str, Any] = {}
+        for key, value in (options or {}).items():
+            option = declared.get(key)
+            if option is None:
+                return CommandResult(False, f"Unknown run option {key!r}")
+            if option["type"] == "bool" and not isinstance(value, bool):
+                return CommandResult(False, f"Run option {key!r} must be true or false")
+            if option["type"] == "choice" and value not in option["choices"]:
+                return CommandResult(
+                    False, f"Select a known {key}: {' or '.join(option['choices'])}"
+                )
+            chosen[key] = value
+        self.reset_tasks()
+        self.tasks.start(self.time_ns, chosen)
+        self.run_message = self._message("start", "Run started")
+        return CommandResult(True, self.run_message)
+
+    def run_stop(self) -> CommandResult:
+        """Stop the scored run at the current time (finishes an open gate attempt)."""
+        if self.tasks is None:
+            return CommandResult(False, "Course scoring is not configured")
+        self._record(self.tasks.stop(self.time_ns))
+        self.run_message = self._message("stop", "Run stopped")
+        return CommandResult(True, self.run_message)
+
+    def run_adjust(self, points: float) -> CommandResult:
+        """Set the referee's manual adjustment added to the run total."""
+        if self.tasks is None:
+            return CommandResult(False, "Course scoring is not configured")
+        if isinstance(points, bool) or not isinstance(points, (int, float)):
+            return CommandResult(False, "Adjustment must be a number")
+        if not math.isfinite(points):
+            return CommandResult(False, "Adjustment must be finite")
+        self.run_adjustment = float(points)
+        self.run_message = self._message("adjustment", "Manual adjustment updated")
+        return CommandResult(True, self.run_message)
+
+    def run_snapshot(self) -> dict[str, Any] | None:
+        """Operator scorecard of the current run (None without tasks).
+
+        elapsed is simulation time since the start while running, else frozen at the stop;
+        rows keep the pack's fixed order and labels; pack status fields are merged in.
+        """
+        if self.tasks is None:
+            return None
+        snapshot = self.tasks.snapshot()
+        run = snapshot["run"]
+        running = bool(run["running"])
+        started = int(run["started_ns"])
+        stopped = run["stopped_ns"]
+        end = self.time_ns if running else (started if stopped is None else int(stopped))
+        extra = self.tasks.describe()
+        scores = dict(snapshot["scores"])
+        declared = self._task_pack.get("score_rows") or [
+            {"key": key, "label": key} for key in scores
+        ]
+        rows = [
+            {"key": row["key"], "label": row["label"], "points": scores.get(row["key"], 0)}
+            for row in declared
+        ]
+        listed = {row["key"] for row in declared}
+        rows += [
+            {"key": key, "label": key, "points": value}
+            for key, value in scores.items()
+            if key not in listed
+        ]
+        ended = str(extra.pop("ended_reason", ""))
+        return {
+            "running": running,
+            "elapsed": max(0, end - started) / 1e9,
+            "scoring_open": running and not ended,
+            "ended_reason": ended,
+            **extra,
+            "total": float(sum(row["points"] for row in rows)) + self.run_adjustment,
+            "adjustment": self.run_adjustment,
+            "rows": rows,
+            "message": self.run_message,
+            "ui": self._task_pack.get("ui", {}),
+            "config_id": self._task_pack["id"],
+        }
+
+    # ------------------------------------------------------------------ visual state
+
+    def thruster_forces(self) -> NDArray[np.float64]:
+        """Realized thruster forces (N) after actuator dynamics, in robot-pack thruster order."""
+        return np.asarray(self.last_step.snapshot.thruster_forces, float)
+
+    def claw_jaws(self) -> dict[str, tuple[float, float]]:
+        """Physical per-jaw opening (m, 0 = closed) of every claw: the prop world's jaw
+        position where one exists (it trails the mechanism while blocked or holding),
+        otherwise the mechanism's commanded joints."""
+        state = self.mechanism_state()
+        jaws = (
+            {}
+            if state is None
+            else {
+                key: (float(claw.joint_positions_m[0]), float(claw.joint_positions_m[1]))
+                for key, claw in state.claws.items()
+            }
+        )
+        for world in self.prop_worlds:
+            jaws[world.mechanism_id] = (float(world.jaw_position_m),) * 2
+        return jaws
+
+    def prop_visuals(self) -> list[dict[str, Any]]:
+        """Rigid props with their display asset id, world pose of the mesh origin and hold."""
+        assets = {
+            (task["id"], prop["id"]): prop["parameters"].get("visual_asset")
+            for task in self.resolved.task_definitions
+            for prop in task["props"]
+            if prop["type"] == "rigid_body"
+        }
+        items = []
+        for world in self.prop_worlds:
+            for key, state in world.props_state().items():
+                items.append(
+                    {
+                        "task": world.task,
+                        "id": key,
+                        "asset": assets.get((world.task, key)),
+                        "position_m": state.position_m,
+                        "orientation_wxyz": state.orientation_wxyz,
+                        "held": state.attached,
+                        "mechanism_id": state.mechanism_id,
+                    }
+                )
+        return items
+
+    def indicators(self) -> list[dict[str, Any]]:
+        """Latched proximity indicators (task, region, world face pose, latched, colors)."""
+        return [] if self.tasks is None else self.tasks.indicators()
+
+    def payload_visuals(self) -> list[dict[str, Any]]:
+        """Released payloads (in flight or at rest) and still-loaded rounds at their slots."""
+        items: list[dict[str, Any]] = []
+        for payload in self.payloads.values():
+            projectile = self._projectiles[payload.mechanism_id]
+            items.append(
+                {
+                    "mechanism_id": payload.mechanism_id,
+                    "mechanism_type": payload.mechanism_type,
+                    "id": payload.identifier,
+                    "loaded": False,
+                    "position_m": tuple(float(v) for v in payload.state.position),
+                    "orientation_wxyz": tuple(float(v) for v in payload.state.orientation_wxyz),
+                    "length_m": float(projectile["length_m"]),
+                    "radius_m": float(projectile["radius_m"]),
+                }
+            )
+        state = self.mechanism_state()
+        if state is not None and self.mechanisms is not None:
+            body = self.last_step.snapshot.body
+            root = _pose(body.position, body.orientation_wxyz)
+            for key, release in state.releases.items():
+                projectile = self._projectiles[key]
+                count = self.mechanisms.slot_count(key)
+                for index in range(count - release.available, count):
+                    pose = root.compose(self.mechanisms.slot_mount(key, index))
+                    items.append(
+                        {
+                            "mechanism_id": key,
+                            "mechanism_type": self._mechanism_types[key],
+                            "id": index,
+                            "loaded": True,
+                            "position_m": tuple(float(v) for v in pose.translation),
+                            "orientation_wxyz": tuple(float(v) for v in pose.orientation_wxyz),
+                            "length_m": float(projectile["length_m"]),
+                            "radius_m": float(projectile["radius_m"]),
+                        }
+                    )
+        return items

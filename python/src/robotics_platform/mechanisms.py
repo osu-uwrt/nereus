@@ -335,6 +335,13 @@ class Mechanisms:
             claw.q += max(-distance, min(distance, claw.target - claw.q))
         self.time_ns += dt_ns
 
+    def slot_count(self, identifier: str) -> int:
+        return len(self._mounts[identifier])
+
+    def slot_mount(self, identifier: str, index: int) -> native.Pose:
+        """Pose of a launcher/dropper slot in the robot root frame (COM)."""
+        return self._mounts[identifier][index]
+
     def snapshot(self, *, killed: bool) -> MechanismState:
         self._kill(killed)
         releases = {}

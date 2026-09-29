@@ -61,6 +61,23 @@ assets:
 - {id: octagon_sos_mesh, path: assets/octagon_sos/model.dae, required_from_step: 3, status: present, sha256: 889932acae53c335bb0b526453d1d36398b3eefaa6c9b0f4ca8b232a76482a1b, source: "riptide_gui riptide_meshes/meshes/octagon_sos/model.dae @907c9ded"}
 - {id: octagon_sos_texture, path: assets/octagon_sos/Task5_Rescue_Fixed.png, required_from_step: 3, status: present, sha256: 58dd02090cc7fec1daeebf1ea63f4fdf64c59dcf072fb864c791d8fff9d2d579, source: "riptide_gui riptide_meshes/meshes/octagon_sos/Task5_Rescue_Fixed.png @907c9ded"}
 
+# Table display meshes (viewer, cameras); copied byte-for-byte (cp) from riptide_gui riptide_meshes/meshes/.
+# Same checkout as the assets above (gate/bin sha256 re-verified equal 2026-09-29). DAE texture <init_from>
+# basenames resolve next to each model.dae. Origins match the .obj collision assets of the same name.
+- {id: table_visual, path: assets/visual/table/model.dae, required_from_step: 4, status: present, sha256: 0671bea1d57426c23a000ea1a27e7d30c3d64d244dada3de85f4116b9fe8d78c, source: "riptide_gui riptide_meshes/meshes/table/model.dae @907c9ded"}
+- {id: basket_helmet_visual_task5_redcross_fixed, path: assets/visual/table_basket_helmet/Task5_RedCross_Fixed.png, required_from_step: 4, status: present, sha256: 1b6b33cd19bd0f63ca640262d3f76dabb847e5531032e8fc4e15673e43af0607, source: "riptide_gui riptide_meshes/meshes/table_basket_helmet/Task5_RedCross_Fixed.png @907c9ded"}
+- {id: basket_helmet_visual, path: assets/visual/table_basket_helmet/model.dae, required_from_step: 4, status: present, sha256: a7c114784418914efc3bb4b5f94728827f20454d54cdfc7720e7dd7072dc30f8, source: "riptide_gui riptide_meshes/meshes/table_basket_helmet/model.dae @907c9ded"}
+- {id: basket_warning_visual_task5_warning_fixed, path: assets/visual/table_basket_warning/Task5_Warning_Fixed.png, required_from_step: 4, status: present, sha256: 12080a50fdcc92cbbf7b0216ce29498fbd3290500f272aa8377b8687a8de5141, source: "riptide_gui riptide_meshes/meshes/table_basket_warning/Task5_Warning_Fixed.png @907c9ded"}
+- {id: basket_warning_visual, path: assets/visual/table_basket_warning/model.dae, required_from_step: 4, status: present, sha256: 0d1bba8cf3a8b2469f7a9b9798924d5b12eba404a068a38bf286d2ab20c37b81, source: "riptide_gui riptide_meshes/meshes/table_basket_warning/model.dae @907c9ded"}
+- {id: pill_visual_task5_pill_fixed, path: assets/visual/table_pill/Task5_Pill_Fixed.png, required_from_step: 4, status: present, sha256: c4b51b42759f55d38c5c68602302a24a0235ce6c8a26930e33abc9fe3dedc80a, source: "riptide_gui riptide_meshes/meshes/table_pill/Task5_Pill_Fixed.png @907c9ded"}
+- {id: pill_visual, path: assets/visual/table_pill/model.dae, required_from_step: 4, status: present, sha256: 32f15a1a87f7c14824c8f19ba9d23bc21dc0fb1d37bc67beb320700f0921dc83, source: "riptide_gui riptide_meshes/meshes/table_pill/model.dae @907c9ded"}
+- {id: bandage_visual_task5_bandaid_fixed, path: assets/visual/table_bandage/Task5_BandAid_Fixed.png, required_from_step: 4, status: present, sha256: 6e94ab1a131c683c5732674432b9e124996f38095061193b7d6e9a14fdee035c, source: "riptide_gui riptide_meshes/meshes/table_bandage/Task5_BandAid_Fixed.png @907c9ded"}
+- {id: bandage_visual, path: assets/visual/table_bandage/model.dae, required_from_step: 4, status: present, sha256: 95057a57e7efdb47bb3be29b3edf629b13b89afb4a7d626e4a0b85a4868ae8fa, source: "riptide_gui riptide_meshes/meshes/table_bandage/model.dae @907c9ded"}
+- {id: nut_and_bolt_visual_task5_nutbolt_fixed, path: assets/visual/table_nut_and_bolt/Task5_NutBolt_Fixed.png, required_from_step: 4, status: present, sha256: 9294e4812c4a7519b589c7c873e8cab9802f20157caf9361a70de8f797b6badf, source: "riptide_gui riptide_meshes/meshes/table_nut_and_bolt/Task5_NutBolt_Fixed.png @907c9ded"}
+- {id: nut_and_bolt_visual, path: assets/visual/table_nut_and_bolt/model.dae, required_from_step: 4, status: present, sha256: d7900bd8218301382df21ab6dc1ef4476a9b8148054f6b88cf259082c60d3c9b, source: "riptide_gui riptide_meshes/meshes/table_nut_and_bolt/model.dae @907c9ded"}
+- {id: plug_visual_task5_electric_fixed, path: assets/visual/table_plug/Task5_Electric_Fixed.png, required_from_step: 4, status: present, sha256: 17ae6152f92af33f5429a1078aad8de1c167185ec440f6b16d7ae7937d3d9d6b, source: "riptide_gui riptide_meshes/meshes/table_plug/Task5_Electric_Fixed.png @907c9ded"}
+- {id: plug_visual, path: assets/visual/table_plug/model.dae, required_from_step: 4, status: present, sha256: c221f5ec0fae0b134ec196da54f23ef8fb7a512d0a9e174babb5165e9899d47f, source: "riptide_gui riptide_meshes/meshes/table_plug/model.dae @907c9ded"}
+
 tasks: [gate.yaml, torpedo.yaml, table.yaml, slalom.yaml, bins.yaml, surface.yaml]   # pack-relative task include files (kind task)
 
 # Robot capabilities by mechanism TYPE (never robot id); checked at scenario resolution.
@@ -82,8 +99,10 @@ run_options:
 # Pure function of (immutable run state, ordered events since last call) -> (score row changes,
 # new events). No runtime object, no stepping, no ROS. validate never imports it.
 scoring_hooks:
-- module: hooks.rules_2026            # pack-relative hooks/rules_2026.py, NOT created in step 1
+- module: hooks.rules_2026            # pack-relative hooks/rules_2026.py
   function: evaluate
+  status_function: describe            # extra run-score fields (role, gate_passed, basket_count, ...)
+  feed_function: feed                  # operator event feed (old simulator/task_events kinds and results)
   parameters:
     roles:
       repair: {target_class: fire, facing_icons: [compass, hammer_and_wrench]}
@@ -131,11 +150,79 @@ scoring_hooks:
       style_rp: 200
       style_yaw: 100
       max_style_quarters: 8
+    feed:                                  # simulator/task_events vocabulary of the original task node
+      kinds: {launcher: torpedo, dropper: dropper, claw: claw}
+      magnet_kind: magnet
+      basket_names: {helmet_basket: helmet, warning_basket: warning}
     slalom: {rows: [slalom_front, slalom_middle, slalom_back]}   # region ids double as score rows
     bins: {mechanism_type: dropper}       # only dropper landings inside a crate score (T15)
     table: {baskets: [helmet_basket, warning_basket]}   # box region ids   # prop-world events, see the hook header
     # The simulator tolerances (breach margin, surface/facing/turn dwells and tolerances) are geometry
     # timing owned by the surface/turn_zone regions of surface.yaml; the hook only sees their events.
+
+# Scorecard rows in the fixed order and with the labels of the original RunScore (scoring.py LABELS).
+score_rows:
+- {key: gate, label: Gate passage / heading / role / style}
+- {key: slalom_front, label: Slalom row 1}
+- {key: slalom_middle, label: Slalom row 2}
+- {key: slalom_back, label: Slalom row 3}
+- {key: bins, label: Bin markers}
+- {key: lights, label: Magnet lights}
+- {key: torpedoes, label: Torpedo openings}
+- {key: sequence, label: Torpedo sequence bonus}
+- {key: distance, label: Torpedo distance bonuses}
+- {key: surface, label: Surface inside octagon}
+- {key: facing, label: Surface facing image}
+- {key: objects_surface, label: Surface with objects}
+- {key: objects_drop, label: Release objects}
+- {key: baskets, label: Place objects in baskets}
+- {key: basket_count, label: Signal basket count with turns}
+- {key: home, label: Return through gate}
+- {key: pinger_first, label: "Random pinger: first task"}
+- {key: pinger_second, label: "Random pinger: second task"}
+
+# Payload/claw outcome counters published as simulator/task_score (original key set).
+outcome_counters: [success, wrong_target, blocked, miss]
+
+run_messages:
+  start: "Run started; pass the gate first"
+  stop: Run stopped
+  adjustment: Manual adjustment updated
+  reset: Tasks and run reset
+
+# Operator/viewer presentation: verbatim `ui` of riptide_simulator c_simulator/tasks/2026/competition.yaml
+# (plus the empty `actions` list the original viewer schema supports).
+ui:
+  title: RoboSub 2026 scorecard
+  run_options:
+  - key: role
+    label: Intended role
+    type: choice
+    default: repair
+    choices:
+    - {value: repair, label: Survey & Repair}
+    - {value: rescue, label: Search & Rescue}
+  - {key: heading_coin, label: Heading coin flip, type: bool, default: true}
+  - {key: role_coin, label: Role coin flip, type: bool, default: true}
+  focus: [Course, Vehicle, gate, torpedo, bin, table, Payloads, Claw, octagon]
+  demo_targets: [gate, torpedo, bin, table]
+  manual_adjustment: true
+  score_note: Pinger awards await future acoustic integration. No session countdown or automatic time bonus is applied to individual runs.
+  score_fields:
+  - {key: basket_count, label: Objects in both baskets}
+  - {key: time_bonus_eligible, label: Time-bonus prerequisites met}
+  previews:
+    gate: {depth: 0.75}
+    bin: {depth: 0.55, camera: dfc}
+    table: {depth: 0.55, camera: dfc}
+  run_inspections:
+  - {label: Inspect launcher, target: Payloads}
+  - {label: Inspect claw, target: Claw}
+  - {label: Inspect lights, target: magnet_target1}
+  status_fields:
+  - {key: intended_role, label: Assigned role}
+  - {key: role, label: Scored role}
+  actions: []
 
 # Inactive: remaining RepairCompTree subtrees, recorded so the step-4 schema does not churn.
 pending:

@@ -162,6 +162,19 @@ class ResolvedScenario:
                 changed.append(source)
         return changed
 
+    def asset_paths(self) -> dict[str, dict[str, str]]:
+        """Absolute path of every declared, present asset, per selected pack (robot/pool/tasks)."""
+        result: dict[str, dict[str, str]] = {}
+        for role, document in (("robot", self.robot), ("pool", self.pool), ("tasks", self.tasks)):
+            root = (self.path.parent / self.scenario[role]).resolve()
+            root = root if root.is_dir() else root.parent
+            result[role] = {
+                item["id"]: str((root / item["path"]).resolve())
+                for item in document.get("assets", [])
+                if item["status"] == "present"
+            }
+        return result
+
     def manifest(self) -> dict[str, Any]:
         base = self.path.parent
         body = {

@@ -122,7 +122,9 @@ class ProximityTarget:
         face = native.Pose()
         face.orientation_wxyz = list(parameters["face_orientation_wxyz"])
         offset = vector3(parameters["sensor_offset_m"], "sensor_offset_m")
-        self._sensor = _owned_pose(world_from_frame).compose(face).apply(offset)
+        self.face_world = _owned_pose(world_from_frame).compose(face)
+        self.indicator: dict[str, str] = {}
+        self._sensor = self.face_world.apply(offset)
         self._probe = vector3(probe_reference_m, "probe point")
         self.reset()
 

@@ -14,7 +14,9 @@ import numpy as np
 import rclpy
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import TransformStamped
+from rcl_interfaces.msg import ParameterDescriptor, ParameterType, SetParametersResult
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from robotics_platform import _native as native
 from rosgraph_msgs.msg import Clock
@@ -63,12 +65,18 @@ class BridgeNode(Node):
     """Owns every ROS entity of one bridge pack; never advances the runtime itself."""
 
     def __init__(self, core_factory: Callable[[Callable[[str, str], Any]], BridgeCore],
-                 namespace: str) -> None:
-        super().__init__("robotics_platform_bridge", namespace=namespace)
+                 namespace: str, node_name: str = "robotics_platform_bridge") -> None:
+        super().__init__(node_name, namespace=namespace)
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self, spin_thread=False)
         self.core = core_factory(self.lookup)
         config = self.core.config
+        self.declare_parameter(
+            "real_time_factor", float(self.core.real_time_factor),
+            ParameterDescriptor(
+                type=ParameterType.PARAMETER_DOUBLE, dynamic_typing=True,
+                description="Simulation speed relative to wall time; 0 pauses stepping and /clock."))
+        self.add_on_set_parameters_callback(self._check_parameters)
         clock = config["clock"]
         self.clock_publisher = self.create_publisher(Clock, clock["topic"], qos(clock["qos"]))
         self.tf_broadcaster = TransformBroadcaster(self) if config.get("tf", {}).get(
@@ -98,6 +106,21 @@ class BridgeNode(Node):
         alignment = config.get("placement", {}).get("estimator_alignment")
         self.alignment_client = None if alignment is None else self.create_client(
             mapping.service_class(alignment["service_type"]), alignment["client"])
+
+    def _check_parameters(self, parameters: list[Parameter]) -> SetParametersResult:
+        for parameter in parameters:
+            if parameter.name == "real_time_factor":
+                if parameter.type_ not in (Parameter.Type.DOUBLE, Parameter.Type.INTEGER):
+                    return SetParametersResult(successful=False,
+                                               reason="real_time_factor must be a number")
+                problem = self.core.set_real_time_factor(parameter.value)
+                if problem is not None:
+                    return SetParametersResult(successful=False, reason=problem)
+        return SetParametersResult(successful=True)
+
+    def publish_startup(self) -> None:
+        """One-shot latched publications (scenario description)."""
+        self.send(self.core.startup_publications())
 
     def start_cameras(self) -> None:
         if self.core.cameras is not None:
@@ -159,17 +182,31 @@ class BridgeNode(Node):
             Counters.bump(self.core.counters.alignments_acknowledged, trigger)
 
 
+PAUSED_REFRESH_S = 0.02  # viewer state refresh while paused (the original 50 Hz publish timer)
+
+
 def run(node: BridgeNode, duration_ns: int | None, max_catchup_ticks: int = 20) -> int:
     """Pace ticks against wall time (scaled by the pack real_time_factor); returns ticks run."""
     core = node.core
     step_s = core.timestep_ns / 1e9
     node.publish_clock(core.clock_ns())
+    node.publish_startup()
     ticks, owed = 0, 0.0
-    previous = time.monotonic()
+    previous = last_refresh = time.monotonic()
     while rclpy.ok():
         for _ in range(32):  # drain ready callbacks on this (the stepping) thread
             rclpy.spin_once(node, timeout_sec=0.0)
+        node.send(core.flush())  # operator events, also while paused
         now = time.monotonic()
+        if core.real_time_factor <= 0:
+            # Paused: no stepping and no /clock; viewers still get fresh state at wall rate.
+            owed = 0.0
+            if now - last_refresh >= PAUSED_REFRESH_S:
+                node.send(core.refresh())
+                last_refresh = now
+            previous = now
+            time.sleep(0.002)
+            continue
         owed += (now - previous) * core.real_time_factor
         previous = now
         steps = 0
@@ -184,7 +221,7 @@ def run(node: BridgeNode, duration_ns: int | None, max_catchup_ticks: int = 20) 
             node.get_logger().warning(f"falling behind wall time; dropping {owed:.4f} s backlog",
                                       throttle_duration_sec=2.0)
             owed = 0.0
-        remaining = (step_s - owed) / core.real_time_factor if core.real_time_factor > 0 else step_s
+        remaining = (step_s - owed) / max(core.real_time_factor, 1e-9)
         if remaining > 2e-4:
             time.sleep(remaining - 1e-4)
     return ticks

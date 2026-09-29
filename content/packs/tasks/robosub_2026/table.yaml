@@ -25,6 +25,10 @@ props:
     # triangle meshes supply legs, rims and basket walls.
     collision_boxes:
     - {id: slab, size_m: [0.635, 0.635, 0.01905], center_m: [0, 0, -0.009525], orientation_wxyz: [1, 0, 0, 0]}
+    visuals:   # riptide_meshes table, table_basket_helmet, table_basket_warning (origins match the collision meshes)
+    - {asset: table_visual, frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: basket_helmet_visual, frame: helmet_basket, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: basket_warning_visual, frame: warning_basket, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
     collision_meshes:
     - {id: table, asset: table_mesh, frame: task, lateral_friction: 0.7, restitution: 0.05}
     - {id: helmet_basket, asset: basket_helmet_mesh, frame: helmet_basket, lateral_friction: 0.7, restitution: 0.05}
@@ -34,6 +38,7 @@ props:
   parameters:
     frame: pill
     collision_asset: pill_mesh
+    visual_asset: pill_visual
     mass_kg: 0.12
     volume_m3: 9e-05
     expected_region: helmet_basket
@@ -51,6 +56,7 @@ props:
   parameters:
     frame: bandage
     collision_asset: bandage_mesh
+    visual_asset: bandage_visual
     mass_kg: 0.1
     volume_m3: 7e-05
     expected_region: helmet_basket
@@ -68,6 +74,7 @@ props:
   parameters:
     frame: nut_and_bolt
     collision_asset: nut_and_bolt_mesh
+    visual_asset: nut_and_bolt_visual
     mass_kg: 0.12
     volume_m3: 9e-05
     expected_region: warning_basket
@@ -85,6 +92,7 @@ props:
   parameters:
     frame: plug
     collision_asset: plug_mesh
+    visual_asset: plug_visual
     mass_kg: 0.1
     volume_m3: 7e-05
     expected_region: warning_basket

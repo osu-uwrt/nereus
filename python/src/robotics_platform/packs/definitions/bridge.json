@@ -84,6 +84,10 @@
     "metadata": {
       "type": "object",
       "description": "Free non-executable annotations preserved verbatim by load/save; never interpreted."
+    },
+    "node_name": {
+      "$ref": "common.schema.json#/$defs/name",
+      "description": "Name of the ROS node the bridge runs as (default robotics_platform_bridge); parameter clients address it, e.g. /<namespace>/<node_name>."
     }
   },
   "required": [
@@ -622,6 +626,17 @@
         "converter": {
           "$ref": "common.schema.json#/$defs/name",
           "description": "Compiled converter maintained in integrations/uwrt for custom messages only, never user code."
+        },
+        "format": {
+          "enum": [
+            "json",
+            "marker_array"
+          ],
+          "description": "Named generic encoder used instead of a field map (fields must then be empty): json writes the native 'json' text into std_msgs/String.data; marker_array converts the native item list into a visualization_msgs/MarkerArray using options."
+        },
+        "options": {
+          "type": "object",
+          "description": "Encoder/endpoint options, validated when the bridge is constructed."
         }
       },
       "required": [

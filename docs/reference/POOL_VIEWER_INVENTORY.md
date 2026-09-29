@@ -228,6 +228,19 @@ Legend: BRIDGE = new bridge (`bridge.yaml`, `robotics_platform_ros`); STACK = un
 | Camera topics `ffc|dfc/zed_node/...` | BRIDGE (compressed rgb, camera_info, depth only; no raw rgb, `left/*`, point cloud) | out of scope here |
 | viewer params `water.*`, `depth_noise`, `depth_model.*` | MISSING as ROS params | the bridge camera products take noise/water from packs; a runtime editing path from the new viewer to camera renders must be designed |
 
+### 3.1 Status: now provided by the bridge
+
+Everything marked MISSING above except TF `simulator/talos/<cam>_camera_link`/`origin`, `simulator/time`,
+`simulator/state`, `simulator/collisionMarkers`, `simulator/enable`, `acoustics/delta_t`, `simulator/reset_magnet_lights`,
+`simulator/reset_table`, `command/led` and the viewer `water.*`/`depth_noise` parameters is declared in
+`content/packs/bridges/uwrt_talos/bridge.yaml` with the old topic names and JSON/message formats (sections 4.1-4.10):
+`simulator/run_command`, `simulator/reset_tasks` (Empty topic next to the Trigger service), `run_score`, `task_score`,
+`task_events`, `actual_thruster_forces`, `magnet_lights`, `claw_joints`, `task_objects`, `projectiles`, the
+`real_time_factor` parameter of `/talos/physics_simulator` and the latched `simulator/scenario` description for the new
+viewer. Row keys/labels/order, `ui`, event vocabulary and outcome counters live in the task pack
+(`tasks.yaml`, `hooks/rules_2026.py describe/feed`). Mesh resources are `file://` absolute paths (pack assets), not
+`package://` URIs. Live check: `integrations/ros2/scripts/viewer_interfaces_smoke.sh`.
+
 ## 4. Missing interfaces: exact old formats
 
 QoS for all: old publishers use default QoS depth 10 (reliable, volatile); the viewer subscribes depth 10 default.

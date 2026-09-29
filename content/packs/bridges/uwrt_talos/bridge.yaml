@@ -27,6 +27,7 @@ assets: []
 requires_robot: talos      # data binding to robot-pack ids; no robot-name code switch
 
 namespace: /talos          # relative names resolve here (controller topics are hardcoded /talos: T18)
+node_name: physics_simulator   # the original simulator node: /talos/physics_simulator hosts the real_time_factor parameter
 
 # Native frame id -> ROS frame name. Only frames used in headers/TF are listed.
 frame_names:
@@ -426,6 +427,131 @@ streams:
     pose.pose.orientation.z: {from: 'reference_pose.orientation_wxyz[3]'}
     twist.twist.linear: {from: reference_body_velocity}     # body axes incl. w x r (original)
     twist.twist.angular: {from: body_angular_velocity}
+
+# ---------------- viewer/operator interfaces of the original simulator (pool_viewer, viewer_panels) ----------------
+# Run control. simulator/run_command: {"action": start|stop|adjustment, ...run options | points}; the
+# std_msgs/Empty topic simulator/reset_tasks is the same reset as the Trigger service of that name.
+- id: run_command
+  direction: subscribe
+  topic: simulator/run_command
+  message_type: std_msgs/msg/String
+  native: 'command:runs.command'
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {command_json: {from: data}}
+- id: reset_tasks_topic
+  direction: subscribe
+  topic: simulator/reset_tasks
+  message_type: std_msgs/msg/Empty
+  native: 'command:tasks.reset'
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {}
+- id: run_score
+  direction: publish
+  topic: simulator/run_score            # JSON scorecard; rows, labels and ui come from the task pack
+  message_type: std_msgs/msg/String
+  native: 'state:run'
+  format: json
+  frame_id: ''
+  rate_hz: 50                           # original 0.02 s publish timer
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {}
+- id: task_score
+  direction: publish
+  topic: simulator/task_score           # outcome counters, JSON
+  message_type: std_msgs/msg/String
+  native: 'state:task_score'
+  format: json
+  frame_id: ''
+  rate_hz: 50
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {}
+- id: task_events
+  direction: publish
+  topic: simulator/task_events          # one JSON object per payload/claw/magnet/reset event
+  message_type: std_msgs/msg/String
+  native: 'event:tasks.feed'
+  format: json
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {}
+# Visual state (pool_viewer): realized thruster forces in the thrusters.order layout, claw jaws,
+# magnet indicator lights, task props and payloads.
+- id: actual_thruster_forces
+  direction: publish
+  topic: simulator/actual_thruster_forces
+  message_type: std_msgs/msg/Float32MultiArray
+  native: 'state:thrusters'
+  frame_id: ''
+  rate_hz: 100                          # STATE_PUB_TIME
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {data: {from: forces_n}}
+- id: claw_joints
+  direction: publish
+  topic: simulator/claw_joints          # [left, right] jaw travel from closed (m)
+  message_type: std_msgs/msg/Float64MultiArray
+  native: 'state:claws'
+  frame_id: ''
+  rate_hz: 50
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {data: {from: claw.jaws_m}}
+- id: magnet_lights
+  direction: publish
+  topic: simulator/magnet_lights
+  message_type: visualization_msgs/msg/MarkerArray
+  native: 'state:indicators'
+  format: marker_array
+  frame_id: map
+  rate_hz: 50
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {}
+  options:
+    shape: sphere
+    scale_m: [0.002, 0.044, 0.044]
+    colors: {red: [1.0, 0.0, 0.0, 1.0], green: [0.0, 1.0, 0.0, 1.0]}
+- id: task_objects
+  direction: publish
+  topic: simulator/task_objects         # prop meshes; relative to held_frame_id while grasped
+  message_type: visualization_msgs/msg/MarkerArray
+  native: 'state:props'
+  format: marker_array
+  frame_id: map
+  rate_hz: 50
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {}
+  options:
+    held_frame_id: talos/base_link
+- id: projectiles
+  direction: publish
+  topic: simulator/projectiles          # DELETEALL, released payloads, still-loaded rounds at their slots
+  message_type: visualization_msgs/msg/MarkerArray
+  native: 'state:payloads'
+  format: marker_array
+  frame_id: map
+  rate_hz: 50
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {}
+  options:
+    namespaces: {launcher: torpedo, dropper: dropper}
+    loaded_suffix: _loaded
+    mesh_asset: projectile_mesh
+    color: [0.65, 0.025, 0.035, 1.0]
+    delete_all: true
+# Latched description of the resolved scenario for viewers (robot, pool, tasks, ui, asset paths).
+- id: scenario
+  direction: publish
+  topic: simulator/scenario
+  message_type: std_msgs/msg/String
+  native: 'event:scenario.description'
+  format: json
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 1, reliability: reliable, durability: transient_local}
+  fields: {}
 
 services:
 - id: set_sim_pose
