@@ -158,6 +158,19 @@
       "cacheVariables": {
         "RP_BUILD_ROS_VIEWER": "ON",
         "RP_BUILD_MESH_ASSETS": "ON",
+        "BUILD_TESTING": "ON",
+        "RP_BUILD_SESSION": "ON",
+        "RP_BUILD_ROS_BRIDGE": "ON",
+        "RP_BUILD_CAMERAS": "ON",
+        "RP_BUILD_OFFSCREEN_RENDERER": "ON"
+      }
+    },
+    {
+      "name": "session",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/build/session",
+      "cacheVariables": {
+        "RP_BUILD_SESSION": "ON",
         "BUILD_TESTING": "ON"
       }
     }

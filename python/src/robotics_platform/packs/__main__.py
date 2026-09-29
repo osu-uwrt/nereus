@@ -1,4 +1,4 @@
-"""Command line: ``python -m robotics_platform.packs {validate,types,schema}``."""
+"""Command line: ``python -m robotics_platform.packs {validate,resolve,types,schema}``."""
 
 from __future__ import annotations
 
@@ -37,6 +37,26 @@ def _validate(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve(arguments: argparse.Namespace) -> int:
+    """Validate a scenario and write the runtime document: manifest + absolute asset paths."""
+    path = Path(arguments.scenario)
+    try:
+        resolved = resolve_scenario(path, strict=arguments.strict)
+        if resolved.changed_sources():
+            raise PackError(["pack sources changed while resolving"])
+        document = resolved.manifest()
+        document["asset_paths"] = resolved.asset_paths()
+    except PackError as error:
+        print(f"INVALID {path}", file=sys.stderr)
+        for problem in error.problems:
+            print(f"  {problem}", file=sys.stderr)
+        return 1
+    output = Path(arguments.output)
+    output.write_text(json.dumps(document, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+    print(f"resolved {path} -> {output}")
+    return 0
+
+
 def _types(arguments: argparse.Namespace) -> int:
     if arguments.json:
         print(json.dumps(type_catalog(), indent=2))
@@ -59,6 +79,11 @@ def main(argv: list[str] | None = None) -> int:
     validate.add_argument("--strict", action="store_true", help="reject unresolved dependencies")
     validate.add_argument("--dump", metavar="JSON", help="write the resolved scenario manifest")
     validate.set_defaults(run=_validate)
+    resolve = commands.add_parser("resolve", help="write the runtime document of a scenario")
+    resolve.add_argument("scenario", help="scenario pack folder or file")
+    resolve.add_argument("--output", "-o", required=True, help="resolved JSON to write")
+    resolve.add_argument("--strict", action="store_true", help="reject unresolved dependencies")
+    resolve.set_defaults(run=_resolve)
     types = commands.add_parser("types", help="list built-in types")
     types.add_argument("--json", action="store_true", help="parameter schemas as JSON")
     types.set_defaults(run=_types)
