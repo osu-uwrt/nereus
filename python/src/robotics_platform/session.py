@@ -189,21 +189,24 @@ class Session:
             payload.active, payload.outcome = False, "timeout"
         if self.tasks is None:
             return []
-        events = list(
-            self.tasks.observe_projectile(
-                now,
-                payload.identifier,
-                old.position.tolist(),
-                new.position.tolist(),
-                _axis(new.orientation_wxyz).tolist(),
-            )
+        step = self.tasks.step_projectile(
+            now,
+            payload.identifier,
+            old.position.tolist(),
+            new.position.tolist(),
+            _axis(new.orientation_wxyz).tolist(),
+            new.velocity.tolist(),
         )
-        for event in events:
-            if event["data"].get("stop_projectile"):
-                payload.active, payload.outcome = False, event["id"]
-                payload.state.velocity = np.zeros(3)
-                payload.state.angular_velocity = np.zeros(3)
-        return events
+        if step.position_world is not None:
+            payload.state.position = step.position_world
+        if step.velocity_world is not None:
+            payload.state.velocity = step.velocity_world
+        if step.stop:
+            ended = [e["id"] for e in step.events]
+            payload.active, payload.outcome = False, ended[-1] if ended else "stopped"
+            payload.state.velocity = np.zeros(3)
+            payload.state.angular_velocity = np.zeros(3)
+        return list(step.events)
 
     def _step_props(self, body: Any, now: int) -> list[Mapping[str, Any]]:
         from .prop_world import Water
@@ -339,7 +342,12 @@ class Session:
                 projectile["length_m"] / 2
             )
             events = self.tasks.release_projectile(
-                now, payload.identifier, payload.mechanism_type, tip, projectile["radius_m"]
+                now,
+                payload.identifier,
+                payload.mechanism_type,
+                tip,
+                projectile["radius_m"],
+                projectile["length_m"],
             )
             self.last_step = Step(
                 self.last_step.snapshot, self.last_step.task_events + tuple(events)
