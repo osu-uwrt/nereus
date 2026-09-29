@@ -40,6 +40,13 @@ class Rules {
         (void)events, (void)context, (void)parameters;
         return Json::array();
     }
+    // The Python feed hook also receives the frozen run snapshot (`TaskRuntime::snapshot()`);
+    // TaskRuntime calls this overload. The default forwards to the stateless one.
+    virtual Json feed(const Json &state, const Events &events, const Json &context,
+                      const Json &parameters) {
+        (void)state;
+        return feed(events, context, parameters);
+    }
 };
 // Explicit, constructed registry (no global self-registration). Keys are the task pack's
 // scoring hook `rules` name (e.g. "robosub_2026"); later a "python" entry can wrap user hooks.
