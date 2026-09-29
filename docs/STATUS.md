@@ -546,3 +546,30 @@ Raw IMU remains orientation-free, and no estimator or ROS dependency was introdu
 The next increment assembles the pinned native Talos inertial devices. Remaining
 DVL/pressure reporting, cameras, original visuals/LEDs, mechanisms and full-stack
 mission acceptance remain open.
+
+## Native Talos inertial device assembly
+
+A separately generated Talos inertial robot/example now instantiates the pinned
+50 Hz AHRS and 500 Hz FOG, including original CAD mounts, SI noise conversions,
+IMU gravity calibration and reported uncertainty. The reusable AHRS profile and
+all new input/output hashes are captured by the offline importer. The existing
+sensor-free physics profiles are unchanged. Neither assembly requires the original
+workspace or ROS. See [TALOS_PHYSICS_PACK.md](reference/TALOS_PHYSICS_PACK.md).
+
+All 107 Release tests and relocated installed C++ consumers passed. The new
+1,500-tick assembly test passed under ASan/UBSan without diagnostics, proving
+source removal, unchanged plant trajectory, 150 AHRS/1,500 FOG acquisitions and
+reset replay. The installed Python wheel passed 20 tests, Ruff and strict mypy.
+The CLI also completed the full run with those sample counts and no invalid
+readings. Importer byte verification and independent read-only source/data review
+passed. The preceding model increment passed the complete 106-test sanitizer suite.
+
+On the provisional baseline machine, 1.5 million measured ticks per mode gave
+plant p99 5.417 microseconds and plant-plus-inertial-acquisition p99 6.459 microseconds.
+The latter completed 3,000 simulated seconds in 8.075 measured seconds; trajectory
+checksums matched. See [PERFORMANCE.md](PERFORMANCE.md) for the record and limits.
+
+This is native inertial assembly, not independent original sensor-output parity.
+Next: capture original inertial reporting, then resolve DVL/pressure policies and
+complete native devices before original scene/asset integration. Cameras, water
+rendering, LEDs/mechanisms, task/scoring and full robot-stack acceptance remain open.

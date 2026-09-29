@@ -67,12 +67,27 @@ def main():
     vehicle = yaml.safe_load(
         read(args.vehicle_repo, VEHICLE_REVISION, "riptide_descriptions/config/talos.yaml")
     )
+    sensor_properties = yaml.safe_load(
+        read(args.vehicle_repo, VEHICLE_REVISION, "riptide_descriptions/config/simulator.yaml")
+    )["sensor_properties"]
+    sensor_overrides = yaml.safe_load(sim("c_simulator/robots/talos/config/sensors.yaml"))[
+        "/**/physics_simulator"
+    ]["ros__parameters"]
     hydro = yaml.safe_load(sim("c_simulator/robots/talos/config/hydrodynamics.yaml"))
     world = yaml.safe_load(sim("c_simulator/worlds/competition_pool.yaml"))
     mapping = yaml.safe_load(sim("c_simulator/tasks/2026/config/mapping.yaml"))
     collision = ET.fromstring(sim("c_simulator/collision_files/robots/talos.urdf"))
     # Record the geometry/coordinate formula sources as well as their input data.
-    sim("c_simulator/src/physics_simulator.cpp")
+    physics_source = sim("c_simulator/src/physics_simulator.cpp").decode()
+    # These defaults live in original node construction rather than YAML. Guard
+    # their exact source definitions instead of treating them as platform defaults.
+    for expression in (
+        'gyroRate = declare_parameter<double>("gyro_rate", 500.0);',
+        'gyroSigma = declare_parameter<double>("gyro_noise_stddev", 0.01 * M_PI / 180.0);',
+        'gyroVariance = declare_parameter<double>("gyro_variance", std::max(1e-9, gyroSigma * gyroSigma));',
+    ):
+        if expression not in physics_source:
+            raise ValueError("unexpected original FOG defaults")
     sim("c_simulator/src/robot_class.cpp")
     if hydro["schema_version"] != 1 or world["schema_version"] != 1 or hydro["robot"] != "talos":
         raise ValueError("unexpected pinned hydro/world schema or robot identity")
@@ -214,6 +229,52 @@ def main():
             for tick in range(0, 1001, 200)
         ],
     }
+    imu = vehicle["imu"]
+    ahrs = {
+        "schema_version": 1,
+        "kind": "sensor",
+        "model": "ahrs",
+        "parameters": {
+            "inertial": {
+                "acceleration_noise": {"white_stddev": [imu["sigma_accel"]] * 3},
+                "gyro_noise": {"white_stddev": [math.radians(imu["sigma_omega"])] * 3},
+                "reporting": {
+                    "gravity_magnitude_m_s2": sensor_overrides["imu_gravity"],
+                    "force_variance": sensor_properties["imu_linear_acceleration_variance"],
+                    "angular_variance": sensor_properties["imu_angular_velocity_variance"],
+                },
+            },
+            "attitude": {
+                "angle_stddev_rad": math.radians(imu["sigma_angle"]),
+                "heading_drift_rad_s": math.radians(sensor_overrides["imu_yaw_drift"]) / 60,
+                "reported_variance": sensor_properties["imu_orientation_variance"],
+            },
+        },
+    }
+    inertial_robot = {
+        **robot,
+        "sensors": [
+            {
+                "id": "imu",
+                "frame": "imu_mount",
+                "mount_frame": "imu_mount",
+                "period_ns": round(1e9 / sensor_properties["imu_rate"]),
+                "profile": "../sensors/talos_ahrs.yaml",
+            },
+            {
+                "id": "fog",
+                "frame": "fog_mount",
+                "mount_frame": "fog_mount",
+                "period_ns": 2000000,
+                "model": "fog",
+                "parameters": {
+                    "axes": [[0, 0, 1]],
+                    "gyro_noise": {"white_stddev": [0, 0, math.radians(0.01)]},
+                },
+            },
+        ],
+    }
+    inertial_run = {**run, "robot": "../robots/talos_inertial.yaml"}
     header = "# Generated from pinned original content; see docs/reference/TALOS_PHYSICS_PACK.md.\n"
     artifacts = {
         "content/robots/talos_dynamics.yaml": header
@@ -223,9 +284,18 @@ def main():
         "content/examples/talos_pool.yaml": header
         + "# Scripted physics example, not the competition mission.\n"
         + yaml.safe_dump(run, sort_keys=False),
+        "content/sensors/talos_ahrs.yaml": header
+        + "# Original noise-enabled inertial/attitude settings; not hardware identification.\n"
+        + yaml.safe_dump(ahrs, sort_keys=False),
+        "content/robots/talos_inertial.yaml": header
+        + "# Dynamics/mounts plus IMU and FOG; other devices and mechanisms remain open.\n"
+        + yaml.safe_dump(inertial_robot, sort_keys=False),
+        "content/examples/talos_inertial_pool.yaml": header
+        + "# Scripted inertial acquisition example, not the competition mission.\n"
+        + yaml.safe_dump(inertial_run, sort_keys=False),
     }
     metadata = {
-        "scope": "Original Talos dynamics, static hull/pool proxies and rigid mounts. Scripted commands; no devices, visuals, tasks or stack adapters.",
+        "scope": "Original Talos dynamics, static hull/pool proxies and rigid mounts, plus a separate noise-enabled IMU/FOG assembly. Scripted commands; no other devices, visuals, tasks or stack adapters.",
         "parameter_status": hydro["parameter_status"],
         "sources_sha256": sources,
         "importer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),

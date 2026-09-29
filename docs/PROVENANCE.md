@@ -100,3 +100,11 @@ are recorded in `tests/fixtures/legacy_talos{,_unoptimized}.json`, alongside com
 identity and flags. The fixtures contain every tick of three scripted trajectories.
 See [TALOS_DYNAMICS.md](reference/TALOS_DYNAMICS.md) for scope and reproduction.
 Original source license status remains as described above.
+
+The Talos importer also emits a separate inertial robot/example and reusable AHRS
+profile from the same pinned physical data plus original vehicle/simulator sensor
+settings. Original FOG rate/noise/covariance defaults live in node construction;
+the importer verifies their exact source expressions before emitting neutral
+configuration. All additional source/output hashes remain in
+`reference/talos_physics_sources.json`. No original ROS node is copied into the
+platform or invoked at runtime.

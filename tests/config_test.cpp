@@ -476,3 +476,76 @@ TEST_F(Profiles, RejectsInvalidAttitudeConfigurationBeforeRuntime) {
     write("sensors/imu.yaml", "schema_version: 1\nkind: sensor\nmodel: ahrs\nparameters: {}\n");
     EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
 }
+
+TEST_F(Profiles, NativeTalosInertialAssemblyPreservesPlantAndScheduledAcquisition) {
+    const auto config = robotics::config::loadScenario(root / "examples/talos_inertial_pool.yaml");
+    ASSERT_EQ(config.sensors.size(), 2U);
+    EXPECT_EQ(config.sources.size(), 4U);
+    EXPECT_EQ(config.sensors[0].model, "ahrs");
+    EXPECT_EQ(config.sensors[0].device.period.count(), 20000000);
+    EXPECT_EQ(config.sensors[1].model, "fog");
+    EXPECT_EQ(config.sensors[1].device.period.count(), 2000000);
+    const Eigen::Quaterniond mount = Eigen::AngleAxisd(-1.5707, Eigen::Vector3d::UnitZ()) *
+                                     Eigen::AngleAxisd(3.141, Eigen::Vector3d::UnitX());
+    EXPECT_LT(config.body_frames.fromRoot("imu_mount").rotation.angularDistance(mount), 1e-12);
+    EXPECT_TRUE(config.body_frames.fromRoot("imu_mount")
+                    .translation.isApprox(Eigen::Vector3d(-.093, -.1892, .0702), 1e-12));
+    std::filesystem::remove_all(root);
+    auto runtime = robotics::config::makeRuntime(config);
+    robotics::simulation::Plant reference(config.plant, config.initial);
+    auto imu = runtime->stream<robotics::sensors::AhrsReading>("imu");
+    auto fog = runtime->stream<robotics::sensors::FogReading>("fog");
+    std::size_t command = 0, imu_count = 0, fog_count = 0;
+    std::optional<robotics::sensors::AhrsReading> first;
+    for (std::uint64_t tick = 0; tick < config.ticks; ++tick) {
+        if (command < config.commands.size() && config.commands[command].tick == tick) {
+            runtime->command(config.commands[command].forces);
+            reference.command(config.commands[command++].forces);
+        }
+        const auto actual = runtime->advance();
+        const auto expected = reference.advance();
+        EXPECT_EQ(actual.body.position, expected.body.position);
+        EXPECT_EQ(actual.body.orientation.coeffs(), expected.body.orientation.coeffs());
+        EXPECT_EQ(actual.thruster_forces, expected.thruster_forces);
+        for (const auto &sample : imu->drain()) {
+            ++imu_count;
+            ASSERT_TRUE(sample.measurement.value);
+            EXPECT_EQ(sample.header.tick, tick + 1);
+            EXPECT_EQ(sample.header.frame, "imu_mount");
+            EXPECT_EQ(sample.header.scheduled, sample.header.acquired);
+            const auto &value = *sample.measurement.value;
+            EXPECT_TRUE(
+                value.inertial.force_covariance.isApprox(Eigen::Matrix3d::Identity() * .01));
+            EXPECT_TRUE(
+                value.inertial.angular_covariance.isApprox(Eigen::Matrix3d::Identity() * .01));
+            EXPECT_TRUE(value.attitude.covariance.diagonal().isApprox(
+                Eigen::Vector3d(.00005, .00001, .01)));
+            EXPECT_LT(
+                value.attitude.sensor_to_world.angularDistance(expected.body.orientation * mount),
+                .1);
+            if (!first)
+                first = value;
+        }
+        for (const auto &sample : fog->drain()) {
+            ++fog_count;
+            ASSERT_TRUE(sample.measurement.value);
+            EXPECT_EQ(sample.header.tick, tick + 1);
+            EXPECT_EQ(sample.header.frame, "fog_mount");
+            EXPECT_NEAR(sample.measurement.value->covariance(0, 0),
+                        std::pow(.01 * std::acos(-1.) / 180, 2), 1e-20);
+        }
+    }
+    EXPECT_EQ(imu_count, 150U);
+    EXPECT_EQ(fog_count, 1500U);
+    ASSERT_TRUE(first);
+    runtime->reset(config.initial, config.seed);
+    EXPECT_FALSE(imu->latest());
+    EXPECT_FALSE(fog->latest());
+    runtime->command(config.commands.front().forces);
+    runtime->advance(10);
+    const auto replay = imu->latest();
+    ASSERT_TRUE(replay && replay->measurement.value);
+    EXPECT_EQ(replay->measurement.value->inertial.specific_force, first->inertial.specific_force);
+    EXPECT_EQ(replay->measurement.value->attitude.sensor_to_world.coeffs(),
+              first->attitude.sensor_to_world.coeffs());
+}

@@ -6,7 +6,8 @@ The reference revisions are the simulator and vehicle-description pins in
 `c_simulator/robots/talos/config/sensors.yaml` and
 `riptide_descriptions/config/{talos,simulator}.yaml`. Sensor overrides take precedence
 as in the original profile composition. These values describe the original simulator,
-not hardware identification. Native Talos dynamics currently instantiate no devices.
+not hardware identification. The separate native Talos inertial assembly now instantiates AHRS and FOG; the
+sensor-free dynamics assembly remains available for physical comparisons.
 
 ## Raw IMU reporting implemented
 
@@ -42,8 +43,9 @@ pose minus COM, with original RPY values unchanged.
   in raw inertial observations or drive acquisitions from subscriber activity.
   The native model defaults to small-angle variance sigma²/3; conversion must select
   original reported variances (including sigma² when the old override is absent).
-  Original noise-disabled mode disables heading drift too. Native Talos device
-  profiles and independent original output capture remain to be connected.
+  Original noise-disabled mode disables heading drift too. The native Talos AHRS
+  profile now selects the original noise-enabled values; independent original
+  sensor-output capture remains open.
 - DVL runs at 8 Hz with default noise standard deviation 0.001 m/s and independently
   reported variance 0.000001. Original velocity includes `omega × r` and sensor
   rotation. Default `dvl_max_tilt=0` disables lock loss entirely: the original
@@ -53,6 +55,9 @@ pose minus COM, with original RPY values unchanged.
 - FOG runs at 500 Hz and reports sensor Z angular rate, with independent noise
   standard deviation 0.01 degree/s. Default reported variance is
   `max(1e-9, sigma_rad_s²)`; configuration may override it independently of noise.
+  Native Talos now selects the original default FOG noise and covariance (the
+  noise variance exceeds the original floor). Arbitrary independent FOG covariance
+  override support remains open.
 - Depth runs at 20 Hz with 0.010 m standard deviation. The original samples the mounted
   pressure point's world Z, adds scalar noise, then corrects to base_link Z using
   the same acquisition orientation and mounted offsets. It reports world/map Z

@@ -106,7 +106,10 @@ the viewer still draws line geometry.
   reported sensor-axis variances through C++/profiles/Python.
 - [x] Separate simulated attitude and composed AHRS outputs with shared acquisition,
   independent noise, copied C++/profile/Python contracts and CSV telemetry. Native
-  Talos device composition, original output captures and ROS products remain open.
+  Talos full device composition, original output captures and ROS products remain open.
+- [x] Pinned native Talos 50 Hz AHRS and 500 Hz FOG assembly, source-independent
+  execution, complete three-second acquisition and unchanged plant trajectory.
+  DVL, pressure/depth, cameras and independent original sensor-output capture remain open.
 - [ ] Native assets and reproducible resolved configuration load outside old workspace.
 
 ## D. Renderer and UI fidelity
@@ -189,7 +192,7 @@ selected live-robot workflows required here.
 3. Stage forcing and actuator calibration/stop interfaces are verified in their
    bounded reference/contracts. Static compound contacts are integrated and validated.
    Named body mounts are now resolved for sensors and live visualization. Next:
-   native Talos inertial device assembly and remaining sensor reporting/device
+   independent original inertial-output reference and remaining sensor reporting/device
    composition (reference/TALOS_SENSOR_CONVERSION.md), then original neutral
    scene/assets. The original Talos
    dynamics capture now covers every tick of the three bounded physics cases;

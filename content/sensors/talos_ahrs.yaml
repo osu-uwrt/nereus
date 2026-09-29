@@ -1,0 +1,34 @@
+# Generated from pinned original content; see docs/reference/TALOS_PHYSICS_PACK.md.
+# Original noise-enabled inertial/attitude settings; not hardware identification.
+schema_version: 1
+kind: sensor
+model: ahrs
+parameters:
+  inertial:
+    acceleration_noise:
+      white_stddev:
+      - 0.016
+      - 0.016
+      - 0.016
+    gyro_noise:
+      white_stddev:
+      - 0.00017453292519943296
+      - 0.00017453292519943296
+      - 0.00017453292519943296
+    reporting:
+      gravity_magnitude_m_s2: 9.755455
+      force_variance:
+      - 0.01
+      - 0.01
+      - 0.01
+      angular_variance:
+      - 0.01
+      - 0.01
+      - 0.01
+  attitude:
+    angle_stddev_rad: 0.008726646259971648
+    heading_drift_rad_s: 0.0
+    reported_variance:
+    - 5.0e-05
+    - 1.0e-05
+    - 0.01

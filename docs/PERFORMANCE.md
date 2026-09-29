@@ -79,3 +79,14 @@ the benchmark's generic `plant_and_scheduled_sensors` label but **this profile h
 zero devices**. It must not be interpreted as Talos sensor throughput. Differences
 between the sequential modes also reflect timing noise and system scheduling.
 Meshes, cameras, mechanisms, competition tasks and ROS remain outside this result.
+
+## Native Talos inertial acquisition baseline
+
+[talos-inertial-headless-baseline.json](reference/performance/talos-inertial-headless-baseline.json)
+adds the native 50 Hz AHRS and 500 Hz FOG to the same physical robot/pool. Each mode
+measured 1.5 million ticks after three warmup runs. Plant p99 was 5.417 microseconds;
+plant plus acquisition/draining p99 was 6.459 microseconds. The latter completed
+3,000 simulated seconds in 8.075 measured seconds (about 372 times real time).
+The physical trajectory checksums matched. These sequential local measurements
+include two inertial devices only; they do not establish complete sensor-suite,
+rendering or robot-stack performance. Runtime construction remains excluded.

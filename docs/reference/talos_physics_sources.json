@@ -1,8 +1,10 @@
 {
-  "scope": "Original Talos dynamics, static hull/pool proxies and rigid mounts. Scripted commands; no devices, visuals, tasks or stack adapters.",
+  "scope": "Original Talos dynamics, static hull/pool proxies and rigid mounts, plus a separate noise-enabled IMU/FOG assembly. Scripted commands; no other devices, visuals, tasks or stack adapters.",
   "parameter_status": "unvalidated_prior",
   "sources_sha256": {
     "7f37bdd62ab90113844137a23806c89b23a8ab9b:riptide_descriptions/config/talos.yaml": "7f0c5a703e3974401a23ce316dbedde1327e974b16105d39a97c7a64837bd664",
+    "7f37bdd62ab90113844137a23806c89b23a8ab9b:riptide_descriptions/config/simulator.yaml": "34468cba811abc743c2ecb3aeb2b90c5d3acb548769d384aa6b0bfda24bde45b",
+    "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/robots/talos/config/sensors.yaml": "aa86fa92f929f1489c7db4732434f2083d7f507b7306874a30b71235d1490fdd",
     "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/robots/talos/config/hydrodynamics.yaml": "bf80b5d6215a7d81fe1017b52bed31befb1749a7bec2feeceaa977909a9f0c88",
     "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/worlds/competition_pool.yaml": "5c4e741d4ca0b763357c16a0f2e39fc3373f60d54d6e997bdf5811aa399858ae",
     "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/tasks/2026/config/mapping.yaml": "7799e049ca39c967914244fcdb9095a3f76e0c76f9a48dabcf26183d8672fa15",
@@ -10,11 +12,14 @@
     "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/src/physics_simulator.cpp": "d4b05d378425bfdb59773ba6b20f0db44f14469c2be4eb0ccdfb69824ff05e14",
     "07647eebe706f96ea7b76db3cc9802735a146698:c_simulator/src/robot_class.cpp": "8207b7b8c2cd83aaa11a1f8292fa481ec4212a3aabdb89f9fd8f80169ebd1719"
   },
-  "importer_sha256": "ad6bd673560380c5a8e2dd6427bef5fd957d024d2621e8a0fab35eb1337b6766",
+  "importer_sha256": "98df531d930eca8c1e974f24b157913e226602412525d9953c571c04087e9847",
   "pyyaml_version": "6.0.1",
   "outputs_sha256": {
     "content/robots/talos_dynamics.yaml": "44546e303654fdac4836112f00f6cc430b9aa4bdc279546bfe91ca2cb187f953",
     "content/worlds/competition_pool.yaml": "4d1c73dd17b2c474ad825104da2f3d0dcfdb72dc1c8153ac1ad777a12178cd48",
-    "content/examples/talos_pool.yaml": "b47fdcd680c845e8a4b1f69453b374ca5ee0727055c45bf506b6a5b0991d6af0"
+    "content/examples/talos_pool.yaml": "b47fdcd680c845e8a4b1f69453b374ca5ee0727055c45bf506b6a5b0991d6af0",
+    "content/sensors/talos_ahrs.yaml": "0eba97923884f6ef14857eba10e5932145c85a54e7ac0ce377a90d0b50554165",
+    "content/robots/talos_inertial.yaml": "5ce91c57d802ce8cfdab1801c048ed4081d752ed39ad354918102f1f7936c5df",
+    "content/examples/talos_inertial_pool.yaml": "3ee0854523a8c52cb71ec27a1d83a448e669c662aa5056b34363c4164c51d866"
   }
 }

@@ -39,6 +39,23 @@ class RuntimeTests(unittest.TestCase):
         runtime.command(scenario.commands[0].forces)
         self.assertTrue(np.isfinite(runtime.advance(100).body.position).all())
 
+    def test_native_talos_inertial_pack_acquires_installed_typed_products(self) -> None:
+        scenario = rp.load_scenario(rp.example_scenario().with_name("talos_inertial_pool.yaml"))
+        self.assertEqual([item.model for item in scenario.sensors], ["ahrs", "fog"])
+        runtime = scenario.create_runtime()
+        runtime.advance(10)
+        imu = runtime.ahrs_stream("imu").latest()
+        fog = runtime.fog_stream("fog").latest()
+        assert imu and imu.value and fog and fog.value
+        self.assertEqual(imu.header.acquired_ns, 20000000)
+        self.assertEqual(fog.header.acquired_ns, 20000000)
+        self.assertEqual(imu.header.frame, "imu_mount")
+        np.testing.assert_array_equal(imu.value.inertial.force_covariance, np.eye(3) * 0.01)
+        np.testing.assert_array_equal(
+            imu.value.attitude.covariance, np.diag([0.00005, 0.00001, 0.01])
+        )
+        self.assertAlmostEqual(np.linalg.norm(imu.value.attitude.orientation_wxyz), 1)
+
     def test_placed_pool_queries_match_local_geometry(self) -> None:
         params = rp.PlantParameters()
         params.pool.origin_xy_world = [-10, -12]
