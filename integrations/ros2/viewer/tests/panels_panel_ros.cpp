@@ -295,8 +295,9 @@ int main(int argc, char **argv) {
     control.reset();
     mission.reset();
     composition.reset();
+    spin(.2); // deliver heartbeats already in flight
     const auto closedAt = reports.size();
-    spin(.2);
+    spin(.3);
     assert(reports.size() == closedAt && !reports.back().switch_asserting_kill); // closing leaves the robot as it was
 
     // A second protocol reuses the exact same motion capability/panel.

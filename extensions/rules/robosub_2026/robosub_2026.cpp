@@ -479,8 +479,17 @@ class Robosub2026 final : public session::Rules {
             anySlalom = anySlalom || score(row.get<std::string>());
         Json role = ledger.role ? Json(*ledger.role) : Json();
         const Json &key = ledger.role ? role : intended;
+        // Coin-flip bonuses earned at the gate; null until the gate is passed.
+        const Json &options = state.at("run").at("options"), &points = parameters.at("points");
+        Json heading_bonus, role_bonus;
+        if (ledger.role) {
+            heading_bonus = integer(points.at("heading")) * (truthy(options.at("heading_coin")) ? 1 : 0);
+            role_bonus = truthy(options.at("role_coin")) && role == intended ? integer(points.at("role")) : 0;
+        }
         return {{"intended_role", intended},
                 {"role", role},
+                {"heading_bonus", heading_bonus},
+                {"role_bonus", role_bonus},
                 {"target_class", parameters.at("roles").at(key.get<std::string>()).at("target_class")},
                 {"gate_passed", ledger.role.has_value()},
                 {"ended_reason", ledger.ended ? kEndedReason : ""},

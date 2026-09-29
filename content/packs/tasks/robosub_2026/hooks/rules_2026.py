@@ -370,18 +370,26 @@ def _replayed(state: Mapping[str, Any], parameters: Mapping[str, Any]) -> _Ledge
 def describe(state: Mapping[str, Any], parameters: Mapping[str, Any]) -> dict[str, Any]:
     """Viewer-facing scalar fields of the run scorecard (never used for scoring).
 
-    Pure function of the frozen run state and its event history: the assigned and scored
-    role, the target class of the current role, whether the gate was passed, the basket
+    Pure function of the frozen run state and its event history: the coin-flip role and the
+    role of the gate side taken, the coin-flip bonuses earned at the gate (None until the gate
+    is passed), the target class of the current role, whether the gate was passed, the basket
     count, the breach message and the time-bonus prerequisites.
     """
-    intended = state["run"]["options"]["role"]
+    options, points = state["run"]["options"], parameters["points"]
+    intended = options["role"]
     ledger = _replayed(state, parameters)
     role = ledger.role
     scores = state["scores"]
     slalom = parameters["slalom"]["rows"]
+    heading_bonus = role_bonus = None
+    if role is not None:
+        heading_bonus = points["heading"] * int(bool(options["heading_coin"]))
+        role_bonus = points["role"] if options["role_coin"] and role == intended else 0
     return {
         "intended_role": intended,
         "role": role,
+        "heading_bonus": heading_bonus,
+        "role_bonus": role_bonus,
         "target_class": parameters["roles"][role or intended]["target_class"],
         "gate_passed": role is not None,
         "ended_reason": ENDED_REASON if ledger.ended else "",

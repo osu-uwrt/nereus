@@ -84,6 +84,9 @@ def drain(pack) -> None:
 
 
 RESOLVED = resolve_scenario(SCENARIO)
+# Captured runs score from boot (the pack default waits for the operator's start); the C++ replay
+# (session_test.cpp) opts in the same way.
+RESOLVED.scenario["run"]["auto_start"] = True
 SENSORS = [s["id"] for s in RESOLVED.robot["sensors"] if s["type"] != "stereo_camera"]
 
 

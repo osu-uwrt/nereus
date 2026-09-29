@@ -151,7 +151,42 @@ class RunPanel final : public Panel {
         for (auto field : {"message", "ended_reason"})
             if (score[field] && score[field].IsScalar())
                 ImGui::TextWrapped("%s", score[field].as<std::string>().c_str());
+        if (schema["manual_adjustment"].as<bool>(false))
+            adjustment(s);
         ImGui::TextWrapped("Timer uses simulation time; pauses with physics. Stop is manual.");
+    }
+    // Subjective points: each entry adds to (or, negative, subtracts from) the run's adjustment.
+    void adjustment(const RunState &s) {
+        const double current = s.score["adjustment"].as<double>(0);
+        ImGui::SeparatorText("Score adjustment");
+        ImGui::Text("Current: %+.1f", current);
+        ImGui::BeginDisabled(!run || !s.fresh || !enabled);
+        const float button = ImGui::CalcTextSize("Clear").x + 2 * ImGui::GetStyle().FramePadding.x;
+        ImGui::SetNextItemWidth(std::max(60.f, ImGui::GetContentRegionAvail().x - 2 * button -
+                                                   2 * ImGui::GetStyle().ItemSpacing.x -
+                                                   ImGui::CalcTextSize("Add").x));
+        ImGui::InputFloat("##points", &manualPoints, 10, 50, "%+.1f");
+        ImGui::SameLine();
+        const auto send = [&](double value) {
+            YAML::Node cmd;
+            cmd["action"] = "adjustment";
+            cmd["points"] = value;
+            run->command(cmd);
+        };
+        ImGui::BeginDisabled(!std::isfinite(manualPoints) || manualPoints == 0);
+        if (ImGui::Button("Add")) {
+            send(current + manualPoints);
+            manualPoints = 0;
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(current == 0);
+        if (ImGui::Button("Clear"))
+            send(0);
+        ImGui::EndDisabled();
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("Subjective points: enter a positive or negative amount and Add; Clear removes all.");
     }
     void taskStatus() {
         const auto s = run ? run->state() : RunState{};
@@ -202,26 +237,12 @@ class RunPanel final : public Panel {
             }
             ImGui::EndTable();
         }
-        ImGui::Text("Manual adjustment: %.1f", score["adjustment"].as<double>(0));
+        ImGui::Text("Score adjustment: %+.1f", score["adjustment"].as<double>(0));
         ImGui::Text("TOTAL: %.1f", score["total"].as<double>(0));
         for (const auto &field : schema["score_fields"]) {
             auto value = score[field["key"].as<std::string>()];
             if (value && value.IsScalar())
                 ImGui::TextWrapped("%s: %s", field["label"].as<std::string>().c_str(), value.as<std::string>().c_str());
-        }
-        if (schema["manual_adjustment"].as<bool>(false)) {
-            ImGui::Separator();
-            ImGui::TextWrapped("Manual adjustment (signed points; replaces prior adjustment)");
-            ImGui::SetNextItemWidth(-1);
-            ImGui::InputFloat("##points", &manualPoints, 50, 100, "%.1f");
-            ImGui::BeginDisabled(!run || !s.fresh || !std::isfinite(manualPoints));
-            if (ImGui::Button("Apply adjustment", {-1, 36})) {
-                YAML::Node cmd;
-                cmd["action"] = "adjustment";
-                cmd["points"] = manualPoints;
-                run->command(cmd);
-            }
-            ImGui::EndDisabled();
         }
         if (schema["score_note"])
             ImGui::TextWrapped("%s", schema["score_note"].as<std::string>().c_str());

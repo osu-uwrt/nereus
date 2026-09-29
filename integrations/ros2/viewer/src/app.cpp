@@ -616,7 +616,10 @@ void App::buildPanels() {
     registerHostItems();
     panelRos_.registerFactories(registry_);
     panels::Context context{trimSlashes(scenario_->ns), scenario_->mapFrame, demoMode_, ros_->useSimTime()};
-    context.documents.emplace("task", YAML::Clone(scenario_->ui));
+    // Panel profile documents carry their scorecard schema under `ui` (run panel and sim.run provider).
+    YAML::Node task(YAML::NodeType::Map);
+    task["ui"] = YAML::Clone(scenario_->ui);
+    context.documents.emplace("task", task);
     context.focus = [this](const std::string &name) { focus(name); };
     if (opt_.showScorecard)
         context.initialWindows.push_back("run");
@@ -975,17 +978,6 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
         ImGui::PushFont(window_->small);
         ImGui::TextDisabled("ROS image topic (no simulator truth pose)");
         ImGui::PopFont();
-    } else if (!demoMode_) {
-        bool ros = feed.rosMode;
-        if (ImGui::Checkbox("What the stack sees (ROS)", &ros)) {
-            feed.rosMode = ros;
-            ros_->refreshCameras();
-            cardDue_[index] = 0; // render the local view immediately when switching back
-        }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Off: this viewer renders the card from its own scene at the truth pose.\n"
-                              "On: the images the bridge publishes (rendered from the pack, with the\n"
-                              "sensor noise model) as the robot stack receives them.");
     }
     ImGui::PushFont(window_->small);
     ImGui::TextColored(muted, "%s  /  %d x %d", camera.model.c_str(), camera.k.width, camera.k.height);
@@ -1025,14 +1017,33 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
         local && !depthFromRos ? cyan : connected ? cyan : muted, "%s",
         demoMode_ ? "PREVIEW ONLY" : local && !depthFromRos ? "LOCAL VIEW" : connected ? "CONNECTED" : "NO SENSOR OUTPUT");
     ImGui::SameLine();
+    const bool sourceToggle = canLocal && !demoMode_;
+    if (sourceToggle) {
+        // Simulator: the source label toggles the card between this viewer's truth-pose render and
+        // the images the bridge publishes to the robot stack.
+        const bool stack = feed.rosMode;
+        ImGui::PushStyleColor(ImGuiCol_Button, stack ? ImVec4(.12f, .48f, .46f, 1) : ImVec4(.1f, .16f, .2f, 1));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, stack ? ImVec4(.16f, .6f, .56f, 1) : ImVec4(.16f, .25f, .31f, 1));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, stack ? ImVec4(.1f, .4f, .38f, 1) : ImVec4(.08f, .13f, .17f, 1));
+        if (ImGui::SmallButton(stack ? "ROS (stack)###source" : "truth pose###source")) {
+            feed.rosMode = !stack;
+            ros_->refreshCameras();
+            cardDue_[index] = 0; // render the local view immediately when switching back
+        }
+        ImGui::PopStyleColor(3);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Click to switch the card's source.\n"
+                              "truth pose: rendered by this viewer at the truth pose (no sensor noise, no bridge latency).\n"
+                              "ROS (stack): the images the bridge publishes, as the robot stack receives them.");
+        ImGui::SameLine();
+    }
     if (local && !depthFromRos)
-        ImGui::TextDisabled("  truth pose  |  RGB");
+        ImGui::TextDisabled(sourceToggle ? "|  RGB" : "  truth pose  |  RGB");
     else
         ImGui::TextDisabled("  %.1f Hz  |  %s", connected ? feed.hz : 0., feed.wantDepth ? "METRES" : "RECTIFIED RGB");
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip(local && !depthFromRos
-                              ? "Rendered by this viewer from the truth pose (no sensor noise, no bridge latency).\n"
-                                "Enable \"What the stack sees (ROS)\" for the images the robot stack receives."
+                              ? "Rendered by this viewer from the truth pose (no sensor noise, no bridge latency)."
                               : "Camera images are rendered and published by the simulator bridge.\n"
                                 "Depth is rendered geometry with the pack's sensor noise model.\n"
                                 "Topic: %s",

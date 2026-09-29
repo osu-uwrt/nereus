@@ -421,6 +421,9 @@ def table_case(resolved, hooks=False):
 
 def main():
     resolved = resolve_scenario(SCENARIO)
+    # Captured cases score from boot (the pack default waits for the operator's start); the C++
+    # replay (task_runtime_test.cpp) opts in the same way.
+    resolved.scenario["run"]["auto_start"] = True
     def build(hooks):
         return [gate_case(resolved, hooks), slalom_case(resolved, hooks), torpedo_case(resolved, hooks),
                 bins_case(resolved, hooks), surface_case(resolved, False, hooks),

@@ -207,7 +207,7 @@ ui:
   title: RoboSub 2026 scorecard
   run_options:
   - key: role
-    label: Intended role
+    label: Coin-flip role
     type: choice
     default: repair
     choices:
@@ -231,8 +231,10 @@ ui:
   - {label: Inspect claw, target: Claw}
   - {label: Inspect lights, target: magnet_target1}
   status_fields:
-  - {key: intended_role, label: Assigned role}
-  - {key: role, label: Scored role}
+  - {key: role, label: Role (gate side taken)}
+  - {key: intended_role, label: Coin-flip role}
+  - {key: heading_bonus, label: Heading coin bonus}
+  - {key: role_bonus, label: Role coin bonus (gate side = coin-flip role)}
   actions: []
 
 # Inactive: remaining RepairCompTree subtrees, recorded so the step-4 schema does not churn.

@@ -58,7 +58,7 @@ struct CameraFeed {
     std::vector<std::uint8_t> rgb, depth; // decoded previews (RGB8)
     int rgbWidth = 0, rgbHeight = 0, depthWidth = 0, depthHeight = 0;
     bool rgbDirty = false, depthDirty = false, wantDepth = false;
-    // false: the card shows the viewer's own render from the truth pose; true ("What the stack sees"):
+    // false: the card shows the viewer's own render from the truth pose; true (card source button "ROS (stack)"):
     // the bridge's published images. Depth always comes from the topic.
     bool rosMode = true;
     double hz = 0;
