@@ -1,0 +1,86 @@
+# Selects sibling packs (paths relative to THIS folder)
+# and owns everything run-specific: world frame, placements, initial state, seed, run options.
+# Working copy for the step-2 navigation bridge; the approved full contract is proposals/step1/packs.
+schema_version: 1
+kind: scenario
+id: talos_uwrt_repair_2026
+description: Talos + unchanged UWRT stack on the original 2026 layout, RepairCompTree role.
+provenance:
+  revisions:
+    riptide_simulator: 07647eebe706f96ea7b76db3cc9802735a146698
+  worktree_checked: '2026-09-29'
+  sources:
+  - {path: riptide_simulator/c_simulator/tasks/2026/config/mapping.yaml, sha256: 7799e049ca39c967914244fcdb9095a3f76e0c76f9a48dabcf26183d8672fa15, hash_basis: git_revision}
+  - {path: riptide_simulator/c_simulator/src/physics_simulator.cpp, sha256: d4b05d378425bfdb59773ba6b20f0db44f14469c2be4eb0ccdfb69824ff05e14, hash_basis: git_revision}
+  - {path: riptide_simulator/c_simulator/tasks/2026/competition.yaml, sha256: 196552bfa71f40d6c5db5b62ae70b52a8d653c645a8ac03366aaec4e9ac2c21b, hash_basis: worktree}
+  derived_from:
+  - {path: content/examples/talos_navigation_pool.yaml, sha256: 6a133fc381570167baaeba7d4fbcdc2ab24a0746a2ae6e2b70608cdc44d0121f}
+assets: []
+
+robot: ../../robots/talos
+pool: ../../pools/robosub_2026
+tasks: ../../tasks/robosub_2026
+bridge: ../../bridges/uwrt_talos
+
+seed: 7                      # original random_seed default
+timestep_ns: 2000000         # 2 ms physics_step
+sensor_noise: true
+
+# World = original "map": ENU, +Z up, z = 0 at the water surface. All placements are upright
+# (yaw about world +Z only), stored in source degrees so no hand-rounded angles appear.
+world_frame: map
+
+# Pool corner pose in world. Source map_origin_pool [x 19.5136, y 0, yaw 90 deg] is the map origin
+# in pool coordinates; its exact inverse is position [0, 19.5136, 0], yaw -90 deg.
+# (Native talos_navigation_pool.yaml stores the same pose with -1.19e-15 floating noise in x.)
+pool_placement:
+  position_m: [0.0, 19.5136, 0.0]
+  yaw_deg: -90.0
+
+# Original mapping init_data (parent map), copied verbatim. Same values are the robot's prior map
+# (riptide_mapping2 config.yaml): trap T1.
+task_placements:
+- {task: gate, position_m: [4.810167, -2.217889, -0.75], yaw_deg: 170.645069}
+- {task: torpedo, position_m: [18.35222, 2.480545, -1.372], yaw_deg: -169.835651}
+
+contacts:
+  model: box_scene
+  restitution: 0.1
+  friction: 0.4
+
+# Plant state at the COM (native state frame), body-axis velocities. base_link starts at
+# [0.017, -0.01, -1.042] (COM + base_link offset). Kill/arm defaults are robot.safety.
+initial:
+  frame: com
+  position_m: [0, 0, -1]               # original startup state (talos.yaml has no sim_start_pose)
+  orientation_wxyz: [1, 0, 0, 0]
+  linear_velocity_m_s: [0, 0, 0]
+  angular_velocity_rad_s: [0, 0, 0]
+
+run:
+  auto_start: true                      # original starts via operator run_command "start"
+  options: {role: repair, heading_coin: true, role_coin: true, pinger_task: none, pinger_random: false}
+
+# Inactive: placements for task definitions that do not exist until step 4 (same source file).
+pending:
+- id: slalom_placement
+  category: task_placement
+  required_from_step: 4
+  blocker: slalom task definition not written in step 1
+  known: {frame: slalom_parent, position_m: [8.332382, 0.560795, -1.3], yaw_deg: -152.691724,
+          rows_in_parent: {slalom_front: [0, 0, 0], slalom_middle: [-2.127361, 0.693981, 0], slalom_back: [-4.231969, 0.117814, 0]}}
+- id: bins_placement
+  category: task_placement
+  required_from_step: 4
+  blocker: bins task definition not written in step 1
+  known: {frame: bin, position_m: [13.408019, 12.324713, -2.13], yaw_deg: -145.070841}
+- id: table_placement
+  category: task_placement
+  required_from_step: 4
+  blocker: table task definition not written in step 1
+  known: {frame: table, position_m: [19.290761, 9.007, -1.54], yaw_deg: 89.039804}
+- id: surface_placement
+  category: task_placement
+  required_from_step: 4
+  blocker: surface task definition not written in step 1
+  known: {frame: octagon, parent: table, position_m: [0.082085, -0.064919, 1.2352], yaw_deg: -134.313351}

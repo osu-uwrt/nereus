@@ -72,6 +72,37 @@ sensor queues unchanged. Opus reviewed the native change without a blocker;
 has completed an initial two-target controller/EKF baseline. The automated paired
 comparison and generic bridge review are in progress; gate 2 is still open.
 
+The optional `integrations/ros2` package now runs resolved data packs through
+rclpy. It validates message fields before stepping, applies configured QoS,
+thruster order/scales and kill policy, and publishes native acquisition stamps,
+clock, navigation sensors, telemetry and truth TF. Placement, reset-to-start and
+sync-to-estimate use the native placement API; optional EKF alignment uses live
+TF. Unsupported endpoints fail at startup. Malformed commands are rejected and
+counted. No UWRT imports or ROS dependencies were added to the platform itself;
+the Talos bridge uses declared fields and needs no custom converter.
+
+`content/packs/` is the runnable navigation selection. Cameras are explicitly
+disabled and task/mechanism endpoints are omitted. Full proposals remain in
+`proposals/step1/`. Missing assets, hooks and unexecuted task rules are recorded
+in each run's `resolved.json` and `execution.json`; `summary.json` records actual
+ticks, sensor counts, rejected inputs and estimator alignment. Full task reset
+is not delivered. TF lookups currently use the latest transform, matching the
+old simulator; the hold comparison uses fixed world/map/odom relationships.
+
+The ROS wheel builds separately with `python -m build --wheel integrations/ros2`.
+It requires a sourced ROS installation providing rclpy, rosidl_runtime_py,
+tf2_ros and the message packages named by the bridge. The UWRT example also
+requires riptide_msgs2 and robot_localization. With the core installed, run
+`PYTHONPATH=integrations/ros2/python:$PYTHONPATH python3 -m robotics_platform_ros
+content/packs/scenarios/talos_uwrt --output build/my-run`. In this workspace's
+provisional FastDDS tests also set `ROS_LOCALHOST_ONLY=1`, a private
+`ROS_DOMAIN_ID`, and `RMW_IMPLEMENTATION=rmw_fastrtps_cpp`.
+
+The installed ROS wheel passes 108 mapping/core/rejection tests; installed core
+passes 111 Python tests including the C++ runner comparison. Installed data-pack
+preflight passes, and Ruff passes. These checks deliver the bridge increment;
+the paired real-stack depth/heading acceptance still determines gate 2.
+
 The user replaced human approval with joint Codex/Claude Code execution. Claude
 uses `claude-opus-5-5` with high effort. It may delegate bounded mechanical work
 to `claude-sonnet-5-5`; the exact model was checked successfully. Codex and Opus

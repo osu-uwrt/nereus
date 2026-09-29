@@ -1,0 +1,267 @@
+# Generic YAML ROS 2 bridge binding the Talos robot pack
+# to the unchanged UWRT stack. No user code. Field maps accept only {from}, {constant} or
+# {from, enum_map}; filters only field equality. Destination keys are ROS field paths on publish and
+# native argument names on subscribe; [i] indexes arrays. Native side: robot-pack ids and the native
+# reading fields of libraries/sensors/include/robotics/sensors/readings.hpp.
+# Working copy for the step-2 navigation bridge; the approved full contract is proposals/step1/packs.
+schema_version: 1
+kind: bridge
+id: uwrt_talos
+description: Talos <-> UWRT robot stack (controller, EKF, acoustics, perception, autonomy).
+provenance:
+  revisions:
+    riptide_simulator: 07647eebe706f96ea7b76db3cc9802735a146698
+    riptide_core: 7f37bdd62ab90113844137a23806c89b23a8ab9b
+  worktree_checked: '2026-09-29'
+  sources:
+  - {path: riptide_simulator/c_simulator/src/physics_simulator.cpp, sha256: d4b05d378425bfdb59773ba6b20f0db44f14469c2be4eb0ccdfb69824ff05e14, hash_basis: git_revision}
+  - {path: riptide_simulator/c_simulator/robots/talos/behavior/mechanisms.py, sha256: 914111762daf4858934b02244ba2b85a6b4f038f6b0871e7a6d53195c43f7115, hash_basis: worktree}
+  - {path: riptide_simulator/c_simulator/tasks/2026/behavior/node.py, sha256: 2fc689ecf44746487047879c711f429bde15d5572fbf137de8f4a11176f3aa73, hash_basis: worktree}
+  - {path: riptide_simulator/camera_faker/src/pool_viewer/main.cpp, sha256: 853c88210565b3f79917e649ff1938ce7ca0f5686a95e3a4e60d36ba5f96fe8a, hash_basis: worktree}
+  - {path: riptide_core/riptide_hardware/cfg/talos_ekf.yaml, sha256: 063ae128b7ca66bc90740de7a0bfa11ba356c3443c606aa14f673dfbbdb441d8, hash_basis: worktree}
+  - {path: riptide_control/riptide_controllers/src/riptide_controllers/controller_overseer.py, sha256: 8582a893195760c92bace6ddf0f59488ca5b37a6a2fe1c730696ea5b1474b1fc, hash_basis: worktree}
+  - {path: controller_models/complete_controller/src/complete_controller.cpp, sha256: f6bf6263f0b12341955109605058eb682f6a6c0ae714c57df57442e1d1a3db6c, hash_basis: worktree}
+  - {path: riptide_core/riptide_acoustics/src/Acoustics.cpp, sha256: 9e5e6cda12f8fae42ad3f34fd0c148d6625a4b992506586699640db490aa3be8, hash_basis: worktree}
+  - {path: riptide_perception/tensor_detector/src/yolo_orientation.py, sha256: 753d23f2eba372bb59c516d9a54b318e65abb045f398be4b601e8da9b5aca52b, hash_basis: worktree}
+assets: []
+requires_robot: talos      # data binding to robot-pack ids; no robot-name code switch
+
+namespace: /talos          # relative names resolve here (controller topics are hardcoded /talos: T18)
+
+# Native frame id -> ROS frame name. Only frames used in headers/TF are listed.
+frame_names:
+  world: map
+  imu_mount: talos/imu_link
+  fog_mount: talos/fog_link
+  dvl_mount: talos/dvl_link
+  ffc_left_optical: talos/ffc_left_camera_optical_frame
+  dfc_left_optical: talos/dfc_left_camera_optical_frame
+
+clock:
+  topic: /clock                          # rosgraph_msgs/msg/Clock
+  epoch: system_time_at_start            # original simNs starts at system time; avoids ROS time 0
+  rate_hz: 500                           # clock_publish_rate: every 2 ms physics step
+  reset_policy: preserve_ros_epoch_and_time   # ROS time never rewinds across resets (T12)
+  publish_before_data: true
+  real_time_factor: 1.0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+
+thrusters:
+  order: [VUS, VUP, HUS, HUP, HLS, HLP, VLS, VLP]   # talos.yaml thruster index 0..7 (controller wrench matrix)
+  input_unit: N
+  input_scales: [1, 1, 1, 1, 1, 1, 1, 1]
+  reject: [wrong_length, nonfinite]                 # whole message ignored (forceCallback)
+
+tf:
+  publish:
+  - {parent: map, child: simulator/talos/base_link, native: 'state:robot.reference_pose', rate_hz: 100}   # truth, STATE_PUB_TIME
+  # Transforms the bridge only reads live. Owners are external; the bridge never republishes them.
+  lookup:
+  - {parent: world, child: map, owner: 'riptide_mapping2 mapping.launch.py chameleon_tf world_to_map (identity start; XY/yaw free)'}
+  - {parent: world, child: odom, owner: 'riptide_hardware2 navigation.launch.py static world->odom'}
+  never_publish: ['talos/*', world, odom, map]
+
+kill:
+  command_stream: software_kill
+  state_stream: firmware_kill
+
+reset:
+  robot_service: reset_sim_to_start      # plant to start pose; tasks untouched
+
+placement:
+  set_service: set_sim_pose
+  sync_service: sync_sim_to_estimate
+  estimator_alignment:                   # physics_simulator.cpp alignEkf; never during a run
+    client: /talos/set_pose
+    service_type: robot_localization/srv/SetPose
+    triggers: [startup, placement, reset_to_start, full_reset]
+    estimate_stream: ekf_odometry        # header.frame_id gives the EKF frame; map->it via tf.lookup
+    pose: reference_frame                # robot reference_frame (base_link)
+    covariance_diagonal: 1.0e-06
+
+streams:
+# ---------------- ROS -> simulator ----------------
+- id: thruster_forces
+  direction: subscribe
+  topic: thruster_forces                 # controller publishes /talos/thruster_forces
+  message_type: std_msgs/msg/Float32MultiArray
+  native: 'command:thrusters.set_forces'
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {forces_n: {from: data}}
+- id: software_kill
+  direction: subscribe
+  topic: command/software_kill
+  message_type: riptide_msgs2/msg/KillSwitchReport
+  native: 'command:robot.set_killed'
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  accept_if: [{field: kill_switch_id, equals: 1}]   # KILL_SWITCH_RQT_CONTROLLER only
+  fields: {killed: {from: switch_asserting_kill}}
+- id: ekf_odometry
+  direction: subscribe
+  topic: odometry/filtered
+  message_type: nav_msgs/msg/Odometry
+  native: 'estimate:latest'              # bridge-held sample for sync_sim_to_estimate / alignment
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields:
+    frame: {from: header.frame_id}
+    position_m: {from: pose.pose.position}
+    orientation_w: {from: pose.pose.orientation.w}
+    orientation_x: {from: pose.pose.orientation.x}
+    orientation_y: {from: pose.pose.orientation.y}
+    orientation_z: {from: pose.pose.orientation.z}
+# ---------------- simulator -> ROS: EKF inputs (talos_ekf.yaml) ----------------
+- id: imu
+  direction: publish
+  topic: vectornav/imu
+  message_type: sensor_msgs/msg/Imu
+  native: 'sensor:imu'
+  frame_id: talos/imu_link
+  rate_hz: 50
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields:
+    header.stamp: {from: sample.time}
+    orientation.w: {from: 'reading.attitude.orientation_wxyz[0]'}   # sensor-to-world, explicit order
+    orientation.x: {from: 'reading.attitude.orientation_wxyz[1]'}
+    orientation.y: {from: 'reading.attitude.orientation_wxyz[2]'}
+    orientation.z: {from: 'reading.attitude.orientation_wxyz[3]'}
+    orientation_covariance: {from: reading.attitude.covariance}
+    angular_velocity: {from: reading.inertial.angular_velocity}
+    angular_velocity_covariance: {from: reading.inertial.angular_covariance}
+    linear_acceleration: {from: reading.inertial.specific_force}
+    linear_acceleration_covariance: {from: reading.inertial.force_covariance}
+- id: fog
+  direction: publish
+  topic: gyro/twist
+  message_type: geometry_msgs/msg/TwistWithCovarianceStamped
+  native: 'sensor:fog'
+  frame_id: talos/fog_link
+  rate_hz: 500
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields:
+    header.stamp: {from: sample.time}
+    twist.twist.angular.z: {from: 'reading.angular_rates[0]'}
+    twist.covariance[35]: {from: 'reading.covariance[0][0]'}
+- id: dvl
+  direction: publish
+  topic: dvl_twist
+  message_type: geometry_msgs/msg/TwistWithCovarianceStamped
+  native: 'sensor:dvl'
+  frame_id: talos/dvl_link
+  rate_hz: 8
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields:
+    header.stamp: {from: sample.time}
+    twist.twist.linear: {from: reading.reference_relative_velocity}
+    twist.covariance[0]: {from: 'reading.covariance[0][0]'}
+    twist.covariance[7]: {from: 'reading.covariance[1][1]'}
+    twist.covariance[14]: {from: 'reading.covariance[2][2]'}
+- id: depth
+  direction: publish
+  topic: depth/pose
+  message_type: geometry_msgs/msg/PoseWithCovarianceStamped
+  native: 'sensor:depth'
+  frame_id: map
+  rate_hz: 20
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields:
+    header.stamp: {from: sample.time}
+    pose.pose.position.z: {from: reading.target_world_z}   # base_link altitude, not raw pressure
+    pose.pose.orientation.w: {constant: 1.0}
+    pose.covariance[14]: {from: reading.variance}
+
+# ---------------- simulator -> ROS: safety / actuator state ----------------
+- id: firmware_kill
+  direction: publish
+  topic: state/kill                      # DoTask + WaitForKillSwitch
+  message_type: std_msgs/msg/Bool
+  native: 'event:robot.kill_changed'     # once per accepted software_kill message (original)
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {data: {from: killed}}
+- id: thruster_telemetry_0_3
+  direction: publish
+  topic: state/thrusters/telemetry       # controller_overseer.py ESC power timeout without it
+  message_type: riptide_msgs2/msg/DshotPartialTelemetry
+  native: timer
+  frame_id: ''
+  rate_hz: 2
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields:
+    start_thruster_num: {constant: 0}
+    disabled_flags: {constant: 0}
+    esc_telemetry[0].thruster_ready: {constant: true}
+    esc_telemetry[1].thruster_ready: {constant: true}
+    esc_telemetry[2].thruster_ready: {constant: true}
+    esc_telemetry[3].thruster_ready: {constant: true}
+- id: thruster_telemetry_4_7
+  direction: publish
+  topic: state/thrusters/telemetry
+  message_type: riptide_msgs2/msg/DshotPartialTelemetry
+  native: timer
+  frame_id: ''
+  rate_hz: 2
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields:
+    start_thruster_num: {constant: 4}
+    disabled_flags: {constant: 0}
+    esc_telemetry[0].thruster_ready: {constant: true}
+    esc_telemetry[1].thruster_ready: {constant: true}
+    esc_telemetry[2].thruster_ready: {constant: true}
+    esc_telemetry[3].thruster_ready: {constant: true}
+# ---------------- simulator -> ROS: cameras (step 3; yolo_orientation.py inputs) ----------------
+# ---------------- diagnostics (not consumed by the stack) ----------------
+- id: ground_truth
+  direction: publish
+  topic: simulator/ground_truth
+  message_type: nav_msgs/msg/Odometry
+  native: 'state:robot'
+  frame_id: map
+  rate_hz: 100
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields:
+    header.stamp: {from: sim.time}
+    child_frame_id: {constant: simulator/talos/base_link}
+    pose.pose.position: {from: reference_pose.position}         # world frame
+    pose.pose.orientation.w: {from: 'reference_pose.orientation_wxyz[0]'}
+    pose.pose.orientation.x: {from: 'reference_pose.orientation_wxyz[1]'}
+    pose.pose.orientation.y: {from: 'reference_pose.orientation_wxyz[2]'}
+    pose.pose.orientation.z: {from: 'reference_pose.orientation_wxyz[3]'}
+    twist.twist.linear: {from: reference_body_velocity}     # body axes incl. w x r (original)
+    twist.twist.angular: {from: body_angular_velocity}
+
+services:
+- id: set_sim_pose
+  service: set_sim_pose
+  service_type: robot_localization/srv/SetPose
+  action: 'command:robot.place'
+  request:
+    frame: {from: pose.header.frame_id}          # non-map frames resolved through tf.lookup
+    position_m: {from: pose.pose.pose.position}
+    orientation_w: {from: pose.pose.pose.orientation.w}
+    orientation_x: {from: pose.pose.pose.orientation.x}
+    orientation_y: {from: pose.pose.pose.orientation.y}
+    orientation_z: {from: pose.pose.pose.orientation.z}
+  response: {}                                   # SetPose response is empty
+  placement: {pose_source: request, keep_velocity: false, becomes_start_pose: true, align_estimator: true}
+- id: sync_sim_to_estimate
+  service: sync_sim_to_estimate
+  service_type: std_srvs/srv/Trigger
+  action: 'command:robot.place'
+  request: {}
+  response: {success: {from: accepted}, message: {from: message}}
+  placement: {pose_source: estimate, keep_velocity: true, becomes_start_pose: false, align_estimator: false}
+- id: reset_sim_to_start
+  service: reset_sim_to_start
+  service_type: std_srvs/srv/Trigger
+  action: 'command:robot.reset_to_start'
+  request: {}
+  response: {success: {from: accepted}, message: {from: message}}
+
+converters: []   # none required; every candidate is evaluated in exceptions.yaml

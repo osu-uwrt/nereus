@@ -27,7 +27,10 @@ Step 2 progress:
   native-profile parity and a distinct four-thruster pack passed.
 - [x] Native placement preserves time and sensor schedules, clears stale readings,
   and supports clearing or preserving propulsion; invalid input is atomic.
-- [ ] Generic ROS bridge and UWRT bindings, followed by the old/new real-stack hold comparison.
+- [x] Generic ROS bridge, UWRT navigation bindings and independently installable
+  package; 108 installed ROS tests and 111 installed core Python tests pass.
+- [ ] Old/new real-stack hold comparison: repeated runs, equal controller config,
+  actual truth/EKF errors and real-time factor, no rejected input or missing alignment.
 
 The user delegated approval to Codex and Claude Code, using Opus 5.5/high. Agree
 ownership, have the other partner review each gate's evidence, and continue without
@@ -50,6 +53,8 @@ only required custom-message converters live in `integrations/uwrt`.
 - Resume UI, LEDs, radiance and visual-fidelity work only after step 5 passes.
 - Revisit broad RViz and industry expansion after the simulator/data-only gates.
 - Keep future training use possible; do not implement RL or general sonar now.
+- Revisit timestamp-matched TF lookup when task mapping makes external frames move;
+  gate 2 uses the old simulator's latest-TF behavior and fixed external transforms.
 
 ## Reference and fidelity policy
 
