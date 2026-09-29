@@ -50,8 +50,8 @@ assets:
 - {id: claw_right_pad_mesh, path: assets/visual/claw/gripper_right.glb, required_from_step: 3, status: present, sha256: f3267ef51e31de7942ab96561efa01931c838bd099ed8b13833aa06a1411e936, source: "riptide_simulator camera_faker/models/claw/gripper_right.glb @07647eeb"}   # right pad (renderer.cpp:492-493)
 - {id: launcher_mesh, path: assets/visual/payloads/launcher.glb, required_from_step: 4, status: missing, source: "riptide_simulator camera_faker/models/payloads/launcher.glb @07647eeb"}
 - {id: projectile_mesh, path: assets/visual/payloads/projectile.glb, required_from_step: 4, status: missing, source: "riptide_simulator camera_faker/models/payloads/projectile.glb @07647eeb"}
-- {id: claw_pad_left, path: assets/collision/claw_pad.obj, required_from_step: 4, status: missing, source: "riptide_simulator c_simulator/collision_files/tasks/claw_pad.obj @07647eeb"}
-- {id: claw_pad_right, path: assets/collision/claw_pad_right.obj, required_from_step: 4, status: missing, source: "riptide_simulator c_simulator/collision_files/tasks/claw_pad_right.obj @07647eeb"}
+- {id: claw_pad_left, path: assets/collision/claw_pad.obj, required_from_step: 4, status: present, sha256: 506d0735f076ac74aa67b8fd9192576d0bd8bc5a07f0ca9e951311ad7fd46512, source: "riptide_simulator c_simulator/collision_files/tasks/claw_pad.obj @07647eeb"}
+- {id: claw_pad_right, path: assets/collision/claw_pad_right.obj, required_from_step: 4, status: present, sha256: f34963988eca6f6ac1ea47524d979724292b4831eb02b231d7e49cf6f7c3cfca, source: "riptide_simulator c_simulator/collision_files/tasks/claw_pad_right.obj @07647eeb"}
 - {id: robot_magnet_mesh, path: assets/visual/magnet/robot_magnet.glb, required_from_step: 4, status: missing, source: "riptide_simulator camera_faker/models/magnet_lights/robot_magnet.glb @07647eeb"}
 
 body:
