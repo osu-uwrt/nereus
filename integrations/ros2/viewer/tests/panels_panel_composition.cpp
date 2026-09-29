@@ -1,6 +1,8 @@
 // Ported from riptide_simulator camera_faker pool_viewer test/panel_composition.cpp; see docs/PROVENANCE.md.
 #include "robotics/ros_viewer/panels/composition.hpp"
+#include <imgui.h>
 #include <cassert>
+#include <functional>
 #include <iostream>
 using namespace robotics::ros_viewer::panels;
 struct FakeMotion : Motion {
@@ -38,9 +40,31 @@ struct FakeMission : Autonomy {
         s.busy = false;
     }
 };
+// Host items: no provider, recorded when drawn so the toolbar order can be observed.
+struct HostItem final : Panel {
+    std::string name;
+    std::vector<std::string> *log;
+    HostItem(std::string n, std::vector<std::string> *l) : name(std::move(n)), log(l) {}
+    void toolbar() override {
+        log->push_back("toolbar:" + name);
+    }
+    void draw() override {
+        log->push_back("draw:" + name);
+    }
+};
 int main() {
     Registry r;
     registerPanels(r);
+    std::vector<std::string> drawLog;
+    for (const char *type : {"view", "detections", "scene_settings"})
+        r.panels.emplace(type, ViewFactory<Panel>{Kind::Motion,
+                                                  [type](const YAML::Node &o) {
+                                                      keys(o, {"label"}, type);
+                                                  },
+                                                  [&, type](const Binding &) {
+                                                      return std::unique_ptr<Panel>(new HostItem(type, &drawLog));
+                                                  },
+                                                  true, std::string(type) != "detections"});
     int created = 0;
     r.providers.emplace("fake.motion", ProviderFactory{Kind::Motion, [](auto) {},
                                                        [&](auto, auto) {
@@ -129,8 +153,94 @@ ownership:
     cfg["typo"] = true;
     fails(cfg);
     cfg = YAML::Load(text);
-    cfg["tools"] = YAML::Load("[{id: tool, type: motion, provider: motion, slot: typo}]");
-    fails(cfg);
+    cfg["tools"] = YAML::Load("[{id: tool, type: motion, provider: motion}]");
+    fails(cfg); // the old `tools:` list is now `toolbar:`
+    // --- toolbar: parsing, ordering, validation
+    const auto toolbarText = std::string(text) + R"(toolbar:
+  - {type: view}
+  - {id: pm, type: panels_menu}
+  - {id: mine, type: motion, provider: motion}
+  - {type: scene_settings, options: {label: x}}
+)";
+    {
+        Composition c(YAML::Load(toolbarText), ctx, r);
+        const std::vector<std::string> order{"view", "pm", "mine", "scene_settings"};
+        assert(c.toolbarIds() == order);
+        ImGui::CreateContext();
+        auto &io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.DisplaySize = {800, 600};
+        io.DeltaTime = 1.f / 30;
+        unsigned char *pixels;
+        int w, h;
+        io.Fonts->GetTexDataAsRGBA32(&pixels, &w, &h);
+        ImGui::NewFrame();
+        ImGui::Begin("t");
+        drawLog.clear();
+        c.drawToolbar();
+        ImGui::End();
+        ImGui::Render();
+        const std::vector<std::string> drawn{"toolbar:view", "toolbar:scene_settings"};
+        assert(drawLog == drawn); // panels_menu / motion draw their own widgets, not through the log
+        // visible: false hides an item without dropping it
+        auto hidden = YAML::Load(toolbarText);
+        hidden["toolbar"][0]["visible"] = false;
+        Composition h2(hidden, ctx, r);
+        ImGui::NewFrame();
+        ImGui::Begin("t");
+        drawLog.clear();
+        h2.drawToolbar();
+        ImGui::End();
+        ImGui::Render();
+        const std::vector<std::string> drawnHidden{"toolbar:scene_settings"};
+        assert(drawLog == drawnHidden);
+        ImGui::DestroyContext();
+    }
+    {
+        // No `toolbar:` key: the default list, restricted to the item types this host registered.
+        Composition c(YAML::Load(text), ctx, r);
+        const std::vector<std::string> order{"scene_settings", "panels_menu", "view"};
+        assert(c.toolbarIds() == order);
+        Composition none(YAML::Load("schema_version: 1\nproviders: {}\ntoolbar: []"), ctx, r);
+        assert(none.toolbarIds().empty());
+    }
+    {
+        // A host item can also be a sidebar panel (draw()), but not a toolbar-only one.
+        auto c2 = YAML::Load(text);
+        c2["panels"].push_back(YAML::Load("{id: det, type: detections, title: Detections}"));
+        c2["toolbar"] = YAML::Load("[{type: detections}, {id: det2, type: detections}]");
+        Composition c(c2, ctx, r);
+        const std::vector<std::string> order{"detections", "det2"};
+        assert(c.toolbarIds() == order);
+        assert(c.panelIds().back() == "det");
+        auto bad = YAML::Load(text);
+        bad["panels"].push_back(YAML::Load("{id: v, type: view}"));
+        fails(bad);
+    }
+    const auto withToolbar = [&](const char *yaml) {
+        auto c = YAML::Load(text);
+        c["toolbar"] = YAML::Load(yaml);
+        return c;
+    };
+    fails(withToolbar("[{type: nope}]"));                                   // unknown type
+    fails(withToolbar("[{type: view, colour: red}]"));                      // unknown key
+    fails(withToolbar("[{type: view, options: {typo: 1}}]"));               // unknown option
+    fails(withToolbar("[{type: view, provider: motion}]"));                 // host item takes no provider
+    fails(withToolbar("[{type: motion}]"));                                 // provider-backed needs a provider
+    fails(withToolbar("[{type: motion, provider: mission}]"));              // capability mismatch
+    fails(withToolbar("[{type: motion, provider: missing}]"));              // unknown provider
+    fails(withToolbar("[{type: view}, {type: view}]"));                     // duplicate (default) ID
+    fails(withToolbar("[{id: a, type: view}, {id: a, type: scene_settings}]"));
+    fails(withToolbar("{type: view}"));                                     // not a sequence
+    fails(withToolbar("[{id: x}]"));                                        // missing type
+    fails(withToolbar("[{type: view, slot: settings}]"));                   // slot is gone
+    try {
+        Composition bad(withToolbar("[{type: nope}]"), ctx, r);
+        assert(false);
+    } catch (const std::exception &e) {
+        const std::string message = e.what();
+        assert(message.find("toolbar.nope") != std::string::npos && message.find("unknown toolbar item type") != std::string::npos);
+    }
     cfg = YAML::Load(text);
     cfg["panels"][0]["slot"] = "settings";
     fails(cfg);

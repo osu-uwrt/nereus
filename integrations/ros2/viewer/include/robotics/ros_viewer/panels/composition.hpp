@@ -43,6 +43,7 @@ struct Binding {
     std::function<void(const std::string &)> focus{};
     bool showWindow = false;
     std::function<void()> drawOverlayControls{};
+    std::function<void()> drawPanelMenu{}; // the panel visibility popup (toolbar item "panels_menu")
 };
 struct ProviderFactory {
     Kind kind;
@@ -53,6 +54,9 @@ template <class T> struct ViewFactory {
     Kind kind;
     std::function<void(const YAML::Node &)> validate;
     std::function<std::unique_ptr<T>(const Binding &)> create;
+    // hosted: provided by the host application (no provider; `provider` is rejected). toolbarOnly: never a
+    // sidebar panel (its draw() has no sidebar form).
+    bool hosted = false, toolbarOnly = false;
 };
 struct Registry {
     std::map<std::string, ProviderFactory> providers;
@@ -69,8 +73,11 @@ class Composition {
     Composition(const YAML::Node &, const Context &, const Registry &);
     void touch();
     void drawSidebar(float height);
+    // Draws the configured `toolbar:` items in order (the default list when the key is absent).
     void drawToolbar();
-    void drawToolsToolbar(const std::string &slot = "overlays");
+    // Instance IDs of the toolbar / sidebar panels in display order.
+    std::vector<std::string> toolbarIds() const;
+    std::vector<std::string> panelIds() const;
     void drawWindows();
     bool sidebarVisible() const {
         return sidebarShown;
@@ -99,7 +106,6 @@ class Composition {
         std::string id, title;
         bool visible, open;
         std::unique_ptr<Panel> panel;
-        std::string slot = "overlays";
     };
     struct Ownership {
         std::shared_ptr<Motion> motion;
@@ -107,11 +113,12 @@ class Composition {
     };
     void syncOwnership();
     void drawOverlayControls(const std::string &provider);
+    void drawPanelMenu();
     float sidebarWidth = 350, sidebarFraction = .29f;
     bool sidebarResized = false;
     bool sidebarShown = true;
     Providers sources;
-    std::vector<PanelInstance> panelInstances, toolInstances;
+    std::vector<PanelInstance> panelInstances, toolbarInstances;
     struct OverlayInstance {
         std::string id, title;
         bool visible;
@@ -121,5 +128,8 @@ class Composition {
     std::vector<OverlayInstance> overlays;
     std::vector<Ownership> ownership;
 };
+// The built-in toolbar item used when a composition has no `toolbar:` list: the host registers the items it
+// provides (types not in the registry are skipped).
+YAML::Node defaultToolbar();
 void registerPanels(Registry &);
 } // namespace robotics::ros_viewer::panels

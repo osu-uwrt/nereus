@@ -57,7 +57,7 @@ void validateSubstitutions(const YAML::Node &node, const Context &ctx) {
 Composition::Composition(const YAML::Node &config, const Context &ctx, const Registry &registry) {
     keys(config,
          {"schema_version", "sidebar_width", "sidebar_width_fraction", "sidebar_visible", "providers", "panels",
-          "tools", "overlays", "ownership"},
+          "toolbar", "overlays", "ownership"},
          "composition");
     if (config["schema_version"].as<int>(0) != 1)
         throw std::invalid_argument("composition.schema_version must be 1");
@@ -89,26 +89,52 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
             throw std::invalid_argument("providers." + id + ": " + e.what());
         }
     }
-    const auto validateViews = [&](const char *name, const auto &factories) {
-        const auto items = config[name];
+    YAML::Node toolbarConfig = config["toolbar"];
+    if (!toolbarConfig) {
+        toolbarConfig = YAML::Node(YAML::NodeType::Sequence);
+        for (const auto &item : defaultToolbar())
+            if (registry.panels.count(item["type"].as<std::string>()))
+                toolbarConfig.push_back(item);
+    }
+    const auto validateViews = [&](const char *name, const YAML::Node &items, const auto &factories) {
+        const bool isToolbar = std::string(name) == "toolbar";
         if (items && !items.IsSequence())
             throw std::invalid_argument(std::string(name) + ": expected a sequence");
         std::set<std::string> ids;
         for (const auto &item : items) {
-            const auto id = item["id"].template as<std::string>("");
+            std::string id = item.IsMap() ? item["id"].template as<std::string>("") : "";
+            if (id.empty() && isToolbar && item.IsMap())
+                id = item["type"].template as<std::string>("");
             try {
-                keys(item, {"id", "type", "provider", "title", "visible", "open", "options", "slot"}, name);
-                required(item, {"id", "type", "provider"});
-                if (item["slot"]) {
-                    const auto slot = item["slot"].template as<std::string>();
-                    if (std::string(name) != "tools" || (slot != "settings" && slot != "overlays"))
-                        throw std::invalid_argument("tool slot must be settings or overlays");
+                keys(item, {"id", "type", "provider", "title", "visible", "open", "options"}, name);
+                required(item, {"type"});
+                if (!isToolbar)
+                    required(item, {"id"});
+                const auto type = item["type"].template as<std::string>();
+                const auto found = factories.find(type);
+                if (found == factories.end()) {
+                    std::string known;
+                    for (const auto &entry : factories)
+                        known += (known.empty() ? "" : ", ") + entry.first;
+                    throw std::invalid_argument("unknown " + std::string(isToolbar ? "toolbar item" : "panel") +
+                                                " type '" + type + "' (known: " + known + ")");
                 }
+                const auto &factory = found->second;
                 if (!ids.insert(id).second)
-                    throw std::invalid_argument("duplicate instance ID");
-                const auto &factory = factories.at(item["type"].template as<std::string>());
-                if (factory.kind != kinds.at(item["provider"].template as<std::string>()))
-                    throw std::invalid_argument("provider capability mismatch");
+                    throw std::invalid_argument("duplicate instance ID (give repeated items distinct ids)");
+                if (factory.hosted) {
+                    if (item["provider"])
+                        throw std::invalid_argument("'" + type + "' is a host item and takes no provider");
+                } else {
+                    required(item, {"provider"});
+                    const auto provider = item["provider"].template as<std::string>();
+                    if (!kinds.count(provider))
+                        throw std::invalid_argument("unknown provider '" + provider + "'");
+                    if (factory.kind != kinds.at(provider))
+                        throw std::invalid_argument("provider capability mismatch");
+                }
+                if (!isToolbar && factory.toolbarOnly)
+                    throw std::invalid_argument("'" + type + "' is toolbar-only and cannot be a sidebar panel");
                 (void)item["visible"].template as<bool>(true);
                 (void)item["open"].template as<bool>(true);
                 (void)item["title"].template as<std::string>(id);
@@ -118,9 +144,9 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
             }
         }
     };
-    validateViews("panels", registry.panels);
-    validateViews("tools", registry.panels);
-    validateViews("overlays", registry.overlays);
+    validateViews("panels", config["panels"], registry.panels);
+    validateViews("toolbar", toolbarConfig, registry.panels);
+    validateViews("overlays", config["overlays"], registry.overlays);
     if (config["ownership"] && !config["ownership"].IsSequence())
         throw std::invalid_argument("ownership must be a sequence");
     std::set<std::string> owned;
@@ -145,14 +171,14 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
     const auto binding = [&](const YAML::Node &item) {
         Binding b;
         b.documents = ctx.documents;
-        b.drawOverlayControls = [this, provider = item["provider"].as<std::string>()] {
-            drawOverlayControls(provider);
-        };
+        const auto providerId = item["provider"].as<std::string>("");
+        b.drawOverlayControls = [this, provider = providerId] { drawOverlayControls(provider); };
+        b.drawPanelMenu = [this] { drawPanelMenu(); };
         b.focus = ctx.focus;
         b.showWindow = std::find(ctx.initialWindows.begin(), ctx.initialWindows.end(), item["id"].as<std::string>()) !=
                        ctx.initialWindows.end();
-        if (!ctx.preview)
-            b.provider = sources.at(item["provider"].as<std::string>());
+        if (!ctx.preview && !providerId.empty())
+            b.provider = sources.at(providerId);
         b.options = item["options"] ? item["options"] : YAML::Node(YAML::NodeType::Map);
         b.mayStart = [this, provider = b.provider] {
             for (const auto &link : ownership)
@@ -179,11 +205,11 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
                                   item["open"].as<bool>(true),
                                   registry.panels.at(item["type"].as<std::string>()).create(binding(item))});
     }
-    for (const auto &item : config["tools"]) {
-        const auto id = item["id"].as<std::string>();
-        toolInstances.push_back({id, item["title"].as<std::string>(id), item["visible"].as<bool>(true), true,
-                                 registry.panels.at(item["type"].as<std::string>()).create(binding(item)),
-                                 item["slot"].as<std::string>("overlays")});
+    for (const auto &item : toolbarConfig) {
+        const auto type = item["type"].as<std::string>();
+        const auto id = item["id"].as<std::string>(type);
+        toolbarInstances.push_back({id, item["title"].as<std::string>(id), item["visible"].as<bool>(true), true,
+                                    registry.panels.at(type).create(binding(item))});
     }
     for (const auto &item : config["overlays"])
         overlays.push_back({item["id"].as<std::string>(), item["title"].as<std::string>(item["id"].as<std::string>()),
@@ -200,7 +226,7 @@ void Composition::touch() {
         source.second->touch();
     syncOwnership();
 }
-void Composition::drawToolbar() {
+void Composition::drawPanelMenu() {
     robotics::ros_viewer::sameLineIfFits(88);
     if (ImGui::Button("Panels", {88, 30}))
         ImGui::OpenPopup("panel_menu");
@@ -217,13 +243,30 @@ void Composition::drawToolbar() {
         ImGui::PopID();
     }
 }
-void Composition::drawToolsToolbar(const std::string &slot) {
-    for (auto &item : toolInstances)
-        if (item.visible && item.slot == slot) {
+void Composition::drawToolbar() {
+    for (auto &item : toolbarInstances)
+        if (item.visible) {
             ImGui::PushID(item.id.c_str());
             item.panel->toolbar();
             ImGui::PopID();
         }
+}
+std::vector<std::string> Composition::toolbarIds() const {
+    std::vector<std::string> ids;
+    for (const auto &item : toolbarInstances)
+        ids.push_back(item.id);
+    return ids;
+}
+std::vector<std::string> Composition::panelIds() const {
+    std::vector<std::string> ids;
+    for (const auto &item : panelInstances)
+        ids.push_back(item.id);
+    return ids;
+}
+YAML::Node defaultToolbar() {
+    return YAML::Load("[{type: scene_settings}, {type: pool_viewer}, {type: panels_menu}, {type: view}, "
+                      "{type: focus}, {type: follow}, {type: labels}, {type: tf}, {type: detections}, "
+                      "{type: mpc_path}, {type: preview_task}]");
 }
 void Composition::drawSidebar(float height) {
     ImGui::BeginChild("operator_sidebar", {sidebarWidth, height}, ImGuiChildFlags_Borders,
@@ -254,7 +297,7 @@ void Composition::drawSidebar(float height) {
     syncOwnership();
 }
 void Composition::drawWindows() {
-    for (auto &item : toolInstances) {
+    for (auto &item : toolbarInstances) {
         ImGui::PushID(item.id.c_str());
         item.panel->drawWindows();
         ImGui::PopID();

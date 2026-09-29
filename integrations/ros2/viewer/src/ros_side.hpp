@@ -137,6 +137,9 @@ class RosSide {
     void setHonorDeleteAll(bool honor) {
         honorDeleteAll_ = honor;
     }
+    bool honorDeleteAll() const {
+        return honorDeleteAll_;
+    }
     DetectionMode detectionMode() const {
         return detectionMode_;
     }
