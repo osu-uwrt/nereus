@@ -1,0 +1,26 @@
+# Visual composition only. Source identity is explicit and may be supplied by
+# either a recording or the simulation host; no physical parameters live here.
+version: 1
+groups:
+  - id: pool
+    frame: world
+    pool:
+      dimensions: [50, 22.86, 2.1336]
+      water_level: 0
+      deck_height: 0.305288888
+      pose:
+        position: [0, 19.5136, 0]
+        orientation_wxyz: [0.7071067811865476, 0, 0, -0.7071067811865476]
+  - id: vehicle
+    source: simulation
+    frame: cad
+    instances:
+      - {mesh: ../talos/Talos3_body.glb}
+      - {mesh: ../talos/rotors/VUS.glb}
+      - {mesh: ../talos/rotors/VUP.glb}
+      - {mesh: ../talos/rotors/HUS.glb}
+      - {mesh: ../talos/rotors/HUP.glb}
+      - {mesh: ../talos/rotors/HLS.glb}
+      - {mesh: ../talos/rotors/HLP.glb}
+      - {mesh: ../talos/rotors/VLS.glb}
+      - {mesh: ../talos/rotors/VLP.glb}

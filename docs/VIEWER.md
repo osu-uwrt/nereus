@@ -7,8 +7,11 @@ same neutral pose/frame displays that future adapters can supply.
 
 This is an initial visualization host, not an RViz replacement yet. It supports
 line geometry: a grid, frame axes, a box-and-axes pose glyph, and pose trajectories.
-Robot meshes/joints, markers, images, clouds, ROS/network connections, simultaneous
-source overlays, and simulation attachment are not implemented. The local YAML
+The optional scene build adds original mesh/pool/water rendering and frame-bound
+robot visualization; see [SCENE_VIEWER.md](SCENE_VIEWER.md). Simulation attachment
+is described in [LIVE_VISUALIZATION.md](LIVE_VISUALIZATION.md). Joint animation,
+markers, images, clouds, ROS/network connections and simultaneous source overlays
+remain open. The local YAML
 fixture format is deliberately small; it is not a general recording system.
 
 ## Build, run, and install
@@ -62,7 +65,7 @@ and `RP_BUILD_CLI=OFF`. Existing simulation presets keep all viewer features off
 - **Disconnect** invalidates only that source. **Reconnect** starts local playback
   at zero in a new generation. Viewing and camera actions issue no robot commands.
 - **Save as** saves current source bindings, selected source, fixed frame, camera,
-  and display settings to the entered path. Source paths are rebased relative to
+  display settings and the optional scene path to the entered path. Resource paths are rebased relative to
   the destination. Playback position/speed are transient, not persisted. Saving
   uses an exclusive temporary file and atomic replacement on the supported POSIX
   platform; failed writes preserve an existing file. This is not a crash-durable

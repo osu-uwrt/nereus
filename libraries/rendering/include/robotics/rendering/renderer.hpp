@@ -6,6 +6,7 @@ struct RenderedFrame {
     std::uint32_t color_texture =
         0; // Borrowed GL texture; contents change on draw, ID invalidated by resize/destruction.
     int width = 0, height = 0;
+    std::uint32_t depth_texture = 0; // Borrowed read-only composite depth; same lifetime as color.
 };
 struct Capture {
     int width = 0, height = 0;

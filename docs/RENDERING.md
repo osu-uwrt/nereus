@@ -129,9 +129,10 @@ frame-rate acceptance. Hidden GLFW contexts work; displayless EGL is not yet tes
 
 ## Remaining integration
 
-The existing interactive viewer still draws lines. Present this renderer through
-its viewport next, using neutral scene data and source poses. Then complete the
-original Talos assembly, rotor animation, LEDs, mechanisms and course assets. Image
+The optional [scene viewer](SCENE_VIEWER.md) now presents this renderer alongside
+line overlays, using neutral scene documents and frozen source snapshots. The
+original Talos assembly, rotor animation, LEDs, mechanisms and course assets still
+need completion. Image
 texture upload, generic cutout data, point/focus overlays and original operator UI
 remain open. Camera/stereo acquisition and original full-stack/task acceptance
 follow those dependencies. The current fixed scene is explicitly Talos body/rotors

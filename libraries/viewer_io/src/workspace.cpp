@@ -89,8 +89,8 @@ Workspace emptyWorkspace() {
 Workspace loadWorkspace(const std::filesystem::path &path) {
     try {
         const auto node = document(path);
-        fields(node,
-               {"version", "sources", "selected_source", "fixed_frame", "displays", "camera"});
+        fields(node, {"version", "sources", "selected_source", "fixed_frame", "displays", "camera",
+                      "scene"});
         Workspace result;
         result.fixed_frame = name(node["fixed_frame"]);
         result.selected_source = node["selected_source"].as<std::string>();
@@ -149,6 +149,12 @@ Workspace loadWorkspace(const std::filesystem::path &path) {
             result.camera = {vector(camera["target"]), camera["yaw"].as<double>(),
                              camera["pitch"].as<double>(), camera["distance"].as<double>()};
         }
+        if (node["scene"]) {
+            const auto value = node["scene"].as<std::string>();
+            if (value.empty() || value.size() > 4096)
+                throw std::invalid_argument("invalid scene path");
+            result.scene = std::filesystem::absolute(path.parent_path() / value).lexically_normal();
+        }
         validateCamera(result.camera);
         return result;
     } catch (const std::exception &error) {
@@ -162,6 +168,11 @@ std::string serializeWorkspace(const Workspace &workspace,
     result["version"] = 1;
     result["fixed_frame"] = workspace.fixed_frame;
     result["selected_source"] = workspace.selected_source;
+    if (!workspace.scene.empty()) {
+        const auto relative = workspace.scene.lexically_relative(
+            std::filesystem::absolute(destination).parent_path());
+        result["scene"] = (relative.empty() ? workspace.scene : relative).string();
+    }
     result["sources"] = YAML::Node(YAML::NodeType::Sequence);
     for (const auto &source : workspace.sources) {
         YAML::Node node;

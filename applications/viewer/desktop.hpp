@@ -20,6 +20,9 @@ class Desktop {
     GLFWwindow *window_{nullptr};
     bool glfw_ready_{false}, imgui_ready_{false}, platform_ready_{false}, renderer_ready_{false};
 };
+struct ViewportBackground {
+    unsigned int color = 0, depth = 0;
+};
 class Viewport {
   public:
     Viewport();
@@ -27,11 +30,12 @@ class Viewport {
     Viewport(const Viewport &) = delete;
     Viewport &operator=(const Viewport &) = delete;
     unsigned int render(const std::vector<visualization::Line> &lines,
-                        const Eigen::Matrix4f &matrix, int width, int height);
+                        const Eigen::Matrix4f &matrix, int width, int height,
+                        ViewportBackground background = {});
 
   private:
     rendering::Lines lines_;
-    unsigned int framebuffer_{0}, texture_{0}, depth_{0};
+    unsigned int framebuffer_{0}, read_framebuffer_{0}, texture_{0}, depth_{0};
     int width_{0}, height_{0};
 };
 } // namespace robotics::viewer

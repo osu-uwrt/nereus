@@ -698,7 +698,7 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
     checkGl("scene rendering");
     r.frame_valid = true;
     guard.success = true;
-    return {r.f.final.color, width, height};
+    return {r.f.final.color, width, height, r.f.composite.depth};
 }
 Capture Renderer::capture() const {
     const auto &f = resources_->f;

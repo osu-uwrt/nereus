@@ -29,6 +29,7 @@ class Session {
     void disconnect();
     void reconnect();
     Scene scene() const;
+    Scene scene(const std::optional<visualization::SourceSnapshot> &source) const;
 
   private:
     const Connection *selected() const;

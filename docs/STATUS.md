@@ -723,3 +723,42 @@ LEDs, mechanisms and original course content afterward. Per-view targets and sha
 scene preparation must precede camera integration. Original simulator replacement
 remains the first acceptance priority, followed by RViz expansion and wider reuse;
 this fixed scene does not close full assembly, task, UI or robot-stack acceptance.
+
+
+## Interactive scene rendering from neutral source frames
+
+The optional scene-viewer build now presents the original mesh/pool/water renderer
+inside the existing native viewer. Versioned scene documents contain independently
+bound groups with relative mesh resources, materials and an optional pool. Dynamic
+groups require an explicit source identity and resolve at one frozen snapshot shared
+with line displays; static groups require their declared fixed frame. Missing frames,
+source changes and disconnects omit groups rather than retaining an old pose.
+
+The desktop copies scene color and composite depth into its own framebuffer before
+overlays. Graphics checks verify unchanged background color, floor occlusion,
+visible foreground lines, resizing and unchanged renderer captures. The pool's
+lighting center remains independent of orbit/follow target. Camera view/projection
+and eye are available separately through the neutral visualization API.
+
+The supplied original Talos body/eight-rotor/pool document works with a local recording
+and with the existing scripted simulation source. Workspace scene paths survive
+Save As/relocation. Explicit Reload scene refreshes assets; loading errors appear in
+the UI and never substitute stale meshes. The default line-only build reports an
+unavailable scene feature without acquiring mesh/scene dependencies.
+
+Validation: both Release and ASan/UBSan scene configurations pass 31 CPU tests,
+relocated standalone installs and external installed consumers after removal of
+copied source/build trees, plus hidden-window graphics contracts/captures. The
+combined simulator/viewer passes 155 tests and a 200-frame Talos navigation run;
+its final screenshot shows the model and original water at source time 3 seconds.
+Recorded and live screenshots were inspected. The baseline line viewer's contracts,
+relocated consumer and graphics captures still pass. Changed C++ implementation
+files pass clang-tidy. CI coverage is configured but has not run remotely.
+The renderer regression still matches all 30 original reference buffers exactly
+after exposing its borrowed depth texture for the viewer.
+
+This closes the initial interactive renderer connection, not original UI/assembly
+or whole-stack acceptance. Next are original rotor motion, LED state and complete
+mechanism/course assets, then the remaining camera/control/transport/task gates.
+Per-view render targets and shared scene preparation still precede camera providers.
+See [SCENE_VIEWER.md](SCENE_VIEWER.md) for commands, schema and current limits.

@@ -4,7 +4,7 @@
 #include <stdexcept>
 
 namespace robotics::visualization {
-Eigen::Matrix4f viewProjection(const Camera &camera, double aspect) {
+CameraMatrices cameraMatrices(const Camera &camera, double aspect) {
     if (!std::isfinite(aspect) || aspect <= 0 || !camera.target.allFinite() ||
         !std::isfinite(camera.yaw) || !std::isfinite(camera.pitch) ||
         std::abs(camera.pitch) > 1.5 || !std::isfinite(camera.distance) || camera.distance < 0.1 ||
@@ -32,6 +32,10 @@ Eigen::Matrix4f viewProjection(const Camera &camera, double aspect) {
     projection(2, 2) = -(far + near) / (far - near);
     projection(2, 3) = -2 * far * near / (far - near);
     projection(3, 2) = -1;
-    return (projection * view).cast<float>();
+    return {view.cast<float>(), projection.cast<float>(), eye.cast<float>()};
+}
+Eigen::Matrix4f viewProjection(const Camera &camera, double aspect) {
+    const auto matrices = cameraMatrices(camera, aspect);
+    return matrices.projection * matrices.view;
 }
 } // namespace robotics::visualization

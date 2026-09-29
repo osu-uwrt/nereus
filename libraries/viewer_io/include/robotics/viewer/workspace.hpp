@@ -17,6 +17,7 @@ struct Workspace {
     std::string fixed_frame{"world"};
     std::vector<visualization::DisplaySettings> displays;
     Camera camera;
+    std::filesystem::path scene; // Optional neutral visual document; no simulation configuration.
 };
 Workspace emptyWorkspace();
 Workspace loadWorkspace(const std::filesystem::path &path);

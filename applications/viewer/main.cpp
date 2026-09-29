@@ -1,4 +1,7 @@
 #include "interface.hpp"
+#ifdef RP_VIEWER_SCENES
+#include "scene_view.hpp"
+#endif
 
 #include <charconv>
 #include <chrono>
@@ -18,6 +21,7 @@ std::int64_t integer(const std::string &text) {
 int main(int argc, char **argv) {
     try {
         std::filesystem::path workspace, screenshot;
+        std::filesystem::path shaders, scene;
         bool hidden = false;
         std::int64_t frames = 0;
         std::optional<robotics::visualization::Time> time;
@@ -26,9 +30,19 @@ int main(int argc, char **argv) {
             if (argument == "--help") {
                 std::cout << "robotics-viewer [WORKSPACE.yaml] [--hidden --frames N] [--time-ns N] "
                              "[--screenshot OUTPUT.ppm]\n";
+                std::cout << "Optional scene build: --scene SCENE.yaml --shaders DIRECTORY\n";
                 return 0;
             }
-            if (argument == "--hidden")
+            if ((argument == "--shaders" || argument == "--scene") && i + 1 < argc) {
+#ifdef RP_VIEWER_SCENES
+                if (argument == "--shaders")
+                    shaders = argv[++i];
+                else
+                    scene = std::filesystem::absolute(argv[++i]);
+#else
+                throw std::invalid_argument("scene rendering unavailable in this build");
+#endif
+            } else if (argument == "--hidden")
                 hidden = true;
             else if ((argument == "--frames" || argument == "--time-ns" ||
                       argument == "--screenshot") &&
@@ -48,7 +62,11 @@ int main(int argc, char **argv) {
         if ((hidden || !screenshot.empty()) && frames == 0)
             throw std::invalid_argument("--hidden/--screenshot require a positive --frames count");
         robotics::viewer::Desktop desktop(hidden);
-        robotics::viewer::Interface interface(workspace);
+        robotics::viewer::SceneDraw scene_draw;
+#ifdef RP_VIEWER_SCENES
+        scene_draw = robotics::viewer::sceneDrawer(shaders);
+#endif
+        robotics::viewer::Interface interface(workspace, std::move(scene_draw), scene);
         if (time)
             interface.seek(*time);
         using Clock = std::chrono::steady_clock;

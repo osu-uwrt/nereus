@@ -142,6 +142,9 @@ endif()
 
 if(RP_BUILD_VISUALIZATION OR RP_BUILD_VIEWER OR RP_BUILD_SIMULATION_VIEW)
   add_subdirectory(libraries/visualization)
+  if(RP_BUILD_SCENE_RENDERER)
+    add_subdirectory(libraries/scene_view)
+  endif()
 endif()
 
 if(RP_BUILD_SIMULATION_VIEW)

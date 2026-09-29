@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.22)
+project(SceneConsumer LANGUAGES CXX)
+find_package(RoboticsPlatform REQUIRED CONFIG)
+add_executable(scene_consumer main.cpp)
+target_link_libraries(scene_consumer PRIVATE RoboticsPlatform::scene_view RoboticsPlatform::viewer_io)

@@ -1,4 +1,7 @@
 #include "interface.hpp"
+#ifdef RP_VIEWER_SCENES
+#include "scene_view.hpp"
+#endif
 #include "running_scenario.hpp"
 #include <charconv>
 #include <iostream>
@@ -15,6 +18,7 @@ std::int64_t frameCount(const std::string &text) {
 int main(int argc, char **argv) {
     try {
         std::filesystem::path scenario_path, screenshot;
+        std::filesystem::path shaders, scene;
         bool hidden = false;
         std::int64_t frames = 0;
         for (int i = 1; i < argc; ++i) {
@@ -22,9 +26,19 @@ int main(int argc, char **argv) {
             if (argument == "--help") {
                 std::cout << "robotics-sim-view SCENARIO.yaml [--hidden --frames N] "
                              "[--screenshot OUTPUT.ppm]\n";
+                std::cout << "Optional scene build: --scene SCENE.yaml --shaders DIRECTORY\n";
                 return 0;
             }
-            if (argument == "--hidden")
+            if ((argument == "--shaders" || argument == "--scene") && i + 1 < argc) {
+#ifdef RP_VIEWER_SCENES
+                if (argument == "--shaders")
+                    shaders = argv[++i];
+                else
+                    scene = std::filesystem::absolute(argv[++i]);
+#else
+                throw std::invalid_argument("scene rendering unavailable in this build");
+#endif
+            } else if (argument == "--hidden")
                 hidden = true;
             else if ((argument == "--frames" || argument == "--screenshot") && i + 1 < argc) {
                 const std::string value(argv[++i]);
@@ -68,9 +82,15 @@ int main(int argc, char **argv) {
             return robotics::viewer::Connection{source, nullptr, 0,
                                                 [source] { source->reconnect(); }};
         });
+        workspace.scene = scene;
         robotics::viewer::Desktop desktop(hidden);
+        robotics::viewer::SceneDraw scene_draw;
+#ifdef RP_VIEWER_SCENES
+        scene_draw = robotics::viewer::sceneDrawer(shaders);
+#endif
         robotics::viewer::Interface interface(std::move(workspace), std::move(sources),
-                                              robotics::visualization::standardDisplays());
+                                              robotics::visualization::standardDisplays(),
+                                              std::move(scene_draw));
         robotics::runner::RunningScenario execution(scenario, source);
         std::int64_t rendered = 0;
         auto previous = std::chrono::steady_clock::now();

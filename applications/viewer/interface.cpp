@@ -10,15 +10,19 @@
 
 namespace robotics::viewer {
 namespace v = visualization;
-Interface::Interface(const std::filesystem::path &workspace)
+Interface::Interface(const std::filesystem::path &workspace, SceneDraw scene_draw,
+                     const std::filesystem::path &scene_override)
     : Interface(workspace.empty() ? emptyWorkspace() : loadWorkspace(workspace), localSources(),
-                v::standardDisplays()) {
+                v::standardDisplays(), std::move(scene_draw)) {
+    if (!scene_override.empty())
+        session_.workspace().scene = scene_override;
     if (!workspace.empty()) {
         std::snprintf(path_.data(), path_.size(), "%s", workspace.c_str());
     }
 }
-Interface::Interface(Workspace workspace, Sources sources, v::Displays displays)
-    : session_(std::move(sources), std::move(displays)) {
+Interface::Interface(Workspace workspace, Sources sources, v::Displays displays,
+                     SceneDraw scene_draw)
+    : session_(std::move(sources), std::move(displays)), scene_draw_(std::move(scene_draw)) {
     session_.open(std::move(workspace));
     std::snprintf(frame_.data(), frame_.size(), "%s", session_.workspace().fixed_frame.c_str());
 }
@@ -90,6 +94,10 @@ void Interface::controls() {
     ImGui::TextDisabled("Metres / right-handed / Z up");
     ImGui::Separator();
     ImGui::TextUnformatted("DISPLAYS");
+    if (!workspace.scene.empty() && scene_draw_ && ImGui::Button("Reload scene"))
+        reload_scene_ = true;
+    if (!scene_message_.empty())
+        ImGui::TextWrapped("%s", scene_message_.c_str());
     const auto scene = session_.scene();
     for (auto &display : workspace.displays) {
         if (!display.source.empty() && display.source != workspace.selected_source)
@@ -175,9 +183,26 @@ void Interface::view() {
     auto &camera = session_.workspace().camera;
     const auto available = ImGui::GetContentRegionAvail();
     const ImVec2 size(std::max(1.0F, available.x), std::max(1.0F, available.y - 135));
-    const auto scene = session_.scene();
-    const auto texture = viewport_.render(scene.lines, v::viewProjection(camera, size.x / size.y),
-                                          static_cast<int>(size.x), static_cast<int>(size.y));
+    const auto snapshot = session_.snapshot();
+    const auto scene = session_.scene(snapshot);
+    const int width = std::clamp(static_cast<int>(size.x), 1, 4096);
+    const int height = std::clamp(static_cast<int>(size.y), 1, 4096);
+    ViewportBackground background;
+    scene_message_.clear();
+    if (scene_draw_) {
+        try {
+            background = scene_draw_(session_.workspace(), snapshot ? &*snapshot : nullptr, width,
+                                     height, reload_scene_, scene_message_);
+        } catch (const std::exception &error) {
+            scene_message_ = error.what();
+        }
+        reload_scene_ = false;
+    } else if (!session_.workspace().scene.empty()) {
+        scene_message_ = "Scene rendering unavailable in this build";
+    }
+    const auto texture = viewport_.render(
+        scene.lines, v::viewProjection(camera, static_cast<double>(width) / height), width, height,
+        background);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
     ImGui::ImageButton("Viewport", static_cast<ImTextureID>(texture), size, {0, 1}, {1, 0});
     ImGui::PopStyleVar();
@@ -234,6 +259,7 @@ void Interface::draw() {
         if (ImGui::Button("Open")) {
             auto loaded = loadWorkspace(path_.data());
             session_.open(std::move(loaded));
+            reload_scene_ = true;
             playing_ = false;
             std::snprintf(frame_.data(), frame_.size(), "%s",
                           session_.workspace().fixed_frame.c_str());

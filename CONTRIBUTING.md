@@ -110,3 +110,7 @@ viewer or ImGui. Use `--preset rendering-asan` for sanitized graphics checks. Ex
 same-backend original comparisons are a separate reference gate; commands and
 optimization pairing are in [RENDERING.md](docs/RENDERING.md). Do not substitute
 cross-driver image tolerances for the recorded same-backend fidelity evidence.
+
+For scene/source presentation changes, run `python3 tools/check_viewer.py --preset
+scene-viewer --graphics` and its `scene-viewer-asan` counterpart. These additionally
+exercise installed visual content, source-bound meshes and depth-tested overlays.

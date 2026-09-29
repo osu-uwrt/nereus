@@ -121,6 +121,7 @@ void Desktop::finish(const std::filesystem::path &screenshot) {
 }
 Viewport::Viewport() {
     glGenFramebuffers(1, &framebuffer_);
+    glGenFramebuffers(1, &read_framebuffer_);
     glGenTextures(1, &texture_);
     glGenRenderbuffers(1, &depth_);
 }
@@ -128,9 +129,11 @@ Viewport::~Viewport() {
     glDeleteRenderbuffers(1, &depth_);
     glDeleteTextures(1, &texture_);
     glDeleteFramebuffers(1, &framebuffer_);
+    glDeleteFramebuffers(1, &read_framebuffer_);
 }
 unsigned int Viewport::render(const std::vector<visualization::Line> &lines,
-                              const Eigen::Matrix4f &matrix, int width, int height) {
+                              const Eigen::Matrix4f &matrix, int width, int height,
+                              ViewportBackground background) {
     width = std::clamp(width, 1, 4096);
     height = std::clamp(height, 1, 4096);
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
@@ -154,6 +157,24 @@ unsigned int Viewport::render(const std::vector<visualization::Line> &lines,
     glDepthMask(GL_TRUE);
     glClearColor(0.025F, 0.04F, 0.055F, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    if (background.color) {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, read_framebuffer_);
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                               background.color, 0);
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
+                               background.depth, 0);
+        if (!background.depth ||
+            glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            throw std::runtime_error("scene background framebuffer is incomplete");
+        }
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glBlitFramebuffer(0, 0, width, height, 0, 0, width, height,
+                          GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+    }
     lines_.draw(lines, matrix);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     return texture_;

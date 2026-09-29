@@ -5,10 +5,15 @@
 #include <array>
 
 namespace robotics::viewer {
+// Injected presentation only; it receives the same frozen source snapshot as overlays.
+using SceneDraw = std::function<ViewportBackground(
+    const Workspace &, const visualization::SourceSnapshot *, int, int, bool, std::string &)>;
 class Interface {
   public:
-    explicit Interface(const std::filesystem::path &workspace);
-    Interface(Workspace workspace, Sources sources, visualization::Displays displays);
+    explicit Interface(const std::filesystem::path &workspace, SceneDraw scene_draw = {},
+                       const std::filesystem::path &scene_override = {});
+    Interface(Workspace workspace, Sources sources, visualization::Displays displays,
+              SceneDraw scene_draw = {});
     void draw();
     void advance(visualization::Time elapsed_ns);
     void seek(visualization::Time time_ns);
@@ -18,6 +23,9 @@ class Interface {
     void playback();
     void view();
     Session session_;
+    SceneDraw scene_draw_;
+    std::string scene_message_;
+    bool reload_scene_{true};
     Viewport viewport_;
     std::array<char, 4096> path_{};
     std::array<char, 257> frame_{};

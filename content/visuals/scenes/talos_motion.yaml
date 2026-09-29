@@ -1,0 +1,18 @@
+# Small visualization-only recording. The simulation supplies the same frame names.
+version: 1
+clock: visual-fixture
+duration_ns: 2000000000
+root: world
+frames:
+  - parent: world
+    child: body
+    static: false
+    samples:
+      - {time_ns: 0, pose: {position: [3, 0, -1], orientation_wxyz: [1, 0, 0, 0]}}
+      - {time_ns: 2000000000, pose: {position: [3.8, 0.3, -0.8], orientation_wxyz: [0.9238795325, 0, 0, 0.3826834324]}}
+  - parent: body
+    child: cad
+    static: true
+    samples:
+      - {time_ns: 0, pose: {position: [0.157, -0.040, 0.048], orientation_wxyz: [1, 0, 0, 0]}}
+streams: []

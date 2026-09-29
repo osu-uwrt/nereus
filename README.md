@@ -104,3 +104,6 @@ This is local development, not a public release. The reused numerical source has
 unresolved license metadata; see [license status](LICENSE.md) and
 [provenance](docs/PROVENANCE.md). No new redistribution license is being asserted
 for the imported code. Resolve this before publishing the project.
+
+The optional [scene viewer](docs/SCENE_VIEWER.md) presents original Talos meshes and
+water from live or recorded source frames, without ROS or simulation in the viewer.

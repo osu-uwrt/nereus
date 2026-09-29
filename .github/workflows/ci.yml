@@ -51,13 +51,13 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        preset: [viewer, viewer-asan]
+        preset: [viewer, viewer-asan, scene-viewer, scene-viewer-asan]
     steps:
       - uses: actions/checkout@v4
       - name: Install standalone viewer dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libeigen3-dev libyaml-cpp-dev libgtest-dev libglfw3-dev libglew-dev libgl1-mesa-dev clang-tidy xvfb xauth
+          sudo apt-get install -y cmake g++ libeigen3-dev libyaml-cpp-dev libgtest-dev libassimp-dev libglfw3-dev libglew-dev libgl1-mesa-dev clang-tidy xvfb xauth
           python3 -m pip install clang-format==23.1.1
       - name: Check contracts, relocated viewer install, and Mesa rendering
         env:

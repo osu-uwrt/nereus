@@ -46,7 +46,8 @@ simulator gaps over unrelated viewer/platform expansion.
 
 These are foundation checks, not Talos fidelity or full platform acceptance.
 Current physics offers disabled, sphere-pool and static compound-box contacts;
-the viewer still draws line geometry.
+the baseline viewer draws lines, while its optional scene build now draws original
+body/pool content from source frames.
 
 ## A. Capture and lock the acceptance baseline
 
@@ -127,6 +128,8 @@ the viewer still draws line geometry.
   resource pack, pinned hashes, original submesh comparison and relocated consumption.
 - [x] Neutral mesh instances, material/emission/lighting inputs and optional water,
   with a context-owned renderer independent of viewer/simulation/ROS.
+- [x] Optional interactive mesh/water viewport with neutral scene documents, frozen
+  source-frame resolution, independent overlays and relocated standalone consumption.
 - [ ] Complete Talos visual assembly with no robot/year dispatch.
 - [x] Original scene/shadow/water/reflection/bloom/post pipeline over exact body/pool
   inputs; all 30 captured buffers match original release/debug builds on this backend.
@@ -206,10 +209,10 @@ selected live-robot workflows required here.
    simulation controls remain open and separate from recording playback.
 3. Stage forcing and actuator calibration/stop interfaces are verified in their
    bounded reference/contracts. Static compound contacts are integrated and validated.
-   Named body mounts are now resolved for sensors and live visualization. Next:
-   presenting the extracted original renderer through the interactive viewport using
-   neutral scene/source inputs. Fixed body/pool captures now match the original pipeline.
-   Then complete Talos mechanisms/LEDs/rotor animation and original course content.
+   Named body mounts are now resolved for sensors and live visualization. The
+   original renderer is connected to the optional interactive viewport through
+   neutral scene/source inputs. Fixed body/pool captures match the original pipeline.
+   Next: complete Talos mechanisms/LEDs/rotor animation and original course content.
    Reusable per-view GPU targets/shared preparation precede camera integration.
    Depth reporting now passes its captured original comparisons. Cameras follow the
    extracted renderer; other device/adapter work stays in the sensor conversion map.

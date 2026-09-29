@@ -8,6 +8,11 @@ struct Camera {
     double pitch{0.6};
     double distance{15.0};
 };
+struct CameraMatrices {
+    Eigen::Matrix4f view, projection;
+    Eigen::Vector3f eye;
+};
+CameraMatrices cameraMatrices(const Camera &camera, double aspect);
 // Z-up orbit camera, 45-degree vertical perspective. No simulation camera semantics.
 Eigen::Matrix4f viewProjection(const Camera &camera, double aspect);
 } // namespace robotics::visualization

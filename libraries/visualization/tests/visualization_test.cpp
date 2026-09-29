@@ -242,6 +242,7 @@ TEST(Workspace, InstalledStylePathsRoundTripAndAtomicSave) {
     auto workspace = ui::loadWorkspace(temporary.directory / "input/local_demo.yaml");
     ASSERT_EQ(workspace.sources.size(), 2);
     EXPECT_TRUE(workspace.sources[0].file.is_absolute());
+    workspace.scene = temporary.directory / "input/scene.yaml";
     workspace.camera.distance = 25;
     workspace.displays[0].enabled = false;
     std::filesystem::create_directory(temporary.directory / "saved");
@@ -249,6 +250,7 @@ TEST(Workspace, InstalledStylePathsRoundTripAndAtomicSave) {
     ui::saveWorkspace(workspace, saved);
     const auto reopened = ui::loadWorkspace(saved);
     EXPECT_EQ(reopened.sources[0].file, workspace.sources[0].file);
+    EXPECT_EQ(reopened.scene, workspace.scene);
     EXPECT_DOUBLE_EQ(reopened.camera.distance, 25);
     EXPECT_FALSE(reopened.displays[0].enabled);
     const auto data = ui::loadRecording(reopened.sources[0].file);
@@ -275,6 +277,10 @@ TEST(Camera, TargetProjectsToCentreAndInvalidInputsFail) {
     v::Camera camera;
     camera.target = {3, 2, 1};
     const auto matrix = v::viewProjection(camera, 1.5);
+    const auto split = v::cameraMatrices(camera, 1.5);
+    const Eigen::Vector4f eye(split.eye.x(), split.eye.y(), split.eye.z(), 1);
+    EXPECT_TRUE((split.view * eye).isApprox(Eigen::Vector4f(0, 0, 0, 1), 1e-5f));
+    EXPECT_TRUE(matrix.isApprox(split.projection * split.view));
     const Eigen::Vector4f clip = matrix * Eigen::Vector4f(3, 2, 1, 1);
     EXPECT_NEAR(clip.x() / clip.w(), 0, 1e-6);
     EXPECT_NEAR(clip.y() / clip.w(), 0, 1e-6);

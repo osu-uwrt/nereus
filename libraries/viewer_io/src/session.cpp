@@ -89,8 +89,10 @@ void Session::reconnect() {
         connection->reconnect();
 }
 Scene Session::scene() const {
+    return scene(snapshot());
+}
+Scene Session::scene(const std::optional<v::SourceSnapshot> &source) const {
     Scene result;
-    const auto source = snapshot();
     for (const auto &settings : workspace_.displays) {
         if (!settings.source.empty() && settings.source != workspace_.selected_source)
             continue;

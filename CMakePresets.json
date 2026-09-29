@@ -8,6 +8,10 @@
       "cacheVariables": {"CMAKE_BUILD_TYPE": "Release"}},
     {"name": "asan", "inherits": "dev", "binaryDir": "${sourceDir}/build/asan",
       "cacheVariables": {"RP_ENABLE_SANITIZERS": "ON"}},
+    {"name": "scene-viewer", "inherits": "viewer", "binaryDir": "${sourceDir}/build/scene-viewer",
+      "cacheVariables": {"RP_BUILD_SCENE_RENDERER": "ON", "RP_INSTALL_REFERENCE_VISUALS": "ON"}},
+    {"name": "scene-viewer-asan", "inherits": "scene-viewer", "binaryDir": "${sourceDir}/build/scene-viewer-asan",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug", "RP_ENABLE_SANITIZERS": "ON"}},
     {"name": "rendering", "inherits": "assets", "binaryDir": "${sourceDir}/build/rendering",
       "cacheVariables": {"RP_BUILD_SCENE_RENDERER": "ON", "RP_BUILD_RENDER_CAPTURE": "ON"}},
     {"name": "rendering-asan", "inherits": "rendering", "binaryDir": "${sourceDir}/build/rendering-asan",
@@ -32,6 +36,8 @@
       "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug", "RP_ENABLE_SANITIZERS": "ON"}}
   ],
   "buildPresets": [
+    {"name": "scene-viewer", "configurePreset": "scene-viewer", "jobs": 2},
+    {"name": "scene-viewer-asan", "configurePreset": "scene-viewer-asan", "jobs": 2},
     {"name": "rendering", "configurePreset": "rendering", "jobs": 2},
     {"name": "rendering-asan", "configurePreset": "rendering-asan", "jobs": 2},
     {"name": "assets", "configurePreset": "assets", "jobs": 2},
@@ -48,6 +54,8 @@
     {"name": "simulation-view-asan", "configurePreset": "simulation-view-asan", "jobs": 2}
   ],
   "testPresets": [
+    {"name": "scene-viewer", "configurePreset": "scene-viewer", "output": {"outputOnFailure": true}},
+    {"name": "scene-viewer-asan", "configurePreset": "scene-viewer-asan", "output": {"outputOnFailure": true}},
     {"name": "rendering", "configurePreset": "rendering", "output": {"outputOnFailure": true}},
     {"name": "rendering-asan", "configurePreset": "rendering-asan", "output": {"outputOnFailure": true}},
     {"name": "assets", "configurePreset": "assets", "output": {"outputOnFailure": true}},
