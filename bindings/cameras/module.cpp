@@ -5,11 +5,15 @@
 #include <pybind11/stl/filesystem.h>
 #include <robotics/cameras/camera.hpp>
 #include <robotics/rendering/offscreen.hpp>
+#include <memory>
 #include <mutex>
+#include <set>
+#include <tuple>
 
 namespace py = pybind11;
 namespace r = robotics::rendering;
 namespace c = robotics::cameras;
+namespace s = robotics::spatial;
 namespace {
 struct Processor {
     explicit Processor(std::uint32_t seed) : camera(seed) {}
@@ -45,12 +49,67 @@ PYBIND11_MODULE(_camera, m) {
         .def_readwrite("near_plane", &c::Intrinsics::near_plane)
         .def_readwrite("far_plane", &c::Intrinsics::far_plane)
         .def("projection", &c::Intrinsics::projection);
+    // rp_spatial types with the robotics_platform._native API and validation. Module-local so
+    // both extensions coexist in one process; each accepts the other's values (same C++ type).
+    auto pose = py::class_<s::Pose>(m, "Pose", py::module_local()).def(py::init<>());
+    pose.def_property(
+            "translation", [](const s::Pose &self) -> Eigen::Vector3d { return self.translation; },
+            [](s::Pose &self, const Eigen::Vector3d &value) { self.translation = value; })
+        .def_property(
+            "orientation_wxyz",
+            [](const s::Pose &self) {
+                return Eigen::Vector4d(self.rotation.w(), self.rotation.x(), self.rotation.y(),
+                                       self.rotation.z());
+            },
+            [](s::Pose &self, const Eigen::Vector4d &q) {
+                self.rotation = Eigen::Quaterniond(q[0], q[1], q[2], q[3]);
+            })
+        .def("compose", [](const s::Pose &self, const s::Pose &child) {
+            s::validate(self);
+            s::validate(child);
+            auto result = s::compose(self, child);
+            s::validate(result);
+            return result;
+        }, py::arg("child"))
+        .def("inverse", [](const s::Pose &self) {
+            s::validate(self);
+            return s::inverse(self);
+        })
+        .def("apply", [](const s::Pose &self, const Eigen::Vector3d &point) {
+            s::validate(self);
+            const Eigen::Vector3d result = s::apply(self, point);
+            if (!point.allFinite() || !result.allFinite())
+                throw std::invalid_argument("transformed point must be finite");
+            return result;
+        }, py::arg("point"))
+        .def("matrix", [](const s::Pose &self) {
+            s::validate(self);
+            Eigen::Matrix4d result = Eigen::Matrix4d::Identity();
+            result.topLeftCorner<3, 3>() = self.rotation.toRotationMatrix();
+            result.topRightCorner<3, 1>() = self.translation;
+            return result;
+        }, "Validated 4x4 child-to-parent transform.");
+    py::class_<s::FixedFrame>(m, "FixedFrame", py::module_local())
+        .def(py::init<>())
+        .def_readwrite("parent", &s::FixedFrame::parent)
+        .def_readwrite("child", &s::FixedFrame::child)
+        .def_property(
+            "pose", [](const s::FixedFrame &self) -> s::Pose { return self.pose; },
+            [](s::FixedFrame &self, const s::Pose &value) { self.pose = value; });
+    py::class_<s::FixedFrames>(m, "FixedFrames", py::module_local())
+        .def(py::init<std::string, std::vector<s::FixedFrame>>(), py::arg("root"), py::arg("edges"))
+        .def_property_readonly("root", &s::FixedFrames::root, py::return_value_policy::copy)
+        .def_property_readonly("edges", &s::FixedFrames::edges, py::return_value_policy::copy)
+        .def("from_root", &s::FixedFrames::fromRoot, py::arg("frame"),
+             py::return_value_policy::copy)
+        .def("lookup", &s::FixedFrames::lookup, py::arg("target"), py::arg("from_frame"));
     m.def("optical_view", [](const Eigen::Vector3d &position, const Eigen::Vector4d &wxyz) {
-        robotics::spatial::Pose pose;
+        s::Pose pose;
         pose.translation = position;
         pose.rotation = Eigen::Quaterniond(wxyz[0], wxyz[1], wxyz[2], wxyz[3]);
         return c::opticalView(pose);
     });
+    m.def("optical_view", &c::opticalView, py::arg("world_from_optical"));
     py::class_<c::DepthNoise>(m, "DepthNoise")
         .def(py::init<>())
         .def_readwrite("enabled", &c::DepthNoise::enabled)
@@ -103,10 +162,41 @@ PYBIND11_MODULE(_camera, m) {
             return p.camera.process(intrinsics, noise, input.rgb, input.depth, jpeg, quality);
         }, py::arg("intrinsics"), py::arg("noise"), py::arg("input"),
            py::arg("jpeg") = false, py::arg("quality") = 93);
-    py::class_<r::MeshAsset, std::shared_ptr<r::MeshAsset>>(m, "Mesh");
+    py::class_<r::MeshAsset, std::shared_ptr<r::MeshAsset>>(m, "Mesh")
+        .def_property_readonly("textures", [](const r::MeshAsset &mesh) {
+            std::set<std::filesystem::path> paths;
+            for (const auto &part : mesh.submeshes)
+                if (part.material.diffuse_texture)
+                    paths.insert(*part.material.diffuse_texture);
+            return std::vector<std::filesystem::path>(paths.begin(), paths.end());
+        }, "Sorted external texture files the renderer opens at first draw.");
     m.def("load_mesh", [](const std::filesystem::path &path) {
         return std::make_shared<r::MeshAsset>(r::loadMesh(path));
     }, py::call_guard<py::gil_scoped_release>());
+    m.def("perforate_mesh", [](const std::shared_ptr<r::MeshAsset> &mesh,
+                                const Eigen::Matrix4f &asset_to_panel,
+                                const std::vector<float> &faces_x, float half_size,
+                                const std::vector<std::tuple<float, float, float>> &cutouts,
+                                float tolerance) {
+        if (!mesh)
+            throw std::invalid_argument("mesh must not be None");
+        r::PanelCutouts panel;
+        panel.asset_to_panel = asset_to_panel;
+        panel.faces_x = faces_x;
+        panel.half_size = half_size;
+        panel.tolerance = tolerance;
+        for (const auto &[u, v, radius] : cutouts)
+            panel.cutouts.push_back({{u, v}, radius});
+        r::PerforatedMesh output;
+        {
+            py::gil_scoped_release release;
+            output = r::perforatePanel(*mesh, panel);
+        }
+        const std::vector<py::ssize_t> counts(output.face_triangles.begin(),
+                                              output.face_triangles.end());
+        return py::make_tuple(std::make_shared<r::MeshAsset>(std::move(output.mesh)), counts);
+    }, py::arg("mesh"), py::arg("asset_to_panel"), py::arg("faces_x"), py::arg("half_size"),
+       py::arg("cutouts"), py::arg("tolerance") = 5e-4f);
     m.def("box_mesh", &r::makeBoxMesh);
     py::enum_<r::SurfaceMaterial>(m, "SurfaceMaterial")
         .value("ASSET", r::SurfaceMaterial::Asset)
@@ -123,7 +213,10 @@ PYBIND11_MODULE(_camera, m) {
         .def_readwrite("casts_shadow", &r::Instance::casts_shadow);
     py::class_<r::Scene>(m, "Scene")
         .def(py::init<>())
-        .def_readwrite("instances", &r::Scene::instances, "Copied list: assign the whole list to edit.")
+        .def_property("instances", [](const r::Scene &s) { return s.instances; },
+                      [](r::Scene &s, std::vector<r::Instance> instances) {
+                          s.instances = std::move(instances);
+                      }, "Owned instance copies: assign the whole list to edit.")
         .def("add", [](r::Scene &s, r::Instance i) { s.instances.push_back(std::move(i)); })
         .def_readwrite("lighting_center", &r::Scene::lighting_center);
     py::class_<r::PoolGeometry>(m, "PoolGeometry")

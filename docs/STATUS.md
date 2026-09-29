@@ -86,6 +86,30 @@ message types. These formatters are not connected to publication yet; capture an
 formatting must run outside the physics thread. Unsupported encodings fail at
 preflight rather than changing pixel meaning.
 
+Pack-driven synchronous capture now composes the pool, robot visuals and task
+meshes using the existing native frame math. Both torpedo panel faces use the
+declared cutouts. Every referenced mesh and external texture must be present,
+inside its owning pack and match its declared hash. Per-eye seeds, calibration,
+appearance, GPU and loaded assets are reported by `describe()`. Captured arrays
+and scene instance copies retain their owners after later captures or replacement.
+The exact Talos-bringup startup water/lighting values reach the renderer; the
+viewer Pool preset is not used. No ROS or simulation import is needed for capture.
+
+Validation: 41 native cases pass in `build/offscreen`, including the GPU contracts
+with `DISPLAY=:0`; all 31 installed Python camera/pack cases pass without DISPLAY,
+including stereo, seed replay, texture rejection, generic packs and coexistence
+with the native simulation extension. Ruff and strict mypy pass for pack capture
+and its extension stub. Opus/Sonnet implemented scene composition and perforation;
+Codex reviewed and corrected lifetime/type issues. Opus reached its usage limit
+before the final follow-up review completed (reset: September 29, 1:30 p.m. Eastern).
+This is a validated local increment, not joint approval of gate 3.
+
+Proof: `env -u DISPLAY PYTHONPATH=build/step3-camera-python RP_REQUIRE_CAMERA=1
+python3 -m unittest discover -s tests/python -p 'test*camera*.py'`.
+An initial direct inference probe using the actual UWRT FFC NCNN model and startup
+water detects compass and hammer-and-wrench at 2.5 m. It does not establish ROS
+perception/mapping accuracy or mission behavior. Gate 3 remains open.
+
 Step 1 passed joint review. `proposals/step1/` contains nine proposed JSON Schemas
 and eight YAML documents: Talos robot, 2026 pool, gate/torpedo task definitions,
 task manifest, UWRT bridge, scenario and the exception ledger. One task-pack

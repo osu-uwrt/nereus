@@ -73,6 +73,21 @@ class CameraCaptureTests(unittest.TestCase):
         disparity = left_columns.mean() - right_columns.mean()
         self.assertAlmostEqual(disparity, self.intrinsics.fx * 0.1 / 2.5, places=5)
 
+    def test_scene_instance_copies_survive_replacement_and_scene_destruction(self):
+        instances = self.scene.instances
+        instances[0].visible = False
+        self.assertTrue(self.scene.instances[0].visible)
+        self.scene.instances = []
+        del self.scene
+        gc.collect()
+        self.assertFalse(instances[0].visible)
+        self.assertIsNotNone(instances[0].mesh)
+        self.scene = camera.Scene()
+        instances[0].visible = True
+        self.scene.instances = instances
+        frame = camera.Processor(7).process(self.intrinsics, self.noise, self.capture())
+        self.assertAlmostEqual(float(frame.depth[24, 32]), 2.5, places=4)
+
     def test_capture_moves_to_workers_and_processors_replay_after_reset(self):
         expected = self.capture().rgb.copy()
         with ThreadPoolExecutor(max_workers=2) as workers:

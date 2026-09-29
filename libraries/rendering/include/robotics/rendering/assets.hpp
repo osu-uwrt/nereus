@@ -1,5 +1,6 @@
 #pragma once
 #include <Eigen/Core>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -43,4 +44,21 @@ struct AssetLimits {
 // External textures must use relative paths; embedded textures are not supported yet.
 // Limits bound source size and output data, not allocations internal to Assimp.
 MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits = {});
+// Planar perforated panel in its own frame: faces are planes x = faces_x[i] with |y|, |z| <=
+// half_size; panel UV is u = y / (2 half_size) + 0.5, v = z / (2 half_size) + 0.5.
+struct PanelCutouts {
+    Eigen::Matrix4f asset_to_panel = Eigen::Matrix4f::Identity(); // Rigid.
+    std::vector<float> faces_x;
+    float half_size = 0;
+    std::vector<UvCutout> cutouts; // Panel UV; the renderer accepts at most four.
+    float tolerance = 5e-4f;       // Metres, for face distance and panel extent.
+};
+struct PerforatedMesh {
+    MeshAsset mesh;
+    std::vector<std::size_t> face_triangles; // Selected triangles per faces_x entry.
+};
+// Moves triangles lying on the panel faces into submeshes carrying the cutouts. Positions and
+// normals are unchanged; a mixed submesh becomes its remainder followed by a panel submesh with
+// copied vertices. Throws std::invalid_argument for invalid parameters or inconsistent UVs.
+PerforatedMesh perforatePanel(const MeshAsset &mesh, const PanelCutouts &panel);
 } // namespace robotics::rendering

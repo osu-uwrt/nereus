@@ -60,8 +60,13 @@ Step 3 progress:
 - [x] Camera ROS message formatters preserve acquisition stamps, calibration, owned
   pixel buffers, channel order and depth units/NaNs; six serialization tests pass.
   Publication remains to be connected to the camera worker.
-- [ ] Compose sensor scenes from pack data, including robot visual placement.
-- [ ] Execute the existing robot-pack camera/stereo definitions offscreen.
+- [x] Compose sensor scenes from pack data, including robot visual placement;
+  verify referenced mesh/texture hashes and both torpedo panel cutout faces.
+- [x] Execute the existing robot-pack camera/stereo definitions offscreen. All 31
+  installed camera/pack cases and 41 native cases pass; capture remains independent
+  of simulation and ROS and uses the exact Talos-bringup startup water/lighting.
+- [ ] Complete Opus follow-up review after the usage-limit reset (September 29,
+  1:30 p.m. Eastern); no gate-3 approval was returned.
 - [ ] Publish calibrated, synchronized image/CameraInfo products through the bridge.
 - [ ] Run actual UWRT perception on those products and review its output.
 
