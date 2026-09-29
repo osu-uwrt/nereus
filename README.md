@@ -16,7 +16,7 @@ pressure/depth, and ideal bottom-track DVL models. Native robot/world/sensor
 An optional [Python API](docs/PYTHON.md) exposes profile loading, programmatic
 configuration, stepping/reset, and typed sensor streams. The [standalone viewer](docs/VIEWER.md)
 now supports local-data playback, frame axes, pose glyphs, and trajectories. ROS integrations,
-meshes/images/clouds, cameras/stereo, task interactions, and training integrations remain future work. See [status](docs/STATUS.md) and the
+rendered meshes/images/clouds, cameras/stereo, task interactions, and training integrations remain future work. See [status](docs/STATUS.md) and the
 [architecture plan](docs/ARCHITECTURE_PLAN.md). [Sensor scope](docs/SENSORS.md)
 covers cameras, stereo cameras, IMUs, DVLs, FOGs, and pressure/depth sensors; sonar is deferred.
 The current example parameters
@@ -50,6 +50,13 @@ cmake --build --preset plant-only
 
 `COLCON_IGNORE` keeps this project out of automatic recursive workspace discovery.
 Build it directly; all generated files stay in this project's `build/` directory.
+
+## Original mesh resources
+
+The optional [CPU mesh library and Talos pack](docs/MESH_ASSETS.md) preserve the
+original body/eight-rotor geometry, materials and transparency without a graphics
+or simulation dependency. Original water rendering and complete visual assembly
+remain in progress. Use `python3 tools/check_assets.py` for installed-pack validation.
 
 ## Standalone viewer
 

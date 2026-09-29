@@ -91,3 +91,13 @@ license/notices and verify upstream identity when updating it. Dependency checks
 prevent simulation/ROS imports in viewer layers and graphics imports in neutral
 visualization/IO layers. CI uses Xvfb/Mesa for its explicit graphics jobs; supported
 hardware/backend claims also require hardware testing.
+
+
+## Mesh resource development
+
+Use `python3 tools/check_assets.py` and `--preset assets-asan` for the optional CPU
+loader and exact Talos resource pack. These verify hashes, original loader fixtures
+and a relocated consumer without simulation or graphics dependencies. Keep Assimp
+private and visual packs optional; Python and default headless installs exclude the
+large reference assets. [MESH_ASSETS.md](docs/MESH_ASSETS.md) documents fidelity limits
+and pinned import/capture tools. Never regenerate reference outputs from platform code.

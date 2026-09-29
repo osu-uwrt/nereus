@@ -1,0 +1,27 @@
+{
+  "scope": "Original unmodified CPU load method; texture-free Talos body and eight rotors. Counts, order, index hashes, color/alpha, bounds and vertex means. No GL or appearance parity claim.",
+  "source_revision": "07647eebe706f96ea7b76db3cc9802735a146698",
+  "sources_sha256": {
+    "camera_faker/src/pool_viewer/renderer.cpp": "256bc540f7bcac052112799c04f81476cc7b5c82bcad1d91bbbbd65df8b752b0",
+    "camera_faker/include/pool_viewer/renderer.hpp": "6029b5e2e2c6f7c4702cc3ba067d09169b37c45725d22948f66ff169c5cfed3b",
+    "camera_faker/include/external/glm (git archive)": "f4cc522f51dd8355699a206954dd7da79bb3f5690c3936a15db72f7883973178",
+    "camera_faker/models/talos3/Talos3_body.glb": "5827668235d30dcde556d2cd1cf2c3352bf71adaeeaa1bc9840925d9eaa2460d",
+    "camera_faker/models/talos3/rotors/VUS.glb": "bcefa0cd37a3c3166cee03e33dcf3fa55342f239aba5b5a28e0c82fb64631f4d",
+    "camera_faker/models/talos3/rotors/VUP.glb": "7b34f2f1be6b251fc94b00b46de65bb5071014b4eb355cc0ff6b32d3b0c76be3",
+    "camera_faker/models/talos3/rotors/HUS.glb": "d11d3770a54ea4feb67b85cfd008f48c58c76703132305010d1e68ddf276651e",
+    "camera_faker/models/talos3/rotors/HUP.glb": "75f47aa49472d9399f466a44a03f6a9fdc7b91a4e170ea171d591b7d622c4f7b",
+    "camera_faker/models/talos3/rotors/HLS.glb": "4382429ecd19663cf270bd50eabe8db373ed52e022700da559b6bd004358804b",
+    "camera_faker/models/talos3/rotors/HLP.glb": "6c07417e1a4c56b1939c733af482689cd7f04faf82a52503436600d51d13d9f9",
+    "camera_faker/models/talos3/rotors/VLS.glb": "a1ea85ced8ca686c06d5a272cfb1ac9fd9ec5d40a1f746ef56364c7bf7869ba8",
+    "camera_faker/models/talos3/rotors/VLP.glb": "e9abcc47da85069b25cbdc780f1a9f75ab56317b523297626970246be7bf98ca"
+  },
+  "driver_sha256": "9484b0ff281f558833beb06767203f6ec6cac8e90de0616eef5211541f933c6b",
+  "capture_sha256": "48ea27e0538a7584a1496e50091738b7607fefd2fc7af58f1a71ba801eeea9c9",
+  "output_sha256": "94a2c5aecd18f69fc99772bfe16a52a39b91503b59fedef665ea7fe84967e112",
+  "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "assimp_version": "5.2.0",
+  "flags": [
+    "-std=c++17",
+    "-O2"
+  ]
+}

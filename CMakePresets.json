@@ -8,6 +8,10 @@
       "cacheVariables": {"CMAKE_BUILD_TYPE": "Release"}},
     {"name": "asan", "inherits": "dev", "binaryDir": "${sourceDir}/build/asan",
       "cacheVariables": {"RP_ENABLE_SANITIZERS": "ON"}},
+    {"name": "assets", "inherits": "release", "binaryDir": "${sourceDir}/build/assets",
+      "cacheVariables": {"RP_BUILD_SIMULATION": "OFF", "RP_BUILD_CLI": "OFF", "RP_BUILD_MESH_ASSETS": "ON", "RP_INSTALL_REFERENCE_VISUALS": "ON"}},
+    {"name": "assets-asan", "inherits": "assets", "binaryDir": "${sourceDir}/build/assets-asan",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug", "RP_ENABLE_SANITIZERS": "ON"}},
     {"name": "plant-only", "inherits": "release", "binaryDir": "${sourceDir}/build/plant-only",
       "cacheVariables": {"RP_BUILD_CLI": "OFF", "BUILD_TESTING": "OFF"}},
     {"name": "viewer", "inherits": "release", "binaryDir": "${sourceDir}/build/viewer",
@@ -24,6 +28,8 @@
       "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug", "RP_ENABLE_SANITIZERS": "ON"}}
   ],
   "buildPresets": [
+    {"name": "assets", "configurePreset": "assets", "jobs": 2},
+    {"name": "assets-asan", "configurePreset": "assets-asan", "jobs": 2},
     {"name": "dev", "configurePreset": "dev", "jobs": 2},
     {"name": "release", "configurePreset": "release", "jobs": 2},
     {"name": "asan", "configurePreset": "asan", "jobs": 2},
@@ -36,6 +42,8 @@
     {"name": "simulation-view-asan", "configurePreset": "simulation-view-asan", "jobs": 2}
   ],
   "testPresets": [
+    {"name": "assets", "configurePreset": "assets", "output": {"outputOnFailure": true}},
+    {"name": "assets-asan", "configurePreset": "assets-asan", "output": {"outputOnFailure": true}},
     {"name": "dev", "configurePreset": "dev", "output": {"outputOnFailure": true}},
     {"name": "release", "configurePreset": "release", "output": {"outputOnFailure": true}},
     {"name": "asan", "configurePreset": "asan", "output": {"outputOnFailure": true}},

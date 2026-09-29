@@ -17,7 +17,7 @@ class ProfileRunnerTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
-        shutil.copytree(CONTENT, self.root / "content")
+        shutil.copytree(CONTENT, self.root / "content", ignore=shutil.ignore_patterns("visuals"))
         self.scenario = self.root / "content/examples/profile_pool.yaml"
 
     def run_profile(self, output=None):

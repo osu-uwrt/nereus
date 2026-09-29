@@ -2,6 +2,11 @@
 
 ## 0.1.0 — unreleased
 
+- Optional CPU mesh/material loading and exact pinned Talos body/eight-rotor pack,
+  with original-loader comparisons and relocated installed consumption.
+- Explicit altitude observations and native original Talos depth reporting; all
+  captured AHRS/FOG/DVL/depth measurement formulas now have reference comparisons.
+
 - Independent ImGui/GLFW/OpenGL viewer with grid, frame axes, pose glyphs, trajectories,
   local playback, camera navigation, and versioned workspace save/reopen.
 - Neutral source/display/frame contracts, optional playback capabilities, source

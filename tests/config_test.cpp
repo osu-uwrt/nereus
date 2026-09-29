@@ -28,7 +28,9 @@ class Profiles : public testing::Test {
         if (!std::filesystem::create_directory(root)) {
             throw std::runtime_error("cannot create test directory");
         }
-        std::filesystem::copy(RP_TEST_CONTENT, root, std::filesystem::copy_options::recursive);
+        for (const auto *folder : {"robots", "worlds", "sensors", "examples"})
+            std::filesystem::copy(std::filesystem::path(RP_TEST_CONTENT) / folder, root / folder,
+                                  std::filesystem::copy_options::recursive);
     }
     ~Profiles() override {
         std::error_code error;

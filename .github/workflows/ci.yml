@@ -63,3 +63,18 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: xvfb-run -a python3 tools/check_viewer.py --preset ${{ matrix.preset }} --tidy --graphics
+
+  mesh-assets:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        preset: [assets, assets-asan]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install CPU mesh dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libeigen3-dev libassimp-dev libgtest-dev
+          python3 -m pip install clang-format==23.1.1
+      - name: Check pinned resources, CPU contracts and relocated consumer
+        run: python3 tools/check_assets.py --preset ${{ matrix.preset }}

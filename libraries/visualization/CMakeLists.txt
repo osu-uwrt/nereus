@@ -36,7 +36,7 @@ if(RP_BUILD_VIEWER)
   rp_project_options(rp_rendering)
   install(TARGETS rp_rendering EXPORT RoboticsPlatformTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-  install(DIRECTORY ../rendering/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  install(FILES ../rendering/include/robotics/rendering/lines.hpp DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/robotics/rendering)
   set(imgui ${PROJECT_SOURCE_DIR}/third_party/imgui)
   add_library(rp_imgui STATIC ${imgui}/imgui.cpp ${imgui}/imgui_draw.cpp
     ${imgui}/imgui_tables.cpp ${imgui}/imgui_widgets.cpp

@@ -28,7 +28,7 @@ def clean_environment():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--preset", choices=("release", "dev", "asan", "viewer", "viewer-asan", "simulation-view", "simulation-view-asan", "simulator-viewer", "simulator-viewer-asan"), default="release")
+    parser.add_argument("--preset", choices=("assets", "assets-asan", "release", "dev", "asan", "viewer", "viewer-asan", "simulation-view", "simulation-view-asan", "simulator-viewer", "simulator-viewer-asan"), default="release")
     parser.add_argument("--install-check", action="store_true")
     parser.add_argument("--tidy", action="store_true")
     args = parser.parse_args()
@@ -81,8 +81,8 @@ def main():
                 continue
             if path.suffix == ".cpp" and ("/src/" in path.as_posix() or "/applications/" in path.as_posix()):
                 run([tidy, path, "-p", ROOT / "build" / args.preset], env=env)
-    if args.install_check and args.preset.startswith("viewer"):
-        parser.error("Use tools/check_viewer.py for viewer installation checks")
+    if args.install_check and args.preset.startswith(("viewer", "assets")):
+        parser.error("Use tools/check_viewer.py or tools/check_assets.py for these installation checks")
     if args.install_check:
         # Relocate the installed prefix and copy the downstream example. The exported
         # build graph must refer only to installed artifacts and system dependencies.

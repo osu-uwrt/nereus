@@ -88,3 +88,14 @@ procedural approximations without manufacturer CAD/photo textures.
 Deliver verified native resources, resolved Talos assembly, resolved course/import
 repairs, then fixed-input renderer comparisons with the unchanged original shader
 behavior. Each delivered slice must load without the original source trees present.
+
+## Delivered body/rotor slice
+
+The exact body/eight-rotor GLBs and conversion metadata now live in the optional
+native visual resource pack. The independent CPU loader retains original geometry,
+materials and transparency and compares all 37 submeshes with the original loading
+path. See [MESH_ASSETS.md](../MESH_ASSETS.md). This is resource/CPU loading delivery;
+mechanisms, LEDs, rotor animation, course assets and original rendering remain open.
+For textured course conversion, explicitly preserve the original white texture tint;
+the generic loader retains imported tint. Indexed bounds match the original culling
+convention, but rendered/depth comparison remains a separate gate.

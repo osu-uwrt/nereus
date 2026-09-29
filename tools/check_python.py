@@ -60,6 +60,10 @@ def main() -> None:
         # This archive was just built from this checkout, not supplied by a third party.
         shutil.unpack_archive(archive, temp / "source")
         (source,) = (temp / "source").iterdir()
+        if (source / "content/visuals").exists():
+            raise RuntimeError(
+                "Optional reference visuals must not enter the Python source archive"
+            )
         build = temp / "native-build"
         settings = [f"-Cbuild-dir={build}", "-Ccmake.define.CMAKE_EXPORT_COMPILE_COMMANDS=ON"]
         if args.sanitizers:

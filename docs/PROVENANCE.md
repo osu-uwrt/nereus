@@ -20,7 +20,8 @@ simulator's `docs/REUSABILITY_PLAN.md` and copied here as the working design.
 Other project-owned implementation files were authored for this new project. The
 synthetic example AUV is not a Talos calibration or copied mesh. Native Talos/pool
 profile data is separately attributed below.
-No meshes, textures, ROS messages, or other robot assets are included.
+Original Talos body/rotor meshes are now included as the optional pack described below.
+No ROS messages or original ROS host are included.
 
 Except for Dear ImGui described below, dependencies are installed separately: Eigen (plant), yaml-cpp
 (optional scenario loader), GoogleTest (tests), Python standard library (test and
@@ -35,7 +36,8 @@ backends, copied from the identified unmodified distribution in
 https://github.com/ocornut/imgui/tree/v1.91.9b. The MIT license and the bundled stb
 notices are retained; the ImGui license is also installed with the viewer.
 The viewer UI, neutral contracts, line renderer, and local motion fixture were
-authored for this project; no legacy host, shaders, meshes, or ROS code was copied.
+authored for this project; no legacy host, shaders or ROS code was copied.
+Original mesh resources and CPU loading conventions are separately attributed below.
 
 The viewer links system GLFW, GLEW, and OpenGL in addition to Eigen/yaml-cpp.
 It optionally loads a system DejaVu font, falling back to ImGui's default; no font
@@ -125,3 +127,26 @@ The navigation assembly also preserves the original 20 Hz depth/world-Z product
 through an explicitly selected altitude model, original noise/variance and rigid
 mount-to-base correction. Its native data is included in the same importer manifest;
 physical pressure sensing remains a separate model.
+
+## Original Talos visual resources and CPU loading
+
+`content/visuals/talos` contains the unchanged original body/eight-rotor GLBs and
+historical conversion metadata from simulator revision
+`07647eebe706f96ea7b76db3cc9802735a146698`, under `camera_faker/models/talos3`.
+`provenance/manifest.json` records per-file source/output hashes and the offline
+importer's hash. `inventory.json` removes transport settings and retains authored
+CAD pivots, axes, order and force/RPM settings. It is not a complete robot assembly.
+Original source/asset licensing remains unresolved as described above; local work
+is authorized and public redistribution still requires that review.
+
+`libraries/rendering/src/assets.cpp` adapts the original CPU loading behavior from
+`camera_faker/src/pool_viewer/renderer.cpp`: Assimp flags, node transforms,
+inverse-transpose normals, submesh order and diffuse/opacity selection. Ownership,
+validation, output limits and neutral value types are new. It links the separately
+installed Assimp library; no Assimp or GLM implementation is vendored here.
+
+`tools/capture_mesh_reference.py` compiles the unchanged original loading method
+with the original pinned GLM headers in a temporary directory. The CPU wrapper
+records ordered mesh statistics without GL, ROS or new platform code. Its fixture
+manifest records exact source/archive/driver/capture/output hashes and tool versions.
+See [MESH_ASSETS.md](MESH_ASSETS.md) for comparison scope and installation boundaries.

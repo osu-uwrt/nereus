@@ -653,3 +653,36 @@ Validation: all 122 Release and ASan/UBSan tests passed, relocated installed C++
 consumers passed, and the installed Python wheel passed all 22 tests plus Ruff and
 strict mypy. The pinned importer reproduced all ten files. No ROS environment or
 original runtime files were required by the installed consumers.
+
+## Original Talos body/rotor assets and independent CPU loading
+
+The optional `mesh_assets` library loads owned geometry/material data through
+private Assimp, with no GL, simulation, YAML, ROS or viewer dependency. It preserves
+node/submesh order, authored units/axes, inverse-transpose normals and opacity,
+checks input/output limits, and computes indexed bounds. External texture paths
+are references only; texture resolution/decoding remains future renderer work.
+
+The exact pinned original Talos body/eight-rotor GLBs are now an optional native
+resource pack with per-file hashes, original conversion metadata and a transport-free
+inventory of precise pivots/axes/order/RPM settings. It contains 1,087,230 triangles.
+Launcher, payloads, claw, magnet, LEDs, animation and complete assembly remain open.
+
+An independent capture of the unchanged original loading method verifies all 37
+submeshes' order, counts, index hashes, RGBA and geometry statistics. Synthetic
+nested transforms verify nonuniform scale, normal transformation, alpha and UV
+conventions. Both Release and ASan/UBSan asset suites passed (seven tests each),
+as did relocated installed consumers loading all nine meshes after removal of the
+copied source/build trees. Hash/import checks passed for all 15 visual files.
+
+Default simulation checks still pass all 122 tests and installed consumers. The
+installed Python wheel passes all 22 tests, Ruff and strict mypy; its source archive
+and wheel exclude the optional visual pack. Standalone viewer contracts and its
+isolated installed extension pass with mesh loading disabled; no new graphics
+appearance test is claimed. The asset CI matrix is configured but has not run remotely.
+Independent read-only review found no blocking defects in the body/rotor scope.
+
+Next: expose neutral scene instances/appearance and extract the entire original
+scene/shadow/water/reflection/bloom/post pass graph for fixed Talos-body/pool RGB
+and depth comparisons. That renderer must own no window or simulation and later
+serve camera acquisition as well as the viewer. Mechanisms/LEDs and course assets
+follow; original UI/ROS panels and full physical RepairCompTree remain required.
