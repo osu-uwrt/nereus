@@ -47,6 +47,9 @@ def plain(value):
 
 def load_resolved():
     resolved = resolve_scenario(SCENARIO)
+    # Scoring cases start at boot; the pack default (operator "start") is covered by
+    # test_session_run_control.
+    resolved.scenario["run"]["auto_start"] = True
     return resolved
 
 

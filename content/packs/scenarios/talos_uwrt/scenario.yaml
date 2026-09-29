@@ -64,5 +64,5 @@ initial:
   angular_velocity_rad_s: [0, 0, 0]
 
 run:
-  auto_start: true                      # TODO: original needs operator "start"; tests assume true
+  auto_start: false                     # original: a run starts on the operator "start" (Run panel / run_command)
   options: {role: repair, heading_coin: true, role_coin: true, pinger_task: none, pinger_random: false}

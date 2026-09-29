@@ -36,6 +36,7 @@ ROWS = ["gate", "slalom_front", "slalom_middle", "slalom_back", "bins", "lights"
 
 def _core(edit: Any = None) -> BridgeCore:
     resolved = resolve_scenario(SCENARIO)
+    resolved.scenario["run"]["auto_start"] = True  # these cases start scoring at boot
     bridge = copy.deepcopy(resolved.bridge)
     assert bridge is not None
     bridge["streams"] = [s for s in bridge["streams"] if "image" not in s

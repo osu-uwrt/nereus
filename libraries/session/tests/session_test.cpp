@@ -45,7 +45,10 @@ Json checkpoint(Session &s, bool tasks) {
 
 void replay(const std::string &fixture_name, bool tasks) {
     const auto fixture = loadFixture(fixture_name);
-    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    // The Python reference scripts were captured with the run started at boot; the pack default
+    // (operator "start") is covered by the Python run-control tests.
+    auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    scenario.scenario["run"]["auto_start"] = true;
     const RulesRegistry rules = robotics::rules::standardRules();
     const auto sensors = sensorNames(scenario);
     std::vector<std::string> task_ids;

@@ -78,7 +78,13 @@ class NoRules : public Rules {
 RulesRegistry noRules() { return {{"robosub_2026", [] { return std::make_unique<NoRules>(); }}}; }
 
 const ResolvedScenario &scenario() {
-    static const ResolvedScenario s = loadResolvedScenario(RP_RESOLVED_TALOS);
+    // Captured Python cases start scoring at boot; the pack default (operator "start") is covered by
+    // the Python run-control tests.
+    static const ResolvedScenario s = [] {
+        auto loaded = loadResolvedScenario(RP_RESOLVED_TALOS);
+        loaded.scenario["run"]["auto_start"] = true;
+        return loaded;
+    }();
     return s;
 }
 

@@ -21,8 +21,11 @@ ROWS = ["gate", "slalom_front", "slalom_middle", "slalom_back", "bins", "lights"
         "basket_count", "home", "pinger_first", "pinger_second"]
 
 
-def make() -> Session:
+def make(auto_start: bool | None = True) -> Session:
+    """auto_start None keeps the pack default (the run starts on the operator's "start")."""
     resolved = resolve_scenario(SCENARIO)
+    if auto_start is not None:
+        resolved.scenario["run"]["auto_start"] = auto_start
     sensors = [s["id"] for s in resolved.robot["sensors"] if s["type"] != "stereo_camera"]
     return Session(resolved, create_runtime(resolved, sensor_ids=sensors))
 
@@ -80,6 +83,21 @@ class RunControlTest(unittest.TestCase):
         self.assertEqual((options["heading_coin"], options["role_coin"]), (False, True))
         run(session, 500)
         self.assertAlmostEqual(session.run_snapshot()["elapsed"], 1.0)
+
+    def test_pack_default_waits_for_the_operator_start(self) -> None:
+        session = make(auto_start=None)
+        session.set_killed(True)  # boots killed: the positively buoyant robot floats up
+        run(session, 3000)        # 6 s: surfaces outside the octagon before any run exists
+        self.assertFalse(session.running)
+        score = session.run_snapshot()
+        self.assertEqual((score["running"], score["total"], score["ended_reason"]), (False, 0, ""))
+        result = session.run_start()
+        self.assertTrue(result.accepted, result.message)
+        run(session, 500)
+        score = session.run_snapshot()
+        self.assertTrue(score["running"])
+        self.assertEqual(score["ended_reason"], "")  # the pre-start surfacing is not a breach
+        self.assertAlmostEqual(score["elapsed"], 1.0)
 
     def test_invalid_start_options_are_rejected_without_side_effects(self) -> None:
         session = make()

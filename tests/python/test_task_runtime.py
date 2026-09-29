@@ -28,6 +28,9 @@ class TaskRuntimeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.resolved = resolve_scenario(SCENARIO)
+        # These tests exercise observation/scoring from boot; the pack default (a run starts on the
+        # operator's "start") is covered by test_session_run_control.
+        cls.resolved.scenario["run"]["auto_start"] = True
 
     def setUp(self):
         self.r = copy.deepcopy(self.resolved)
