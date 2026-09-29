@@ -117,6 +117,16 @@ void RosMotion::killLocked(const std::string &message) {
     report();
     send(value.commanded, Mode::Disabled);
 }
+// Drops the viewer's manual control without touching the enable switch or the controller: the robot keeps
+// its last command. Watchdogs use this (never a kill) so a stalled UI, a lost tether or a slow service
+// cannot kill a robot running on its own; only the KILL button, the physical kill or a competing operator do.
+void RosMotion::releaseLocked(const std::string &message) {
+    ++generation;
+    cancelRequest();
+    value.pending = false;
+    value.mode = Mode::Disabled;
+    value.message = message;
+}
 void RosMotion::block(bool active) {
     std::lock_guard<std::mutex> lock(mutex);
     if (active && !value.blocked) {
@@ -150,7 +160,7 @@ void RosMotion::complete(uint64_t epoch, Mode mode, const Pose &pose, bool succe
         return;
     value.pending = false;
     if (!success) {
-        killLocked("Mode request failed: " + message);
+        releaseLocked("Mode request failed: " + message);
         return;
     }
     if (!value.enabled || !ready())
@@ -200,12 +210,13 @@ void RosMotion::tick() {
     }
     if (!session)
         value.message = value.fresh ? "Ready / enable to control" : "Waiting for fresh pose";
-    if (value.enabled && std::chrono::duration<double>(now - lastUi).count() >= uiTimeout)
-        killLocked("Viewer unresponsive; enable again");
-    else if (value.enabled && !value.fresh)
-        killLocked("Pose stale; enable again");
-    else if (value.pending && std::chrono::duration<double>(now - pendingSince).count() > requestTimeout)
-        killLocked("Control request timed out");
+    const bool controlling = value.mode != Mode::Disabled || value.pending;
+    if (value.pending && std::chrono::duration<double>(now - pendingSince).count() > requestTimeout)
+        releaseLocked("Control request timed out");
+    else if (controlling && std::chrono::duration<double>(now - lastUi).count() >= uiTimeout)
+        releaseLocked("Viewer unresponsive; manual control released, robot holds its last command");
+    else if (controlling && !value.fresh)
+        releaseLocked("Pose stale; manual control released, robot holds its last command");
     // Setpoint telemetry is independent of manual ownership and gizmo visibility.
     if (setpointTf && value.hasCommand && value.fresh && finitePose(value.commanded)) {
         geometry_msgs::msg::TransformStamped target;

@@ -27,9 +27,10 @@ void usage() {
         "  --keep-detections      ignore detector DELETEALL; observations live out their lifetime\n"
         "  --detections-placement MODE   pose_source (default) | truth | estimate | both; truth/both need the simulator\n"
         "  --hidden --frames N --screenshot out.png   render N frames, save a PNG, exit\n"
-        "  --render-rate HZ       optional frame cap (default: none, vsync paces)\n"
+        "  --render-rate HZ       frame cap (default 60; with --vsync: none, vsync paces)\n"
         "  --card-rate HZ         local camera card refresh (default: each camera's own rate; 0 = camera rate)\n"
-        "  --no-vsync             disable vsync (swap interval 0)\n"
+        "  --vsync | --no-vsync   swap interval 1 / 0 (default 0: a covered or unfocused window's vsync\n"
+        "                         swaps are throttled by the compositor and stall the UI)\n"
         "  --profile              log frame time mean/p50/p95/p99/max and per-phase CPU cost every 5 s\n"
         "                         (F3 toggles the on-screen readout)\n"
         "  --legacy-cards         A/B aid: render both local cards together every 0.1 s with the full pipeline\n"
@@ -103,6 +104,8 @@ int main(int argc, char **argv) {
         }
         else if (arg == "--no-vsync")
             options.vsync = false;
+        else if (arg == "--vsync")
+            options.vsync = true;
         else if (arg == "--legacy-cards")
             options.legacyCards = true;
         else if (arg == "--profile")

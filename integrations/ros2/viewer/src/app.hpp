@@ -29,8 +29,10 @@ struct Options {
     std::vector<float> injectF;     // test aid: hover this window position and press F mid-run
     std::vector<float> orbit;       // optional initial orbit: yaw pitch distance (radians, metres)
     int frames = 0;                 // render N frames, save the screenshot, exit
-    double renderRate = 0;          // frame cap in Hz; 0 = uncapped (vsync paces; hidden runs use 30)
-    bool vsync = true;              // swap interval 1 (ignored for --hidden)
+    double renderRate = 0;          // frame cap in Hz; 0 = 60 (vsync: uncapped, vsync paces; hidden runs use 30)
+    // Swap interval 1 (ignored for --hidden). Off by default: under Wayland/XWayland the compositor throttles
+    // swaps of a covered or unfocused window (~1 Hz), which stalls the whole UI loop.
+    bool vsync = false;
     bool profile = false;           // log frame-time statistics every few seconds
     bool legacyCards = false;       // A/B aid: both cards every 0.1 s through the full render pipeline
     bool profileSync = false;       // also glFinish after main/card draws so phases include GPU time

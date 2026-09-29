@@ -50,10 +50,6 @@ class UwrtMotion final : public RosMotion {
                                                         [this](const Command &msg) { observe(msg, false); });
         startTimer();
     }
-    ~UwrtMotion() override {
-        if (session && rclcpp::ok())
-            kill();
-    }
 
   private:
     void observe(const Command &msg, bool lin) {
@@ -97,7 +93,7 @@ class UwrtMotion final : public RosMotion {
         msg.kill_switch_id = switchId;
         msg.sender_id = sender;
         msg.switch_asserting_kill = !value.enabled;
-        msg.switch_needs_update = true;
+        msg.switch_needs_update = false; // enable latches (RViz "Req Kill" off): untethered runs continue
         killPub->publish(msg);
     }
     bool modeReady() override {

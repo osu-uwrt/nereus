@@ -50,6 +50,7 @@ class RosMotion : public Motion {
     void tick();
     bool ready() const;
     void killLocked(const std::string &);
+    void releaseLocked(const std::string &);
     void complete(uint64_t epoch, Mode, const Pose &, bool success, const std::string &message);
     virtual void send(const Pose &, Mode) = 0;
     virtual void report() = 0;

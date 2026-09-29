@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
     control->enable();
     spin(.2);
     assert(control->state().enabled && !(control->state().mode == Mode::Position));
-    assert(!reports.back().switch_asserting_kill && reports.back().switch_needs_update);
+    assert(!reports.back().switch_asserting_kill && !reports.back().switch_needs_update); // latched enable
     assert(lin.back().mode == Command::DISABLED);
     control->activate(Mode::Position, control->state().actual);
     spin(.3);
@@ -163,17 +163,21 @@ int main(int argc, char **argv) {
     control->drag(target);
     spin(.1);
     assert(lin.size() == count);
+    // Watchdogs release manual control but never kill: the robot keeps its last command (untethered runs).
+    const auto held = lin.size();
     spin(.9, false); // render hang, while ROS and TF continue
-    assert(!control->state().enabled && reports.back().switch_asserting_kill);
-    assert(lin.back().mode == Command::DISABLED && ang.back().mode == Command::DISABLED);
+    assert(control->state().enabled && control->state().mode == Mode::Disabled);
+    assert(!reports.back().switch_asserting_kill && lin.size() == held);
     spin(.1);
-    assert(!control->state().enabled); // no automatic resume
-    control->enable();
-    spin(.1);
+    assert(control->state().mode == Mode::Disabled); // no automatic resume
+    control->activate(Mode::Position, control->state().actual);
+    spin(.2);
+    assert(control->state().mode == Mode::Position);
+    const auto beforeStale = lin.size();
     spin(1.15, true, false); // estimator stops, UI remains responsive
-    assert(!control->state().enabled && !control->state().fresh);
+    assert(control->state().enabled && !control->state().fresh && control->state().mode == Mode::Disabled);
+    assert(!reports.back().switch_asserting_kill && lin.size() == beforeStale);
     spin(.1);
-    control->enable();
     delay = true;
     control->activate(Mode::Position, control->state().actual);
     spin(.1);
@@ -189,13 +193,12 @@ int main(int argc, char **argv) {
     serviceSuccess = false;
     control->activate(Mode::Position, control->state().actual);
     spin(.2);
-    assert(!control->state().enabled);
+    assert(control->state().enabled && control->state().mode == Mode::Disabled);
     serviceSuccess = true;
-    control->enable();
     delay = true;
     control->activate(Mode::Position, control->state().actual);
     spin(3.2);
-    assert(!control->state().enabled && !control->state().pending);
+    assert(control->state().enabled && !control->state().pending);
     assert(control->state().message == "Control request timed out");
     delay = false;
     spin(.1);
@@ -292,8 +295,9 @@ int main(int argc, char **argv) {
     control.reset();
     mission.reset();
     composition.reset();
+    const auto closedAt = reports.size();
     spin(.2);
-    assert(reports.back().switch_asserting_kill && lin.back().mode == Command::DISABLED);
+    assert(reports.size() == closedAt && !reports.back().switch_asserting_kill); // closing leaves the robot as it was
 
     // A second protocol reuses the exact same motion capability/panel.
     std::vector<geometry_msgs::msg::PoseStamped> poses;

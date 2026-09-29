@@ -1915,7 +1915,7 @@ int App::loop() {
             saveCameraImages(opt_.screenshot);
             break;
         }
-        const double cap = opt_.renderRate > 0 ? opt_.renderRate : (opt_.hidden ? 30. : 0.);
+        const double cap = opt_.renderRate > 0 ? opt_.renderRate : opt_.hidden ? 30. : opt_.vsync ? 0. : 60.;
         if (cap > 0) {
             const auto before = Clock::now();
             std::this_thread::sleep_until(frameStart + std::chrono::duration_cast<Clock::duration>(

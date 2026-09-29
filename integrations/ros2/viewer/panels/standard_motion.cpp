@@ -22,10 +22,6 @@ class StandardMotion final : public RosMotion {
             });
         startTimer();
     }
-    ~StandardMotion() override {
-        if (session && rclcpp::ok())
-            kill();
-    }
     void enable() override {
         std::lock_guard<std::mutex> lock(mutex);
         if (!ready() || value.pending || !client->service_is_ready())

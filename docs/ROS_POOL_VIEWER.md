@@ -24,8 +24,10 @@ Capture mode saves the full window PNG plus `<stem>-<camera>.png` from the last 
 
 ## Frame pacing, smoothing, profiling
 
-- **vsync** is on by default (swap interval 1, paced to the display). `--render-rate HZ` adds an optional cap,
-  `--no-vsync` disables vsync. `--hidden` runs keep vsync off and a 30 Hz cap.
+- **vsync** is off by default with a 60 Hz cap (`--render-rate HZ` changes it), like the original viewer (swap
+  interval 0 + sleep). Under Wayland/XWayland the compositor throttles a covered or unfocused window's vsync swaps to
+  about 1 Hz, which stalled the whole UI loop. `--vsync` restores swap interval 1 (uncapped unless `--render-rate`).
+  `--hidden` runs keep vsync off and a 30 Hz cap.
 - **Display-time sampling.** The robot pose and every TF frame drawn are looked up (tf2 interpolation) at a smooth
   display time instead of "latest": `display_clock.hpp` maps wall time onto the stamp domain with a low-pass estimate
   of `stamp - wall`, so the sampled time advances evenly each frame, `--display-delay` (default 0.02 s) behind the
@@ -124,6 +126,12 @@ status_lights, thruster_visuals, camera_geometry (+ frame graph), jpeg, scenario
 
 ## Deviations
 
+- **Motion enable latches; watchdogs never kill** (the original auto-killed). `uwrt.motion` sends
+  `switch_needs_update = false` (RViz ControlPanel with "Req Kill" unchecked), so enable survives an untethered run
+  and closing the viewer. A UI stall (`ui_timeout`), stale pose (`pose_timeout`), request timeout (`request_timeout`)
+  or failed mode request only releases the viewer's manual control: nothing is sent, the robot keeps its last command
+  and the operator must press Position/Feedforward again. Kills come only from the KILL button, the physical kill, or
+  another sender on the same kill switch.
 - Camera sensor look (water, noise, depth model) is not editable from the viewer; Water/Lighting tabs change only
   the observer render. Runtime editing of the camera products needs a bridge parameter path (open item).
 - Detections (`yolo_orientation/visualization_marker_array`; overlay on by default, `--no-detections` /
