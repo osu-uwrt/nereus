@@ -1,5 +1,15 @@
 # Source and dependency provenance
 
+## Licensing
+
+This project is licensed under Apache-2.0 (`LICENSE`, `NOTICE`). The code, meshes and data ported from OSU UWRT's
+own repositories (`riptide_simulator`, `riptide_meshes`, `riptide_core`, listed below) carried no license
+declaration; UWRT releases them as part of this project under Apache-2.0. Vendored third-party code keeps its
+own license: Dear ImGui (MIT, `third_party/imgui/LICENSE.txt`) and GLM (MIT / Happy Bunny,
+`third_party/glm/glm/copying.txt`). Build-time dependencies are installed separately under their own licenses.
+
+## Sources
+
 The numerical kernels in `libraries/simulation/src/marine_dynamics.cpp`,
 `thruster_dynamics.cpp`, their private `detail/` headers, and
 `libraries/simulation/tests/model_reference_test.cpp` are adapted from:
@@ -12,11 +22,8 @@ The numerical kernels in `libraries/simulation/src/marine_dynamics.cpp`,
   `c_simulator/test/test_marine_dynamics.cpp`.
 - Changes: private namespace/includes, formatting, empty-thruster support,
   checked index conversion and consistent Eigen index types.
-- License: not established in that repository; see ../LICENSE.md. Public release
-  is blocked on resolving this metadata, not on local implementation work.
+- License: none declared upstream; released here under Apache-2.0 (see Licensing).
 
-The architecture plan was developed with the project owner in the original
-simulator's `docs/REUSABILITY_PLAN.md` and copied here as the working design.
 Other project-owned implementation files were authored for this new project. The
 synthetic example AUV is not a Talos calibration or copied mesh. Native Talos/pool
 profile data is separately attributed below.
@@ -25,8 +32,7 @@ No ROS messages or original ROS host are included.
 
 Except for Dear ImGui described below, dependencies are installed separately: Eigen (plant), yaml-cpp
 (optional scenario loader), GoogleTest (tests), Python standard library (test and
-development tools), and CMake/compiler tools. No runtime downloads occur. Review
-licenses and exact packaged dependency versions before public distribution.
+development tools), and CMake/compiler tools. No runtime downloads occur.
 
 ## Viewer dependencies and content
 
@@ -54,13 +60,12 @@ and RK4 sequencing in `detail/rk4.hpp` are adapted from original revision
 They retain the legacy disk-area fraction, 1 mm minimum projected extent, sinusoidal
 current derivative, stage forcing and midpoint actuator split. New configuration
 is neutral, immersion is optional, and environment time uses authoritative ticks.
-The original unresolved license metadata described above applies to these ports too.
+These ports are released under Apache-2.0 (see Licensing).
 
 `tools/capture_stage_reference.py` reads that pinned revision only when explicitly
 invoked. Its test driver extracts original expressions into a temporary build with
 the original pure numerical kernels, then records checked fixture data. The driver
 and all inputs/results are hashed in `tests/fixtures/legacy_stage_dynamics.json`.
-See `reference/STAGE_DYNAMICS.md` for reproduction and the bounded comparison scope.
 
 ## Static box contact equations
 
@@ -71,13 +76,12 @@ impulse/friction response from original revision
 `c_simulator/include/c_simulator/collisionBox.h`. Geometry validation, neutral
 value descriptors, fixed-size temporaries, ownership and caching were rewritten.
 Original proxy ordering and response expressions remain reference-tested.
-The original license metadata remains unresolved as described above.
+Released under Apache-2.0 (see Licensing).
 
 The offline contact capture extracts original method bodies, disables logging,
 and excludes the separate optional task-contact hook. It does not build a ROS node.
 Source/driver/fixture hashes and compiler flags accompany the single-response and
 whole-step optimized/unoptimized captures in `tests/fixtures/legacy_box_*.json`.
-See `reference/BOX_CONTACTS.md` for scope, optimization sensitivity and reproduction.
 
 ## Native Talos and pool data
 
@@ -88,9 +92,7 @@ controller configuration, resolves CAD/COM offsets, and emits native physical
 parameters, rigid mounts and collision boxes. The example command schedule is new;
 sensors/visuals/tasks are not instantiated by this slice. Exact input revisions and
 source/output/importer hashes are written by `tools/import_talos_physics.py` (not kept in the repo).
-See `reference/TALOS_PHYSICS_PACK.md` for reproduction and limits. These project
-sources retain the unresolved source/asset license review requirement before public
-redistribution; local implementation continues under the user's authorization.
+Released under Apache-2.0 (see Licensing).
 
 ## Independent Talos trajectory reference
 
@@ -101,8 +103,7 @@ vehicle/hydrodynamics/world/mapping/URDF Git objects; the native importer and it
 outputs are not reference inputs. Source, driver, capture script and fixture hashes
 are recorded in `tests/fixtures/legacy_talos{,_unoptimized}.json`, alongside compiler
 identity and flags. The fixtures contain every tick of three scripted trajectories.
-See [TALOS_DYNAMICS.md](reference/TALOS_DYNAMICS.md) for scope and reproduction.
-Original source license status remains as described above.
+Released under Apache-2.0 (see Licensing).
 
 The Talos importer also emits a separate inertial robot/example and reusable AHRS
 profile from the same pinned physical data plus original vehicle/simulator sensor
@@ -116,8 +117,7 @@ platform or invoked at runtime.
 extracts sensor initialization/reporting expressions into a temporary non-ROS
 build. The prescribed kinematic inputs and outputs are recorded in
 `tests/fixtures/legacy_sensor_kinematics.csv`; its JSON records all source, script,
-driver and result hashes. [SENSOR_KINEMATICS.md](reference/SENSOR_KINEMATICS.md)
-identifies all 28 verified sensor fields and comparison limits.
+driver and result hashes for all 28 verified sensor fields.
 
 The same pinned Talos conversion also emits a navigation assembly and reusable
 reference-velocity profile for the original default DVL product. Its rate, noise,
@@ -143,8 +143,7 @@ records its output hash in the manifest. It also imports the three LED bars from
 The composed LED/pool example records the local scene input hash. Historical ROS
 fields remain only in provenance; runtime scene data contains none. This is not
 a complete robot assembly.
-Original source/asset licensing remains unresolved as described above; local work
-is authorized and public redistribution still requires that review.
+Released under Apache-2.0 (see Licensing).
 
 `libraries/rendering/src/assets.cpp` adapts the original CPU loading behavior from
 `camera_faker/src/pool_viewer/renderer.cpp`: Assimp flags, node transforms,
@@ -174,8 +173,8 @@ adds only an explicit water-presence guard; present-water calculations are retai
 unchanged from that pinned revision's `camera_faker/include/external/glm`. Its dual
 Happy Bunny/MIT notice is retained and installed with the renderer; it is a private
 implementation dependency. Per-file source/output hashes and importer hash are written by
-`tools/import_render_resources.py` (not kept in the repo). Original renderer/shader license metadata remains
-subject to the source review described above.
+`tools/import_render_resources.py` (not kept in the repo). Released under Apache-2.0
+(see Licensing).
 
 The offline original-renderer capture reads pinned Git objects and builds the
 original renderer/shaders with a thin GLFW/CPU-output harness. Its timing helper is
@@ -194,7 +193,7 @@ platform's double-precision spatial representation. `tools/capture_animation_ref
 compiles the unchanged original headers independently and records source archive,
 harness and output hashes in its output (not kept in the repo). The fixture
 parameters are copied from the original Talos thruster/status-light configurations.
-Source licensing remains subject to the original metadata review above.
+Released under Apache-2.0 (see Licensing).
 
 ## ROS pool viewer host
 
@@ -208,4 +207,4 @@ port the window layout, toolbar, camera controls, detection/MPC/TF overlays, cou
 of the original Talos `status_lights.yaml` and `models/talos3/thrusters.yaml` (pivots/axes/RPM fit) with robot-pack
 ids; `content/viewer/assets/calibration_board.png` is the original `April Tag.jpg` converted to PNG.
 `tests/host_{viewer_input,tf_tree,detection_pose,status_lights,thruster_visuals,camera_geometry}.cpp` adapt the
-corresponding original unit tests to gtest. Licensing follows the original metadata review above.
+corresponding original unit tests to gtest. Released under Apache-2.0 (see Licensing).

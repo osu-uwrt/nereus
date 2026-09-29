@@ -135,7 +135,7 @@ if(RP_BUILD_PYTHON)
   install(DIRECTORY python/src/robotics_platform/ DESTINATION robotics_platform
     COMPONENT python PATTERN "__pycache__" EXCLUDE)
   install(DIRECTORY content/ DESTINATION robotics_platform/content COMPONENT python PATTERN "visuals" EXCLUDE)
-  install(FILES LICENSE.md docs/PROVENANCE.md DESTINATION robotics_platform/legal COMPONENT python)
+  install(FILES LICENSE NOTICE docs/PROVENANCE.md DESTINATION robotics_platform/legal COMPONENT python)
 endif()
 
 install(TARGETS rp_simulation rp_sensors EXPORT RoboticsPlatformTargets
@@ -162,7 +162,7 @@ if(RP_BUILD_CAMERA_PYTHON)
     install(DIRECTORY python/src/robotics_platform/ DESTINATION robotics_platform
       COMPONENT python PATTERN "__pycache__" EXCLUDE)
     install(DIRECTORY content/ DESTINATION robotics_platform/content COMPONENT python PATTERN "visuals" EXCLUDE)
-    install(FILES LICENSE.md docs/PROVENANCE.md DESTINATION robotics_platform/legal COMPONENT python)
+    install(FILES LICENSE NOTICE docs/PROVENANCE.md DESTINATION robotics_platform/legal COMPONENT python)
   endif()
 endif()
 if(RP_BUILD_RENDER_CAPTURE)
@@ -232,7 +232,7 @@ if(RP_BUILD_ROS_VIEWER)
   add_subdirectory(integrations/ros2/viewer)
 endif()
 
-install(FILES LICENSE.md docs/PROVENANCE.md DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform/legal)
+install(FILES LICENSE NOTICE docs/PROVENANCE.md DESTINATION ${CMAKE_INSTALL_DATADIR}/robotics_platform/legal)
 install(EXPORT RoboticsPlatformTargets NAMESPACE RoboticsPlatform::
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/RoboticsPlatform)
 configure_package_config_file(cmake/RoboticsPlatformConfig.cmake.in

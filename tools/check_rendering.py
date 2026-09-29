@@ -46,7 +46,7 @@ def main():
             "docs",
         ):
             shutil.copytree(ROOT / folder, source / folder)
-        for file in ("CMakeLists.txt", "LICENSE.md"):
+        for file in ("CMakeLists.txt", "LICENSE", "NOTICE"):
             shutil.copy2(ROOT / file, source / file)
         flags = [
             "-DRP_BUILD_SIMULATION=OFF",

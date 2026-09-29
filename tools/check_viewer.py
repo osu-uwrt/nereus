@@ -46,7 +46,7 @@ def main():
             shutil.copytree(ROOT / folder, source / folder)
         if scenes:
             shutil.copytree(ROOT / "content/visuals", source / "content/visuals")
-        for file in ("CMakeLists.txt", "LICENSE.md"):
+        for file in ("CMakeLists.txt", "LICENSE", "NOTICE"):
             shutil.copy2(ROOT / file, source / file)
         build = temp / "build"
         flags = [
