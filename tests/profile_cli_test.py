@@ -68,6 +68,20 @@ class ProfileRunnerTests(unittest.TestCase):
         self.assertIn("specific_force.z", {r["field"] for r in first})
         self.assertEqual(self.run_profile().returncode, 0)
 
+    def test_native_talos_navigation_reports_all_samples_without_range(self):
+        self.scenario = self.root / "content/examples/talos_navigation_pool.yaml"
+        output = self.root / "sensors.csv"
+        result = self.run_profile(output)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = list(csv.DictReader(io.StringIO(output.read_text())))
+        for name, count in (("imu", 150), ("fog", 1500), ("dvl", 24)):
+            device = [r for r in rows if r["device"] == name]
+            self.assertEqual(len({r["sequence"] for r in device}), count)
+            self.assertEqual({r["valid"] for r in device}, {"1"})
+        dvl = [r for r in rows if r["device"] == "dvl"]
+        self.assertIn("reference_relative_velocity.z", {r["field"] for r in dvl})
+        self.assertNotIn("bottom_distance", {r["field"] for r in dvl})
+
     def test_invalid_nested_profile_fails_before_creating_output(self):
         profile = self.root / "content/sensors/imu.yaml"
         profile.write_text(profile.read_text().replace("white_stddev:", "unknown:", 1))

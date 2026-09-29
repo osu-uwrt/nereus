@@ -108,6 +108,21 @@ void bindSensors(py::module_ &m) {
                    .def_readwrite("maximum_range", &DvlParameters::maximum_range)
                    .def_readwrite("velocity_noise", &DvlParameters::velocity_noise);
     valueProperty(dvl, "bottom_axis", &DvlParameters::bottom_axis);
+    auto limit = py::class_<InclinationLimit>(m, "InclinationLimit").def(py::init<>());
+    valueProperty(limit, "sensor_axis", &InclinationLimit::sensor_axis);
+    valueProperty(limit, "reference_axis_world", &InclinationLimit::reference_axis_world);
+    valueProperty(limit, "maximum_angle", &InclinationLimit::maximum_angle);
+    auto velocity =
+        py::class_<ReferenceVelocityParameters>(m, "ReferenceVelocityParameters").def(py::init<>());
+    valueProperty(velocity, "mount", &ReferenceVelocityParameters::mount);
+    valueProperty(velocity, "reference_velocity_world",
+                  &ReferenceVelocityParameters::reference_velocity_world);
+    valueProperty(velocity, "noise", &ReferenceVelocityParameters::noise);
+    valueProperty(velocity, "reported_variance", &ReferenceVelocityParameters::reported_variance);
+    valueProperty(velocity, "inclination_limit", &ReferenceVelocityParameters::inclination_limit);
+    py::class_<ReferenceVelocity>(m, "ReferenceVelocity")
+        .def(py::init<ReferenceVelocityParameters>(),
+             py::arg("parameters") = ReferenceVelocityParameters{});
     py::class_<PressureParameters>(m, "PressureParameters")
         .def(py::init<>())
         .def_readwrite("mount", &PressureParameters::mount)
@@ -168,6 +183,11 @@ void bindSensors(py::module_ &m) {
                            .def_readonly("bottom_distance", &DvlReading::bottom_distance);
     readCopy(dvl_reading, "bottom_relative_velocity", &DvlReading::bottom_relative_velocity);
     readCopy(dvl_reading, "covariance", &DvlReading::covariance);
+    auto velocity_reading = py::class_<VelocityReading>(m, "VelocityReading");
+    readCopy(velocity_reading, "reference_relative_velocity",
+             &VelocityReading::reference_relative_velocity);
+    readCopy(velocity_reading, "covariance", &VelocityReading::covariance);
+    bindStream<VelocityReading>(m, "VelocitySample", "VelocityStream");
     py::class_<PressureReading>(m, "PressureReading")
         .def_readonly("absolute_pressure", &PressureReading::absolute_pressure)
         .def_readonly("pressure_variance", &PressureReading::pressure_variance)

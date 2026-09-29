@@ -12,6 +12,7 @@ int main() {
     initial.linear_velocity.x() = 0.5;
     sensors::Runtime runtime(parameters, initial, 42);
     auto imu = runtime.add({"imu", "imu_link", 10ms}, sensors::Imu{});
+    auto velocity = runtime.add({"velocity", "velocity_link", 10ms}, sensors::ReferenceVelocity{});
     sensors::AhrsParameters ahrs_parameters;
     ahrs_parameters.attitude.heading_drift_rate = .1;
     auto ahrs = runtime.add({"ahrs", "imu_link", 20ms}, sensors::Ahrs({}, ahrs_parameters));
@@ -49,6 +50,12 @@ int main() {
                 return 1;
         }
         attitude->drain();
+        for (const auto &sample : velocity->drain()) {
+            if (!sample.measurement.value ||
+                sample.measurement.value->reference_relative_velocity !=
+                    runtime.observe().body.linear_velocity)
+                return 1;
+        }
         for (const auto &sample : pressure->drain()) {
             if (!sample.measurement.value) {
                 return 1;
@@ -67,12 +74,13 @@ int main() {
     // The final DVL acquisition is still pending its configured 20ms latency.
     if (imu->stats().delivered != 100 || fog->stats().delivered != 50 ||
         dvl->stats().delivered != 9 || pressure->stats().delivered != 20 ||
-        ahrs->stats().delivered != 50 || attitude->stats().delivered != 50) {
+        ahrs->stats().delivered != 50 || attitude->stats().delivered != 50 ||
+        velocity->stats().delivered != 100) {
         return 1;
     }
     runtime.reset(initial, 42);
     return imu->latest() || fog->latest() || dvl->latest() || pressure->latest() ||
-                   ahrs->latest() || attitude->latest()
+                   ahrs->latest() || attitude->latest() || velocity->latest()
                ? 1
                : 0;
 }

@@ -23,9 +23,9 @@ would change mounted specific force.
 
 ## Verified and pending outputs
 
-The current comparison checks all 21 AHRS/FOG fields: specific force, angular
+The current comparison checks all 25 AHRS/FOG/reference-velocity fields: specific force, angular
 velocity, sign-equivalent sensor-to-world quaternion, three reported covariance
-diagonals, FOG rate and FOG variance. Maximum absolute error must remain below
+diagonals, FOG rate/variance and DVL velocity/variance. Maximum absolute error must remain below
 `1e-12`. Native mounts come from the resolved Talos frame pack. Models explicitly
 select zero sampling noise with the original gravity and reported uncertainty.
 This gates native models and resolved mounts; profile loading/settings have separate
@@ -33,8 +33,8 @@ assembly tests and are not all exercised by this manually configured comparison.
 Reported variance remains independent of sampling noise, including for FOG before
 configured axis projection.
 
-The remaining seven fields capture default DVL velocity/variance, mounted depth-point
-world Z, corrected base-link world Z and depth variance. They are retained as
+The remaining three fields capture mounted depth-point world Z, corrected base-link
+world Z and depth variance. They are retained as
 upcoming acceptance inputs and are **not yet verified against native models**.
 Keeping both depth heights prevents the final lever-arm cancellation from hiding
 an incorrect pressure-sensor mount.

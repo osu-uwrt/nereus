@@ -56,6 +56,42 @@ class RuntimeTests(unittest.TestCase):
         )
         self.assertAlmostEqual(np.linalg.norm(imu.value.attitude.orientation_wxyz), 1)
 
+    def test_reference_velocity_and_native_talos_navigation_are_installed(self) -> None:
+        parameters = rp.ReferenceVelocityParameters()
+        parameters.reference_velocity_world = [1, 2, 3]
+        parameters.reported_variance = [0.01, 0.02, 0.03]
+        runtime = passive()
+        stream = runtime.add(rp.Device("velocity", "sensor"), rp.ReferenceVelocity(parameters))
+        parameters.reference_velocity_world = [99, 99, 99]
+        runtime.advance(5)
+        sample = stream.latest()
+        assert sample and sample.value
+        np.testing.assert_allclose(sample.value.reference_relative_velocity, [-1, -2, -3])
+        np.testing.assert_array_equal(sample.value.covariance, np.diag([0.01, 0.02, 0.03]))
+        copied = sample.value.reference_relative_velocity
+        copied[:] = 0
+        np.testing.assert_allclose(sample.value.reference_relative_velocity, [-1, -2, -3])
+        self.assertIsNotNone(runtime.velocity_stream("velocity").latest())
+        limit = rp.InclinationLimit()
+        limit.maximum_angle = 0.1
+        limit.sensor_axis = [0, 0, 1]
+        parameters.inclination_limit = limit
+        limited = passive()
+        missing = limited.add(rp.Device("velocity", "sensor"), rp.ReferenceVelocity(parameters))
+        limited.advance(5)
+        unavailable = missing.latest()
+        assert unavailable
+        self.assertIsNone(unavailable.value)
+        self.assertIn("inclination", unavailable.unavailable_reason)
+        scenario = rp.load_scenario(rp.example_scenario().with_name("talos_navigation_pool.yaml"))
+        navigation = scenario.create_runtime()
+        navigation.advance(63)
+        dvl = navigation.velocity_stream("dvl").latest()
+        assert dvl and dvl.value
+        self.assertEqual(dvl.header.scheduled_ns, 125000000)
+        self.assertEqual(dvl.header.acquired_ns, 126000000)
+        np.testing.assert_array_equal(dvl.value.covariance, np.eye(3) * 1e-6)
+
     def test_placed_pool_queries_match_local_geometry(self) -> None:
         params = rp.PlantParameters()
         params.pool.origin_xy_world = [-10, -12]

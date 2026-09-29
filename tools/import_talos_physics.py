@@ -85,9 +85,10 @@ def main():
         'gyroRate = declare_parameter<double>("gyro_rate", 500.0);',
         'gyroSigma = declare_parameter<double>("gyro_noise_stddev", 0.01 * M_PI / 180.0);',
         'gyroVariance = declare_parameter<double>("gyro_variance", std::max(1e-9, gyroSigma * gyroSigma));',
+        'declare_parameter<double>("dvl_max_tilt", 0.0);',
     ):
         if expression not in physics_source:
-            raise ValueError("unexpected original FOG defaults")
+            raise ValueError("unexpected original sensor defaults")
     sim("c_simulator/src/robot_class.cpp")
     if hydro["schema_version"] != 1 or world["schema_version"] != 1 or hydro["robot"] != "talos":
         raise ValueError("unexpected pinned hydro/world schema or robot identity")
@@ -276,6 +277,30 @@ def main():
         ],
     }
     inertial_run = {**run, "robot": "../robots/talos_inertial.yaml"}
+    dvl = {
+        "schema_version": 1,
+        "kind": "sensor",
+        "model": "reference_velocity",
+        "parameters": {
+            "reference_velocity_world_m_s": [0, 0, 0],
+            "velocity_noise": {"white_stddev": [sensor_overrides["dvl_noise_stddev"]] * 3},
+            "reported_variance": [sensor_overrides["dvl_variance"]] * 3,
+        },
+    }
+    navigation_robot = {
+        **inertial_robot,
+        "sensors": [
+            *inertial_robot["sensors"],
+            {
+                "id": "dvl",
+                "frame": "dvl_mount",
+                "mount_frame": "dvl_mount",
+                "period_ns": round(1e9 / vehicle["dvl"]["rate"]),
+                "profile": "../sensors/talos_dvl.yaml",
+            },
+        ],
+    }
+    navigation_run = {**run, "robot": "../robots/talos_navigation.yaml"}
     header = "# Generated from pinned original content; see docs/reference/TALOS_PHYSICS_PACK.md.\n"
     artifacts = {
         "content/robots/talos_dynamics.yaml": header
@@ -294,9 +319,18 @@ def main():
         "content/examples/talos_inertial_pool.yaml": header
         + "# Scripted inertial acquisition example, not the competition mission.\n"
         + yaml.safe_dump(inertial_run, sort_keys=False),
+        "content/sensors/talos_dvl.yaml": header
+        + "# Original default velocity reporting: no floor, range or inclination gate.\n"
+        + yaml.safe_dump(dvl, sort_keys=False),
+        "content/robots/talos_navigation.yaml": header
+        + "# AHRS, FOG and reference-velocity DVL; pressure/cameras/mechanisms remain open.\n"
+        + yaml.safe_dump(navigation_robot, sort_keys=False),
+        "content/examples/talos_navigation_pool.yaml": header
+        + "# Scripted navigation-sensor example, not the competition mission.\n"
+        + yaml.safe_dump(navigation_run, sort_keys=False),
     }
     metadata = {
-        "scope": "Original Talos dynamics, static hull/pool proxies and rigid mounts, plus a separate noise-enabled IMU/FOG assembly. Scripted commands; no other devices, visuals, tasks or stack adapters.",
+        "scope": "Original Talos dynamics, static hull/pool proxies and rigid mounts, separate noise-enabled inertial and navigation assemblies (IMU/FOG/reference-velocity DVL). Scripted commands; no pressure/cameras, visuals, tasks or stack adapters.",
         "parameter_status": hydro["parameter_status"],
         "sources_sha256": sources,
         "importer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),

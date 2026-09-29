@@ -30,6 +30,10 @@ struct DvlReading {
     Eigen::Matrix3d covariance;
     double bottom_distance; // Ideal slant range along bottom_axis; not noisy altitude.
 };
+struct VelocityReading {
+    Eigen::Vector3d reference_relative_velocity; // Sensor frame, m/s; no range observation.
+    Eigen::Matrix3d covariance;
+};
 struct PressureReading {
     double absolute_pressure; // Pa, including surface atmospheric pressure.
     double pressure_variance; // Pa^2.

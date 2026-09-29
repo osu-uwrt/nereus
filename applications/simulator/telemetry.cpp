@@ -80,6 +80,10 @@ void fields(const Row &row, const sensors::DvlReading &reading) {
     row.matrix("velocity_covariance", "m^2/s^2", reading.covariance);
     row.field("bottom_distance", "m", reading.bottom_distance);
 }
+void fields(const Row &row, const sensors::VelocityReading &reading) {
+    row.vector("reference_relative_velocity", "m/s", reading.reference_relative_velocity);
+    row.matrix("velocity_covariance", "m^2/s^2", reading.covariance);
+}
 void fields(const Row &row, const sensors::PressureReading &reading) {
     row.field("absolute_pressure", "Pa", reading.absolute_pressure);
     row.field("pressure_variance", "Pa^2", reading.pressure_variance);
@@ -119,9 +123,13 @@ std::vector<std::function<void()>> telemetry(sensors::Runtime &runtime,
     using Factory = std::function<std::function<void()>(sensors::Runtime &, const std::string &,
                                                         std::ostream *)>;
     const std::map<std::string, Factory> factories{
-        {"imu", watch<sensors::ImuReading>},   {"attitude", watch<sensors::AttitudeReading>},
-        {"ahrs", watch<sensors::AhrsReading>}, {"fog", watch<sensors::FogReading>},
-        {"dvl", watch<sensors::DvlReading>},   {"pressure", watch<sensors::PressureReading>}};
+        {"imu", watch<sensors::ImuReading>},
+        {"attitude", watch<sensors::AttitudeReading>},
+        {"ahrs", watch<sensors::AhrsReading>},
+        {"fog", watch<sensors::FogReading>},
+        {"dvl", watch<sensors::DvlReading>},
+        {"reference_velocity", watch<sensors::VelocityReading>},
+        {"pressure", watch<sensors::PressureReading>}};
     std::vector<std::function<void()>> observers;
     for (const auto &plan : plans) {
         const auto factory = factories.find(plan.model);

@@ -209,3 +209,9 @@ or `ahrs_stream(id)`. AHRS samples expose copied `value.inertial` and
 Nested `AhrsParameters` fields are copied on read/write: edit a local child value
 and assign it back. Models own their settings after construction. No estimator or
 ROS message is hidden in these contracts.
+
+`ReferenceVelocity(ReferenceVelocityParameters())` observes mounted velocity relative
+to a constant world velocity without bottom/range queries. Use `velocity_stream(id)`
+for typed `reference_relative_velocity` and covariance. Optional `InclinationLimit`
+provides an explicit axis-angle validity gate. Parameter children and optional limit
+values are copied; assign edited child settings back before constructing the model.

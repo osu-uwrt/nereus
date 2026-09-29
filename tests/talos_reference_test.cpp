@@ -86,7 +86,7 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
         << " " << worst[1];
 }
 
-TEST(TalosReference, OriginalNoiseDisabledInertialMeasurementFormulas) {
+TEST(TalosReference, OriginalNoiseDisabledInertialAndReferenceVelocityFormulas) {
     namespace sensors = robotics::sensors;
     const auto config = robotics::config::loadScenario(std::string(RP_TEST_CONTENT) +
                                                        "/examples/talos_inertial_pool.yaml");
@@ -102,6 +102,10 @@ TEST(TalosReference, OriginalNoiseDisabledInertialMeasurementFormulas) {
     sensors::Ahrs ahrs(mount("imu_mount"), parameters);
     sensors::Fog fog(mount("fog_mount"), {Eigen::Vector3d::UnitZ()}, {},
                      Eigen::Vector3d(0, 0, std::pow(.01 * std::acos(-1.) / 180, 2)));
+    sensors::ReferenceVelocityParameters velocity_parameters;
+    velocity_parameters.mount = mount("dvl_mount");
+    velocity_parameters.reported_variance = Eigen::Vector3d::Constant(.000001);
+    sensors::ReferenceVelocity velocity(velocity_parameters);
     std::ifstream fixture(std::string(RP_FIXTURES) + "/legacy_sensor_kinematics.csv");
     ASSERT_TRUE(fixture);
     std::string row;
@@ -134,15 +138,17 @@ TEST(TalosReference, OriginalNoiseDisabledInertialMeasurementFormulas) {
                                                       values[29]);
         if (orientation.dot(expected_orientation) < 0)
             orientation.coeffs() *= -1;
-        Eigen::Matrix<double, 21, 1> actual;
+        const auto speed = velocity.sample(input, .125).value.value();
+        Eigen::Matrix<double, 25, 1> actual;
         actual << imu.inertial.specific_force, imu.inertial.angular_velocity, orientation.w(),
             orientation.x(), orientation.y(), orientation.z(), imu.attitude.covariance.diagonal(),
             imu.inertial.angular_covariance.diagonal(), imu.inertial.force_covariance.diagonal(),
-            gyro.angular_rates[0], gyro.covariance(0, 0);
+            gyro.angular_rates[0], gyro.covariance(0, 0), speed.reference_relative_velocity,
+            speed.covariance(0, 0);
         ASSERT_TRUE(actual.allFinite());
-        EXPECT_LT((actual - values.segment<21>(20)).cwiseAbs().maxCoeff(), 1e-12)
+        EXPECT_LT((actual - values.segment<25>(20)).cwiseAbs().maxCoeff(), 1e-12)
             << "case " << values[0];
-        // Remaining captured DVL and depth columns become gates with their declared models.
+        // Remaining captured depth columns become gates with their declared models.
     }
     EXPECT_EQ(count, 24);
 }

@@ -97,6 +97,7 @@ rules or overrides. All models require a parameters mapping, even when it is `{}
 | `ahrs` | Required `inertial` mapping (raw IMU settings) and `attitude` mapping (attitude settings); each may be `{}` |
 | `fog` | Required `axes`: one to three unit vectors in sensor coordinates; `gyro_noise`, optional sensor-axis diagonal `reported_variance` in (rad/s)² |
 | `dvl` | `bottom_axis` (default sensor −Z), `minimum_range_m` (0.1), `maximum_range_m` (50), `velocity_noise` |
+| `reference_velocity` | `reference_velocity_world_m_s` (zero), `velocity_noise`, `reported_variance`, optional `inclination_limit` |
 | `pressure` | `noise`, `reference_pressure_pa` (101325), `reference_density_kg_m3` (1000), `reference_gravity_m_s2` (9.80665), `minimum_pressure_pa` (0), `maximum_pressure_pa` (10000000) |
 
 Noise mappings allow `bias`, `white_stddev`, and `walk_stddev`, defaulting to zero.
@@ -143,6 +144,11 @@ covariance is the small-angle `angle_stddev_rad² / 3` diagonal; an explicit
 `reported_variance` overrides it in sensor axes. See [SENSOR_RUNTIME.md](SENSOR_RUNTIME.md)
 for composition, validity and reset semantics. This example alone does not configure
 the complete Talos device suite.
+
+`reference_velocity` is a velocity-only observation with no implied floor/range.
+Optional `inclination_limit` requires `maximum_angle_rad` in [0, pi] and accepts
+unit `sensor_axis` and `reference_axis_world` (both default −Z). Omit the mapping
+for unconditional acquisition. It is independent of the `dvl` finite-bottom query.
 
 Camera/stereo/sonar model names are currently rejected as unsupported. Their future
 adapters must register concrete decoders and model factories rather than create

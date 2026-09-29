@@ -36,6 +36,7 @@ from ._native import (
     ImuReporting,
     ImuSample,
     ImuStream,
+    InclinationLimit,
     Mount,
     NoiseParameters,
     OverflowPolicy,
@@ -47,6 +48,8 @@ from ._native import (
     PressureReading,
     PressureSample,
     PressureStream,
+    ReferenceVelocity,
+    ReferenceVelocityParameters,
     Runtime,
     SampleHeader,
     ScalarNoiseParameters,
@@ -56,6 +59,9 @@ from ._native import (
     Snapshot,
     StreamStats,
     Thruster,
+    VelocityReading,
+    VelocitySample,
+    VelocityStream,
     load_scenario,
 )
 
@@ -66,6 +72,12 @@ def example_scenario() -> Path:
 
 
 __all__ = [
+    "InclinationLimit",
+    "ReferenceVelocityParameters",
+    "ReferenceVelocity",
+    "VelocityReading",
+    "VelocitySample",
+    "VelocityStream",
     "Attitude",
     "AttitudeParameters",
     "AttitudeReading",

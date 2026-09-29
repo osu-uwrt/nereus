@@ -804,3 +804,99 @@ TEST(Fog, IndependentReportedVariancePreservesProjectionAndNoise) {
          {-1., std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()})
         EXPECT_THROW((Fog({}, axes, {}, Eigen::Vector3d(0, invalid, 0))), std::invalid_argument);
 }
+
+TEST(ReferenceVelocity, MovingReferenceIncludesMountLeverArmWithoutBottomAvailability) {
+    ReferenceVelocityParameters p;
+    p.mount.position_body = {0, 2, 0};
+    p.mount.sensor_to_body = Eigen::AngleAxisd(std::acos(-1.) / 2, Eigen::Vector3d::UnitY());
+    p.reference_velocity_world = {1, 2, 0};
+    p.reported_variance = Eigen::Vector3d(.01, .02, .03);
+    auto input = motion();
+    input.state.body.position = {-100, 500, 20}; // No water or bottom is required.
+    input.state.body.orientation = Eigen::AngleAxisd(std::acos(-1.) / 2, Eigen::Vector3d::UnitZ());
+    input.state.body.linear_velocity = {2, 3, 4};
+    input.state.body.angular_velocity = {0, 0, 3};
+    input.acceleration_valid = false;
+    ReferenceVelocity model(p);
+    const auto actual = model.sample(input, .01).value.value();
+    EXPECT_TRUE(actual.reference_relative_velocity.isApprox(Eigen::Vector3d(-4, 4, -6), 1e-12));
+    EXPECT_EQ(actual.covariance, Eigen::Matrix3d(p.reported_variance->asDiagonal()));
+    Dvl bottom({}, PoolBottom(sim::Pool{}));
+    EXPECT_FALSE(bottom.sample(input, .01).value);
+}
+
+TEST(ReferenceVelocity, InclinationGatePreservesNoiseHistoryAndReset) {
+    ReferenceVelocityParameters p;
+    p.noise = noisy();
+    ReferenceVelocity continuous(p);
+    p.inclination_limit = InclinationLimit{};
+    p.inclination_limit->maximum_angle = .4;
+    ReferenceVelocity gated(p);
+    continuous.reset(7, "velocity");
+    gated.reset(7, "velocity");
+    auto input = motion();
+    input.state.body.orientation = Eigen::AngleAxisd(.400001, Eigen::Vector3d::UnitX());
+    EXPECT_FALSE(gated.sample(input, .01).value);
+    continuous.sample(input, .01);
+    input.state.body.orientation = Eigen::AngleAxisd(.399999, Eigen::Vector3d::UnitX());
+    const auto expected = continuous.sample(input, .01).value.value();
+    EXPECT_EQ(gated.sample(input, .01).value->reference_relative_velocity,
+              expected.reference_relative_velocity);
+    gated.reset(7, "velocity");
+    continuous.reset(7, "velocity");
+    EXPECT_EQ(gated.sample(input, .01).value->reference_relative_velocity,
+              continuous.sample(input, .01).value->reference_relative_velocity);
+    p.mount.sensor_to_body = Eigen::AngleAxisd(std::acos(-1.) / 2, Eigen::Vector3d::UnitY());
+    p.inclination_limit->sensor_axis = Eigen::Vector3d::UnitZ();
+    p.inclination_limit->reference_axis_world = Eigen::Vector3d::UnitX();
+    ReferenceVelocity custom(p);
+    EXPECT_TRUE(custom.sample(motion(), .01).value);
+    input.state.body.orientation = Eigen::AngleAxisd(std::acos(-1.) / 2, Eigen::Vector3d::UnitZ());
+    EXPECT_FALSE(custom.sample(input, .01).value);
+}
+
+TEST(ReferenceVelocity, RejectsInvalidReferenceCovarianceAndInclination) {
+    ReferenceVelocityParameters p;
+    p.reference_velocity_world.x() = std::numeric_limits<double>::infinity();
+    EXPECT_THROW((ReferenceVelocity(p)), std::invalid_argument);
+    p.reference_velocity_world.setZero();
+    p.reported_variance = Eigen::Vector3d(0, -1, 0);
+    EXPECT_THROW((ReferenceVelocity(p)), std::invalid_argument);
+    p.reported_variance.reset();
+    p.inclination_limit = InclinationLimit{};
+    for (const double angle : {-1., 4., std::numeric_limits<double>::quiet_NaN()}) {
+        p.inclination_limit->maximum_angle = angle;
+        EXPECT_THROW((ReferenceVelocity(p)), std::invalid_argument);
+    }
+    p.inclination_limit->maximum_angle = .5;
+    p.inclination_limit->sensor_axis.setZero();
+    EXPECT_THROW((ReferenceVelocity(p)), std::invalid_argument);
+    p.inclination_limit->sensor_axis = -Eigen::Vector3d::UnitZ();
+    p.inclination_limit->reference_axis_world *= 2;
+    EXPECT_THROW((ReferenceVelocity(p)), std::invalid_argument);
+}
+
+TEST(ReferenceVelocity, InclinationAcceptsRotatedAlignmentAndRejectsExteriorAngles) {
+    ReferenceVelocityParameters p;
+    p.mount.sensor_to_body = Eigen::AngleAxisd(.06, Eigen::Vector3d(3, 1, 2).normalized());
+    auto input = motion();
+    input.state.body.orientation = Eigen::AngleAxisd(.02, Eigen::Vector3d(1, 2, 3).normalized());
+    p.inclination_limit = InclinationLimit{};
+    auto &limit = *p.inclination_limit;
+    limit.reference_axis_world =
+        (input.state.body.orientation * (p.mount.sensor_to_body * limit.sensor_axis)).normalized();
+    ReferenceVelocity aligned(p);
+    EXPECT_TRUE(aligned.sample(input, .01).value);
+    input.state.body.orientation =
+        Eigen::AngleAxisd(1e-8, limit.reference_axis_world.unitOrthogonal()) *
+        input.state.body.orientation;
+    EXPECT_FALSE(aligned.sample(input, .01).value);
+    p.mount = {};
+    limit.reference_axis_world = -Eigen::Vector3d::UnitZ();
+    limit.maximum_angle = .4;
+    ReferenceVelocity boundary(p);
+    input.state.body.orientation = Eigen::AngleAxisd(.4, Eigen::Vector3d::UnitX());
+    EXPECT_TRUE(boundary.sample(input, .01).value);
+    input.state.body.orientation = Eigen::AngleAxisd(.4 + 1e-8, Eigen::Vector3d::UnitX());
+    EXPECT_FALSE(boundary.sample(input, .01).value);
+}

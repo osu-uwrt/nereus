@@ -1,0 +1,19 @@
+# Generated from pinned original content; see docs/reference/TALOS_PHYSICS_PACK.md.
+# Original default velocity reporting: no floor, range or inclination gate.
+schema_version: 1
+kind: sensor
+model: reference_velocity
+parameters:
+  reference_velocity_world_m_s:
+  - 0
+  - 0
+  - 0
+  velocity_noise:
+    white_stddev:
+    - 0.001
+    - 0.001
+    - 0.001
+  reported_variance:
+  - 1.0e-06
+  - 1.0e-06
+  - 1.0e-06

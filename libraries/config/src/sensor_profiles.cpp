@@ -130,6 +130,36 @@ Attach dvl(const sensors::Mount &mount, const YAML::Node &node, const std::strin
         runtime.add(device, sensors::Dvl(parameters, sensors::PoolBottom(pool)));
     };
 }
+Attach referenceVelocity(const sensors::Mount &mount, const YAML::Node &node,
+                         const std::string &field) {
+    keys(node,
+         {"reference_velocity_world_m_s", "velocity_noise", "reported_variance",
+          "inclination_limit"},
+         field);
+    sensors::ReferenceVelocityParameters p;
+    p.mount = mount;
+    p.noise = noise(node["velocity_noise"], field + ".velocity_noise");
+    if (node["reference_velocity_world_m_s"])
+        p.reference_velocity_world = vector(node, "reference_velocity_world_m_s", 3, field);
+    if (node["reported_variance"])
+        p.reported_variance = vector(node, "reported_variance", 3, field);
+    if (node["inclination_limit"]) {
+        const auto limit = node["inclination_limit"];
+        const auto path = field + ".inclination_limit";
+        keys(limit, {"sensor_axis", "reference_axis_world", "maximum_angle_rad"}, path);
+        sensors::InclinationLimit value;
+        value.maximum_angle = number(limit, "maximum_angle_rad", path);
+        if (limit["sensor_axis"])
+            value.sensor_axis = vector(limit, "sensor_axis", 3, path);
+        if (limit["reference_axis_world"])
+            value.reference_axis_world = vector(limit, "reference_axis_world", 3, path);
+        p.inclination_limit = value;
+    }
+    const sensors::ReferenceVelocity model(p);
+    return [model](auto &runtime, const auto &device, const auto &, double) {
+        runtime.add(device, model);
+    };
+}
 Attach pressure(const sensors::Mount &mount, const YAML::Node &node, const std::string &field) {
     keys(node,
          {"noise", "reference_pressure_pa", "reference_density_kg_m3", "reference_gravity_m_s2",
@@ -237,9 +267,10 @@ SensorPlan parseSensor(const YAML::Node &node, const std::filesystem::path &decl
     const auto model = text(definition, "model", definition_field);
     result.model = model;
     // Configuration-edge registry only; no family enum or branch in the runtime.
-    const std::map<std::string, Decode> decoders{{"imu", imu},   {"attitude", attitude},
-                                                 {"ahrs", ahrs}, {"fog", fog},
-                                                 {"dvl", dvl},   {"pressure", pressure}};
+    const std::map<std::string, Decode> decoders{
+        {"imu", imu},          {"attitude", attitude}, {"ahrs", ahrs},
+        {"fog", fog},          {"dvl", dvl},           {"reference_velocity", referenceVelocity},
+        {"pressure", pressure}};
     const auto decoder = decoders.find(model);
     if (decoder == decoders.end()) {
         throw std::invalid_argument(definition_field + ": unsupported sensor model " + model);

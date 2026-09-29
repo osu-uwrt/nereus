@@ -158,6 +158,24 @@ retains cross-axis correlations for nonorthogonal axes. This metadata is indepen
 of generated noise and remains present when noise is disabled. Defaults continue
 to project the noise process covariance.
 
+**Reference velocity:** a separately selected ideal velocity observation relative
+to a configured constant world-frame velocity. It includes sensor rotation and
+`omega × r` at the mount, subtracting the reference velocity in body axes before
+conversion to sensor coordinates. Zero reference velocity represents a stationary
+world. The output has velocity/covariance only: no floor hit, range, water-column
+gate or current subtraction is implied. This expresses the original Talos default
+DVL velocity publication without weakening the finite-floor model below.
+
+Optional `InclinationLimit` compares a sensor-fixed unit axis in world coordinates
+against a declared world unit axis. Both default to −Z. A sample is unavailable
+when the angle exceeds the configured maximum in [0, pi]; absent configuration
+disables the gate. A normalized `atan2(cross, dot)` comparison allows 16 double
+machine epsilons of angular roundoff at the boundary; tests reject a 1e-8 radian
+exterior rotation. The original positive `dvl_max_tilt` maps to this explicit limit;
+original zero maps to absence. Noise history advances even when the gate rejects a
+sample. Optional `reported_variance` is a sensor-axis diagonal independent of noise.
+All parameters and readings are owned values; reset replays the independent stream.
+
 **DVL:** computes the mounted point's velocity relative to the returned bottom's
 world velocity, then rotates it into the sensor frame. The narrow bottom query takes
 world origin/unit direction and returns an optional distance and bottom velocity.

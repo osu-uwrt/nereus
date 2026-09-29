@@ -599,3 +599,32 @@ The fixture comparison configures original reporting values explicitly; native
 profile/settings assembly has separate tests. It does not establish acquisition,
 whole-trajectory, stochastic-sequence or ROS message parity. Remaining DVL/depth
 reporting models now have source-derived comparison inputs for the next increment.
+
+## Declared reference velocity and Talos DVL assembly
+
+`ReferenceVelocity` now observes mounted velocity relative to a declared constant
+world velocity, with independent noise/reported uncertainty and optional inclination
+validity. It has no range or bottom query. The existing finite-floor DVL remains
+unchanged. The pinned `talos_navigation` robot/example selects the original default
+8 Hz DVL policy alongside AHRS/FOG. Its CLI run produces 150 AHRS, 1500 FOG and
+24 velocity acquisitions with declared timestamps and no invented range fields.
+
+The independent original measurement fixture now compares 25 AHRS/FOG/DVL fields
+across all 24 prescribed states within 1e-12. Moving-reference, lever-arm, covariance,
+invalid-input, noise-history, source-removal and reset contracts are tested. Review
+found a zero-inclination roundoff rejection; normalized atan2 and a documented
+16-epsilon angular allowance now preserve exact alignment and reject 1e-8-radian
+exterior cases. The importer reproduces all ten pinned generated files.
+
+All 117 final Release tests and installed C++ consumers passed. The preceding
+116-test full sanitizer run passed, followed by all eight focused velocity/navigation
+and reference tests under ASan/UBSan after the boundary fix. No sanitizer diagnostics
+were reported. The final installed Python wheel passed 21 tests, Ruff and strict mypy.
+Independent source/data/implementation review confirmed the conversion and fix.
+
+Next is original depth reporting: an explicitly selected ideal-altitude observation
+with same-acquisition mounted-to-base correction. Physical pressure remains a separate
+truthful pressure-device model; unbounded original world-Z cannot be preserved by
+extrapolating absolute pressure through negative values. Depth reference columns
+remain unverified until that model lands. Cameras, scene/water/LED/mechanism/task
+implementation and full-stack acceptance remain open.

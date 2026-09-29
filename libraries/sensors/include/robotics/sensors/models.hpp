@@ -149,6 +149,32 @@ class Dvl {
     Noise3 velocity_;
 };
 
+struct InclinationLimit {
+    Eigen::Vector3d sensor_axis = -Eigen::Vector3d::UnitZ();
+    Eigen::Vector3d reference_axis_world = -Eigen::Vector3d::UnitZ();
+    double maximum_angle = 0; // rad; zero permits only aligned axes. Absence disables the gate.
+};
+struct ReferenceVelocityParameters {
+    Mount mount;
+    Eigen::Vector3d reference_velocity_world = Eigen::Vector3d::Zero();
+    NoiseParameters noise;
+    std::optional<Eigen::Vector3d> reported_variance; // Sensor-axis diagonal (m/s)^2.
+    std::optional<InclinationLimit> inclination_limit;
+};
+// Ideal mounted velocity relative to an explicit constant world velocity.
+// No bottom/range/water query is implied by this separately selected model.
+class ReferenceVelocity {
+  public:
+    using Reading = VelocityReading;
+    explicit ReferenceVelocity(ReferenceVelocityParameters parameters = {});
+    void reset(std::uint64_t seed, const std::string &id);
+    Measurement<Reading> sample(const simulation::MotionSample &, double elapsed_seconds);
+
+  private:
+    ReferenceVelocityParameters parameters_;
+    Noise3 noise_;
+};
+
 struct ScalarNoiseParameters {
     double bias = 0, white_stddev = 0, walk_stddev = 0;
 };

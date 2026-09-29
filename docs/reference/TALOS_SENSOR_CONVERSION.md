@@ -6,8 +6,9 @@ The reference revisions are the simulator and vehicle-description pins in
 `c_simulator/robots/talos/config/sensors.yaml` and
 `riptide_descriptions/config/{talos,simulator}.yaml`. Sensor overrides take precedence
 as in the original profile composition. These values describe the original simulator,
-not hardware identification. The separate native Talos inertial assembly now instantiates AHRS and FOG; the
-sensor-free dynamics assembly remains available for physical comparisons.
+not hardware identification. The separate native Talos inertial assembly instantiates AHRS and FOG; the navigation
+assembly adds the original default DVL policy. The sensor-free dynamics assembly
+remains available for physical comparisons.
 
 ## Raw IMU reporting implemented
 
@@ -50,9 +51,11 @@ pose minus COM, with original RPY values unchanged.
 - DVL runs at 8 Hz with default noise standard deviation 0.001 m/s and independently
   reported variance 0.000001. Original velocity includes `omega × r` and sensor
   rotation. Default `dvl_max_tilt=0` disables lock loss entirely: the original
-  implementation does not query a floor or publish range. The current finite-floor
-  bottom-track model therefore needs a separately declared reference/validity policy
-  for fidelity. Do not invent a bottom hit/range to bypass its validation.
+  implementation does not query a floor or publish range. The separately declared
+  native `reference_velocity` model now preserves this policy and matches the
+  original prescribed-state velocity/variance capture. `talos_navigation.yaml`
+  selects the 8 Hz device and original noise/covariance. The finite-floor bottom-track
+  model remains separate; optional inclination validity is selected explicitly.
 - FOG runs at 500 Hz and reports sensor Z angular rate, with independent noise
   standard deviation 0.01 degree/s. Default reported variance is
   `max(1e-9, sigma_rad_s²)`; configuration may override it independently of noise.
@@ -73,3 +76,16 @@ noise-disabled original formulas and configured noise statistics, and explicitly
 record that stochastic samples are not bit-identical to the old shared stream.
 Retain timestamps/frames/validity and bounded delivery throughout. Cameras/stereo
 follow through independently owned acquisition and the original render backend.
+
+## Next depth-model decision
+
+For exact original above-water behavior, use a separately declared ideal altitude
+observation and same-acquisition mounted-to-base correction. Retain the physical
+pressure model and its pressure-derived depth as the pressure-device option. The
+legacy stream is an unbounded noisy world-Z observation; extrapolating absolute
+pressure above water eventually produces negative pressure and cannot reproduce it
+without breaking the pressure contract. Do not relax physical pressure validation
+or silently call ideal altitude a pressure measurement. The legacy profile must
+name this approximation explicitly. Independent reported variance must remain
+present when sampling noise is disabled, and correction must use the acquisition
+orientation rather than a later or noisy AHRS observation.

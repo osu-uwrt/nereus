@@ -114,4 +114,9 @@ extracts sensor initialization/reporting expressions into a temporary non-ROS
 build. The prescribed kinematic inputs and outputs are recorded in
 `tests/fixtures/legacy_sensor_kinematics.csv`; its JSON records all source, script,
 driver and result hashes. [SENSOR_KINEMATICS.md](reference/SENSOR_KINEMATICS.md)
-identifies verified fields and pending DVL/depth comparison.
+identifies verified fields and pending depth comparison.
+
+The same pinned Talos conversion also emits a navigation assembly and reusable
+reference-velocity profile for the original default DVL product. Its rate, noise,
+variance and mount are original content; absent inclination gating is guarded
+against the original node default. No synthetic floor/range observation is added.

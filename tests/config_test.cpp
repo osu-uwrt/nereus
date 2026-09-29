@@ -562,3 +562,71 @@ TEST_F(Profiles, FogReportedVarianceIsIndependentOfSamplingNoise) {
             "reported_variance: [0, 0, -1]");
     EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
 }
+
+TEST_F(Profiles, ReferenceVelocityIsSelectedExplicitlyAndSurvivesSourceRemoval) {
+    write("sensors/imu.yaml", "schema_version: 1\nkind: sensor\nmodel: reference_velocity\n"
+                              "parameters: {reference_velocity_world_m_s: [1, 2, 3], "
+                              "reported_variance: [0.01, 0.02, 0.03]}\n");
+    const auto config = robotics::config::loadScenario(scenario());
+    std::filesystem::remove_all(root);
+    auto runtime = robotics::config::makeRuntime(config);
+    const auto body = runtime->advance(5).body;
+    const auto sample = runtime->stream<robotics::sensors::VelocityReading>("imu")->latest();
+    ASSERT_TRUE(sample && sample->measurement.value);
+    EXPECT_TRUE(sample->measurement.value->reference_relative_velocity.isApprox(
+        body.linear_velocity - body.orientation.conjugate() * Eigen::Vector3d(1, 2, 3), 1e-12));
+    EXPECT_EQ(sample->measurement.value->covariance.diagonal(), Eigen::Vector3d(.01, .02, .03));
+}
+
+TEST_F(Profiles, ReferenceVelocityInclinationAndValidationReachRuntime) {
+    const std::string header =
+        "schema_version: 1\nkind: sensor\nmodel: reference_velocity\nparameters:\n";
+    write("sensors/imu.yaml",
+          header + "  inclination_limit: {sensor_axis: [0, 0, 1], maximum_angle_rad: 0.1}\n");
+    auto runtime = robotics::config::makeRuntime(robotics::config::loadScenario(scenario()));
+    runtime->advance(5);
+    const auto sample = runtime->stream<robotics::sensors::VelocityReading>("imu")->latest();
+    ASSERT_TRUE(sample);
+    EXPECT_FALSE(sample->measurement.value);
+    for (const std::string invalid : {"reported_variance: [0, -1, 0]", "inclination_limit: {}",
+                                      "inclination_limit: {maximum_angle_rad: 4}", "unknown: 1"}) {
+        write("sensors/imu.yaml", header + "  " + invalid + "\n");
+        EXPECT_THROW(robotics::config::loadScenario(scenario()), std::invalid_argument);
+    }
+}
+
+TEST_F(Profiles, NativeTalosNavigationPreservesEightHzReferenceVelocityAcquisition) {
+    const auto config =
+        robotics::config::loadScenario(root / "examples/talos_navigation_pool.yaml");
+    ASSERT_EQ(config.sensors.size(), 3U);
+    EXPECT_EQ(config.sensors[2].model, "reference_velocity");
+    EXPECT_EQ(config.sensors[2].device.period.count(), 125000000);
+    std::filesystem::remove_all(root);
+    auto runtime = robotics::config::makeRuntime(config);
+    const auto imu = runtime->stream<robotics::sensors::AhrsReading>("imu");
+    const auto fog = runtime->stream<robotics::sensors::FogReading>("fog");
+    const auto dvl = runtime->stream<robotics::sensors::VelocityReading>("dvl");
+    std::size_t command = 0, count = 0;
+    for (std::uint64_t tick = 0; tick < config.ticks; ++tick) {
+        if (command < config.commands.size() && config.commands[command].tick == tick)
+            runtime->command(config.commands[command++].forces);
+        runtime->advance();
+        imu->drain();
+        fog->drain();
+        for (const auto &sample : dvl->drain()) {
+            ++count;
+            ASSERT_TRUE(sample.measurement.value);
+            EXPECT_TRUE(sample.measurement.value->reference_relative_velocity.allFinite());
+            EXPECT_TRUE(
+                sample.measurement.value->covariance.isApprox(Eigen::Matrix3d::Identity() * 1e-6));
+            EXPECT_EQ(sample.header.frame, "dvl_mount");
+            EXPECT_EQ(sample.header.scheduled.count(),
+                      static_cast<std::int64_t>(count) * 125000000);
+            EXPECT_EQ(sample.header.acquired.count(),
+                      ((sample.header.scheduled.count() + 1999999) / 2000000) * 2000000);
+        }
+    }
+    EXPECT_EQ(count, 24U);
+    EXPECT_EQ(imu->stats().acquired, 150U);
+    EXPECT_EQ(fog->stats().acquired, 1500U);
+}

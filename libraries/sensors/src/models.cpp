@@ -247,6 +247,58 @@ Measurement<Fog::Reading> Fog::sample(const simulation::MotionSample &motion,
     return {std::move(result), {}};
 }
 
+ReferenceVelocity::ReferenceVelocity(ReferenceVelocityParameters parameters)
+    : parameters_(std::move(parameters)), noise_(parameters_.noise) {
+    normalizeMount(parameters_.mount);
+    if (!parameters_.reference_velocity_world.allFinite())
+        throw std::invalid_argument("reference velocity must be finite");
+    if (parameters_.reported_variance && (!parameters_.reported_variance->allFinite() ||
+                                          (parameters_.reported_variance->array() < 0).any()))
+        throw std::invalid_argument("reported velocity variances must be finite and nonnegative");
+    if (parameters_.inclination_limit) {
+        auto &limit = *parameters_.inclination_limit;
+        validateAxis(limit.sensor_axis);
+        validateAxis(limit.reference_axis_world);
+        limit.sensor_axis.normalize();
+        limit.reference_axis_world.normalize();
+        if (!std::isfinite(limit.maximum_angle) || limit.maximum_angle < 0 ||
+            limit.maximum_angle > std::acos(-1.))
+            throw std::invalid_argument("inclination limit must be in [0, pi] radians");
+    }
+}
+void ReferenceVelocity::reset(std::uint64_t seed, const std::string &id) {
+    noise_.reset(seed, id, "reference_velocity.velocity");
+}
+Measurement<ReferenceVelocity::Reading>
+ReferenceVelocity::sample(const simulation::MotionSample &motion, double elapsed_seconds) {
+    validateMotion(motion);
+    const auto noise = noise_.sample(elapsed_seconds);
+    const auto &body = motion.state.body;
+    const auto &mount = parameters_.mount;
+    if (parameters_.inclination_limit) {
+        const auto &limit = *parameters_.inclination_limit;
+        const Eigen::Vector3d axis_world =
+            (body.orientation * (mount.sensor_to_body * limit.sensor_axis)).normalized();
+        // atan2 remains well conditioned near alignment; permit only angular roundoff.
+        const double angle = std::atan2(axis_world.cross(limit.reference_axis_world).norm(),
+                                        axis_world.dot(limit.reference_axis_world));
+        if (angle - limit.maximum_angle > 16 * std::numeric_limits<double>::epsilon())
+            return {std::nullopt, "reference velocity inclination limit exceeded"};
+    }
+    Reading result;
+    result.reference_relative_velocity =
+        mount.sensor_to_body.conjugate() *
+            (body.linear_velocity + body.angular_velocity.cross(mount.position_body) -
+             body.orientation.conjugate() * parameters_.reference_velocity_world) +
+        noise;
+    result.covariance = noise_.covariance();
+    if (parameters_.reported_variance)
+        result.covariance = parameters_.reported_variance->asDiagonal();
+    if (!result.reference_relative_velocity.allFinite())
+        throw std::overflow_error("reference velocity measurement overflow");
+    return {std::move(result), {}};
+}
+
 PoolBottom::PoolBottom(const simulation::Pool &pool)
     : length_(pool.length), width_(pool.width), floor_(pool.water_level - pool.depth),
       surface_(pool.water_level), origin_xy_(pool.origin_xy_world),

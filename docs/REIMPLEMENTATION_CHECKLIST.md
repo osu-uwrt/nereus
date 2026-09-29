@@ -111,8 +111,11 @@ the viewer still draws line geometry.
   execution, complete three-second acquisition and unchanged plant trajectory.
   DVL, pressure/depth and cameras remain open.
 - [x] Independent extracted original AHRS/FOG measurement formulas match 24 prescribed
-  kinematic states, including retained uncertainty with sampling noise disabled
+  kinematic states, now also including original DVL velocity/variance and retained
+  uncertainty with sampling noise disabled
   (reference/SENSOR_KINEMATICS.md). Whole-stack timing/products remain open.
+- [x] Separate reference-velocity model and original default Talos DVL policy,
+  optional inclination validity, native 8 Hz acquisition and captured formula parity.
 - [ ] Native assets and reproducible resolved configuration load outside old workspace.
 
 ## D. Renderer and UI fidelity
@@ -195,8 +198,8 @@ selected live-robot workflows required here.
 3. Stage forcing and actuator calibration/stop interfaces are verified in their
    bounded reference/contracts. Static compound contacts are integrated and validated.
    Named body mounts are now resolved for sensors and live visualization. Next:
-   declared reference-velocity and pressure/depth reporting with their captured
-   original comparisons, then remaining device composition (reference/TALOS_SENSOR_CONVERSION.md), then original neutral
+   pressure/depth reporting with its captured original comparisons, then remaining
+   device composition (reference/TALOS_SENSOR_CONVERSION.md), then original neutral
    scene/assets. The original Talos
    dynamics capture now covers every tick of the three bounded physics cases;
    task/prop contacts and full mission references remain open.
