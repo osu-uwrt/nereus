@@ -23,7 +23,7 @@ def configured():
     stream.update(topic="camera/depth", qos=QOS)
     bridge["streams"].append(stream)
     bridge["services"] = [{**RESET, "service": "reset"}]
-    return SimpleNamespace(robot=robot, bridge=bridge, scenario={"world_frame": "scenario_world"})
+    return SimpleNamespace(robot=robot, bridge=bridge, scenario={"world_frame": "scenario_world", "seed": 0})
 
 
 class CameraIntegrationTests(unittest.TestCase):

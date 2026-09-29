@@ -99,10 +99,10 @@ class DeclaredConfigTest(unittest.TestCase):
         bridge["kill"] = {"command_stream": "thruster_cmd", "state_stream": "kill_event"}
         self._rejects(bridge, "command:robot.set_killed")
 
-    def test_task_reset_binding_is_rejected(self) -> None:
+    def test_task_reset_binding_must_name_a_task_reset_service(self) -> None:
         bridge = _with_services(SET_POSE)
         bridge["reset"] = {"tasks_service": "set_pose"}
-        self._rejects(bridge, "task and full resets are not executed")
+        self._rejects(bridge, "command:tasks.reset")
 
     def test_frame_names_must_agree_with_stamped_sensor_frame_id(self) -> None:
         bridge = copy.deepcopy(BRIDGE)

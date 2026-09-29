@@ -189,7 +189,7 @@ def _make(bridge: dict[str, Any] | None = None, robot: dict[str, Any] | None = N
           lookup: Any = None) -> BridgeCore:
     resolved = SimpleNamespace(bridge=copy.deepcopy(bridge or BRIDGE),
                                robot=copy.deepcopy(robot or ROBOT),
-                               scenario={"world_frame": "scenario_world"})
+                               scenario={"world_frame": "scenario_world", "seed": 0})
     initial = native.BodyState()
     initial.position = [1.0, 2.0, 3.0]
     pack = SimpleNamespace(
@@ -225,8 +225,8 @@ class ConstructionTest(unittest.TestCase):
             _make(_with_streams(altitude={"rate_hz": 49}))
 
     def test_unknown_native_endpoint_raises(self) -> None:
-        with self.assertRaisesRegex(BridgeError, "state:mechanisms"):
-            _make(_with_streams(ticker={"native": "state:mechanisms"}))
+        with self.assertRaisesRegex(BridgeError, "state:unknown"):
+            _make(_with_streams(ticker={"native": "state:unknown"}))
 
     def test_unselected_sensor_raises(self) -> None:
         with self.assertRaisesRegex(BridgeError, "not selected"):
@@ -569,8 +569,8 @@ class PlacementTest(unittest.TestCase):
         np.testing.assert_allclose(core.runtime.placed[1][0], [1.0, 2.0, 3.0], atol=1e-12)
 
     def test_unsupported_action_raises_at_construction(self) -> None:
-        service = {**RESET, "id": "task_reset", "action": "command:tasks.reset"}
-        with self.assertRaisesRegex(BridgeError, "command:tasks.reset"):
+        service = {**RESET, "id": "teleport", "action": "command:robot.teleport"}
+        with self.assertRaisesRegex(BridgeError, "command:robot.teleport"):
             _make(_with_services(service))
 
     def test_runtime_without_place_raises_at_construction(self) -> None:

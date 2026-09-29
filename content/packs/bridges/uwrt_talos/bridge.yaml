@@ -79,6 +79,8 @@ kill:
 
 reset:
   robot_service: reset_sim_to_start      # plant to start pose; tasks untouched
+  tasks_service: reset_tasks             # tasks + reload + disarm
+  full_service: reset_scenario           # whole scenario; no original equivalent
 
 placement:
   set_service: set_sim_pose
@@ -128,6 +130,17 @@ streams:
     orientation_y: {from: pose.pose.orientation.y}
     orientation_z: {from: pose.pose.orientation.z}
 # ---------------- simulator -> ROS: EKF inputs (talos_ekf.yaml) ----------------
+- id: claw_timed_move
+  direction: subscribe
+  topic: command/actuator/claw_move_s    # RepairCompTree PublishFloat32
+  message_type: std_msgs/msg/Float32
+  native: 'command:mechanisms.claw.timed_move'
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {signed_duration_s: {from: data}}   # sign/zero semantics owned by the claw type
+  reply_stream: actuator_cmd_status
+
 - id: imu
   direction: publish
   topic: vectornav/imu
@@ -228,6 +241,41 @@ streams:
     esc_telemetry[2].thruster_ready: {constant: true}
     esc_telemetry[3].thruster_ready: {constant: true}
 # ---------------- simulator -> ROS: cameras (step 3; yolo_orientation.py inputs) ----------------
+- id: actuator_status
+  direction: publish
+  topic: state/actuator/status
+  message_type: riptide_msgs2/msg/ActuatorStatus
+  native: 'state:mechanisms'
+  frame_id: ''
+  rate_hz: 50                            # original 0.02 s timer
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields:
+    actuators_armed: {from: armed}
+    claw_state: {from: claw.state, enum_map: {disarmed: 1, opening: 6, closing: 7, opened: 3, closed: 4}}
+    rack_state: {constant: 2}            # RACK_UNKNOWN, original constant
+    torpedo_state: {from: torpedo_launcher.state, enum_map: {disarmed: 1, busy: 4, loaded: 3, empty: 5}}
+    torpedo_available_count: {from: torpedo_launcher.available}
+    dropper_state: {from: dropper.state, enum_map: {disarmed: 1, busy: 3, loaded: 2, empty: 4}}
+    dropper_available_count: {from: dropper.available}
+- id: actuator_busy
+  direction: publish
+  topic: state/actuator/busy
+  message_type: std_msgs/msg/Bool
+  native: 'state:mechanisms'
+  frame_id: ''
+  rate_hz: 50
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {data: {from: any_busy}}       # cooldown group busy or claw moving
+- id: actuator_cmd_status
+  direction: publish
+  topic: state/actuator/cmd_status       # reply to topic-form commands only
+  message_type: std_msgs/msg/Bool
+  native: 'event:mechanisms.command_result'
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {data: {from: accepted}}
+
 - id: ffc_rgb_compressed
   direction: publish
   topic: ffc/zed_node/rgb/image_rect_color/compressed
@@ -351,6 +399,49 @@ services:
   service: reset_sim_to_start
   service_type: std_srvs/srv/Trigger
   action: 'command:robot.reset_to_start'
+  request: {}
+  response: {success: {from: accepted}, message: {from: message}}
+
+- id: arm
+  service: command/actuator/arm          # SetActuatorsArmed
+  service_type: std_srvs/srv/SetBool
+  action: 'command:mechanisms.set_armed' # rejected while killed
+  request: {armed: {from: data}}
+  response: {success: {from: accepted}, message: {from: message}}
+- id: fire_torpedo
+  service: command/actuator/torpedo
+  service_type: std_srvs/srv/Trigger
+  action: 'command:mechanisms.torpedo_launcher.fire'
+  request: {}
+  response: {success: {from: accepted}, message: {from: message}}
+- id: fire_dropper
+  service: command/actuator/dropper
+  service_type: std_srvs/srv/Trigger
+  action: 'command:mechanisms.dropper.fire'
+  request: {}
+  response: {success: {from: accepted}, message: {from: message}}
+- id: reload
+  service: command/actuator/notify_reload   # ReloadActuators; original also disarms
+  service_type: std_srvs/srv/Trigger
+  action: 'command:mechanisms.reload_all'
+  request: {}
+  response: {success: {from: accepted}, message: {from: message}}
+- id: claw
+  service: command/actuator/claw
+  service_type: std_srvs/srv/SetBool
+  action: 'command:mechanisms.claw.command'
+  request: {open: {from: data}}
+  response: {success: {from: accepted}, message: {from: message}}
+- id: reset_tasks
+  service: simulator/reset_tasks
+  service_type: std_srvs/srv/Trigger
+  action: 'command:tasks.reset'
+  request: {}
+  response: {success: {from: accepted}, message: {from: message}}
+- id: reset_scenario
+  service: simulator/reset_scenario      # new name; the original had no full-reset service
+  service_type: std_srvs/srv/Trigger
+  action: 'command:scenario.reset'       # plant, sensors, mechanisms, contacts, tasks, scores
   request: {}
   response: {success: {from: accepted}, message: {from: message}}
 
