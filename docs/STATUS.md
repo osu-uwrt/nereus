@@ -47,6 +47,15 @@ original active-attempt requirement before accepting the hook. This proves only
 selected gate/home scoring and observer reset, not plant reset or mission completion.
 Mechanisms, remaining tasks and coordinated whole-system reset are still open.
 
+Slalom, bins (crates plus magnet lights) and the octagon surface task are now pack data
+(`slalom.yaml`, `bins.yaml`, `surface.yaml`) with generic runtime primitives in
+`task_zones.py` (open crates, proximity latches, surfacing/facing, turn zones) and portal
+frames/depth bands; their rows, and the table rows fed by prop-world events through
+`TaskRuntime.observe_events`, are scored by the 2026 hook. `step_projectile` returns the
+crate/panel/pool physical correction for the payload owner. 30 new tests include per-tick
+comparison with the original CourseJudge/RunScore. Table props, the pinger and the
+`table.yaml` definition remain open (see the hook header for the table event contract).
+
 The first camera increment adds optional CPU camera geometry and image processing
 (`RP_BUILD_CAMERAS`), with optical frames, rectified stereo projection, owned RGB
 and depth buffers, JPEG encoding, and the original empirical depth-noise model.

@@ -1,4 +1,4 @@
-# Task pack = task include files + run rules + assets; runtime scoring is not yet implemented.
+# Task pack = task include files + run rules + assets; runtime scoring is executed by robotics_platform.task_runtime + hooks/rules_2026.py.
 # No course layout (scenario-owned) and no robot names (capabilities by mechanism type only).
 # Working copy for the step-2 navigation bridge; the approved full contract is proposals/step1/packs.
 schema_version: 1
@@ -24,7 +24,9 @@ provenance:
 
 # Step-3 camera assets for defined tasks; copied byte-for-byte (cp) from riptide_gui riptide_meshes/meshes/.
 # Verified at copy time (2026-09-29): riptide_gui HEAD == 907c9ded53b0cd6fe7461d8d80c40a4fa9fbc4fc and
-# `git status --porcelain` clean for meshes/{gate,gate_repair,gate_rescue,torpedo}. DAE texture <init_from>
+# `git status --porcelain` clean for meshes/{gate,gate_repair,gate_rescue,torpedo}. Step-4 additions
+# (slalom, bin, bin_magnet, bin_vinyl, octagon_*) were copied the same way and verified at the same HEAD;
+# slalom/old.dae is not used by the original markers and is not copied. DAE texture <init_from>
 # basenames resolve next to each model.dae (gate has no textures). Import rules to keep:
 # Assimp Collada IGNORE_UP_DIRECTION=true, node hierarchy, white texture tint, pack-relative textures.
 assets:
@@ -36,11 +38,28 @@ assets:
 - {id: torpedo_mesh, path: assets/torpedo/model.dae, required_from_step: 3, status: present, sha256: 0d45476fb0c24d9acf508b5cad95060a51b85373ed5c131813541ca685ed754e, source: "riptide_gui riptide_meshes/meshes/torpedo/model.dae @907c9ded"}
 - {id: torpedo_texture, path: assets/torpedo/Task4_ver1_Fixed.png, required_from_step: 3, status: present, sha256: b6a5a8bc9ef0cde09a055296f9746b61be9b8d6961fe5504b46350649dbf4336, source: "riptide_gui riptide_meshes/meshes/torpedo/Task4_ver1_Fixed.png @907c9ded"}
 
-tasks: [gate.yaml, torpedo.yaml]   # pack-relative task include files (kind task)
+- {id: slalom_mesh, path: assets/slalom/model.dae, required_from_step: 3, status: present, sha256: ab2a771f16f9f0546362a986608eeb3af18a16e9d7e2b772c9b05c7178cf25bf, source: "riptide_gui riptide_meshes/meshes/slalom/model.dae @907c9ded"}
+- {id: bin_mesh, path: assets/bin/model.dae, required_from_step: 3, status: present, sha256: 3c99920f0cd42830336356365a4f0df2ac7504a22e7fdf136efde33265f509a9, source: "riptide_gui riptide_meshes/meshes/bin/model.dae @907c9ded"}
+- {id: bin_magnet_mesh, path: assets/bin_magnet/model.dae, required_from_step: 3, status: present, sha256: 3ee920af938c676da72ae13e6abda913c2039030abcf88dc334fe9b8a309de16, source: "riptide_gui riptide_meshes/meshes/bin_magnet/model.dae @907c9ded"}
+- {id: bin_vinyl_mesh, path: assets/bin_vinyl/model.dae, required_from_step: 3, status: present, sha256: fbb82e0c293401193fb2b1dab5052e1d1cdbf713544d9a520ca1168324ff5021, source: "riptide_gui riptide_meshes/meshes/bin_vinyl/model.dae @907c9ded"}
+- {id: bin_vinyl_blood_texture, path: assets/bin_vinyl/Task3_Blood_Fixed.png, required_from_step: 3, status: present, sha256: 0647f0001d15dfe8c8d28415028c8e93f5ece93d28c4521a4819c5991b99d59e, source: "riptide_gui riptide_meshes/meshes/bin_vinyl/Task3_Blood_Fixed.png @907c9ded"}
+- {id: bin_vinyl_fire_texture, path: assets/bin_vinyl/Task3_Fire_Fixed.png, required_from_step: 3, status: present, sha256: 36e2602834f76a1005c38561105ef89810cd37c446fa647657695be7af3a6e93, source: "riptide_gui riptide_meshes/meshes/bin_vinyl/Task3_Fire_Fixed.png @907c9ded"}
+- {id: octagon_buoy_mesh, path: assets/octagon_buoy/model.dae, required_from_step: 3, status: present, sha256: 7493cea169edd2ff215f79edb2eedc3b3f053767ef077faac0d40af6b55e619a, source: "riptide_gui riptide_meshes/meshes/octagon_buoy/model.dae @907c9ded"}
+- {id: octagon_buoy_texture, path: assets/octagon_buoy/Task5_Search_Fixed.png, required_from_step: 3, status: present, sha256: 4c1a4f7ac07b05a51e0408a69bd99f987c1c4e5b9da7b19a51dcf71a9da9ea84, source: "riptide_gui riptide_meshes/meshes/octagon_buoy/Task5_Search_Fixed.png @907c9ded"}
+- {id: octagon_compass_mesh, path: assets/octagon_compass/model.dae, required_from_step: 3, status: present, sha256: f7fbf799513fd2e1aa9727272bf4987e07017cc4ec56bb59692f90b16216eeee, source: "riptide_gui riptide_meshes/meshes/octagon_compass/model.dae @907c9ded"}
+- {id: octagon_compass_texture, path: assets/octagon_compass/Task5_Survey_Fixed.png, required_from_step: 3, status: present, sha256: fddafbc59bcf393c51a9d7531de69dca938e5231258c54fbba39362619cdb7c0, source: "riptide_gui riptide_meshes/meshes/octagon_compass/Task5_Survey_Fixed.png @907c9ded"}
+- {id: octagon_hammer_and_wrench_mesh, path: assets/octagon_hammer_and_wrench/model.dae, required_from_step: 3, status: present, sha256: 64b1c6185fa9f93e190a30b0a3bdde1c8fc3c283fa57ae805fff5fef9ad02b38, source: "riptide_gui riptide_meshes/meshes/octagon_hammer_and_wrench/model.dae @907c9ded"}
+- {id: octagon_hammer_and_wrench_texture, path: assets/octagon_hammer_and_wrench/Task5_Repair_Fixed.png, required_from_step: 3, status: present, sha256: bda8e8c2982b1d51b01c165c7f21fbf67cda5725f4c9e4c22c7c2431a13680c7, source: "riptide_gui riptide_meshes/meshes/octagon_hammer_and_wrench/Task5_Repair_Fixed.png @907c9ded"}
+- {id: octagon_sos_mesh, path: assets/octagon_sos/model.dae, required_from_step: 3, status: present, sha256: 889932acae53c335bb0b526453d1d36398b3eefaa6c9b0f4ca8b232a76482a1b, source: "riptide_gui riptide_meshes/meshes/octagon_sos/model.dae @907c9ded"}
+- {id: octagon_sos_texture, path: assets/octagon_sos/Task5_Rescue_Fixed.png, required_from_step: 3, status: present, sha256: 58dd02090cc7fec1daeebf1ea63f4fdf64c59dcf072fb864c791d8fff9d2d579, source: "riptide_gui riptide_meshes/meshes/octagon_sos/Task5_Rescue_Fixed.png @907c9ded"}
+
+tasks: [gate.yaml, torpedo.yaml, slalom.yaml, bins.yaml, surface.yaml]   # pack-relative task include files (kind task)
 
 # Robot capabilities by mechanism TYPE (never robot id); checked at scenario resolution.
 requires:
 - {task: torpedo, mechanism_type: launcher, min_count: 1}
+- {task: bins, mechanism_type: dropper, min_count: 1}
+- {task: bins, mechanism_type: magnet, min_count: 1}
 
 # Run options (competition.yaml ui.run_options defaults; pinger_select run command).
 run_options:
@@ -103,48 +122,19 @@ scoring_hooks:
       style_rp: 200
       style_yaw: 100
       max_style_quarters: 8
-    tolerances:   # config/tasks.yaml scoring (simulator tolerances, not handbook rules)
-      breach_margin_m: 0.02
-      surface_dwell_s: 0.5
-      facing_tolerance_deg: 15.0
-      facing_dwell_s: 0.5
-      turn_tolerance_deg: 30.0
-      turn_dwell_s: 1.0
-      turn_settle_deg: 10.0
-      turn_reversal_deg: 15.0
+    slalom: {rows: [slalom_front, slalom_middle, slalom_back]}   # region ids double as score rows
+    bins: {mechanism_type: dropper}       # only dropper landings inside a crate score (T15)
+    table: {baskets: [helmet, warning]}   # prop-world events, see the hook header
+    # The simulator tolerances (breach margin, surface/facing/turn dwells and tolerances) are geometry
+    # timing owned by the surface/turn_zone regions of surface.yaml; the hook only sees their events.
 
 # Inactive: remaining RepairCompTree subtrees, recorded so the step-4 schema does not churn.
 pending:
-- id: slalom
-  category: task
-  required_from_step: 4
-  blocker: task definition not written in step 1
-  known:
-    subtree: SlalomTree
-    region: {type: rectangular_portal, count: 3, frames: [slalom_front, slalom_middle, slalom_back],
-             abs_y_lt_m: 1.55, z_band_m: [-0.81, 0.474], traversal: reference_origin,
-             note: side = sign(y); depth uses envelope extent}
-    props: slalom/model.dae visual only; the original has NO pole collision proxies
-    hook: rows scored vs gate side (same/other) + depth bonus
 - id: random_pinger
   category: task
   required_from_step: 4
   blocker: no acoustic source placement or amplitude model exists (robot pending pinger, O3/O4)
   known: {subtree: RandomPingerTree, hook: pinger_first/pinger_second tied to first scored deploy/restore row}
-- id: bins
-  category: task
-  required_from_step: 4
-  blocker: task definition not written in step 1
-  known:
-    subtree: BinTree
-    crates: {frames: [bin_vinyl1, bin_vinyl2, bin_vinyl3, bin_vinyl4], classes: [blood, fire, fire, blood],
-             outer_width_m: 0.333248, inner_width_m: 0.3048, outer_height_m: 0.2794,
-             base_thickness_m: 0.008128, liner_thickness_m: 0.004, liner_height_fraction: 0.5}
-    magnet_lights: {frames: [magnet_target1, magnet_target2], face_rpy_rad: [0, -0.7853981633974483, 0],
-                    sensor_offset_m: [-0.008, 0, 0], trigger_distance_m: 0.1524, activation_time_s: 0.5,
-                    initial: red, latched: green}
-    events: drop_into applies to ALL payload kinds (T15); magnet proximity dwell
-    hook: bins 300 per good + 500 per unique correct; lights 500 each, max 2
 - id: table
   category: task
   required_from_step: 4
@@ -157,15 +147,6 @@ pending:
             volume_m3: [9.0e-05, 7.0e-05, 9.0e-05, 7.0e-05], basket: [helmet, helmet, warning, warning]}
     events: [attach, drop_into, surface]
     hook: object drop, baskets, basket-count turns
-- id: surface
-  category: task
-  required_from_step: 4
-  blocker: task definition not written in step 1
-  known:
-    subtree: SurfaceTree
-    region: {type: surface, shape: regular_octagon, apothem_m: 1.3716, pipe_radius_m: 0.010668, surface_z_m: 0.0}
-    props: octagon PVC (8 boxes) and signs compass, hammer_and_wrench, buoy, sos
-    events: breach outside octagon ends scoring; surface dwell 0.5 s; facing within 15 deg for 0.5 s
 - id: return_home
   category: task
   required_from_step: 4

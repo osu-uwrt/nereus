@@ -1095,7 +1095,8 @@
           "items": {
             "enum": [
               "envelope_at_crossing_point_with_current_orientation",
-              "envelope_at_completion"
+              "envelope_at_completion",
+              "reference_origin_at_crossing"
             ]
           },
           "minItems": 1,
@@ -1114,6 +1115,19 @@
         "max_pose_step_m": {
           "type": "number",
           "exclusiveMinimum": 0
+        },
+        "frame": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Optional task frame whose pose is the portal's local frame (default: the task frame); one task can hold several rows."
+        },
+        "depth_band_m": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Optional [bottom, top] z band in m in the portal frame; pass_through then emits depth_overlap, whether the crossing point plus the envelope's conservative vertical extent overlaps the band."
         }
       },
       "required": [
@@ -1127,7 +1141,7 @@
         "max_pose_step_m"
       ],
       "additionalProperties": false,
-      "description": "Rectangular opening crossed by the robot. Lengths in m; approach_radius_m opens/closes an attempt; a larger reference-origin jump than max_pose_step_m resets the judge.",
+      "description": "Rectangular opening crossed by the robot. Lengths in m; approach_radius_m opens/closes an attempt; a larger reference-origin jump than max_pose_step_m resets the judge. Fit check reference_origin_at_crossing accepts a crossing point with 0 < |y| < abs_y_lt_m and ignores z_lt_m and the envelope.",
       "x-category": "region"
     },
     "perforated_panel": {
@@ -1236,7 +1250,8 @@
           "items": {
             "enum": [
               "crossing_point_local",
-              "envelope_top_world"
+              "envelope_top_world",
+              "depth_overlap"
             ]
           },
           "uniqueItems": true
@@ -1314,6 +1329,344 @@
       ],
       "additionalProperties": false,
       "description": "Event fired when a projectile from the given mechanism type crosses the named perforated_panel region with the given outcome.",
+      "x-category": "event"
+    },
+    "open_crate": {
+      "type": "object",
+      "properties": {
+        "frame": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Task frame of the crate; local z = 0 is the interior floor."
+        },
+        "class": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Class label emitted with landings (scoring meaning is hook-owned)."
+        },
+        "outer_width_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "inner_width_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "outer_height_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "base_thickness_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "liner_thickness_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "liner_height_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Visual liner height as a fraction of the crate; not used by the physics."
+        }
+      },
+      "required": [
+        "class",
+        "outer_width_m",
+        "inner_width_m",
+        "outer_height_m",
+        "base_thickness_m",
+        "liner_thickness_m",
+        "liner_height_fraction"
+      ],
+      "additionalProperties": false,
+      "description": "Open-topped square crate in m. Payloads of every mechanism kind collide with conservative wall proxies (solid from outside until they enter through the top opening; inner liner faces contain them afterwards) and stop on a floor or rim landing: outcome inside (entered and fully within the inner walls) or blocked.",
+      "x-category": "region"
+    },
+    "proximity_target": {
+      "type": "object",
+      "properties": {
+        "frame": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Task frame of the target."
+        },
+        "face_orientation_wxyz": {
+          "$ref": "common.schema.json#/$defs/quaternion",
+          "description": "Face orientation relative to the frame."
+        },
+        "sensor_offset_m": {
+          "$ref": "common.schema.json#/$defs/vector3",
+          "description": "Sensor point in m in the face frame."
+        },
+        "trigger_distance_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "dwell_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "probe_mechanism_type": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "The robot's single mechanism of this type supplies the probe point (its tip_position_m)."
+        },
+        "indicator": {
+          "type": "object",
+          "properties": {
+            "initial": {
+              "enum": [
+                "red",
+                "green"
+              ]
+            },
+            "latched": {
+              "enum": [
+                "red",
+                "green"
+              ]
+            }
+          },
+          "required": [
+            "initial",
+            "latched"
+          ],
+          "additionalProperties": false,
+          "description": "Light colours for rendering; the latch is exposed in the run snapshot."
+        }
+      },
+      "required": [
+        "face_orientation_wxyz",
+        "sensor_offset_m",
+        "trigger_distance_m",
+        "dwell_s",
+        "probe_mechanism_type",
+        "indicator"
+      ],
+      "additionalProperties": false,
+      "description": "Latched proximity sensor: the robot probe point within trigger_distance_m (m) of the sensor point for a continuous dwell_s (s) latches the target until reset.",
+      "x-category": "region"
+    },
+    "surface": {
+      "type": "object",
+      "properties": {
+        "frame": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Task frame at the octagon centre (default: the task frame)."
+        },
+        "shape": {
+          "enum": [
+            "regular_octagon"
+          ]
+        },
+        "apothem_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "pipe_radius_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "breach_margin_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "dwell_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_pose_step_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "facing": {
+          "type": "object",
+          "properties": {
+            "targets": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Task frames the robot may face."
+            },
+            "tolerance_deg": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "dwell_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "targets",
+            "tolerance_deg",
+            "dwell_s"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "shape",
+        "apothem_m",
+        "pipe_radius_m",
+        "breach_margin_m",
+        "dwell_s",
+        "max_pose_step_m",
+        "facing"
+      ],
+      "additionalProperties": false,
+      "description": "Water-surface region: regular octagon with sides facing 0, 45, ... degrees in the frame, inner apothem apothem_m - pipe_radius_m. Facts: surface_reached/surface_lost (submerged, inside, envelope top at the water for dwell_s), breach (envelope top above the water by breach_margin_m outside the octagon after being submerged; latches), facing_reached/facing_lost (nearest target by planar heading error within tolerance_deg for dwell_s while surfaced).",
+      "x-category": "region"
+    },
+    "turn_zone": {
+      "type": "object",
+      "properties": {
+        "frame": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Task frame at the zone centre (default: the task frame)."
+        },
+        "radius_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_pose_step_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "turn_tolerance_deg": {
+          "type": "number",
+          "minimum": 0
+        },
+        "settle_deg": {
+          "type": "number",
+          "minimum": 0
+        },
+        "reversal_deg": {
+          "type": "number",
+          "minimum": 0
+        },
+        "min_travel_deg": {
+          "type": "number",
+          "minimum": 0
+        },
+        "dwell_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "restart_events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "task": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "id": {
+                "$ref": "common.schema.json#/$defs/name"
+              }
+            },
+            "required": [
+              "task",
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Events (task, event id) that discard the travel so far."
+        }
+      },
+      "required": [
+        "radius_m",
+        "max_pose_step_m",
+        "turn_tolerance_deg",
+        "settle_deg",
+        "reversal_deg",
+        "min_travel_deg",
+        "dwell_s",
+        "restart_events"
+      ],
+      "additionalProperties": false,
+      "description": "Yaw-turn judge within radius_m of the frame origin: one-direction travel is judged in whole turns (travel + turn_tolerance_deg) / 360 when the heading holds within settle_deg for dwell_s, reverses by more than reversal_deg, or the robot leaves the zone; travel under min_travel_deg is ignored. Fact rotation_judged {reason, travel_rad, turns}.",
+      "x-category": "region"
+    },
+    "region_fact": {
+      "type": "object",
+      "properties": {
+        "region": {
+          "$ref": "common.schema.json#/$defs/name"
+        }
+      },
+      "required": [
+        "region"
+      ],
+      "additionalProperties": false
+    },
+    "drop_into": {
+      "type": "object",
+      "properties": {
+        "region": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "projectile_mechanism_types": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "launcher",
+              "dropper"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "outcome": {
+          "enum": [
+            "inside",
+            "blocked"
+          ]
+        }
+      },
+      "required": [
+        "region",
+        "projectile_mechanism_types",
+        "outcome"
+      ],
+      "additionalProperties": false,
+      "description": "Event fired when a payload of one of the mechanism types ends on the named open_crate region with the given outcome; data carries region_class, detail (floor or rim), projectile_id and mechanism_type. Once per payload.",
+      "x-category": "event"
+    },
+    "activate": {
+      "$ref": "#/$defs/region_fact",
+      "description": "Event fired when a proximity_target region latches.",
+      "x-category": "event"
+    },
+    "surface_reached": {
+      "$ref": "#/$defs/region_fact",
+      "description": "Event fired when the robot has been surfaced inside the named surface region for its dwell.",
+      "x-category": "event"
+    },
+    "surface_lost": {
+      "$ref": "#/$defs/region_fact",
+      "description": "Event fired when a surfaced robot leaves the surfaced state.",
+      "x-category": "event"
+    },
+    "facing_reached": {
+      "$ref": "#/$defs/region_fact",
+      "description": "Event fired when the named surface region's facing dwell is met; data.target names the frame.",
+      "x-category": "event"
+    },
+    "facing_lost": {
+      "$ref": "#/$defs/region_fact",
+      "description": "Event fired when a met facing dwell is lost or changes target.",
+      "x-category": "event"
+    },
+    "breach": {
+      "$ref": "#/$defs/region_fact",
+      "description": "Event fired once when the robot breaches outside the named surface region.",
+      "x-category": "event"
+    },
+    "rotation_judged": {
+      "$ref": "#/$defs/region_fact",
+      "description": "Event fired when a turn_zone judges its travel; data carries reason, travel_rad and turns.",
       "x-category": "event"
     },
     "event_points": {

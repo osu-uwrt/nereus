@@ -304,7 +304,15 @@ def tasks(data: dict[str, Any], root: Path) -> tuple[list[str], list[dict[str, A
     return problems, unresolved
 
 
-_EVENT_REGION = {"pass_through": "rectangular_portal", "hit": "perforated_panel"}
+# Event type -> region types it may name. drop_into also names regions of other owners
+# (for example basket volumes checked by a prop world) once their region types exist.
+_EVENT_REGION = {
+    "pass_through": ("rectangular_portal",), "hit": ("perforated_panel",),
+    "drop_into": ("open_crate",), "activate": ("proximity_target",),
+    "surface_reached": ("surface",), "surface_lost": ("surface",), "breach": ("surface",),
+    "facing_reached": ("surface",), "facing_lost": ("surface",),
+    "rotation_judged": ("turn_zone",),
+}
 
 
 def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
@@ -337,14 +345,22 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
     for identifier, item in regions.items():
         if item["type"] == "perforated_panel":
             duplicates((hole["id"] for hole in item["parameters"]["holes"]), "hole", problems)
+    for identifier, item in regions.items():
+        parameters = item["parameters"]
+        named = [parameters["frame"]] if "frame" in parameters else []
+        named += parameters.get("facing", {}).get("targets", [])
+        for frame in named:
+            if frame not in frames:
+                problems.append(f"/regions/{identifier}: unknown frame '{frame}'")
     for item in data["events"]:
         where = f"/events/{item['id']}"
         parameters = item["parameters"]
         expected = _EVENT_REGION.get(item["type"])
         if expected is not None:
             region = regions.get(parameters["region"])
-            if region is None or region["type"] != expected:
-                problems.append(f"{where}/parameters/region: must name a {expected} region")
+            if region is None or region["type"] not in expected:
+                problems.append(f"{where}/parameters/region: must name a "
+                                f"{' or '.join(expected)} region")
         if item["type"] == "pass_through" and parameters["from_side"] == parameters["to_side"]:
             problems.append(f"{where}/parameters: from_side and to_side must differ")
         if item["type"] == "contact" and parameters["prop"] not in props:

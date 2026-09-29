@@ -22,6 +22,7 @@ class PortalEvent:
     envelope_top_world: float
     rotation_vector_body: tuple[float, float, float]
     attempt_id: int
+    depth_overlap: bool | None = None
 
 
 @dataclass
@@ -52,9 +53,11 @@ def _number(value: Any, field: str, *, positive: bool = False) -> float:
     return result
 
 
-def _keys(value: Any, expected: set[str], field: str) -> None:
-    if not isinstance(value, Mapping) or set(value) != expected:
-        raise ValueError(f"{field} requires exactly {sorted(expected)}")
+def _keys(value: Any, expected: set[str], field: str, optional: frozenset[str] = frozenset()) -> None:
+    if (not isinstance(value, Mapping) or not expected <= set(value)
+            or set(value) - expected - optional):
+        raise ValueError(f"{field} requires exactly {sorted(expected)}"
+                         + (f" plus optional {sorted(optional)}" if optional else ""))
 
 
 def _owned_pose(value: native.Pose) -> native.Pose:
@@ -103,7 +106,8 @@ class PortalTracker:
                  envelope_reference_vertices: Any, floor_z: float) -> None:
         _keys(parameters, {"plane", "bounds_local", "world_floor_clearance",
                            "crossing_reference", "fit_checks", "traversal",
-                           "approach_radius_m", "max_pose_step_m"}, "portal parameters")
+                           "approach_radius_m", "max_pose_step_m"}, "portal parameters",
+              frozenset({"frame", "depth_band_m"}))
         plane, bounds = parameters["plane"], parameters["bounds_local"]
         _keys(plane, {"axis", "offset_m"}, "plane")
         _keys(bounds, {"abs_y_lt_m", "z_lt_m"}, "bounds_local")
@@ -115,7 +119,7 @@ class PortalTracker:
             raise ValueError("unsupported portal traversal")
         checks = parameters["fit_checks"]
         supported = {"envelope_at_crossing_point_with_current_orientation",
-                     "envelope_at_completion"}
+                     "envelope_at_completion", "reference_origin_at_crossing"}
         if (not isinstance(checks, (list, tuple)) or not checks or
                 any(not isinstance(check, str) or check not in supported for check in checks) or
                 len(set(checks)) != len(checks)):
@@ -129,6 +133,14 @@ class PortalTracker:
         self._radius = _number(parameters["approach_radius_m"], "approach_radius_m", positive=True)
         self._max_step = _number(parameters["max_pose_step_m"], "max_pose_step_m", positive=True)
         self._floor_check = parameters["world_floor_clearance"]
+        band = parameters.get("depth_band_m")
+        self._band: tuple[float, float] | None = None
+        if band is not None:
+            if not isinstance(band, (list, tuple)) or len(band) != 2:
+                raise ValueError("depth_band_m must be [bottom, top]")
+            self._band = (_number(band[0], "depth_band_m[0]"), _number(band[1], "depth_band_m[1]"))
+            if self._band[0] > self._band[1]:
+                raise ValueError("depth_band_m must be ordered [bottom, top]")
         self._traversal, self._checks = parameters["traversal"], frozenset(checks)
         self._vertices = np.array(envelope_reference_vertices, dtype=float, copy=True)
         if (self._vertices.ndim != 2 or self._vertices.shape[1] != 3 or
@@ -219,12 +231,22 @@ class PortalTracker:
                 if crossing is not None:
                     fits = not self._floor_check or world[:, 2].min() > self._floor
                     for check in self._checks:
+                        if check == "reference_origin_at_crossing":
+                            # Origin-only fit: the crossing must have a side (y != 0) and stay in width.
+                            fits = fits and 0 < abs(float(crossing[1])) < self._width
+                            continue
                         vertices = (local if check == "envelope_at_completion" else
                                     self._vertices @ current.local_rotation.T + crossing)
                         fits = (fits and np.max(np.abs(vertices[:, 1])) < self._width and
                                 vertices[:, 2].max() < self._top)
                     if fits:
-                        passage = (entry, side, tuple(float(x) for x in crossing))
+                        depth = None
+                        if self._band is not None:
+                            # Conservative box extent of the envelope in task axes at completion.
+                            extent = np.abs(current.local_rotation) @ np.abs(self._vertices).max(axis=0)
+                            depth = bool(crossing[2] + extent[2] >= self._band[0]
+                                         and crossing[2] - extent[2] <= self._band[1])
+                        passage = (entry, side, tuple(float(x) for x in crossing), depth)
                 crossing = None
             if side:
                 entry = side
@@ -233,12 +255,12 @@ class PortalTracker:
         else:
             entry = 1 if current.local_position[0] > self._offset else -1
         if passage is not None:
-            source, target, point = passage
+            source, target, point, depth = passage
             event = PortalEvent(
                 "pass_through", time_ns, "positive" if source > 0 else "negative",
                 "positive" if target > 0 else "negative", point, current.top,
                 tuple(float(x) for x in attempt.turns) if attempt is not None else (0., 0., 0.),
-                attempt.identifier if attempt is not None else 0)
+                attempt.identifier if attempt is not None else 0, depth)
             events.append(event)
             if attempt is not None:
                 attempt.passages[event.from_side] = event

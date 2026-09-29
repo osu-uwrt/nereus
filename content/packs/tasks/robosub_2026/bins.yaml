@@ -1,0 +1,139 @@
+# Task include file (kind task), referenced from tasks.yaml.
+# Task-local frame = the original bin_frame / bin_cad_geometry (identity): the crate assembly with
+# +Z up. Crates are drop_into volumes fed by dropper payloads (walls/rims/floor apply to every
+# payload kind, trap T15; only dropper landings score in the hook). Magnet lights are latched
+# proximity targets for the robot's magnet tip. Judge: node.py payload/crate step + MagnetLights.
+schema_version: 1
+kind: task
+id: bins
+description: Four vinyl-marked crates for dropper payloads and two magnet light targets.
+
+frames:   # mapping.yaml bin_vinyl1..4 and magnet_target1/2 under bin_cad_geometry
+- {id: bin_vinyl1, position_m: [0.474, -0.122, 0.301], orientation_wxyz: [1, 0, 0, 0]}
+- {id: bin_vinyl2, position_m: [0.237, 0.347, 0.335], orientation_wxyz: [1, 0, 0, 0]}
+- {id: bin_vinyl3, position_m: [-0.21663, -0.3466, 0.47036], orientation_wxyz: [1, 0, 0, 0]}
+- {id: bin_vinyl4, position_m: [-0.43325, 0.12206, 0.57196], orientation_wxyz: [1, 0, 0, 0]}
+- {id: magnet_target1, position_m: [0.76512, 0.37018, 0.25975], orientation_wxyz: [1, 0, 0, 0]}
+- {id: magnet_target2, position_m: [-0.70442, -0.37018, 0.65], orientation_wxyz: [0, 0, 0, 1]}   # yaw 180
+
+props:
+- id: bin_assembly
+  type: static_body
+  parameters:
+    collision_boxes: []   # the original has no robot proxies for the bins (payload walls are the crate regions)
+    # markers.yaml marker7..13. Per-class vinyl textures (renderer override) are not expressible yet:
+    # both textures ship with bin_vinyl_mesh, the magnet housings/LEDs (glb) are not in this pack.
+    visuals:
+    - {asset: bin_mesh, frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: bin_vinyl_mesh, frame: bin_vinyl1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: bin_vinyl_mesh, frame: bin_vinyl2, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: bin_vinyl_mesh, frame: bin_vinyl3, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: bin_vinyl_mesh, frame: bin_vinyl4, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: bin_magnet_mesh, frame: magnet_target1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: bin_magnet_mesh, frame: magnet_target2, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+
+regions:
+- id: bin_vinyl1
+  type: open_crate
+  parameters:
+    frame: bin_vinyl1
+    class: blood
+    # config/tasks.yaml crate: CleverMade 25 L, local z = 0 is the interior (vinyl) floor.
+    outer_width_m: 0.333248
+    inner_width_m: 0.3048
+    outer_height_m: 0.2794
+    base_thickness_m: 0.008128
+    liner_thickness_m: 0.004
+    liner_height_fraction: 0.5
+- id: bin_vinyl2
+  type: open_crate
+  parameters:
+    frame: bin_vinyl2
+    class: fire
+    # config/tasks.yaml crate: CleverMade 25 L, local z = 0 is the interior (vinyl) floor.
+    outer_width_m: 0.333248
+    inner_width_m: 0.3048
+    outer_height_m: 0.2794
+    base_thickness_m: 0.008128
+    liner_thickness_m: 0.004
+    liner_height_fraction: 0.5
+- id: bin_vinyl3
+  type: open_crate
+  parameters:
+    frame: bin_vinyl3
+    class: fire
+    # config/tasks.yaml crate: CleverMade 25 L, local z = 0 is the interior (vinyl) floor.
+    outer_width_m: 0.333248
+    inner_width_m: 0.3048
+    outer_height_m: 0.2794
+    base_thickness_m: 0.008128
+    liner_thickness_m: 0.004
+    liner_height_fraction: 0.5
+- id: bin_vinyl4
+  type: open_crate
+  parameters:
+    frame: bin_vinyl4
+    class: blood
+    # config/tasks.yaml crate: CleverMade 25 L, local z = 0 is the interior (vinyl) floor.
+    outer_width_m: 0.333248
+    inner_width_m: 0.3048
+    outer_height_m: 0.2794
+    base_thickness_m: 0.008128
+    liner_thickness_m: 0.004
+    liner_height_fraction: 0.5
+- id: magnet_target1
+  type: proximity_target
+  parameters:
+    frame: magnet_target1
+    # config/tasks.yaml magnet_lights: the face tilts up 45 deg (pitch -pi/4); the sensor sits 8 mm behind it.
+    face_orientation_wxyz: [0.9238795325112867, 0.0, -0.3826834323650898, 0.0]
+    sensor_offset_m: [-0.008, 0.0, 0.0]
+    trigger_distance_m: 0.1524
+    dwell_s: 0.5
+    probe_mechanism_type: magnet     # robot magnet tip (robot_tip_offset), passive: no arming
+    indicator: {initial: red, latched: green}
+- id: magnet_target2
+  type: proximity_target
+  parameters:
+    frame: magnet_target2
+    # config/tasks.yaml magnet_lights: the face tilts up 45 deg (pitch -pi/4); the sensor sits 8 mm behind it.
+    face_orientation_wxyz: [0.9238795325112867, 0.0, -0.3826834323650898, 0.0]
+    sensor_offset_m: [-0.008, 0.0, 0.0]
+    trigger_distance_m: 0.1524
+    dwell_s: 0.5
+    probe_mechanism_type: magnet     # robot magnet tip (robot_tip_offset), passive: no arming
+    indicator: {initial: red, latched: green}
+events:
+- id: bin_vinyl1_inside
+  type: drop_into
+  parameters: {region: bin_vinyl1, projectile_mechanism_types: [launcher, dropper], outcome: inside}
+- id: bin_vinyl1_blocked
+  type: drop_into
+  parameters: {region: bin_vinyl1, projectile_mechanism_types: [launcher, dropper], outcome: blocked}
+- id: bin_vinyl2_inside
+  type: drop_into
+  parameters: {region: bin_vinyl2, projectile_mechanism_types: [launcher, dropper], outcome: inside}
+- id: bin_vinyl2_blocked
+  type: drop_into
+  parameters: {region: bin_vinyl2, projectile_mechanism_types: [launcher, dropper], outcome: blocked}
+- id: bin_vinyl3_inside
+  type: drop_into
+  parameters: {region: bin_vinyl3, projectile_mechanism_types: [launcher, dropper], outcome: inside}
+- id: bin_vinyl3_blocked
+  type: drop_into
+  parameters: {region: bin_vinyl3, projectile_mechanism_types: [launcher, dropper], outcome: blocked}
+- id: bin_vinyl4_inside
+  type: drop_into
+  parameters: {region: bin_vinyl4, projectile_mechanism_types: [launcher, dropper], outcome: inside}
+- id: bin_vinyl4_blocked
+  type: drop_into
+  parameters: {region: bin_vinyl4, projectile_mechanism_types: [launcher, dropper], outcome: blocked}
+- id: magnet_target1_on
+  type: activate
+  parameters: {region: magnet_target1}
+- id: magnet_target2_on
+  type: activate
+  parameters: {region: magnet_target2}
+
+# Shots, classes, unique crates and lights are stateful and role dependent: owned by the pack hook.
+scoring: []

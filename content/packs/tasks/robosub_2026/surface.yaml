@@ -1,0 +1,77 @@
+# Task include file (kind task), referenced from tasks.yaml.
+# Task-local frame = the original octagon frame (centre of the octagon, +Z up). The scenario places it
+# at its world pose (derived from the table placement, mapping.yaml octagon under table).
+# Judge: scoring.py CourseJudge.update surface/facing/turn logic; rows scored by the pack hook.
+schema_version: 1
+kind: task
+id: surface
+description: Octagon surfacing, facing-image dwell and the basket-count turn judge.
+
+frames:   # mapping.yaml compass / hammer_and_wrench / buoy / sos under octagon
+- {id: compass, position_m: [0.0, 1.38, 0.0], orientation_wxyz: [0.7071067811865476, 0.0, 0.0, -0.7071067811865475]}
+- {id: hammer_and_wrench, position_m: [0.0, -1.38, 0.0], orientation_wxyz: [0.7071067811865476, 0.0, 0.0, 0.7071067811865475]}
+- {id: buoy, position_m: [-1.38, 0.0, 0.0], orientation_wxyz: [1, 0, 0, 0]}
+- {id: sos, position_m: [1.38, 0.0, 0.0], orientation_wxyz: [0, 0, 0, 1]}
+# The table origin in this frame: exact inverse of the mapping octagon-under-table pose
+# ([0.082085, -0.064919, 1.2352] m, yaw -134.313351 deg), the centre of the basket-count turn zone.
+- {id: table_origin, position_m: [0.010891616316147913, -0.10408552483425264, -1.2352], orientation_wxyz: [0.3882125471904098, 0.0, 0.0, 0.9215698661544516]}
+
+props:
+- id: octagon_signs
+  type: static_body
+  parameters:
+    collision_boxes: []   # PVC pipes and signs have no robot proxies in the original; the octagon PVC is not modelled
+    visuals:              # markers.yaml marker21..24
+    - {asset: octagon_buoy_mesh, frame: buoy, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: octagon_sos_mesh, frame: sos, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: octagon_hammer_and_wrench_mesh, frame: hammer_and_wrench, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: octagon_compass_mesh, frame: compass, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+
+regions:
+- id: octagon
+  type: surface
+  parameters:
+    shape: regular_octagon
+    apothem_m: 1.3716              # inner pipe edge = apothem - pipe radius (the robot must fit inside it)
+    pipe_radius_m: 0.010668
+    breach_margin_m: 0.02
+    dwell_s: 0.5
+    max_pose_step_m: 2.0
+    facing: {targets: [compass, hammer_and_wrench, buoy, sos], tolerance_deg: 15.0, dwell_s: 0.5}
+- id: turn_zone
+  type: turn_zone
+  parameters:
+    frame: table_origin
+    radius_m: 3.0                  # attempt_radius around the table origin
+    max_pose_step_m: 2.0
+    turn_tolerance_deg: 30.0       # a rotation this far short of N turns still counts as N
+    settle_deg: 10.0
+    reversal_deg: 15.0
+    min_travel_deg: 30.0           # hard-coded radians(30) in the original judge_turns
+    dwell_s: 1.0
+    # The original restarted when the physical basket count changed; the prop world's events for a
+    # grasped or basket-settled prop are the equivalent (a grasp of a prop not in a basket also restarts).
+    restart_events: [{task: table, id: grasp}, {task: table, id: basket_drop}]
+
+events:
+- id: surfaced
+  type: surface_reached
+  parameters: {region: octagon}
+- id: surface_ended
+  type: surface_lost
+  parameters: {region: octagon}
+- id: facing_dwelled
+  type: facing_reached
+  parameters: {region: octagon}
+- id: facing_ended
+  type: facing_lost
+  parameters: {region: octagon}
+- id: breached
+  type: breach
+  parameters: {region: octagon}
+- id: rotation_judged
+  type: rotation_judged
+  parameters: {region: turn_zone}
+
+# Surface, facing, objects_surface and basket_count rows depend on role, held props and baskets: hook-owned.
+scoring: []

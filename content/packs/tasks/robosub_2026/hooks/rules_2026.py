@@ -1,7 +1,33 @@
-"""Pure 2026 gate/style, home and torpedo scoring; other tasks remain unimplemented.
+"""Pure 2026 scoring: gate/style, home, torpedo, slalom, bins, lights, surface and table rows.
 
 Geometry events are supplied by the platform. This hook owns competition rules only,
 returns absolute max-per-row updates, and never changes the supplied run snapshot.
+
+Gate and torpedo rows are folded incrementally as before. Slalom, bins, lights, surface and
+table rows come from a ledger that replays the run history and then the new events in order,
+so every derived fact (role, held prop, basket contents, shots, lights) is a pure function of
+the ordered event stream; awards only ever raise a row. A breach event ends scoring for good.
+
+Event contract by task (platform-emitted unless noted):
+  gate      pass_through forward_pass/reverse_pass, attempt_finished (existing).
+  torpedo   payload_released, hit hole_pass/panel_blocked (existing).
+  slalom    pass_through on regions slalom_front|middle|back (positive -> negative), data
+            crossing_point_local (row frame; y sign = side) and depth_overlap (bool).
+  bins      payload_released (mechanism dropper registers a shot, at most max_shots);
+            drop_into outcome inside|blocked with region = crate id, data region_class,
+            mechanism_type; activate on regions magnet_target1|2 (light latched);
+            miss (ignored: a missed payload scores nothing).
+  surface   surface_reached / surface_lost (0.5 s dwell inside the octagon), facing_reached
+            {target} / facing_lost, breach (outside the octagon: scoring ends),
+            rotation_judged {turns} (basket-count turn judge on region turn_zone).
+  table     supplied by the prop world through TaskRuntime.observe_events, all with
+            task "table":
+              {type attach, id grasp, data {prop_id, mechanism_id}}
+              {type detach, id release, data {prop_id, mechanism_id, reason?}}
+                  reason "released" (default) credits objects_drop; "slipped" does not.
+              {type drop_into, id basket_drop, region <basket id>,
+               data {prop_id, basket, expected_basket}}  prop settled in a basket.
+  A basket holds a prop from its basket_drop until the prop is grasped again.
 """
 
 import math
@@ -30,6 +56,158 @@ def _distance(data: Mapping[str, Any]) -> float:
             or not math.isfinite(value) or value < 0):
         raise ValueError("launcher release requires a finite nonnegative release_distance_m")
     return float(value)
+
+
+def _select_role(event: Mapping[str, Any], state: Mapping[str, Any],
+                 parameters: Mapping[str, Any]) -> tuple[str, int]:
+    """Role (by the gate half crossed) and side sign from a first forward gate passage."""
+    y = event["data"]["crossing_point_local"][1]
+    reference = parameters["gate"]["role_reference_frame"]
+    repair_y = state["tasks"]["gate"]["frames"][reference]["position_m"][1]
+    return ("repair" if y * repair_y > 0 else "rescue"), (1 if y > 0 else -1)
+
+
+class _Ledger:
+    """Slalom, bins, lights, surface and table rows as a fold over the ordered event stream.
+
+    ``award(row, value)`` only ever raises a row. ``emit`` is None while replaying history.
+    Eligibility is the original one: scoring open (running, no breach) and the gate passed.
+    """
+
+    def __init__(self, state: Mapping[str, Any], parameters: Mapping[str, Any], award: Any):
+        self.state, self.parameters, self.points = state, parameters, parameters["points"]
+        self.award, self.emit = award, None
+        self.role: str | None = None
+        self.side = 0
+        self.ended = False
+        self.shots: dict[int, dict[str, Any]] = {}
+        self.lights: set[str] = set()
+        self.grasped: set[str] = set()
+        self.dropped: set[str] = set()
+        self.surfaced: set[str] = set()
+        self.contents: dict[str, str] = {}
+        self.basket_awards: dict[str, int] = {}
+        self.held: str | None = None
+        self.surface_active = False
+        self.facing: str | None = None
+
+    def feed(self, event: Mapping[str, Any]) -> None:
+        if self.ended:
+            return
+        task, kind, data = event["task"], event["type"], event["data"]
+        if _forward(event) and self.role is None:
+            self.role, self.side = _select_role(event, self.state, self.parameters)
+        elif kind == "breach" and task == "surface":
+            self.ended = True
+            if self.emit is not None:
+                self.emit({"id": "surface:scoring_ended", "type": "scoring_ended",
+                           "task": task, "region": event["region"], "time_ns": event["time_ns"],
+                           "data": {"reason": "breach outside octagon"}})
+            return
+        elif task == "slalom" and kind == "pass_through":
+            self.slalom(event)
+        elif task == "bins":
+            self.bins(event)
+        elif task == "surface":
+            if kind == "surface_reached":
+                self.surface_active = True
+            elif kind == "surface_lost":
+                self.surface_active, self.facing = False, None
+            elif kind == "facing_reached":
+                self.facing = data["target"]
+            elif kind == "facing_lost":
+                self.facing = None
+            elif kind == "rotation_judged":
+                self.basket_turns(data["turns"])
+        elif task == "table":
+            self.table(event)
+        self.surface_rows()
+
+    @property
+    def target_class(self) -> str:
+        return str(self.parameters["roles"][self.role]["target_class"])
+
+    def slalom(self, event: Mapping[str, Any]) -> None:
+        data = event["data"]
+        if (self.role is None or event["region"] not in self.parameters["slalom"]["rows"]
+                or data["from_side"] != "positive" or data["to_side"] != "negative"):
+            return
+        side = 1 if data["crossing_point_local"][1] > 0 else -1
+        points = self.points
+        self.award(event["region"], (points["slalom_same"] if side == self.side
+                                     else points["slalom_other"])
+                   + points["slalom_depth"] * bool(data["depth_overlap"]))
+
+    def bins(self, event: Mapping[str, Any]) -> None:
+        data, points = event["data"], self.points
+        if event["type"] == "activate":
+            if self.role is not None:
+                self.lights.add(event["region"])
+                self.award("lights", points["light"] * min(points["max_lights"], len(self.lights)))
+            return
+        if data.get("mechanism_type") != self.parameters["bins"]["mechanism_type"]:
+            return
+        identifier = data.get("projectile_id")
+        if event["type"] == "payload_released":
+            if identifier not in self.shots and len(self.shots) < points["max_shots"]:
+                self.shots[identifier] = {"eligible": self.role is not None, "result": None,
+                                          "target": "", "correct": False}
+        elif event["type"] == "drop_into" and data["outcome"] == "inside":
+            shot = self.shots.get(identifier)
+            if self.role is None or shot is None or not shot["eligible"] or shot["result"]:
+                return
+            correct = data["region_class"] == self.target_class
+            shot.update(result="success" if correct else "wrong_target", correct=correct,
+                        target=event["region"])
+            good = [item for item in self.shots.values()
+                    if item["result"] in ("success", "wrong_target")]
+            unique = {item["target"] for item in good if item["correct"]}
+            self.award("bins", points["bin"] * len(good) + points["bin_class"] * len(unique))
+
+    def table(self, event: Mapping[str, Any]) -> None:
+        data, points = event["data"], self.points
+        prop = data.get("prop_id")
+        if event["type"] == "attach":
+            self.held = prop
+            if self.role is not None:
+                self.grasped.add(prop)
+                self.contents.pop(prop, None)
+        elif event["type"] == "detach":
+            if self.held == prop:
+                self.held = None
+            if (self.role is not None and prop in self.grasped
+                    and data.get("reason", "released") == "released"):
+                self.dropped.add(prop)
+                self.award("objects_drop", points["object_drop"] * len(self.dropped))
+        elif (event["type"] == "drop_into" and self.role is not None
+              and data.get("basket") in self.parameters["table"]["baskets"]):
+            self.contents[prop] = data["basket"]
+            value = (points["basket_correct"] if data["basket"] == data["expected_basket"]
+                     else points["basket_other"])
+            self.basket_awards[prop] = max(value, self.basket_awards.get(prop, 0))
+            self.award("baskets", sum(self.basket_awards.values()))
+
+    def basket_turns(self, turns: int) -> None:
+        count, points = len(self.contents), self.points
+        if self.role is not None and count > 0 and turns > 0:
+            self.award("basket_count", points["basket_count"] if turns == count
+                       else points["basket_count_near"] if abs(turns - count) == 1 else 0)
+
+    def surface_rows(self) -> None:
+        if self.role is None or not self.surface_active:
+            return
+        points = self.points
+        self.award("surface", points["surface"])
+        if self.held is not None and self.held in self.grasped:
+            self.surfaced.add(self.held)
+            self.award("objects_surface", points["object_surface"] * len(self.surfaced))
+        if self.facing is not None:
+            icons = self.parameters["roles"][self.role]["facing_icons"]
+            value = points["facing_correct"] if self.facing in icons else points["facing_other"]
+            count = len(self.contents)
+            if count > 0 and self.facing == icons[min(count, 2) - 1]:
+                value = points["facing_count"]
+            self.award("facing", value)
 
 
 def evaluate(state: Mapping[str, Any], events: Sequence[Mapping[str, Any]],
@@ -94,9 +272,8 @@ def evaluate(state: Mapping[str, Any], events: Sequence[Mapping[str, Any]],
                 and [shot["hole_size"] for shot in shots.values()] == list(rules["sequence_order"])):
             award("sequence", points["sequence"])
 
-    for event in events:
-        if event["time_ns"] < run["started_ns"]:
-            continue
+    def handle(event: Mapping[str, Any]) -> None:
+        nonlocal role
         data = event["data"]
         if event["task"] == "torpedo" and data.get("mechanism_type") == "launcher":
             if event["type"] == "payload_released" and event["id"] == "payload_released":
@@ -128,9 +305,9 @@ def evaluate(state: Mapping[str, Any], events: Sequence[Mapping[str, Any]],
                     shot.update(accepted)
                     emit_shot(event, "shot_result", accepted)
                     award_torpedoes()
-            continue
+            return
         if event["task"] != "gate" or event["region"] != "gate_opening":
-            continue
+            return
         if _forward(event):
             if role is None:
                 y = data["crossing_point_local"][1]
@@ -164,5 +341,15 @@ def evaluate(state: Mapping[str, Any], events: Sequence[Mapping[str, Any]],
               and role is not None
               and data["envelope_top_world"] < state["environment"]["surface_z_m"]):
             award("home", points["home"])
+
+    ledger = _Ledger(state, parameters, award)
+    for event in history:
+        ledger.feed(event)
+    ledger.emit = result["events"].append
+    for event in events:
+        if event["time_ns"] < run["started_ns"] or ledger.ended:
+            continue
+        handle(event)
+        ledger.feed(event)
     result["scores"] = [{"row": row, "points": value} for row, value in updated.items()]
     return result

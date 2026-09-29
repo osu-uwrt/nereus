@@ -34,6 +34,7 @@ class PerforatedPanel:
     def __init__(self, parameters: Mapping[str, Any], world_from_task: native.Pose):
         if parameters['plane']['axis'] != 'x':
             raise ValueError('perforated panels currently require an X plane')
+        self._world_from_task = native.Pose().compose(world_from_task)
         self._task_from_world = world_from_task.inverse()
         self._rotation = native.Pose()
         self._rotation.orientation_wxyz = self._task_from_world.orientation_wxyz
@@ -54,6 +55,10 @@ class PerforatedPanel:
                 raise ValueError('invalid panel hole')
             self._holes.append((hole['id'], hole['class'], hole['size'],
                                 (uv - .5) * 2 * self._half, radius))
+
+    def world_point(self, point_local: Sequence[float]) -> np.ndarray:
+        result: np.ndarray = self._world_from_task.apply(vector3(point_local, 'point'))
+        return result
 
     def release_distance(self, tip_world: Sequence[float]) -> float:
         return abs(float(self._task_from_world.apply(vector3(tip_world, 'tip'))[0]) - self._offset)

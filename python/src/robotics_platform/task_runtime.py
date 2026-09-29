@@ -7,7 +7,7 @@ import itertools
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, field
 from types import MappingProxyType
 from typing import Any
 
@@ -19,6 +19,7 @@ from .packs import ResolvedScenario
 from .packs._semantics import hook_module
 from .task_projectiles import PerforatedPanel, vector3
 from .task_regions import PortalEvent, PortalTracker
+from .task_zones import Fact, OpenCrate, ProximityTarget, SurfaceTracker, TurnTracker
 
 
 def _freeze(value: Any) -> Any:
@@ -60,15 +61,76 @@ def _envelope(robot: dict[str, Any]) -> np.ndarray:
     return np.asarray(vertices)
 
 
+def _probe_point(robot: dict[str, Any], mechanism_type: str) -> np.ndarray:
+    """Tip of the robot's single mechanism of this type, in the robot reference frame."""
+    found = [item for item in robot["mechanisms"] if item["type"] == mechanism_type]
+    if len(found) != 1:
+        raise ValueError(f"task probe needs exactly one {mechanism_type!r} mechanism; "
+                         f"robot has {len(found)}")
+    frames = _frames(robot["frames"])
+    pose = frames.from_root(robot["reference_frame"]).inverse().compose(
+        frames.from_root(found[0]["frame"]))
+    return np.asarray(pose.apply(found[0]["parameters"]["tip_position_m"]))
+
+
+@dataclass(frozen=True)
+class ProjectileStep:
+    """Judged swept payload step: events plus the physical correction its owner must apply.
+
+    stop: the payload has ended (blocked, landed or missed) and must no longer advance;
+    position_world / velocity_world replace the owner's end-of-step centre and velocity, or
+    are None when unchanged.
+    """
+
+    events: tuple[Mapping[str, Any], ...]
+    stop: bool = False
+    position_world: tuple[float, ...] | None = None
+    velocity_world: tuple[float, ...] | None = None
+
+
+@dataclass
+class _Projectile:
+    mechanism: str
+    radius: float
+    length: float
+    released_ns: int
+    tasks: set[str]
+    entered: set[tuple[str, str]] = field(default_factory=set)
+    active: bool = True
+    scored: bool = False
+
+
+_SURFACE_FACTS = ("surface_reached", "surface_lost", "facing_reached", "facing_lost", "breach")
+_EVENT_TYPES = ("pass_through", "hit", "drop_into", "activate", "rotation_judged", "attach",
+                "detach", *_SURFACE_FACTS)
+_MAX_PAYLOAD_AGE_S = 30.0
+
+
 class TaskRuntime:
     """Explicit task observer with detached, recursively read-only snapshots.
 
-    Implemented geometry includes portals, projectile panels and robot/prop contact-entry
-    events and event-points rules. Unsupported selected types fail at construction; use
+    Implemented geometry: portals (optionally in a named task frame, with a depth band),
+    projectile panels, open crates, proximity latches, octagon surfacing/facing, turn zones,
+    and robot/prop contact-entry events. Unsupported selected types fail at construction; use
     task_ids explicitly for a partial scripted acceptance run. Contact pairs are supplied
     by the physical contact owner, not inferred from a scoring region. Task hooks are
     trusted pack Python, not a security sandbox; only state, events and parameters are
     passed to them. Hook failures stop observation until reset.
+
+    Event sources: observe() samples the robot reference pose and emits region facts;
+    release_projectile()/step_projectile() judge payload flight; observe_events() accepts
+    events from a physical owner such as a prop world (attach, detach, drop_into on its own
+    regions). Times are integer nanoseconds and must not decrease until reset.
+
+    Projectile API (payload owner): release_projectile(time, id, mechanism_type, tip,
+    radius[, length_m]) then, every tick, step_projectile(time, id, start_center, end_center,
+    axis, velocity) -> ProjectileStep(events, stop, position_world, velocity_world). Crate walls,
+    rim/floor landings, panel blocks and pool floor/wall/30 s misses are judged for every
+    payload kind; the owner applies stop/position/velocity when set. Events: payload_released,
+    hit (panels), drop_into (crate landing: outcome inside | blocked) and miss (pool_floor |
+    pool_wall_or_timeout, once per payload, emitted to each task that registered its release).
+    A payload that already produced a panel or crate/miss result gets no further crate/miss
+    events. observe_projectile() is the events-only view of the same step (velocity unknown).
     """
 
     def __init__(self, resolved: ResolvedScenario, *, task_ids: Sequence[str] | None = None):
@@ -88,29 +150,59 @@ class TaskRuntime:
                    + resolved.scenario["pool_placement"]["position_m"][2])
         self._environment = {"surface_z_m": surface,
                              "floor_z_m": surface - resolved.pool["parameters"]["depth_m"]}
+        self._pool_size = (resolved.pool["parameters"]["length_m"],
+                           resolved.pool["parameters"]["width_m"])
+        self._pool_from_world = _placement(resolved.scenario["pool_placement"]).inverse()
         envelope = _envelope(resolved.robot)
         placements = {item["task"]: _placement(item)
                       for item in resolved.scenario["task_placements"]}
         self._portals: dict[tuple[str, str], PortalTracker] = {}
         self._panels: dict[tuple[str, str], PerforatedPanel] = {}
+        self._crates: dict[tuple[str, str], OpenCrate] = {}
+        self._targets: dict[tuple[str, str], ProximityTarget] = {}
+        self._surfaces: dict[tuple[str, str], SurfaceTracker] = {}
+        self._turns: dict[tuple[str, str], TurnTracker] = {}
         self._contacts: dict[tuple[str, str], list[dict[str, Any]]] = {}
         self._rules: list[tuple[str, dict[str, Any]]] = []
         for identifier, task in self._tasks.items():
+            frames = {item["id"]: item for item in task["frames"]}
+
+            def placed(parameters: Mapping[str, Any], *, task_id: str = identifier,
+                       named: dict[str, Any] = frames) -> native.Pose:
+                base = placements[task_id]
+                if "frame" not in parameters:
+                    return base
+                frame = named[parameters["frame"]]
+                return base.compose(_pose(frame["position_m"], frame["orientation_wxyz"]))
+
             for region in task["regions"]:
-                if region["type"] == "perforated_panel":
-                    self._panels[identifier, region["id"]] = PerforatedPanel(
-                        region["parameters"], placements[identifier])
-                    continue
-                if region["type"] != "rectangular_portal":
-                    raise ValueError(f"task {identifier}: unsupported region {region['type']!r}")
-                self._portals[identifier, region["id"]] = PortalTracker(
-                    region["parameters"], placements[identifier], envelope,
-                    self._environment["floor_z_m"],
-                )
+                key, parameters = (identifier, region["id"]), region["parameters"]
+                kind = region["type"]
+                if kind == "perforated_panel":
+                    self._panels[key] = PerforatedPanel(parameters, placements[identifier])
+                elif kind == "rectangular_portal":
+                    self._portals[key] = PortalTracker(
+                        parameters, placed(parameters), envelope,
+                        self._environment["floor_z_m"])
+                elif kind == "open_crate":
+                    self._crates[key] = OpenCrate(parameters, placed(parameters))
+                elif kind == "proximity_target":
+                    self._targets[key] = ProximityTarget(
+                        parameters, placed(parameters),
+                        _probe_point(resolved.robot, parameters["probe_mechanism_type"]))
+                elif kind == "surface":
+                    positions = {name: placed({"frame": name}).translation
+                                 for name in parameters["facing"]["targets"]}
+                    self._surfaces[key] = SurfaceTracker(
+                        parameters, placed(parameters), envelope, surface, positions)
+                elif kind == "turn_zone":
+                    self._turns[key] = TurnTracker(parameters, placed(parameters))
+                else:
+                    raise ValueError(f"task {identifier}: unsupported region {kind!r}")
             for event in task["events"]:
                 if event["type"] == "contact" and event["parameters"]["with"] == "robot":
                     self._contacts.setdefault((identifier, event["parameters"]["prop"]), []).append(event)
-                elif event["type"] not in ("pass_through", "hit"):
+                elif event["type"] not in _EVENT_TYPES:
                     raise ValueError(f"task {identifier}: unsupported event {event['type']!r}")
             for rule in task["scoring"]:
                 if rule["type"] != "event_points":
@@ -140,13 +232,14 @@ class TaskRuntime:
             if not callable(callback):
                 raise ValueError(f"task hook {path}:{function} is not callable")
             self._hooks.append((callback, parameters))
-        for portal in self._portals.values():
-            portal.reset()
+        for tracker in (*self._portals.values(), *self._targets.values(),
+                        *self._surfaces.values(), *self._turns.values()):
+            tracker.reset()
         self._scores: dict[str, int] = {}
         self._history: list[dict[str, Any]] = []
         self._award_counts: dict[tuple[str, str], int] = {}
         self._active_contacts: set[tuple[str, str]] = set()
-        self._projectiles: dict[int, tuple[str, float]] = {}
+        self._projectiles: dict[int, _Projectile] = {}
         self._last_time = 0
         self._failed = False
         self._run = {"running": self._auto_start, "ended": False, "started_ns": 0,
@@ -156,7 +249,9 @@ class TaskRuntime:
         return _freeze({"run": self._run, "scores": self._scores, "history": self._history,
                         "tasks": {key: {"frames": {f["id"]: f for f in task["frames"]}}
                                   for key, task in self._tasks.items()},
-                        "environment": self._environment})
+                        "environment": self._environment,
+                        "latched": {f"{task}/{region}": target.latched
+                                    for (task, region), target in self._targets.items()}})
 
     def start(self, time_ns: int) -> None:
         """Start a fresh scoring run at the caller's current simulation time."""
@@ -200,6 +295,10 @@ class TaskRuntime:
             for (task, region), portal in self._portals.items():
                 for event in portal.observe(time_ns, world_reference):
                     events.extend(self._portal_events(task, region, event))
+            for trackers in (self._targets, self._surfaces, self._turns):
+                for (task, region), tracker in trackers.items():
+                    events.extend(self._fact_events(
+                        task, region, time_ns, tracker.observe(time_ns, world_reference)))
             for pair in sorted(active - self._active_contacts):
                 for binding in self._contacts[pair]:
                     events.append({"id": binding["id"], "type": "contact", "task": pair[0],
@@ -226,10 +325,49 @@ class TaskRuntime:
                 and binding["parameters"]["from_side"] == event.from_side
                 and binding["parameters"]["to_side"] == event.to_side]
 
+    def _fact_events(self, task: str, region: str, time_ns: int, facts: Sequence[Fact]
+                     ) -> list[dict[str, Any]]:
+        return [{"id": binding["id"], "type": kind, "task": task, "region": region,
+                 "time_ns": time_ns, "data": dict(data)}
+                for kind, data in facts for binding in self._tasks[task]["events"]
+                if binding["type"] == kind and binding["parameters"]["region"] == region]
+
+    def observe_events(self, time_ns: int, events: Sequence[Mapping[str, Any]]
+                       ) -> tuple[Mapping[str, Any], ...]:
+        """Score events from a physical owner (for example a prop world) at this time.
+
+        Each event is {id, type, task, region, data}; the task must be selected and the
+        data plain JSON. The runtime stamps time_ns and copies the data before any hook
+        sees it. Declared-event matching is not required: the pack hook owns the contract.
+        """
+        self._check_time(time_ns)
+        built = []
+        for event in events:
+            if (not isinstance(event, Mapping)
+                    or set(event) != {"id", "type", "task", "region", "data"}
+                    or any(not isinstance(event[key], str) for key in ("id", "type", "task", "region"))
+                    or not event["id"] or not event["type"] or event["task"] not in self._tasks
+                    or not isinstance(event["data"], Mapping)):
+                raise ValueError("external task events require id, type, task, region and data")
+            built.append({**{key: event[key] for key in ("id", "type", "task", "region")},
+                          "time_ns": time_ns,
+                          "data": json.loads(json.dumps(event["data"], allow_nan=False))})
+        try:
+            result = self._evaluate(built)
+        except Exception:
+            self._failed = True
+            raise
+        self._last_time = time_ns
+        return result
+
     def release_projectile(self, time_ns: int, identifier: int, mechanism_type: str,
-                           tip_world: Sequence[float], radius_m: float
-                           ) -> tuple[Mapping[str, Any], ...]:
-        """Observe a successful physical release; the mechanism owner supplies its tip."""
+                           tip_world: Sequence[float], radius_m: float,
+                           length_m: float | None = None) -> tuple[Mapping[str, Any], ...]:
+        """Observe a successful physical release; the mechanism owner supplies its tip.
+
+        length_m is the payload's capsule length (default 2 * radius, a sphere); crate walls,
+        floors and the pool floor use its oriented vertical extent.
+        """
         self._check_time(time_ns)
         if type(identifier) is not int or identifier < 0 or identifier in self._projectiles:
             raise ValueError("projectile identifiers must be unique nonnegative integers")
@@ -238,33 +376,60 @@ class TaskRuntime:
         tip = vector3(tip_world, "projectile tip")
         if isinstance(radius_m, bool) or not math.isfinite(radius_m) or radius_m <= 0:
             raise ValueError("projectile radius must be positive and finite")
-        events = []
+        length = 2 * float(radius_m) if length_m is None else length_m
+        if isinstance(length, bool) or not math.isfinite(length) or length <= 0:
+            raise ValueError("projectile length must be positive and finite")
+        events: list[dict[str, Any]] = []
+        tasks: set[str] = set()
         for (task, region), panel in self._panels.items():
             bindings = self._tasks[task]["events"]
             if any(b["type"] == "hit" and b["parameters"]["region"] == region
                    and b["parameters"]["projectile_mechanism_type"] == mechanism_type
                    for b in bindings):
+                tasks.add(task)
                 events.append({"id": "payload_released", "type": "payload_released",
                                "task": task, "region": region, "time_ns": time_ns,
                                "data": {"projectile_id": identifier,
                                         "mechanism_type": mechanism_type,
                                         "release_distance_m": panel.release_distance(tip)}})
+        for task, region in self._crates:
+            if task not in tasks and any(
+                    b["type"] == "drop_into"
+                    and mechanism_type in b["parameters"]["projectile_mechanism_types"]
+                    and (task, b["parameters"]["region"]) in self._crates
+                    for b in self._tasks[task]["events"]):
+                tasks.add(task)
+                events.append({"id": "payload_released", "type": "payload_released",
+                               "task": task, "region": region, "time_ns": time_ns,
+                               "data": {"projectile_id": identifier,
+                                        "mechanism_type": mechanism_type}})
         try:
             result = self._evaluate(events)
         except Exception:
             self._failed = True
             raise
-        self._projectiles[identifier] = (mechanism_type, float(radius_m))
+        self._projectiles[identifier] = _Projectile(mechanism_type, float(radius_m),
+                                                    float(length), time_ns, tasks)
         self._last_time = time_ns
         return result
 
     def observe_projectile(self, time_ns: int, identifier: int,
                            start_center_world: Sequence[float], end_center_world: Sequence[float],
                            axis_world: Sequence[float]) -> tuple[Mapping[str, Any], ...]:
-        """Judge swept mesh-center motion; hit data tells the physical owner to stop.
+        """Events-only view of step_projectile with unknown velocity (wall damping skipped)."""
+        return self.step_projectile(time_ns, identifier, start_center_world, end_center_world,
+                                    axis_world).events
+
+    def step_projectile(self, time_ns: int, identifier: int,
+                        start_center_world: Sequence[float], end_center_world: Sequence[float],
+                        axis_world: Sequence[float], velocity_world: Sequence[float] | None = None
+                        ) -> ProjectileStep:
+        """Judge swept mesh-center motion and return the physical correction to apply.
 
         The original panel contact uses mesh centers; only release-distance scoring uses
-        the projectile tip. Keeping these distinct preserves near-panel outcomes.
+        the projectile tip. Keeping these distinct preserves near-panel outcomes. Order follows
+        the original: panels, crates (walls, then landings), pool floor, pool walls/timeout.
+        velocity_world is the pre-contact velocity that crate walls damp and project.
         """
         self._check_time(time_ns)
         if type(identifier) is not int or identifier < 0 or identifier not in self._projectiles:
@@ -274,12 +439,22 @@ class TaskRuntime:
         axis = vector3(axis_world, "projectile axis")
         if abs(float(np.linalg.norm(axis)) - 1) > 1e-6:
             raise ValueError("projectile axis must be unit length")
-        mechanism, radius = self._projectiles[identifier]
-        events = []
+        velocity = (np.zeros(3) if velocity_world is None
+                    else vector3(velocity_world, "projectile velocity"))
+        state = self._projectiles[identifier]
+        if not state.active:
+            self._last_time = time_ns
+            return ProjectileStep((), True)
+        mechanism, radius = state.mechanism, state.radius
+        events: list[dict[str, Any]] = []
+        new, current, stop = end.copy(), velocity.copy(), False
         for (task, region), panel in self._panels.items():
             hit = panel.intersect(start, end, axis, radius)
             if hit is None:
                 continue
+            state.scored = True
+            if hit.outcome == "blocked":
+                new, current, stop = panel.world_point(hit.point_local), np.zeros(3), True
             for binding in self._tasks[task]["events"]:
                 p = binding["parameters"]
                 if (binding["type"] == "hit" and p["region"] == region
@@ -293,17 +468,64 @@ class TaskRuntime:
                                             "hole_size": hit.hole_size,
                                             "hit_point_local": hit.point_local,
                                             "stop_projectile": p["stop_projectile"]}})
+        for (task, region), crate in self._crates.items():
+            step = crate.step(start, new, current, axis, radius, state.length,
+                              (task, region) in state.entered)
+            new, current = step.position, step.velocity
+            if step.entered:
+                state.entered.add((task, region))
+            if step.outcome is None:
+                continue
+            stop = True
+            if state.scored:
+                continue
+            state.scored = True
+            for binding in self._tasks[task]["events"]:
+                p = binding["parameters"]
+                if (binding["type"] == "drop_into" and p["region"] == region
+                        and mechanism in p["projectile_mechanism_types"]
+                        and p["outcome"] == step.outcome):
+                    events.append({"id": binding["id"], "type": "drop_into", "task": task,
+                                   "region": region, "time_ns": time_ns,
+                                   "data": {"projectile_id": identifier,
+                                            "mechanism_type": mechanism, "outcome": step.outcome,
+                                            "detail": step.detail,
+                                            "region_class": crate.crate_class}})
+        vertical = radius + max(0.0, state.length / 2 - radius) * abs(float(axis[2]))
+        reason = ""
+        floor_limit = self._environment["floor_z_m"] + vertical
+        if new[2] < floor_limit:
+            new = new.copy()
+            new[2] = floor_limit
+            current, stop, reason = np.zeros(3), True, "pool_floor"
+        local = self._pool_from_world.apply(new)
+        if (local[0] < 0 or local[0] > self._pool_size[0] or local[1] < 0
+                or local[1] > self._pool_size[1]
+                or (time_ns - state.released_ns) / 1e9 > _MAX_PAYLOAD_AGE_S):
+            current, stop, reason = np.zeros(3), True, reason or "pool_wall_or_timeout"
+        if reason and not state.scored:
+            state.scored = True
+            events.extend({"id": "payload_miss", "type": "miss", "task": task, "region": "",
+                           "time_ns": time_ns,
+                           "data": {"projectile_id": identifier, "mechanism_type": mechanism,
+                                    "reason": reason}} for task in sorted(state.tasks))
         try:
             result = self._evaluate(events)
         except Exception:
             self._failed = True
             raise
+        state.active = not stop
         self._last_time = time_ns
-        return result
+        moved = None if np.array_equal(new, end) else tuple(float(x) for x in new)
+        damped = None if np.array_equal(current, velocity) else tuple(float(x) for x in current)
+        return ProjectileStep(result, stop, moved, damped)
 
     def _evaluate(self, events: list[dict[str, Any]]) -> tuple[Mapping[str, Any], ...]:
         if not events:
             return ()
+        for tracker in self._turns.values():
+            if any((event["task"], event["id"]) in tracker.restart_events for event in events):
+                tracker.restart()
         scores = dict(self._scores)
         counts = dict(self._award_counts)
         if self._run["running"] and not self._run["ended"]:

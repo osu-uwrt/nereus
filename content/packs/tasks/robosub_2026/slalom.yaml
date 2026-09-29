@@ -1,0 +1,80 @@
+# Task include file (kind task), referenced from tasks.yaml.
+# Task-local frame = slalom_front (the original slalom_parent with the front row at identity, +X toward
+# the approach side, +Z up). Rows are the original slalom_front/middle/back mapping frames; the scenario
+# places the task. Judge: scoring.py CourseJudge.update slalom loop; rows scored by the pack hook.
+schema_version: 1
+kind: task
+id: slalom
+description: Three slalom rows crossed on the reference origin; side and depth are scored by the hook.
+
+frames:   # mapping.yaml slalom_front / slalom_middle / slalom_back (yaw 0 under slalom_front)
+- {id: slalom_front, position_m: [0.0, 0.0, 0.0], orientation_wxyz: [1, 0, 0, 0]}
+- {id: slalom_middle, position_m: [-2.127361, 0.693981, 0.0], orientation_wxyz: [1, 0, 0, 0]}
+- {id: slalom_back, position_m: [-4.231969, 0.117814, 0.0], orientation_wxyz: [1, 0, 0, 0]}
+
+props:
+- id: poles
+  type: static_body
+  parameters:
+    collision_boxes: []   # the original has NO pole collision proxies (visual only)
+    visuals:              # markers.yaml marker3..5: identity offset in each row frame
+    - {asset: slalom_mesh, frame: slalom_front, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: slalom_mesh, frame: slalom_middle, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+    - {asset: slalom_mesh, frame: slalom_back, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+
+# Each row is a portal in its own frame. Only the reference-origin crossing point counts:
+# 0 < |y| < 1.55 (side = sign(y)); depth_overlap uses the envelope's conservative vertical extent
+# against the z band. Original oddities kept: rows score only positive -> negative crossings.
+regions:
+- id: slalom_front
+  type: rectangular_portal
+  parameters:
+    frame: slalom_front
+    plane: {axis: x, offset_m: 0.0}
+    bounds_local: {abs_y_lt_m: 1.55, z_lt_m: 0.474}   # slalom_half_width; z_lt_m unused by this fit check
+    world_floor_clearance: false
+    crossing_reference: robot_reference_origin
+    fit_checks: [reference_origin_at_crossing]
+    traversal: reference_origin
+    depth_band_m: [-0.81, 0.474]                        # slalom_bottom, slalom_top
+    approach_radius_m: 3.0                              # attempt bookkeeping only (no slalom style)
+    max_pose_step_m: 2.0
+- id: slalom_middle
+  type: rectangular_portal
+  parameters:
+    frame: slalom_middle
+    plane: {axis: x, offset_m: 0.0}
+    bounds_local: {abs_y_lt_m: 1.55, z_lt_m: 0.474}   # slalom_half_width; z_lt_m unused by this fit check
+    world_floor_clearance: false
+    crossing_reference: robot_reference_origin
+    fit_checks: [reference_origin_at_crossing]
+    traversal: reference_origin
+    depth_band_m: [-0.81, 0.474]                        # slalom_bottom, slalom_top
+    approach_radius_m: 3.0                              # attempt bookkeeping only (no slalom style)
+    max_pose_step_m: 2.0
+- id: slalom_back
+  type: rectangular_portal
+  parameters:
+    frame: slalom_back
+    plane: {axis: x, offset_m: 0.0}
+    bounds_local: {abs_y_lt_m: 1.55, z_lt_m: 0.474}   # slalom_half_width; z_lt_m unused by this fit check
+    world_floor_clearance: false
+    crossing_reference: robot_reference_origin
+    fit_checks: [reference_origin_at_crossing]
+    traversal: reference_origin
+    depth_band_m: [-0.81, 0.474]                        # slalom_bottom, slalom_top
+    approach_radius_m: 3.0                              # attempt bookkeeping only (no slalom style)
+    max_pose_step_m: 2.0
+
+events:
+- id: front_pass
+  type: pass_through
+  parameters: {region: slalom_front, from_side: positive, to_side: negative, emits: [crossing_point_local, depth_overlap]}
+- id: middle_pass
+  type: pass_through
+  parameters: {region: slalom_middle, from_side: positive, to_side: negative, emits: [crossing_point_local, depth_overlap]}
+- id: back_pass
+  type: pass_through
+  parameters: {region: slalom_back, from_side: positive, to_side: negative, emits: [crossing_point_local, depth_overlap]}
+
+scoring: []   # same/other side and depth points depend on the gate side: owned by the pack hook
