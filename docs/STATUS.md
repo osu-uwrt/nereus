@@ -52,6 +52,17 @@ Python suite passed all 110 cases (the initially skipped C++ comparison was run
 separately with `RP_REFERENCE_RUNNER=build/release/robotics-sim`). Ruff and strict
 mypy passed for the changed Python code. This remains below the real ROS hold gate.
 
+The next step-2 increment adds `pack_runtime.create_runtime`: resolved robot,
+pool and task contact data construct the existing native plant and explicitly
+selected sensors. It honors contact mode, sensor enablement and queue policy;
+requested unsupported cameras fail instead of silently disappearing. Omitted
+sensor ids are reported for the caller's run manifest. Native pose composition
+is reused for transforms. Talos command/sensor traces match the established
+native profile under identical inputs, and a separate four-thruster pack runs
+without robot-specific code. The nine factory/binding cases pass as part of the
+110-case verification above. ROS clock mapping, placement and bridge lifecycle
+remain the next increment; no live UWRT hold has been demonstrated yet.
+
 The user replaced human approval with joint Codex/Claude Code execution. Claude
 uses `claude-opus-5-5` with high effort. It may delegate bounded mechanical work
 to `claude-sonnet-5-5`; the exact model was checked successfully. Codex and Opus

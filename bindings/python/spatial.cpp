@@ -15,6 +15,30 @@ void bindSpatial(py::module_ &m) {
         [](Pose &self, const Eigen::Vector4d &q) {
             self.rotation = Eigen::Quaterniond(q[0], q[1], q[2], q[3]);
         });
+    pose.def(
+        "compose",
+        [](const Pose &self, const Pose &child) {
+            validate(self);
+            validate(child);
+            auto result = compose(self, child);
+            validate(result);
+            return result;
+        },
+        py::arg("child"));
+    pose.def("inverse", [](const Pose &self) {
+        validate(self);
+        return inverse(self);
+    });
+    pose.def(
+        "apply",
+        [](const Pose &self, const Eigen::Vector3d &point) {
+            validate(self);
+            const Eigen::Vector3d result = apply(self, point);
+            if (!point.allFinite() || !result.allFinite())
+                throw std::invalid_argument("transformed point must be finite");
+            return result;
+        },
+        py::arg("point"));
     auto frame = py::class_<FixedFrame>(m, "FixedFrame")
                      .def(py::init<>())
                      .def_readwrite("parent", &FixedFrame::parent)

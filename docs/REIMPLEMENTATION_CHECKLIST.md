@@ -23,7 +23,8 @@ Step 2 progress:
 
 - [x] Standalone pack loader, lossless saves, source snapshots, generated schemas,
   registered-type output, validation CLI and explicit unresolved dependencies.
-- [ ] Connect resolved packs to the native runtime and preserve navigation behavior.
+- [x] Connect resolved packs to the native runtime and preserve navigation behavior;
+  native-profile parity and a distinct four-thruster pack passed.
 - [ ] Generic ROS bridge and UWRT bindings, followed by the old/new real-stack hold comparison.
 
 The user delegated approval to Codex and Claude Code, using Opus 5.5/high. Agree
