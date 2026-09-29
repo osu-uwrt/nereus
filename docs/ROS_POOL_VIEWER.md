@@ -112,8 +112,16 @@ status_lights, thruster_visuals, camera_geometry (+ frame graph), jpeg, scenario
 
 - Camera sensor look (water, noise, depth model) is not editable from the viewer; Water/Lighting tabs change only
   the observer render. Runtime editing of the camera products needs a bridge parameter path (open item).
-- Detections resolve at the *truth* base pose at the marker stamp composed with the pack's fixed base-to-camera
-  transform (the bridge publishes no per-camera truth TF); markers wait for TF instead of falling back to estimates.
+- Detections (`yolo_orientation/visualization_marker_array`; overlay on by default, `--no-detections` /
+  `detections.enabled`). Each observation (keyed by ns,id) is placed once and never follows later TF; lifetime expiry
+  is independent of visibility. Placement (`--detections-placement` / `detections.placement` / toolbar combo):
+  `pose_source` (default) follows the pose source; `truth` = truth base at the marker stamp composed with the pack's
+  base-to-camera transform; `estimate` = RViz-like TF lookup of the marker frame at the stamp, retried for 0.5 s,
+  then the latest transform and drawn dim and dashed ("approximate"); `both` draws truth solid and estimate as a cyan
+  outline with a legend. Truth/both need the simulator: on a real robot (estimate source, or no truth frame) they are
+  not offered in the UI and are treated as estimate (logged once). The stack's detector sends DELETEALL before every
+  frame's markers, so by default only the newest frame's detections show (RViz behaviour) and they blink; `--keep-detections`
+  / `detections.honor_delete_all: false` lets observations live out their 5 s lifetime instead.
 - Loaded payload rounds are drawn from the mechanism slot poses (`payloads.loaded_namespaces`), released rounds and
   props from marker poses; magnet lights are emissive boxes at the marker pose/scale rather than bin LED meshes.
 - In `--demo` the camera cards show this viewer's own render from each sensor pose (there is no stream).

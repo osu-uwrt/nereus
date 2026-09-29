@@ -10,7 +10,10 @@ struct ScreenRect {
 };
 bool projectToScreen(const glm::mat4 &viewProjection, const ScreenRect &rect, const glm::vec4 &world, ImVec2 &pixel);
 ImU32 rgba(float r, float g, float b, float a);
-void drawDetections(const std::vector<PlacedDetection> &, const glm::mat4 &viewProjection, const ScreenRect &);
+// `both`: truth and estimate placements are shown together, so estimate ones get a distinct cyan outline.
+// Approximate estimate placements (TF had not reached the stamp) are dim and dashed. A legend explains the styles.
+void drawDetections(const std::vector<PlacedDetection> &, const glm::mat4 &viewProjection, const ScreenRect &,
+                    bool both = false);
 void drawMpcPath(const std::vector<glm::mat4> &, const glm::mat4 &viewProjection, const ScreenRect &);
 struct TfOverlay {
     const TfSnapshot *snapshot = nullptr;

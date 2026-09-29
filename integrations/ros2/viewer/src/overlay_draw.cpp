@@ -14,13 +14,33 @@ ImU32 rgba(float r, float g, float b, float a) {
     return ImGui::ColorConvertFloat4ToU32({r, g, b, a});
 }
 
-void drawDetections(const std::vector<PlacedDetection> &detections, const glm::mat4 &vp, const ScreenRect &rect) {
+namespace {
+void dashedLine(ImDrawList *draw, ImVec2 a, ImVec2 b, ImU32 color, float thickness) {
+    const float dx = b.x - a.x, dy = b.y - a.y, length = std::sqrt(dx * dx + dy * dy);
+    constexpr float dash = 6.f, gap = 4.f;
+    for (float t = 0; t < length; t += dash + gap) {
+        const float t1 = std::min(t + dash, length);
+        draw->AddLine({a.x + dx * t / length, a.y + dy * t / length}, {a.x + dx * t1 / length, a.y + dy * t1 / length},
+                      color, thickness);
+    }
+}
+} // namespace
+
+void drawDetections(const std::vector<PlacedDetection> &detections, const glm::mat4 &vp, const ScreenRect &rect,
+                    bool both) {
     using visualization_msgs::msg::Marker;
     auto *draw = ImGui::GetWindowDrawList();
     draw->PushClipRect(rect.position, {rect.position.x + rect.width, rect.position.y + rect.height}, true);
+    bool haveApprox = false;
     for (const auto &placed : detections) {
         const auto &m = placed.marker;
-        const ImU32 tint = rgba(m.color.r, m.color.g, m.color.b, m.color.a);
+        using Kind = PlacedDetection::Kind;
+        const bool approx = placed.kind == Kind::EstimateApprox;
+        const bool outlined = both && placed.kind != Kind::Truth; // estimate next to truth: cyan, unfilled
+        haveApprox |= approx;
+        const float alpha = m.color.a * (approx ? .45f : 1.f);
+        const ImU32 tint = outlined ? rgba(.25f, .9f, 1.f, std::max(alpha, approx ? .45f : .9f))
+                                    : rgba(m.color.r, m.color.g, m.color.b, alpha);
         if (m.type == Marker::CUBE) {
             const float hx = float(m.scale.x) / 2, hy = float(m.scale.y) / 2;
             const glm::vec4 corners[] = {{-hx, -hy, 0, 1}, {hx, -hy, 0, 1}, {hx, hy, 0, 1}, {-hx, hy, 0, 1}};
@@ -30,8 +50,13 @@ void drawDetections(const std::vector<PlacedDetection> &detections, const glm::m
                 visible = projectToScreen(vp, rect, placed.pose * corners[i], pixels[i]);
             if (!visible)
                 continue;
-            draw->AddConvexPolyFilled(pixels, 4, tint);
-            draw->AddPolyline(pixels, 4, tint, ImDrawFlags_Closed, 1.5f);
+            if (!outlined)
+                draw->AddConvexPolyFilled(pixels, 4, tint);
+            if (approx)
+                for (int i = 0; i < 4; ++i)
+                    dashedLine(draw, pixels[i], pixels[(i + 1) % 4], tint, 1.5f);
+            else
+                draw->AddPolyline(pixels, 4, tint, ImDrawFlags_Closed, outlined ? 2.f : 1.5f);
         } else if (m.type == Marker::ARROW) {
             // Pose+scale arrow along the marker's +X, drawn like rviz: a shaft ending at 77% of the length and
             // a head over the final 23%. The head base is projected in 3D so it foreshortens with the view;
@@ -42,7 +67,10 @@ void drawDetections(const std::vector<PlacedDetection> &detections, const glm::m
                 !projectToScreen(vp, rect, placed.pose * glm::vec4(float(m.scale.x), 0, 0, 1), tip))
                 continue;
             const float thickness = 1.5f;
-            draw->AddLine(tail, neck, tint, thickness);
+            if (approx)
+                dashedLine(draw, tail, neck, tint, thickness);
+            else
+                draw->AddLine(tail, neck, tint, thickness);
             const ImVec2 axis{tip.x - neck.x, tip.y - neck.y};
             const float headLength = std::sqrt(axis.x * axis.x + axis.y * axis.y);
             if (headLength < 1e-3f) {
@@ -52,9 +80,25 @@ void drawDetections(const std::vector<PlacedDetection> &detections, const glm::m
             const float halfWidth = std::clamp(headLength * .45f, 3.f, 12.f);
             const ImVec2 normal{-axis.y / headLength * halfWidth, axis.x / headLength * halfWidth};
             const ImVec2 head[] = {tip, {neck.x + normal.x, neck.y + normal.y}, {neck.x - normal.x, neck.y - normal.y}};
-            draw->AddTriangleFilled(head[0], head[1], head[2], tint);
+            if (!outlined)
+                draw->AddTriangleFilled(head[0], head[1], head[2], tint);
             draw->AddTriangle(head[0], head[1], head[2], tint, 1.f);
         }
+    }
+    if (both || haveApprox) {
+        float y = rect.position.y + 52.f; // below the status pills
+        const float x = rect.position.x + 10.f;
+        const int lines = (both ? 2 : 0) + (haveApprox ? 1 : 0);
+        draw->AddRectFilled({x - 4.f, y - 2.f}, {x + 300.f, y + ImGui::GetTextLineHeight() * lines + 2.f},
+                            rgba(.03f, .07f, .1f, .72f), 3.f);
+        if (both) {
+            draw->AddText({x, y}, rgba(1.f, 1.f, 1.f, .9f), "Detections: solid = simulator truth");
+            y += ImGui::GetTextLineHeight();
+            draw->AddText({x, y}, rgba(.25f, .9f, 1.f, .95f), "Detections: cyan outline = estimate (TF)");
+            y += ImGui::GetTextLineHeight();
+        }
+        if (haveApprox)
+            draw->AddText({x, y}, rgba(1.f, 1.f, 1.f, .7f), "Detections: dim dashed = approximate (TF lagged)");
     }
     draw->PopClipRect();
 }

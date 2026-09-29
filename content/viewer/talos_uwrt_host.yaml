@@ -34,6 +34,20 @@ pose:
   truth_delay_s: 0.02
   other_delay_s: 0.06
 
+# Detector markers (topics.detections). Each observation is placed once and then stays fixed in the world.
+#   enabled:   overlay on at start (CLI: --detections / --no-detections).
+#   placement: pose_source  follow the pose source above (truth: simulator truth camera pose at the marker
+#                           stamp; estimate: TF of the marker frame at the stamp, RViz-like)
+#              truth | estimate | both   show that placement, or both (truth solid, estimate cyan outline)
+#              truth/both need a simulator; on a real robot they are treated as estimate.
+#              (CLI: --detections-placement; also a combo in the toolbar when truth exists.)
+detections:
+  enabled: true
+  placement: pose_source
+  # The stack's detector sends DELETEALL before every frame's markers, so with true only the newest
+  # frame's detections show (RViz behaviour). false: ignore DELETEALL; observations live out their lifetime.
+  honor_delete_all: true
+
 # Visual-state streams, relative to the bridge namespace. Missing publishers are simply absent.
 # (thruster force and LED topics come from the two documents above.)
 topics:

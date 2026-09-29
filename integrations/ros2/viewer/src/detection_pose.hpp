@@ -4,6 +4,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <rclcpp/time.hpp>
+#include <stdexcept>
+#include <string>
 #include <tf2_ros/buffer.h>
 #include <visualization_msgs/msg/marker.hpp>
 
@@ -60,14 +62,72 @@ class DetectionPose {
         return placed_;
     }
 
+    // RViz-like placement through TF: the marker frame at the marker stamp. While TF has not reached the
+    // stamp, keep retrying for `retryWindow` seconds (`age` = time since the observation arrived), then use the
+    // latest transform once and flag the result approximate. Zero stamps mean "latest" and are exact.
+    bool placeViaTf(const visualization_msgs::msg::Marker &marker, const std::string &fixedFrame, tf2_ros::Buffer &tf,
+                    double age, double retryWindow = 0.5) {
+        if (placed_)
+            return true;
+        if (resolveDetectionPose(marker, fixedFrame, tf, world_))
+            return placed_ = true;
+        if (rclcpp::Time(marker.header.stamp).nanoseconds() == 0 || age < retryWindow)
+            return false;
+        auto latest = marker;
+        latest.header.stamp = builtin_interfaces::msg::Time();
+        placed_ = resolveDetectionPose(latest, fixedFrame, tf, world_);
+        approximate_ = placed_;
+        return placed_;
+    }
+
     const glm::mat4 &world() const {
         return world_;
     }
+    bool placed() const {
+        return placed_;
+    }
+    bool approximate() const {
+        return approximate_;
+    }
 
   private:
-    bool placed_ = false;
+    bool placed_ = false, approximate_ = false;
     glm::mat4 world_{1};
 };
+
+// Which placements of a detection to show. PoseSource follows the viewer's pose source.
+enum class DetectionMode { PoseSource, Truth, Estimate, Both };
+inline DetectionMode parseDetectionMode(const std::string &text) {
+    if (text == "pose_source" || text.empty())
+        return DetectionMode::PoseSource;
+    if (text == "truth")
+        return DetectionMode::Truth;
+    if (text == "estimate")
+        return DetectionMode::Estimate;
+    if (text == "both")
+        return DetectionMode::Both;
+    throw std::invalid_argument("detections placement must be pose_source|truth|estimate|both, got '" + text + "'");
+}
+struct DetectionShow {
+    bool truth = false, estimate = false;
+    bool downgraded = false; // truth/both was requested but no simulator truth exists: estimate only
+};
+// Truth placement needs simulator truth; without it (real robot) truth/both collapse to the estimate.
+inline DetectionShow resolveDetectionMode(DetectionMode requested, bool truthAvailable, bool truthActive) {
+    DetectionShow show;
+    if (!truthAvailable) {
+        show.estimate = true;
+        show.downgraded = requested == DetectionMode::Truth || requested == DetectionMode::Both;
+        return show;
+    }
+    switch (requested) {
+    case DetectionMode::PoseSource: (truthActive ? show.truth : show.estimate) = true; break;
+    case DetectionMode::Truth: show.truth = true; break;
+    case DetectionMode::Estimate: show.estimate = true; break;
+    case DetectionMode::Both: show.truth = show.estimate = true; break;
+    }
+    return show;
+}
 
 // The simulator publishes only the truth base link, so the optical pose at which a detection was
 // acquired is that truth pose at the marker stamp composed with the fixed base-to-camera transform

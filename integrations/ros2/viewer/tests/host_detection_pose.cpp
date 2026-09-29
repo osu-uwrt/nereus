@@ -227,3 +227,118 @@ TEST(HostDetectionPose, TruthBaseAcquisition) {
     ASSERT_TRUE(placed.place(marker, "map", tf, "", &world));
     ASSERT_TRUE(glm::length(placed.world()[3] - first[3]) < 1e-6f);
 }
+
+namespace {
+struct TfFixture {
+  std::shared_ptr<rclcpp::Clock> clock = std::make_shared<rclcpp::Clock>(RCL_ROS_TIME);
+  tf2_ros::Buffer tf{clock};
+  void set(int sec, double x) {
+    geometry_msgs::msg::TransformStamped t;
+    t.header.frame_id = "map";
+    t.child_frame_id = "camera";
+    t.header.stamp.sec = sec;
+    t.transform.translation.x = x;
+    t.transform.rotation.w = 1;
+    ASSERT_TRUE(tf.setTransform(t, "test"));
+  }
+};
+visualization_msgs::msg::Marker markerAt(int sec) {
+  visualization_msgs::msg::Marker m;
+  m.header.frame_id = "camera";
+  m.header.stamp.sec = sec;
+  m.pose.position.x = 1;
+  m.pose.orientation.w = 1;
+  return m;
+}
+} // namespace
+
+TEST(HostDetectionPose, EstimatePlacementExactThenImmutable) {
+  TfFixture f;
+  f.set(10, 0);
+  f.set(12, 2);
+  DetectionPose p;
+  ASSERT_TRUE(p.placeViaTf(markerAt(11), "map", f.tf, 0.));
+  ASSERT_TRUE(!p.approximate());
+  EXPECT_NEAR(p.world()[3].x, 2.0, 1e-5); // 1 (interpolated) + marker 1
+  f.set(13, 50);
+  ASSERT_TRUE(p.placeViaTf(markerAt(11), "map", f.tf, 9.));
+  EXPECT_NEAR(p.world()[3].x, 2.0, 1e-5);
+}
+
+TEST(HostDetectionPose, EstimatePlacementRetriesThenApproximates) {
+  TfFixture f;
+  f.set(10, 3);
+  DetectionPose p;
+  // TF has not reached the stamp: wait inside the retry window...
+  ASSERT_TRUE(!p.placeViaTf(markerAt(20), "map", f.tf, 0.1));
+  ASSERT_TRUE(!p.placed());
+  // ...and use the exact transform if it arrives in time.
+  f.set(21, 5);
+  ASSERT_TRUE(p.placeViaTf(markerAt(20), "map", f.tf, 0.3));
+  ASSERT_TRUE(!p.approximate());
+
+  // Never arrives: after the window fall back to the latest transform and mark it approximate, once.
+  TfFixture g;
+  g.set(10, 3);
+  DetectionPose q;
+  ASSERT_TRUE(!q.placeViaTf(markerAt(20), "map", g.tf, 0.49));
+  ASSERT_TRUE(q.placeViaTf(markerAt(20), "map", g.tf, 0.51));
+  ASSERT_TRUE(q.approximate());
+  EXPECT_NEAR(q.world()[3].x, 4.0, 1e-5);
+  g.set(30, 100);
+  ASSERT_TRUE(q.placeViaTf(markerAt(20), "map", g.tf, 5.));
+  EXPECT_NEAR(q.world()[3].x, 4.0, 1e-5);
+
+  // Unknown frame never places, even after the window.
+  auto bad = markerAt(20);
+  bad.header.frame_id = "nowhere";
+  DetectionPose r;
+  ASSERT_TRUE(!r.placeViaTf(bad, "map", g.tf, 5.));
+}
+
+TEST(HostDetectionPose, ZeroStampUsesLatestExactly) {
+  TfFixture f;
+  f.set(10, 3);
+  DetectionPose p;
+  ASSERT_TRUE(p.placeViaTf(markerAt(0), "map", f.tf, 0.));
+  ASSERT_TRUE(!p.approximate());
+  EXPECT_NEAR(p.world()[3].x, 4.0, 1e-5);
+}
+
+TEST(HostDetectionPose, ModeResolution) {
+  EXPECT_TRUE(parseDetectionMode("both") == DetectionMode::Both);
+  EXPECT_TRUE(parseDetectionMode("pose_source") == DetectionMode::PoseSource);
+  EXPECT_THROW(parseDetectionMode("nope"), std::invalid_argument);
+  // Simulator present: pose source follows the active source; both shows both placements.
+  auto s = resolveDetectionMode(DetectionMode::PoseSource, true, true);
+  EXPECT_TRUE(s.truth && !s.estimate);
+  s = resolveDetectionMode(DetectionMode::PoseSource, true, false);
+  EXPECT_TRUE(!s.truth && s.estimate);
+  s = resolveDetectionMode(DetectionMode::Both, true, true);
+  EXPECT_TRUE(s.truth && s.estimate && !s.downgraded);
+  s = resolveDetectionMode(DetectionMode::Estimate, true, true);
+  EXPECT_TRUE(!s.truth && s.estimate);
+  // Real robot: truth and both are never offered; they collapse to the estimate.
+  for (auto mode : {DetectionMode::Truth, DetectionMode::Both, DetectionMode::PoseSource, DetectionMode::Estimate}) {
+    s = resolveDetectionMode(mode, false, false);
+    EXPECT_TRUE(!s.truth && s.estimate);
+    EXPECT_EQ(s.downgraded, mode == DetectionMode::Truth || mode == DetectionMode::Both);
+  }
+}
+
+TEST(HostDetectionPose, PlacementsAreIndependentPerKind) {
+  // Mode switching: each kind is placed once, lazily, so switching modes never moves an existing placement
+  // and a later-enabled kind places at the same acquisition stamp.
+  TfFixture f;
+  f.set(10, 0);
+  f.set(12, 2);
+  DetectionPose truth, estimate;
+  glm::mat4 acquisition = glm::translate(glm::mat4(1), glm::vec3(7, 0, 0));
+  auto m = markerAt(11);
+  ASSERT_TRUE(truth.place(m, "map", f.tf, "", &acquisition));
+  EXPECT_NEAR(truth.world()[3].x, 8.0, 1e-5);
+  f.set(13, 99);
+  ASSERT_TRUE(estimate.placeViaTf(m, "map", f.tf, 1.));
+  EXPECT_NEAR(estimate.world()[3].x, 2.0, 1e-5);
+  EXPECT_NEAR(truth.world()[3].x, 8.0, 1e-5);
+}

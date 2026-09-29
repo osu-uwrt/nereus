@@ -456,17 +456,19 @@ void RosSide::receiveDetections(const visualization_msgs::msg::MarkerArray &msg)
     using Marker = visualization_msgs::msg::Marker;
     const auto now = Clock::now();
     for (const auto &m : msg.markers) {
-        if (m.action == Marker::DELETEALL)
-            detectionMarkers_.clear();
-        else if (m.action == Marker::DELETE)
+        if (m.action == Marker::DELETEALL) {
+            if (honorDeleteAll_)
+                detectionMarkers_.clear();
+        } else if (m.action == Marker::DELETE)
             detectionMarkers_.erase({m.ns, m.id});
         else
-            detectionMarkers_[{m.ns, m.id}] = DetectionEntry{m, now, {}};
+            detectionMarkers_[{m.ns, m.id}] = DetectionEntry{m, now, {}, {}};
     }
 }
 
-// Camera observations belong at their actual simulated acquisition pose: the truth base link at the
-// marker stamp composed with the pack's fixed base-to-camera transform. Never falls back to estimated TF.
+// Each observation is placed once per placement kind and then never follows later TF. Truth: the truth base
+// link at the marker stamp composed with the pack's fixed base-to-camera transform. Estimate: TF of the marker
+// frame at the stamp through the localization frames (RViz-like), approximate after the retry window.
 void RosSide::captureDetections(bool show) {
     placedDetections.clear();
     expire(props);
@@ -484,33 +486,47 @@ void RosSide::captureDetections(bool show) {
     }
     if (!show || !live_ || !scenario_)
         return;
+    const DetectionShow shown = detectionShow();
+    if (shown.downgraded && !warnedDetectionDowngrade_) {
+        warnedDetectionDowngrade_ = true;
+        std::cerr << "robotics-pool-viewer: no simulator truth; detection placement truth/both treated as estimate\n";
+    }
     for (auto &[key, entry] : detectionMarkers_) {
         const auto &m = entry.marker;
-        const glm::mat4 *baseToCamera = nullptr;
-        for (const auto &c : scenario_->cameras) {
-            if (m.header.frame_id == c.rosOpticalFrame)
-                baseToCamera = &c.opticalInBase;
-            else if (m.header.frame_id == scenario_->rosFrame(c.mountFrame))
-                baseToCamera = &c.mountInBase;
-            if (baseToCamera)
-                break;
+        const double age = std::chrono::duration<double>(now - entry.received).count();
+        if (shown.truth) {
+            const glm::mat4 *baseToCamera = nullptr;
+            for (const auto &c : scenario_->cameras) {
+                if (m.header.frame_id == c.rosOpticalFrame)
+                    baseToCamera = &c.opticalInBase;
+                else if (m.header.frame_id == scenario_->rosFrame(c.mountFrame))
+                    baseToCamera = &c.mountInBase;
+                if (baseToCamera)
+                    break;
+            }
+            bool placed;
+            if (baseToCamera) {
+                const rclcpp::Time stamp(m.header.stamp);
+                glm::mat4 acquisition;
+                if (truthAcquisitionPose(*buffer_, scenario_->mapFrame, scenario_->truthBaseFrame, stamp, *baseToCamera,
+                                         acquisition)) {
+                    auto stamped = m;
+                    if (stamp.nanoseconds() == 0)
+                        stamped.header.stamp.nanosec = 1; // zero stamps use the latest truth for initial placement only
+                    placed = entry.truth.place(stamped, scenario_->mapFrame, *buffer_, "", &acquisition);
+                } else {
+                    placed = entry.truth.placed(); // truth TF has not reached the stamp; retry next frame
+                }
+            } else {
+                placed = entry.truth.place(m, scenario_->mapFrame, *buffer_);
+            }
+            if (placed)
+                placedDetections.push_back({entry.truth.world(), m, PlacedDetection::Kind::Truth});
         }
-        bool placed;
-        if (baseToCamera) {
-            const rclcpp::Time stamp(m.header.stamp);
-            glm::mat4 acquisition;
-            if (!truthAcquisitionPose(*buffer_, scenario_->mapFrame, poseFrame(), stamp, *baseToCamera,
-                                      acquisition))
-                continue; // truth TF has not reached the stamp; retry next frame
-            auto stamped = m;
-            if (stamp.nanoseconds() == 0)
-                stamped.header.stamp.nanosec = 1; // zero stamps use the latest truth for initial placement only
-            placed = entry.placement.place(stamped, scenario_->mapFrame, *buffer_, "", &acquisition);
-        } else {
-            placed = entry.placement.place(m, scenario_->mapFrame, *buffer_);
-        }
-        if (placed)
-            placedDetections.push_back({entry.placement.world(), m});
+        if (shown.estimate && entry.estimate.placeViaTf(m, scenario_->mapFrame, *buffer_, age))
+            placedDetections.push_back({entry.estimate.world(), m,
+                                        entry.estimate.approximate() ? PlacedDetection::Kind::EstimateApprox
+                                                                     : PlacedDetection::Kind::Estimate});
     }
 }
 
