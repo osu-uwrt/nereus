@@ -33,6 +33,9 @@ struct Submesh {
 struct MeshAsset {
     std::vector<Submesh> submeshes;   // Original depth-first node/mesh order.
     Eigen::Vector3f minimum, maximum; // Indexed bounds in authored asset coordinates.
+    // Sorted canonical files opened by the importer, including the source mesh and
+    // material/buffer sidecars. Textures opened later by the renderer are separate.
+    std::vector<std::filesystem::path> dependencies;
 };
 struct AssetLimits {
     std::uintmax_t file_bytes = 128 * 1024 * 1024;

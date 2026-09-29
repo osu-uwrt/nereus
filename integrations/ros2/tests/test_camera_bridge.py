@@ -37,6 +37,48 @@ class Provider:
         self.seeds.append(seed)
 
 
+class ParallelProvider(Provider):
+    sensor_ids = ("cam", "other")
+
+    def __init__(self):
+        super().__init__()
+        self.entered = {sensor: threading.Event() for sensor in self.sensor_ids}
+        self.release = {sensor: threading.Event() for sensor in self.sensor_ids}
+        self.reset_entered = threading.Event()
+        self.reset_release = threading.Event()
+        self.reset_release.set()
+        self.active = set()
+        self.lock = threading.Lock()
+
+    def capture(self, sensor, position, orientation, time_s, *, jpeg_quality):
+        with self.lock:
+            if sensor in self.active:
+                raise AssertionError("same camera acquired concurrently")
+            self.active.add(sensor)
+            self.calls.append((sensor, position, orientation, time_s, jpeg_quality))
+        self.entered[sensor].set()
+        if not self.release[sensor].wait(5):
+            raise TimeoutError("test capture was not released")
+        with self.lock:
+            self.active.remove(sensor)
+        frame = SimpleNamespace(width=3, height=2, depth=np.ones((2, 3), np.float32))
+        return SimpleNamespace(left=frame, right=None)
+
+    def reset(self, seed):
+        with self.lock:
+            if self.active:
+                raise AssertionError("reset overlaps an old capture")
+            self.seeds.append(seed)
+        self.reset_entered.set()
+        if not self.reset_release.wait(5):
+            raise TimeoutError("test reset was not released")
+
+    def unblock(self):
+        for event in self.release.values():
+            event.set()
+        self.reset_release.set()
+
+
 def resolved(overflow="drop_oldest"):
     config = {"id": "cam", "type": "stereo_camera", "frame": "optical", "enabled": True,
               "period_ns": 20_000_000, "capacity": 1, "overflow": overflow,
@@ -48,34 +90,157 @@ def resolved(overflow="drop_oldest"):
                            bridge={"streams": [stream], "frame_names": {"optical": "auv/optical"}})
 
 
+def two_cameras():
+    config = resolved()
+    other = copy.deepcopy(config.robot["sensors"][0])
+    other["id"] = "other"
+    config.robot["sensors"].append(other)
+    stream = copy.deepcopy(config.bridge["streams"][0])
+    stream.update(id="other_depth", native="sensor:other.depth_left")
+    config.bridge["streams"].append(stream)
+    return config
+
+
 def snapshot(ns, x=1):
     return SimpleNamespace(elapsed_ns=ns, body=SimpleNamespace(
         position=np.array([x, 2., 3.]), orientation_wxyz=np.array([1., 0., 0., 0.])))
 
 
 class CameraBridgeTests(unittest.TestCase):
-    def test_overflow_keeps_waiting_camera_ahead_of_new_work(self):
-        config = resolved()
-        other = copy.deepcopy(config.robot["sensors"][0])
-        other["id"] = "other"
-        config.robot["sensors"].append(other)
-        provider = Provider()
-        provider.sensor_ids = ("cam", "other")
+    def test_each_camera_has_one_inflight_and_its_own_latest_pending_capture(self):
+        provider = ParallelProvider()
         done = threading.Semaphore(0)
-        worker = CameraBridge(config, provider, lambda _: done.release())
+        worker = CameraBridge(two_cameras(), provider, lambda _: done.release())
         self.addCleanup(worker.close)
-        self.addCleanup(provider.release.set)
+        self.addCleanup(provider.unblock)
         worker.start()
         worker.acquire(snapshot(2_000_000), 0)
-        self.assertTrue(provider.entered.wait(2))
+        for event in provider.entered.values():
+            self.assertTrue(event.wait(2))
         for ns in (20_000_000, 40_000_000, 60_000_000):
             worker.acquire(snapshot(ns), ns)
-        provider.release.set()
-        for _ in range(3):
+        for stats in worker.stats().values():
+            self.assertEqual(stats["dropped_pending"], 2)
+        provider.unblock()
+        for _ in range(4):
             self.assertTrue(done.acquire(timeout=2))
         worker.close()
-        self.assertEqual([call[0] for call in provider.calls], ["cam", "other", "cam"])
-        self.assertEqual([call[3] for call in provider.calls], [.002, .06, .06])
+        for sensor in provider.sensor_ids:
+            self.assertEqual([call[3] for call in provider.calls if call[0] == sensor], [.002, .06])
+
+    def test_reset_waits_for_both_cameras_and_coalesces_new_seed_before_capture(self):
+        provider = ParallelProvider()
+        publications = []
+        done = threading.Semaphore(0)
+
+        def publish(values):
+            publications.extend(values)
+            done.release()
+
+        worker = CameraBridge(two_cameras(), provider, publish)
+        self.addCleanup(worker.close)
+        self.addCleanup(provider.unblock)
+        worker.start()
+        worker.acquire(snapshot(2_000_000), 102_000_000)
+        for event in provider.entered.values():
+            self.assertTrue(event.wait(2))
+        worker.invalidate(seed=98)
+        worker.acquire(snapshot(2_000_000), 202_000_000)
+        provider.release["cam"].set()
+        self.assertFalse(provider.reset_entered.wait(.05))
+        provider.reset_release.clear()
+        provider.release["other"].set()
+        self.assertTrue(provider.reset_entered.wait(2))
+        worker.invalidate(seed=99)
+        worker.acquire(snapshot(2_000_000), 302_000_000)
+        self.assertEqual(len(provider.calls), 2)  # Neither camera can pass a pending reset.
+        provider.reset_release.set()
+        for _ in provider.sensor_ids:
+            self.assertTrue(done.acquire(timeout=2))
+        worker.close()
+        self.assertEqual(provider.seeds, [98, 99])
+        self.assertEqual(len(publications), 2)
+        self.assertEqual({p.message.header.stamp.nanosec for p in publications}, {302_000_000})
+        for stats in worker.stats().values():
+            self.assertEqual(stats["discarded_stale"], 2)
+
+    def test_close_joins_every_active_camera_and_discards_their_outputs(self):
+        provider = ParallelProvider()
+        publications = []
+        worker = CameraBridge(two_cameras(), provider, publications.extend)
+        self.addCleanup(worker.close)
+        self.addCleanup(provider.unblock)
+        worker.start()
+        worker.acquire(snapshot(2_000_000), 0)
+        for event in provider.entered.values():
+            self.assertTrue(event.wait(2))
+        with ThreadPoolExecutor(1) as closer:
+            closing = closer.submit(worker.close)
+            try:
+                with worker._condition:
+                    self.assertTrue(worker._condition.wait_for(lambda: worker._stopping, timeout=2))
+                provider.release["cam"].set()
+                self.assertFalse(closing.done())
+            finally:
+                provider.unblock()
+            closing.result(timeout=2)
+        self.assertEqual(publications, [])
+        self.assertTrue(all(not thread.is_alive() for thread in worker._threads))
+
+    def test_placement_invalidates_both_workers_without_reseeding(self):
+        provider = ParallelProvider()
+        publications = []
+        done = threading.Semaphore(0)
+
+        def publish(values):
+            publications.extend(values)
+            done.release()
+
+        worker = CameraBridge(two_cameras(), provider, publish)
+        self.addCleanup(worker.close)
+        self.addCleanup(provider.unblock)
+        worker.start()
+        worker.acquire(snapshot(2_000_000), 102_000_000)
+        for event in provider.entered.values():
+            self.assertTrue(event.wait(2))
+        worker.acquire(snapshot(20_000_000), 120_000_000)
+        worker.invalidate()
+        worker.acquire(snapshot(40_000_000), 140_000_000)
+        provider.unblock()
+        for _ in provider.sensor_ids:
+            self.assertTrue(done.acquire(timeout=2))
+        worker.close()
+        self.assertEqual(provider.seeds, [])
+        self.assertEqual(len(publications), 2)
+        self.assertEqual({p.message.header.stamp.nanosec for p in publications}, {140_000_000})
+        for stats in worker.stats().values():
+            self.assertEqual(stats["discarded_stale"], 2)
+
+    def test_publication_failure_stops_other_worker_and_reaches_owner(self):
+        provider = ParallelProvider()
+        calls = []
+
+        def publish(values):
+            calls.append(values)
+            raise ValueError("publication failed")
+
+        worker = CameraBridge(two_cameras(), provider, publish)
+        worker.start()
+        try:
+            worker.acquire(snapshot(2_000_000), 0)
+            for event in provider.entered.values():
+                self.assertTrue(event.wait(2))
+            provider.release["cam"].set()
+            with worker._condition:
+                self.assertTrue(worker._condition.wait_for(lambda: worker._failure is not None,
+                                                          timeout=2))
+            with self.assertRaisesRegex(RuntimeError, "publication failed"):
+                worker.acquire(snapshot(20_000_000), 0)
+        finally:
+            provider.unblock()
+            with self.assertRaisesRegex(RuntimeError, "publication failed"):
+                worker.close()
+        self.assertEqual(len(calls), 1)
 
     def worker(self, *, config=None):
         provider = Provider()

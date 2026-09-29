@@ -15,9 +15,10 @@ part of step 3. Do not restructure unrelated components.
 
 Current step: **3 — offscreen cameras/stereo and the real perception gate.**
 Step 2 passed the repeated real-controller/EKF hold comparison and Opus review.
-Pack capture and bounded ROS publication are implemented. Next: finish the real
-detector/mapper run, assess the measured camera throughput, and complete Opus review.
-Production camera streams remain disabled until these checks are complete.
+Pack capture and bounded ROS publication are implemented. The real detector/mapper
+run now passes independent internal review; the acceptance and config activation
+checkpoint is being recorded. User-authorized internal reviewers replace Claude
+while its quota is unavailable; its later review will not block current work.
 
 The first camera increment adds optional CPU camera geometry and image processing
 (`RP_BUILD_CAMERAS`), with optical frames, rectified stereo projection, owned RGB
@@ -137,6 +138,24 @@ The production pack remains disabled; the diagnostic copies and records are in
 Proof: `PYTHONPATH=integrations/ros2/python:build/step3-camera-python:$PYTHONPATH
 RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_DOMAIN_ID=219 ROS_LOCALHOST_ONLY=1
 RP_TEST_ROS_LIVE=1 python3 -m unittest discover -s integrations/ros2/tests -p 'test*.py'`.
+
+Camera processing now runs on one bounded worker per selected camera. Shared
+scene/GL work and publication remain serialized; depth noise and JPEG processing
+overlap across cameras. Per-camera order, reset barriers, placement invalidation
+and joined shutdown remain intact. Concurrent and serial stereo RGB/JPEG/depth
+match exactly under the same seeds. Metadata waits for a complete seed reset.
+Importer dependencies such as OBJ materials and glTF buffers are now recorded,
+hash-checked and constrained to their pack, alongside mesh/texture files; source
+snapshot checks catch a deleted material that Assimp would otherwise ignore.
+
+Validation: 40 installed camera/pack/dependency cases plus the seed-metadata race
+regression pass; 134 ROS bridge cases and all 41 native/GPU cases pass. Ruff and
+scoped strict mypy pass. Internal independent review found the metadata race,
+which is corrected. Capture-only throughput rises from about 8.3 to 14.2 FPS per
+camera. In the real-stack run, 42.38 simulated seconds produced 635 FFC and 590
+DFC captures from 636 requests each, with one and 46 pending drops respectively.
+Every native navigation sample was delivered. Remaining overflow is explicit;
+two full-resolution cameras at a sustained 15 Hz is not claimed.
 
 Step 1 passed joint review. `proposals/step1/` contains nine proposed JSON Schemas
 and eight YAML documents: Talos robot, 2026 pool, gate/torpedo task definitions,

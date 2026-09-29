@@ -163,6 +163,9 @@ PYBIND11_MODULE(_camera, m) {
         }, py::arg("intrinsics"), py::arg("noise"), py::arg("input"),
            py::arg("jpeg") = false, py::arg("quality") = 93);
     py::class_<r::MeshAsset, std::shared_ptr<r::MeshAsset>>(m, "Mesh")
+        .def_property_readonly("dependencies", [](const r::MeshAsset &mesh) {
+            return mesh.dependencies;
+        }, "Sorted canonical files opened by the importer, including mesh and sidecars.")
         .def_property_readonly("textures", [](const r::MeshAsset &mesh) {
             std::set<std::filesystem::path> paths;
             for (const auto &part : mesh.submeshes)

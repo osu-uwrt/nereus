@@ -65,19 +65,22 @@ Step 3 progress:
 - [x] Execute the existing robot-pack camera/stereo definitions offscreen. All 31
   installed camera/pack cases and 41 native cases pass; capture remains independent
   of simulation and ROS and uses the exact Talos-bringup startup water/lighting.
-- [ ] Complete Opus follow-up review after the usage-limit reset (September 29,
-  1:30 p.m. Eastern); no gate-3 approval was returned.
+- [x] Independent internal camera/lifecycle review under the user's fallback policy;
+  importer sidecar verification and concurrent seed metadata fixes are implemented.
 - [x] Publish calibrated, synchronized image/CameraInfo products through the bridge;
   bounded worker, placement invalidation and shutdown pass 130 bridge checks.
   A real two-camera run publishes all six products while delivering every native
   navigation sample; production camera streams remain disabled pending gate 3.
-- [ ] Assess/resolve full-resolution camera throughput: one worker captures about
-  8–9 frames/s per camera against 15 Hz requests; overflow is fair, bounded and counted.
+- [x] Assess/improve full-resolution camera throughput: per-camera CPU workers reach
+  about 14.2 FPS each in capture benchmarks; actual perception run captures 635 FFC
+  and 590 DFC frames in 42.38 simulated seconds. Residual overflow remains counted.
 - [ ] Run actual UWRT perception on those products and review its output.
 
 The user delegated approval to Codex and Claude Code, using Opus 5.5/high. Agree
 ownership, have the other partner review each gate's evidence, and continue without
 human approval. Stop and report genuine blockers; do not work around a wrong gate.
+The user subsequently authorized internal-agent review whenever Claude is unavailable;
+continue without quota interruptions and request a Claude catch-up review once available.
 Claude may delegate bounded mechanical work to Sonnet 5.5, with separate file
 ownership; Codex and Opus retain difficult work and validation. Keep readable meeting
 notes in the Git-ignored `collaboration_logs/` directory; raw output stays in `build/`.
@@ -93,6 +96,8 @@ only required custom-message converters live in `integrations/uwrt`.
 
 ## Deferred follow-ups
 
+- Claude catch-up review of work since its limit reset when it becomes available.
+- Eliminate residual full-resolution camera drops if later mission tests require 15 Hz.
 - Resume UI, LEDs, radiance and visual-fidelity work only after step 5 passes.
 - Revisit broad RViz and industry expansion after the simulator/data-only gates.
 - Keep future training use possible; do not implement RL or general sonar now.

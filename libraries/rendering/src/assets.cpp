@@ -1,6 +1,7 @@
 #include "robotics/rendering/assets.hpp"
 #include <Eigen/LU>
 #include <algorithm>
+#include <assimp/DefaultIOSystem.h>
 #include <assimp/Importer.hpp>
 #include <assimp/config.h>
 #include <assimp/postprocess.h>
@@ -8,11 +9,30 @@
 #include <cmath>
 #include <limits>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 
 namespace robotics::rendering {
 namespace {
+class DependencyIO final : public Assimp::DefaultIOSystem {
+  public:
+    Assimp::IOStream *Open(const char *path, const char *mode = "rb") override {
+        // Resolve before opening so an allocation/filesystem failure cannot leak a stream.
+        const auto canonical = std::filesystem::weakly_canonical(path);
+        auto *stream = Assimp::DefaultIOSystem::Open(path, mode);
+        if (stream) {
+            try {
+                files.insert(canonical);
+            } catch (...) {
+                Assimp::DefaultIOSystem::Close(stream);
+                throw;
+            }
+        }
+        return stream;
+    }
+    std::set<std::filesystem::path> files;
+};
 Eigen::Matrix4f matrix(const aiMatrix4x4 &m) {
     Eigen::Matrix4f result;
     result << m.a1, m.a2, m.a3, m.a4, m.b1, m.b2, m.b3, m.b4, m.c1, m.c2, m.c3, m.c4, m.d1, m.d2,
@@ -39,6 +59,8 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
     if (error || !bytes || bytes > limits.file_bytes)
         fail("missing, empty or oversized asset");
     Assimp::Importer importer;
+    auto *io = new DependencyIO;
+    importer.SetIOHandler(io); // The importer owns the handler through scene extraction.
     importer.SetPropertyBool(AI_CONFIG_IMPORT_COLLADA_IGNORE_UP_DIRECTION, true);
     const auto *scene =
         importer.ReadFile(path.string(), aiProcess_Triangulate | aiProcess_GenSmoothNormals |
@@ -46,6 +68,7 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
     if (!scene || !scene->mRootNode)
         fail(importer.GetErrorString());
     MeshAsset result;
+    result.dependencies.assign(io->files.begin(), io->files.end());
     result.minimum.setConstant(std::numeric_limits<float>::infinity());
     result.maximum = -result.minimum;
     struct Pending {
@@ -193,6 +216,7 @@ PerforatedMesh perforatePanel(const MeshAsset &mesh, const PanelCutouts &panel) 
             throw std::invalid_argument("textured panel face UVs differ from the panel mapping");
     };
     PerforatedMesh result;
+    result.mesh.dependencies = mesh.dependencies;
     result.mesh.minimum = mesh.minimum;
     result.mesh.maximum = mesh.maximum;
     result.mesh.submeshes.reserve(mesh.submeshes.size());

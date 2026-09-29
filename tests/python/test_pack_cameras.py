@@ -10,9 +10,12 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 from robotics_platform.packs import resolve_scenario
@@ -87,6 +90,40 @@ class TalosPackCameraTests(unittest.TestCase):
         if torpedo is not None:
             torpedo(next(item for item in tasks if item["id"] == "torpedo")["props"][0])
         return pc.PackCameras(with_changes(self.resolved, robot, scenario, tasks), sensors)
+
+    def test_concurrent_cameras_preserve_stereo_pixels_jpeg_and_noise_replay(self):
+        robot = copy.deepcopy(self.resolved.robot)
+        for sensor in robot["sensors"]:
+            if sensor["type"] != "stereo_camera":
+                continue
+            sensor["enabled"] = True
+            p = sensor["parameters"]
+            # Small frames keep this synchronization/replay test independent of GPU throughput.
+            sx, sy = 160 / p["resolution_px"][0], 100 / p["resolution_px"][1]
+            p["resolution_px"] = [160, 100]
+            p["outputs"] = ["rgb_left", "rgb_right", "depth_left"]
+            for eye in ("left", "right"):
+                for key, scale in (("fx", sx), ("cx", sx), ("fy", sy), ("cy", sy)):
+                    p[f"intrinsics_{eye}"][key] *= scale
+        cameras = pc.PackCameras(with_changes(
+            self.resolved, robot, dict(self.resolved.scenario, sensor_noise=True)))
+
+        def sequence(sensor):
+            position = [10, 10, -1] if sensor == cameras.sensor_ids[0] else [11, 12, -1.2]
+            return [cameras.capture(sensor, position, IDENTITY, i / 15,
+                                    jpeg_quality=93) for i in range(3)]
+
+        expected = {sensor: sequence(sensor) for sensor in cameras.sensor_ids}
+        with ThreadPoolExecutor(2) as workers:
+            for _ in range(2):
+                cameras.reset(self.resolved.scenario["seed"])
+                actual = dict(zip(cameras.sensor_ids, workers.map(sequence, cameras.sensor_ids)))
+                for sensor in cameras.sensor_ids:
+                    for a, b in zip(expected[sensor], actual[sensor]):
+                        for eye in ("left", "right"):
+                            np.testing.assert_array_equal(getattr(a, eye).rgb, getattr(b, eye).rgb)
+                            self.assertEqual(getattr(a, eye).jpeg, getattr(b, eye).jpeg)
+                        np.testing.assert_array_equal(a.left.depth, b.left.depth)
 
     def torpedo_view(self, cameras, uv, distance, back=False):
         placement = next(item for item in self.resolved.scenario["task_placements"]
@@ -242,6 +279,40 @@ class TalosPackCameraTests(unittest.TestCase):
             self.assertEqual(a["cameras"][sensor]["seeds"], b["cameras"][sensor]["seeds"])
         self.assertEqual(a["seed"]["scenario_seed"], 7)
         self.assertIn("sha256", a["seed"]["policy"])
+
+    def test_description_waits_for_a_complete_seed_reset(self):
+        cameras = self.enabled(outputs=["camera_info"])
+        entered, release, describing = threading.Event(), threading.Event(), threading.Event()
+        processors = cameras._cameras["ffc"]["processors"]
+        original = processors["left"]
+
+        def reset(seed):
+            entered.set()
+            if not release.wait(5):
+                raise TimeoutError("test reset was not released")
+            original.reset(seed)
+
+        def describe():
+            describing.set()
+            return cameras.describe()
+
+        processors["left"] = SimpleNamespace(reset=reset)
+        with ThreadPoolExecutor(2) as workers:
+            restart = workers.submit(cameras.reset, 99)
+            try:
+                self.assertTrue(entered.wait(2))
+                description = workers.submit(describe)
+                self.assertTrue(describing.wait(2))
+                self.assertFalse(description.done())
+            finally:
+                release.set()
+            restart.result(timeout=2)
+            record = description.result(timeout=2)
+        self.assertEqual(record["seed"]["scenario_seed"], 99)
+        for sensor in cameras.sensor_ids:
+            for eye in pc.EYES:
+                self.assertEqual(record["cameras"][sensor]["seeds"][eye],
+                                 pc.derive_seed(99, sensor, eye))
 
     def test_outputs_and_jpeg_follow_the_pack_request(self):
         cameras = self.enabled(outputs=["depth_left", "camera_info"], sensors=["dfc"])
@@ -532,6 +603,110 @@ class NativeCoexistenceTests(unittest.TestCase):
         if probe.returncode:
             self.skipTest("native extension is not installed alongside the camera extension")
         subprocess.run([sys.executable, "-c", script], check=True)
+
+
+@unittest.skipIf(pc is None, "optional camera extension is not installed")
+class CaptureConcurrencyTests(unittest.TestCase):
+    def cameras(self):
+        """Native pose validation with controlled GL/CPU boundaries and owned fake frames."""
+        cameras = object.__new__(pc.PackCameras)
+        cameras._lock = threading.Lock()
+        cameras._capture_locks = {key: threading.Lock() for key in ("a", "b")}
+        cameras._scene = SimpleNamespace(instances=[])
+        cameras._static, cameras._robot_visuals = [], []
+        cameras._appearance = None
+        captures = []
+
+        def capture(scene, view, *args):
+            captures.append(view)
+            return view
+
+        cameras._host = SimpleNamespace(capture=capture)
+        cameras._view = lambda camera, eye, root: (camera["id"], eye)
+        cameras._cameras = {}
+        for key in ("a", "b"):
+            processors = {}
+            for eye in pc.EYES:
+                state = {"count": 0}
+
+                def process(intrinsics, noise, raw, *, jpeg, quality, state=state):
+                    state["count"] += 1
+                    return (raw, state["count"])
+
+                def reset(seed, state=state):
+                    state["count"] = 0
+
+                processors[eye] = SimpleNamespace(process=process, reset=reset)
+            cameras._cameras[key] = {
+                "id": key, "outputs": {"rgb_left", "rgb_right", "depth_left"}, "noise": None,
+                "intrinsics": {eye: SimpleNamespace(width=1, height=1) for eye in pc.EYES},
+                "processors": processors, "seeds": {},
+            }
+        cameras.reset(7)
+        return cameras, captures
+
+    def test_other_camera_processing_overlaps_but_same_camera_stays_ordered(self):
+        cameras, captures = self.cameras()
+        entered, release = threading.Event(), threading.Event()
+        processor = cameras._cameras["a"]["processors"]["left"]
+        original = processor.process
+
+        def blocked(*args, **kwargs):
+            entered.set()
+            if not release.wait(5):
+                raise TimeoutError("test processing was not released")
+            return original(*args, **kwargs)
+
+        processor.process = blocked
+        with ThreadPoolExecutor(3) as workers:
+            a = workers.submit(cameras.capture, "a", [0, 0, 0], IDENTITY, 0)
+            try:
+                self.assertTrue(entered.wait(2))
+                again = workers.submit(cameras.capture, "a", [0, 0, 0], IDENTITY, 0)
+                b = workers.submit(cameras.capture, "b", [0, 0, 0], IDENTITY, 0)
+                self.assertEqual(b.result(timeout=2).left, (("b", "left"), 1))
+                self.assertFalse(again.done())
+                self.assertEqual(captures, [("a", "left"), ("a", "right"),
+                                            ("b", "left"), ("b", "right")])
+            finally:
+                release.set()
+            self.assertEqual(a.result(timeout=2).left, (("a", "left"), 1))
+            self.assertEqual(again.result(timeout=2).left, (("a", "left"), 2))
+
+    def test_reset_waits_for_processing_before_resetting_either_stereo_eye(self):
+        cameras, _ = self.cameras()
+        entered, release, resetting = threading.Event(), threading.Event(), threading.Event()
+        processor = cameras._cameras["b"]["processors"]["left"]
+        original = processor.process
+
+        def blocked(*args, **kwargs):
+            entered.set()
+            if not release.wait(5):
+                raise TimeoutError("test processing was not released")
+            return original(*args, **kwargs)
+
+        processor.process = blocked
+
+        def reset():
+            resetting.set()
+            cameras.reset(99)
+
+        with ThreadPoolExecutor(2) as workers:
+            capture = workers.submit(cameras.capture, "b", [0, 0, 0], IDENTITY, 0)
+            try:
+                self.assertTrue(entered.wait(2))
+                restart = workers.submit(reset)
+                self.assertTrue(resetting.wait(2))
+                self.assertFalse(restart.done())
+            finally:
+                release.set()
+            pair = capture.result(timeout=2)
+            restart.result(timeout=2)
+        self.assertEqual(pair.left, (("b", "left"), 1))
+        self.assertEqual(pair.right, (("b", "right"), 1))
+        replay = cameras.capture("b", [0, 0, 0], IDENTITY, 0)
+        self.assertEqual(replay, pair)
+        self.assertEqual(cameras._seed, 99)
 
 
 if __name__ == "__main__":

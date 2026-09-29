@@ -14,6 +14,7 @@ import hashlib
 import math
 import threading
 from collections.abc import Iterable, Mapping
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -76,8 +77,10 @@ def _upright(item: Mapping[str, Any]) -> _camera.Pose:
 class PackCameras:
     """Offscreen RGB/depth for a scenario's stereo cameras, one synchronous call per frame.
 
-    The scene and EGL host are built once; captures are serialized. Robot visuals follow the
-    supplied root pose; pool and task content is static. No mechanism motion or lights.
+    The scene and EGL host are built once; GL capture is serialized. Different cameras may
+    process depth/JPEG concurrently; each camera's stereo acquisition and noise stay ordered.
+    Robot visuals follow the supplied root pose; pool and task content is static.
+    No mechanism motion or lights.
     """
 
     def __init__(self, resolved: ResolvedScenario, sensor_ids: Iterable[str] | None = None, *,
@@ -88,6 +91,7 @@ class PackCameras:
         self._files: dict[tuple[str, str], dict[str, Any]] = {}
         scenario, robot, pool = resolved.scenario, resolved.robot, resolved.pool
         self._cameras = self._select(robot, sensor_ids)
+        self._capture_locks = {sensor: threading.Lock() for sensor in self._cameras}
         self._frames = _camera.FixedFrames(robot["frames"]["root"], [
             self._edge(item) for item in robot["frames"]["transforms"]])
         self._sensor_noise = bool(scenario["sensor_noise"])
@@ -103,6 +107,12 @@ class PackCameras:
              self._frames.from_root(item["frame"]).compose(_placed(item)).matrix())
             for item in robot.get("visuals", [])
         ]
+        # Importers may silently omit a missing sidecar. Check the resolved snapshot
+        # as well as successfully imported files before accepting the scene.
+        changed = resolved.changed_sources()
+        if changed:
+            raise ValueError("pack sources changed since resolution (missing file or sha256 "
+                             "mismatch): " + ", ".join(str(path) for path in changed))
         shaders = shader_directory or Path(_camera.__file__).parent / "shaders"
         self._host = _camera.OffscreenRenderer(shaders)
         self.reset(scenario["seed"])
@@ -140,13 +150,14 @@ class PackCameras:
             instance.mesh = mesh
             instance.transform = (world_root @ root_from_asset).astype(np.float32)
             robot.append(instance)
-        with self._lock:
-            self._scene.instances = self._static + robot
-            raw = {}
-            for eye, view in views.items():
-                intrinsics = camera["intrinsics"][eye]
-                raw[eye] = self._host.capture(self._scene, view, self._appearance, time,
-                                              intrinsics.width, intrinsics.height, *wanted[eye])
+        with self._capture_locks[sensor_id]:
+            with self._lock:
+                self._scene.instances = self._static + robot
+                raw = {}
+                for eye, view in views.items():
+                    intrinsics = camera["intrinsics"][eye]
+                    raw[eye] = self._host.capture(self._scene, view, self._appearance, time,
+                                                  intrinsics.width, intrinsics.height, *wanted[eye])
             frames = {}
             # The right eye has no depth and so no random state; processing the left eye last
             # keeps a failed call from consuming the left eye's noise stream.
@@ -173,7 +184,11 @@ class PackCameras:
         """Restore every eye's noise stream from an independent seed derived from ``seed``."""
         if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 1 << 64:
             raise ValueError("seed must be an integer in [0, 2**64)")
-        with self._lock:
+        # Lock every complete acquisition before resetting any processor. Captures acquire
+        # only their own camera lock, then the GL lock, so this order cannot form a cycle.
+        with ExitStack() as locks:
+            for lock in self._capture_locks.values():
+                locks.enter_context(lock)
             for sensor_id, camera in self._cameras.items():
                 for eye in EYES:
                     camera["seeds"][eye] = derive_seed(seed, sensor_id, eye)
@@ -182,6 +197,12 @@ class PackCameras:
 
     def describe(self) -> dict[str, Any]:
         """JSON-ready effective configuration for a run record; a detached deep copy."""
+        with ExitStack() as locks:
+            for lock in self._capture_locks.values():
+                locks.enter_context(lock)
+            return self._describe_locked()
+
+    def _describe_locked(self) -> dict[str, Any]:
         cameras = {}
         for sensor_id, camera in self._cameras.items():
             noise = camera["noise"]
@@ -397,6 +418,8 @@ class PackCameras:
                 raise ValueError(f"{role} pack: unknown asset '{asset_id}'")
             path = self._verify(role, self._root(role) / declared["path"], "mesh", asset_id)
             mesh = _camera.load_mesh(path)
+            for dependency in mesh.dependencies:
+                self._verify(role, dependency, "importer_dependency", asset_id)
             for texture in mesh.textures:
                 self._verify(role, texture, "texture", asset_id)
             self._meshes[key] = mesh
