@@ -82,7 +82,8 @@ Step 3 progress:
 
 Step 4 progress:
 
-- [ ] Gate traversal and pack-owned gate/home scoring with scripted reset/replay.
+- [x] Gate traversal and pack-owned gate/home scoring with scripted observer reset/replay;
+  28 tests and five recorded scripted cases pass, with independent source/review checks.
 - [ ] Mechanism state, payload trajectories and task contacts.
 - [ ] Remaining 2026 task definitions and original-rule scoring comparisons.
 - [ ] Coordinated full reset including physics, sensors, cameras, mechanisms and scores.

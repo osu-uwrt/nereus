@@ -30,9 +30,22 @@ this is not a sustained 15 Hz guarantee for both cameras. UI and mission accepta
 remain deferred. Internal reviewers replace Claude while its quota is unavailable;
 request its catch-up review after 1:30 p.m. Eastern without interrupting progress.
 
-The first step-4 slice is physical gate traversal, pure pack-owned gate/home scoring,
-and reset/replay. Mechanisms, remaining tasks and coordinated whole-system reset
-follow; none is implied complete by the camera gate.
+The first step-4 slice now observes pack-selected rectangular portals using the robot
+scoring envelope and native frame transforms. Competition rules live in the task
+pack's pure hook; it receives recursively read-only state/events and returns score
+rows/events. Hook bytes are verified against the resolved manifest; failures stop
+observation until reset. Contact-entry events and declarative points also work with
+explicit physical contact inputs. Unsupported selected task types fail explicitly.
+
+Validation: 28 task tests pass, including independently captured original traversal
+traces, direct original-ledger comparisons, hook ownership/failure handling and reset.
+`PYTHONPATH=build/step3-camera-python:$PYTHONPATH python3
+integrations/uwrt/acceptance/tasks.py --output build/step4-gate-review` records five
+scripted cases plus identical replay: repair gate 550/home 300, wrong role 400/home
+300, and no points for width/top/floor violations. Internal review corrected the
+original active-attempt requirement before accepting the hook. This proves only
+selected gate/home scoring and observer reset, not plant reset or mission completion.
+Mechanisms, remaining tasks and coordinated whole-system reset are still open.
 
 The first camera increment adds optional CPU camera geometry and image processing
 (`RP_BUILD_CAMERAS`), with optical frames, rectified stereo projection, owned RGB
