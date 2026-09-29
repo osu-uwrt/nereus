@@ -38,6 +38,21 @@ class StaticTransformTests(unittest.TestCase):
                 with self.assertRaises(BridgeError):
                     _make(bridge)
 
+    def test_truth_edges_mirror_frames_under_a_published_truth_frame(self):
+        bridge = configured()
+        bridge["tf"]["publish"] = [{"parent": WORLD, "child": "sim/root",
+                                    "native": "state:robot.reference_pose", "rate_hz": 10}]
+        # Same robot frames as the aliased edge, different ROS names: allowed for truth edges.
+        bridge["tf"]["static"].append({"parent": "sim/root", "child": "sim/mount",
+                                       "from_frame": "com", "to_frame": "base", "truth": True})
+        core = _make(bridge)
+        self.assertEqual([(t.parent, t.child) for t in core.static_transforms],
+                         [("vehicle/root", "vehicle/mount"), ("sim/root", "sim/mount")])
+        np.testing.assert_allclose(core.static_transforms[1].translation, OFFSET)
+        bridge["tf"]["static"][-1]["parent"] = "elsewhere"
+        with self.assertRaisesRegex(BridgeError, "must descend from a tf.publish frame"):
+            _make(bridge)
+
     def test_duplicate_ownership_cycles_and_forbidden_children_are_rejected(self):
         bridge = configured()
         bridge["tf"]["lookup"] = [{"parent": "external", "child": "vehicle/mount"}]

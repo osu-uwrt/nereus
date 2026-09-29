@@ -500,7 +500,7 @@ def bridge_binding(data: dict[str, Any], robot_data: dict[str, Any]) -> list[str
             frame = edge[native_name]
             if frame not in frames or frame == WORLD:
                 problems.append(f"/tf/static/{index}/{native_name}: unknown robot frame '{frame}'")
-            elif frame in names and names[frame] != edge[ros_name]:
+            elif not edge.get("truth", False) and frame in names and names[frame] != edge[ros_name]:
                 problems.append(f"/tf/static/{index}/{ros_name}: differs from frame_names['{frame}']")
     sensors = {item["id"]: item for item in robot_data["sensors"]}
     mechanisms = {item["id"] for item in robot_data["mechanisms"]}
