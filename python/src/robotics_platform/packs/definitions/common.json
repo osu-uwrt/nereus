@@ -378,6 +378,13 @@
             "present"
           ],
           "description": "missing: declared for a later step, no file copied yet. A loader must reject a missing asset once its required_from_step is active."
+        },
+        "unmapped_uv_color": {
+          "type": "array",
+          "items": {"type": "number", "minimum": 0, "maximum": 1},
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "Mesh repair for exports that map a textured material onto the whole mesh with the untextured faces at UV (0,0): those faces are drawn untextured in this linear RGBA color instead of sampling the (often transparent) corner texel."
         }
       },
       "required": [

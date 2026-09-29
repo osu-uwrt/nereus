@@ -119,3 +119,38 @@ TEST(PackScene, PoseHelpers) {
     EXPECT_NEAR(m(2, 3), 3, 1e-12);
     EXPECT_THROW(ps::placement({{"position_m", {0, 0, 0}}, {"orientation_wxyz", {2, 0, 0, 0}}}), std::exception);
 }
+
+TEST(PackScene, UnmappedUvFacesAreDrawnInTheDeclaredColor) {
+    ps::PackScene pack(talos());
+    const auto raw = r::loadMesh(talos().asset("tasks", "pill_visual"));
+    std::size_t rawTriangles = 0, rawUnmapped = 0;
+    for (const auto &part : raw.submeshes)
+        for (std::size_t k = 0; k + 2 < part.indices.size(); k += 3) {
+            ++rawTriangles;
+            bool all = part.material.diffuse_texture.has_value();
+            for (std::size_t c = 0; c < 3; ++c)
+                all = all && part.vertices[part.indices[k + c]].uv.squaredNorm() < 1e-14f;
+            rawUnmapped += all;
+        }
+    ASSERT_GT(rawUnmapped, 0u) << "the shipped pill mesh has unmapped body faces";
+    for (const auto *asset : {"pill_visual", "nut_and_bolt_visual"}) {
+        const auto repaired = pack.mesh("tasks", asset);
+        ASSERT_TRUE(repaired) << asset;
+        std::size_t body = 0, triangles = 0;
+        for (const auto &part : repaired->submeshes) {
+            triangles += part.indices.size() / 3;
+            if (!part.material.diffuse_texture && part.material.base_color.isApprox(Eigen::Vector4f(.003442196f, .003442196f, .003442196f, 1)))
+                body += part.indices.size() / 3;
+        }
+        EXPECT_GT(body, 0u) << asset << ": dark-plastic body submesh";
+        if (std::string(asset) == "pill_visual") {
+            EXPECT_EQ(body, rawUnmapped);
+            EXPECT_EQ(triangles, rawTriangles); // nothing lost, nothing duplicated
+        }
+    }
+    // Assets without the repair are unchanged (bandage has no unmapped_uv_color).
+    const auto bandage = pack.mesh("tasks", "bandage_visual");
+    const auto rawBandage = r::loadMesh(talos().asset("tasks", "bandage_visual"));
+    ASSERT_TRUE(bandage);
+    EXPECT_EQ(bandage->submeshes.size(), rawBandage.submeshes.size());
+}

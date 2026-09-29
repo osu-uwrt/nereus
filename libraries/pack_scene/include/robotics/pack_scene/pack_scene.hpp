@@ -96,6 +96,8 @@ class PackScene {
     // Cached mesh of a declared pack asset ("robot" | "pool" | "tasks"); optional texture asset id
     // of the same pack replaces the diffuse texture of every submesh. Throws when strict and the
     // asset is unusable, else returns null and records a warning.
+    // The pack's declaration of an asset (role robot|pool|tasks), or null.
+    const session::Json *assetEntry(const std::string &role, const std::string &asset) const;
     std::shared_ptr<const rendering::MeshAsset> mesh(const std::string &role, const std::string &asset,
                                                      const std::string &texture = {}) const;
     // Convenience for dynamic content: instance of a pack asset at a world pose (float cast last).
