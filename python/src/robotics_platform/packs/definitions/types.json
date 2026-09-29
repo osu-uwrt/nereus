@@ -987,6 +987,33 @@
         },
         "texture": {
           "$ref": "common.schema.json#/$defs/name"
+        },
+        "material": {
+          "enum": ["asset", "liner", "clear", "emissive"],
+          "description": "Renderer surface class for this placement: asset (default: the mesh's own materials), liner (corrugated liner shading), clear (blended translucent cover) or emissive (self-lit, HDR glow; radiance and the tint apply)."
+        },
+        "radiance": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "HDR radiance multiplier of an emissive placement."
+        },
+        "indicator": {
+          "type": "object",
+          "properties": {
+            "region": {
+              "$ref": "common.schema.json#/$defs/name"
+            },
+            "color_rgb": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "common.schema.json#/$defs/vector3"
+              },
+              "minProperties": 1
+            }
+          },
+          "required": ["region", "color_rgb"],
+          "additionalProperties": false,
+          "description": "Task visuals only: the placement's tint follows the indicator of the named region of the same task (regions with an indicator block). color_rgb maps every indicator color name to the linear RGB tint shown while that color is current."
         }
       },
       "required": [

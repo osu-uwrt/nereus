@@ -216,13 +216,16 @@ PYBIND11_MODULE(_camera, m) {
         .value("ASSET", r::SurfaceMaterial::Asset)
         .value("TILES", r::SurfaceMaterial::Tiles)
         .value("DECK", r::SurfaceMaterial::Deck)
-        .value("LINER", r::SurfaceMaterial::Liner);
+        .value("LINER", r::SurfaceMaterial::Liner)
+        .value("CLEAR", r::SurfaceMaterial::Clear)
+        .value("EMISSIVE", r::SurfaceMaterial::Emissive);
     py::class_<r::Instance>(m, "Instance")
         .def(py::init<>())
         .def_readwrite("mesh", &r::Instance::mesh)
         .def_readwrite("transform", &r::Instance::transform)
         .def_readwrite("tint", &r::Instance::tint)
         .def_readwrite("material", &r::Instance::material)
+        .def_readwrite("radiance", &r::Instance::radiance)
         .def_readwrite("visible", &r::Instance::visible)
         .def_readwrite("casts_shadow", &r::Instance::casts_shadow);
     py::class_<r::Scene>(m, "Scene")

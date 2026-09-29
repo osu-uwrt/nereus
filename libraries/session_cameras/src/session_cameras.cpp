@@ -324,7 +324,8 @@ void SessionCameras::raiseFailure() const {
 void SessionCameras::request(std::int64_t snapshot_time_ns, std::int64_t ros_stamp_ns,
                              const spatial::Pose &world_from_root,
                              const std::vector<rendering::Instance> &dynamic,
-                             const std::vector<pack_scene::RobotOverride> &overrides) {
+                             const std::vector<pack_scene::RobotOverride> &overrides,
+                             const std::map<std::string, bool> &latched) {
     spatial::validate(world_from_root);
     std::shared_ptr<const std::vector<rendering::Instance>> sharedDynamic;
     std::shared_ptr<const std::vector<pack_scene::RobotOverride>> sharedOverrides;
@@ -364,6 +365,7 @@ void SessionCameras::request(std::int64_t snapshot_time_ns, std::int64_t ros_sta
         job.root = world_from_root;
         job.dynamic = sharedDynamic;
         job.overrides = sharedOverrides;
+        job.latched = latched;
         job.jpeg_quality = c.jpeg_quality;
         if (c.pending.size() >= c.capacity) {
             if (c.fail_on_overflow)
@@ -459,7 +461,7 @@ Products SessionCameras::capture(Camera &c, const Job &job) {
     products.right_info = makeInfo(c.intrinsics[1], true, c.baseline_m);
 
     const auto root = pack_scene::toMatrix(job.root);
-    const auto scene = scene_->compose(root, *job.dynamic, *job.overrides);
+    const auto scene = scene_->compose(root, *job.dynamic, *job.overrides, job.latched);
     const auto viewFor = [&](int eye) {
         const auto worldEye = spatial::compose(job.root, eye ? c.right_eye : c.left_eye);
         rendering::View view;

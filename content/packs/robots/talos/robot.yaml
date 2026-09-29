@@ -52,7 +52,7 @@ assets:
 - {id: projectile_mesh, path: assets/visual/payloads/projectile.glb, required_from_step: 4, status: present, sha256: 67b854b4cdd1e4ec96e499f78bcd49509b16679796cb0b253cf7b9c3f67f6923, source: "riptide_simulator camera_faker/models/payloads/projectile.glb @07647eeb"}
 - {id: claw_pad_left, path: assets/collision/claw_pad.obj, required_from_step: 4, status: present, sha256: 506d0735f076ac74aa67b8fd9192576d0bd8bc5a07f0ca9e951311ad7fd46512, source: "riptide_simulator c_simulator/collision_files/tasks/claw_pad.obj @07647eeb"}
 - {id: claw_pad_right, path: assets/collision/claw_pad_right.obj, required_from_step: 4, status: present, sha256: f34963988eca6f6ac1ea47524d979724292b4831eb02b231d7e49cf6f7c3cfca, source: "riptide_simulator c_simulator/collision_files/tasks/claw_pad_right.obj @07647eeb"}
-- {id: robot_magnet_mesh, path: assets/visual/magnet/robot_magnet.glb, required_from_step: 4, status: missing, source: "riptide_simulator camera_faker/models/magnet_lights/robot_magnet.glb @07647eeb"}
+- {id: robot_magnet_mesh, path: assets/visual/magnet/robot_magnet.glb, required_from_step: 4, status: present, sha256: a95c37ae9be406f172ca5c3a972cf8018a9d46043e44979047c46f19c185b3c4, source: "riptide_simulator camera_faker/models/magnet_lights/robot_magnet.glb @bf8b50a"}
 
 body:
   type: marine_6dof
@@ -147,6 +147,8 @@ visuals:
 - {asset: claw_right_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
 - {asset: claw_left_pad_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
 - {asset: claw_right_pad_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+# Magnet stick and disk tip: the mesh origin sits at magnet.tip_position_m (talos_tasks.yaml magnet_lights.robot_tip_offset).
+- {asset: robot_magnet_mesh, frame: magnet_mount, position_m: [0, 0, 0.05], orientation_wxyz: [1, 0, 0, 0]}
 
 # Effective original physics proxies (talos.urdf box origins are COM-relative).
 collision_boxes:

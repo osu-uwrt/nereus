@@ -54,6 +54,14 @@ struct PropVisual {
     Matrix4d world_from_asset_at_reset = Matrix4d::Identity();
 };
 
+// A task visual (emissive) whose tint follows the indicator of a task region (magnet target lights):
+// `initial` until the region reports latched, then `latched`. `instance` indexes staticScene().
+struct IndicatorVisual {
+    std::string task, region;
+    std::size_t instance = 0;
+    Eigen::Vector4f initial = Eigen::Vector4f::Ones(), latched = Eigen::Vector4f::Ones();
+};
+
 class PackScene {
   public:
     explicit PackScene(const session::ResolvedScenario &, Options = {});
@@ -95,13 +103,19 @@ class PackScene {
                                  const Matrix4d &world_from_asset) const;
 
     // Static scene, robot visuals at world_from_root (with overrides), then the dynamic instances.
+    // `latched` maps indicator region ids to their latch state (missing regions stay at the initial colour).
     rendering::Scene compose(const Matrix4d &world_from_root,
                              const std::vector<rendering::Instance> &dynamic = {},
-                             const std::vector<RobotOverride> &overrides = {}) const;
+                             const std::vector<RobotOverride> &overrides = {},
+                             const std::map<std::string, bool> &latched = {}) const;
     rendering::Scene compose(const spatial::Pose &world_from_root,
                              const std::vector<rendering::Instance> &dynamic = {},
-                             const std::vector<RobotOverride> &overrides = {}) const {
-        return compose(toMatrix(world_from_root), dynamic, overrides);
+                             const std::vector<RobotOverride> &overrides = {},
+                             const std::map<std::string, bool> &latched = {}) const {
+        return compose(toMatrix(world_from_root), dynamic, overrides, latched);
+    }
+    const std::vector<IndicatorVisual> &indicatorVisuals() const {
+        return indicators_;
     }
 
     const std::vector<std::string> &warnings() const {
@@ -119,6 +133,7 @@ class PackScene {
     std::size_t pool_instances_ = 0;
     std::vector<RobotVisual> robot_;
     std::vector<PropVisual> props_;
+    std::vector<IndicatorVisual> indicators_;
     mutable std::mutex mutex_;
     mutable std::map<std::string, std::shared_ptr<const rendering::MeshAsset>> cache_;
     mutable std::vector<std::string> warnings_;

@@ -390,6 +390,20 @@ class PackCameras:
                     instance.mesh = mesh
                     instance.transform = world_task.compose(task_asset).matrix().astype(
                         np.float32)
+                    # CLEAR/EMISSIVE/radiance need a native module built with them; older builds keep
+                    # the mesh's own material (the C++ PackScene is the runtime authority).
+                    material = visual.get("material", "asset")
+                    kind = getattr(_camera.SurfaceMaterial, material.upper(), None)
+                    if material != "asset" and kind is not None:
+                        instance.material = kind
+                    if material == "emissive" and hasattr(instance, "radiance"):
+                        instance.radiance = float(visual.get("radiance", 60.0))
+                        instance.casts_shadow = False
+                    indicator = visual.get("indicator")
+                    if indicator is not None:
+                        # Initial state (reset); the latch is not part of the static scene.
+                        color = regions[indicator["region"]]["parameters"]["indicator"]["initial"]
+                        instance.tint = [*indicator["color_rgb"][color], 1.0]
                     result.append(instance)
                 if panel is not None:
                     empty = [x for x, n in zip(panel[0], counts) if n == 0]

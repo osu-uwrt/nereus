@@ -188,7 +188,7 @@ r::Scene SceneModel::build(const VisualState &state) const {
         }
         dynamic.push_back(std::move(instance));
     }
-    r::Scene scene = pack_->compose(worldFromRoot(state.body), dynamic, overrides);
+    r::Scene scene = pack_->compose(worldFromRoot(state.body), dynamic, overrides, state.indicatorLatched);
     if (robotOnly_) { // static scene = pool + task visuals; robot and dynamic instances follow it
         for (std::size_t i = 0; i < pack_->staticScene().instances.size() && i < scene.instances.size(); ++i)
             scene.instances[i].visible = false;

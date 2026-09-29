@@ -88,7 +88,8 @@ class SessionCameras {
     // waits. world_from_root is the robot frame root pose; dynamic/overrides are copied.
     void request(std::int64_t snapshot_time_ns, std::int64_t ros_stamp_ns, const spatial::Pose &world_from_root,
                  const std::vector<rendering::Instance> &dynamic = {},
-                 const std::vector<pack_scene::RobotOverride> &overrides = {});
+                 const std::vector<pack_scene::RobotOverride> &overrides = {},
+                 const std::map<std::string, bool> &latched = {});
     // Interest of one consumer in one camera output (any consumer true enables it).
     void setDemand(const std::string &camera, Output, bool wanted, const std::string &consumer = "default");
     void setAlways(bool);
@@ -115,6 +116,7 @@ class SessionCameras {
         spatial::Pose root;
         std::shared_ptr<const std::vector<rendering::Instance>> dynamic;
         std::shared_ptr<const std::vector<pack_scene::RobotOverride>> overrides;
+        std::map<std::string, bool> latched; // indicator region -> latch state
         bool rgb_left = false, depth_left = false, rgb_right = false;
         std::optional<int> jpeg_quality;
     };

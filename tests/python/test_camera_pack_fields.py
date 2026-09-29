@@ -81,7 +81,10 @@ class TalosCameraFieldTests(unittest.TestCase):
         placed: dict[str, list[str]] = {}
         for visual in self.robot["visuals"]:
             self.assertIn(visual["asset"], present)
-            self.assertEqual(visual["position_m"], ORIGIN)
+            magnet = next(item for item in self.robot["mechanisms"] if item["type"] == "magnet")
+            # The magnet mesh origin sits at the mechanism tip; every other visual is at its frame origin.
+            self.assertEqual(visual["position_m"],
+                             magnet["parameters"]["tip_position_m"] if visual["asset"] == "robot_magnet_mesh" else ORIGIN)
             self.assertEqual(visual["orientation_wxyz"], IDENTITY)
             placed.setdefault(visual["frame"], []).append(visual["asset"])
         rotors = [f"rotor_{item['id']}" for item in self.robot["thrusters"]]
@@ -91,6 +94,7 @@ class TalosCameraFieldTests(unittest.TestCase):
         self.assertEqual(sorted(placed[claw["frame"]]), sorted([
             "claw_static_mesh", "claw_left_mesh", "claw_right_mesh",
             "claw_left_pad_mesh", "claw_right_pad_mesh"]))
+        self.assertEqual(placed.pop("magnet_mount"), ["robot_magnet_mesh"])
         self.assertEqual(set(placed), {"cad", claw["frame"]})
 
     def test_stereo_cameras_are_enabled_with_rectified_right_eyes(self) -> None:
