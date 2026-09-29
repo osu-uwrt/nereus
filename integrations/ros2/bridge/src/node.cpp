@@ -1,6 +1,7 @@
 #include "node.hpp"
 
 #include <geometry_msgs/msg/transform_stamped.hpp>
+#include <rclcpp/serialization.hpp>
 #include <robot_localization/srv/set_pose.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
 #include <std_srvs/srv/set_bool.hpp>
@@ -97,7 +98,7 @@ struct BridgeNode::Impl {
     rclcpp::SerializedMessage buffer_message; // reused by the stepping thread
     std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor;
     std::thread executor_thread;
-    OnSetParametersCallbackHandle::SharedPtr parameter_handle;
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_handle;
     CameraSink *cameras{nullptr};
 
     void post(std::function<void()> work) {

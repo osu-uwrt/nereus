@@ -1,6 +1,8 @@
 #pragma once
 // Typed native values and value specifications shared by the field-map compiler and the core
 // (port of the Spec/SpecTree machinery in mapping.py). No ROS dependency.
+#include <nlohmann/json.hpp>
+
 #include <cstdint>
 #include <initializer_list>
 #include <map>
@@ -11,6 +13,7 @@
 #include <vector>
 
 namespace robotics::ros_bridge {
+using Json = nlohmann::json;
 
 // A declared field map cannot be applied to the declared ROS or native types.
 class MappingError : public std::runtime_error {

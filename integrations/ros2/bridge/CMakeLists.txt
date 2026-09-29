@@ -22,7 +22,7 @@ target_link_libraries(rp_bridge_core PUBLIC rp_session rclcpp::rclcpp rcpputils:
   ${builtin_interfaces_TARGETS} ${robot_localization_TARGETS})
 rp_project_options(rp_bridge_core)
 
-add_executable(robotics-sim-ros src/main.cpp src/node.cpp src/session_adapter.cpp src/records.cpp)
+add_executable(robotics-sim-ros src/main.cpp src/node.cpp src/session_adapter.cpp src/records.cpp src/camera_sink.cpp)
 target_link_libraries(robotics-sim-ros PRIVATE rp_bridge_core rp_rules tf2_ros::tf2_ros
   ${tf2_msgs_TARGETS} ${rosgraph_msgs_TARGETS})
 rp_project_options(robotics-sim-ros)

@@ -8,7 +8,7 @@
 #include "records.hpp"
 #include "session_adapter.hpp"
 
-#include <extensions/rules/registry.hpp>
+#include <rules/registry.hpp>
 
 #include <csignal>
 #include <cstdio>
@@ -77,7 +77,7 @@ void withoutCameras(session::ResolvedScenario &resolved) {
     std::set<std::string> cameras;
     for (const auto &sensor : resolved.robot.at("sensors"))
         if (isCamera(sensor))
-            cameras.insert(sensor.at("id"));
+            cameras.insert(sensor.at("id").get<std::string>());
     Json streams = Json::array();
     for (const auto &stream : resolved.bridge.at("streams")) {
         const std::string native = stream.at("native");

@@ -574,7 +574,8 @@ void BridgeCore::checkBindings() {
         {"robot_service", "command:robot.reset_to_start"},
         {"tasks_service", "command:tasks.reset"},
         {"full_service", "command:scenario.reset"}};
-    for (const auto &[key, value] : config_.value("reset", Json::object()).items()) {
+    const Json reset = config_.value("reset", Json::object());
+    for (const auto &[key, value] : reset.items()) {
         const auto action = actions.find(key);
         const std::string service = value;
         const bool ok = action != actions.end() && services.count(service) &&
