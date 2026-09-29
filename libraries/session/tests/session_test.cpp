@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <optional>
 
 using namespace robotics::session;
 using namespace robotics::session::testing;
@@ -162,11 +163,11 @@ TEST(Session, RunSnapshotDocumentMatchesPython) {
 }
 
 namespace {
-void throughput(bool tasks, const char *label) {
+void throughput(bool tasks, const char *label,
+                std::vector<std::string> task_ids = {"gate", "torpedo", "slalom"}) {
     const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
     const RulesRegistry rules = robotics::rules::standardRules();
     const auto sensors = sensorNames(scenario);
-    const std::vector<std::string> task_ids{"gate", "torpedo", "slalom"};
     Session s(scenario, createRuntime(scenario, &sensors), rules, SessionOptions{tasks ? &task_ids : nullptr, tasks});
     s.setKilled(false);
     s.setArmed(true);
@@ -194,4 +195,88 @@ TEST(Session, ThroughputWithTasksDisabled) {
 
 TEST(Session, ThroughputWithTasksEnabled) {
     throughput(true, "tasks gate+torpedo+slalom");
+}
+
+TEST(Session, ThroughputWithTheTableContactWorld) {
+    throughput(true, "tasks table (prop world + robot contacts)", {"table"});
+}
+
+// Full pipeline (plant + robot contacts + mechanisms + prop world): the robot follows a kinematic
+// pickup path (open, lower around the bandage, close, lift, carry, hold) with the claw square to the
+// token and at 45 degrees. The grasp must hold without creeping: pads must not keep pushing on a
+// welded prop (Bullet multibody colliders ignore setIgnoreCollisionCheck).
+TEST(Session, GraspedPropStaysInTheClawWhileCarried) {
+    std::ifstream stream(std::string(RP_SESSION_FIXTURES) + "/prop_world.json");
+    const Json fixture = Json::parse(stream);
+    const Json &data = fixture.at("cases").at("release_elsewhere");
+    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    const RulesRegistry rules = robotics::rules::standardRules();
+    const auto sensors = sensorNames(scenario);
+    const std::vector<std::string> task_ids{"table"};
+    Eigen::Matrix4d mount_local;
+    for (int r = 0; r < 4; ++r)
+        for (int c = 0; c < 4; ++c)
+            mount_local(r, c) = data.at("mount_local").at(r).at(c).get<double>();
+    Eigen::Matrix3d base_rotation;
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c)
+            base_rotation(r, c) = data.at("mount_rotation").at(r).at(c).get<double>();
+    const auto &place = data.at("ops").at(0).at("place");
+    const Eigen::Vector3d grasp_point = Eigen::Vector3d(place[0], place[1], place[2]) + Eigen::Vector3d(0, 0, -.25);
+    for (double deg : {0.0, 45.0}) {
+        Session s(scenario, createRuntime(scenario, &sensors), rules, SessionOptions{&task_ids, true});
+        s.setKilled(false);
+        s.setArmed(true);
+        s.commandClaw("claw", true);
+        Eigen::Matrix4d mount = Eigen::Matrix4d::Identity();
+        mount.block<3, 3>(0, 0) = Eigen::AngleAxisd(deg * M_PI / 180, Eigen::Vector3d::UnitZ()).toRotationMatrix() * base_rotation;
+        const double dt = s.timestepNs() / 1e9;
+        std::string log;
+        int tick = 0;
+        std::optional<Eigen::Vector3d> attached_at;
+        double drift = 0;
+        auto drive = [&](const Eigen::Vector3d &from, const Eigen::Vector3d &to, double seconds) {
+            const int n = static_cast<int>(seconds / dt);
+            const Eigen::Vector3d v = (to - from) / seconds;
+            for (int i = 0; i < n; ++i, ++tick) {
+                mount.block<3, 1>(0, 3) = from + (to - from) * (i + 1.0) / n;
+                const Eigen::Matrix4d body = mount * mount_local.inverse();
+                robotics::simulation::BodyState b;
+                b.position = body.block<3, 1>(0, 3);
+                b.orientation = Eigen::Quaterniond(Eigen::Matrix3d(body.block<3, 3>(0, 0)));
+                b.linear_velocity = b.orientation.conjugate() * v;
+                s.place(b, false);
+                const auto step = s.advance();
+                if (attached_at) {
+                    const auto bandage = s.props().at("table").at("bandage");
+                    const Eigen::Vector3d claw = (Eigen::Translation3d(step.snapshot.body.position) *
+                                                  step.snapshot.body.orientation * Eigen::Isometry3d(mount_local))
+                                                     .translation();
+                    drift = std::max(drift, (bandage.position - claw - *attached_at).norm());
+                } else if (s.props().at("table").at("bandage").attached) {
+                    const Eigen::Vector3d claw = (Eigen::Translation3d(step.snapshot.body.position) *
+                                                  step.snapshot.body.orientation * Eigen::Isometry3d(mount_local))
+                                                     .translation();
+                    attached_at = s.props().at("table").at("bandage").position - claw;
+                }
+                for (const auto &e : step.task_events)
+                    if (e.at("type") == "attach" || e.at("type") == "detach")
+                        log += e.at("type").get<std::string>() + "@" + std::to_string(tick * dt) + ":" +
+                               e.at("data").value("reason", "") + " ";
+                drain(s.runtime(), s.pack());
+            }
+        };
+        const Eigen::Vector3d above = grasp_point + Eigen::Vector3d(0, 0, .3);
+        drive(above, above, 3);            // jaws open
+        drive(above, grasp_point, 2);      // lower around the bandage
+        s.commandClaw("claw", false);
+        drive(grasp_point, grasp_point, 3); // close
+        const Eigen::Vector3d lifted = grasp_point + Eigen::Vector3d(0, 0, .3);
+        drive(grasp_point, lifted, 2);
+        drive(lifted, lifted + Eigen::Vector3d(.5, 0, 0), 2);
+        drive(lifted + Eigen::Vector3d(.5, 0, 0), lifted + Eigen::Vector3d(.5, 0, 0), 1);
+        EXPECT_TRUE(attached_at.has_value()) << "yaw " << deg << ": " << log;
+        EXPECT_TRUE(s.props().at("table").at("bandage").attached) << "yaw " << deg << ": " << log;
+        EXPECT_LT(drift, .003) << "yaw " << deg << ": grasped bandage moved relative to the claw";
+    }
 }

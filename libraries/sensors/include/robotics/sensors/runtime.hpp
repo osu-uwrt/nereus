@@ -213,6 +213,9 @@ class Runtime {
     // Keeps sensor phase/noise and time; discards readings from before placement.
     simulation::Snapshot place(const simulation::BodyState &state, bool clear_actuators = true);
     simulation::Snapshot reset(const simulation::BodyState &initial, std::uint64_t seed);
+    void setContactResolver(std::shared_ptr<simulation::ContactResolver> resolver) {
+        plant_.setContactResolver(std::move(resolver));
+    }
     bool faulted() const {
         return faulted_;
     }

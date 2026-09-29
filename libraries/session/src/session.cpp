@@ -10,6 +10,20 @@
 namespace robotics::session {
 namespace {
 using namespace detail;
+// Several contact worlds: resolved in order within one plant step.
+class ResolverChain final : public simulation::ContactResolver {
+  public:
+    explicit ResolverChain(std::vector<std::shared_ptr<simulation::ContactResolver>> resolvers)
+        : resolvers_(std::move(resolvers)) {}
+    State resolve(State state, const Matrix6 &inverse_mass) override {
+        for (auto &resolver : resolvers_)
+            state = resolver->resolve(state, inverse_mass);
+        return state;
+    }
+
+  private:
+    std::vector<std::shared_ptr<simulation::ContactResolver>> resolvers_;
+};
 
 simulation::PayloadParameters payloadParameters(const Json &projectile) {
     simulation::PayloadParameters p;
@@ -242,6 +256,15 @@ Session::Session(const ResolvedScenario &scenario, PackRuntime pack, const Rules
             if (selected && contact)
                 s.prop_worlds.push_back(std::make_unique<PropWorld>(s.scenario, id));
         }
+        // Robot-side contacts of every contact world (claw pads / held props against task scenery),
+        // resolved inside each plant step.
+        std::vector<std::shared_ptr<simulation::ContactResolver>> resolvers;
+        for (auto &world : s.prop_worlds)
+            resolvers.push_back(world->vehicleContacts(s.pack.parameters.contacts.friction));
+        if (resolvers.size() == 1)
+            s.pack.runtime->setContactResolver(resolvers[0]);
+        else if (!resolvers.empty())
+            s.pack.runtime->setContactResolver(std::make_shared<ResolverChain>(std::move(resolvers)));
     }
     if (!s.dynamics.empty()) {
         const auto &pool = s.pack.parameters.pool;

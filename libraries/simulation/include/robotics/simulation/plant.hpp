@@ -116,6 +116,8 @@ class Plant {
     // Teleports without restarting time/generation; optionally clears propulsion history.
     Snapshot place(const BodyState &state, bool clear_actuators = true);
     Snapshot reset(const BodyState &initial); // Restarts time and clears actuator history.
+    // Optional extra contact response (nullptr removes it); see ContactResolver.
+    void setContactResolver(std::shared_ptr<ContactResolver> resolver);
 
   private:
     struct Impl;

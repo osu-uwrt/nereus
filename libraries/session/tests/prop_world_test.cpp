@@ -75,7 +75,7 @@ struct Replay {
 };
 
 Replay replay(const ResolvedScenario &scenario, const Json &data, double dt, int sample_ticks, PropWorld *shared = nullptr,
-           bool check = true) {
+           bool check = true, std::size_t op_limit = SIZE_MAX, Matrix4 *final_mount = nullptr) {
     std::unique_ptr<PropWorld> owned;
     if (!shared)
         owned = std::make_unique<PropWorld>(scenario, "table");
@@ -100,6 +100,8 @@ Replay replay(const ResolvedScenario &scenario, const Json &data, double dt, int
     const std::int64_t tick_ns = std::llround(dt * 1e9);
     double spent = 0;
     for (const auto &op : data.at("ops")) {
+        if (op_limit-- == 0)
+            break;
         if (op.contains("place")) {
             mount.block<3, 1>(0, 3) = vec(op.at("place"));
         } else if (op.contains("reset")) {
@@ -136,6 +138,8 @@ Replay replay(const ResolvedScenario &scenario, const Json &data, double dt, int
         }
     }
     run.step_us = 1e6 * spent / run.ticks;
+    if (final_mount)
+        *final_mount = mount;
     return run;
 }
 
@@ -190,6 +194,114 @@ TEST(PropWorld, FinalStatesAndQueriesMatch) {
             contents[k] = v.get<std::string>();
         EXPECT_EQ(world.basketContents(), contents) << name;
     }
+}
+
+namespace {
+using State = robotics::simulation::ContactResolver::State;
+using Matrix6 = robotics::simulation::ContactResolver::Matrix6;
+// Robot COM state whose claw mount is at `mount` (world), moving with world velocity `velocity`.
+State stateAt(const Matrix4 &mount, const Matrix4 &mount_local, const Eigen::Vector3d &velocity) {
+    const Matrix4 body = mount * mount_local.inverse();
+    const Eigen::Quaterniond q(Eigen::Matrix3d(body.block<3, 3>(0, 0)));
+    State x;
+    x << body.block<3, 1>(0, 3), q.w(), q.x(), q.y(), q.z(), q.conjugate() * velocity, Eigen::Vector3d::Zero();
+    return x;
+}
+Eigen::Vector3d worldVelocity(const State &x) {
+    return Eigen::Quaterniond(x[3], x[4], x[5], x[6]).normalized() * Eigen::Vector3d(x.segment<3>(7));
+}
+// Mount height at which lowering the robot in 1 mm steps first meets robot-side contact.
+double contactHeight(robotics::simulation::ContactResolver &contacts, Matrix4 mount, const Matrix4 &mount_local,
+                     const Matrix6 &inverse_mass) {
+    for (int i = 0; i < 600; ++i, mount(2, 3) -= 1e-3) {
+        const State x = stateAt(mount, mount_local, Eigen::Vector3d::Zero());
+        if (!contacts.resolve(x, inverse_mass).isApprox(x, 1e-12))
+            return mount(2, 3);
+    }
+    return std::nan("");
+}
+// Translation-only robot (these harnesses integrate position only): the contact impulse cannot
+// turn into rotation about the COM, so the contact point velocity is the COM velocity.
+const Matrix6 kInverseMass = (Eigen::Matrix<double, 6, 1>() << 1 / 40., 1 / 45., 1 / 45., 1e-9, 1e-9, 1e-9)
+                                 .finished()
+                                 .asDiagonal();
+} // namespace
+
+// Old task_contacts.cpp: the claw pads cannot pass through the table; the robot is pushed out and
+// loses its approach velocity. Free space is untouched.
+TEST(PropWorld, RobotContactsStopThePadsAtTheTable) {
+    const Json fixture = readFixture();
+    const Json &data = fixture.at("cases").at("empty_jaws");
+    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    PropWorld world(scenario, "table");
+    auto contacts = world.vehicleContacts(0.4);
+    const Matrix4 mount_local = matrixOf(data.at("mount_local"));
+    Matrix4 mount = Matrix4::Identity();
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c)
+            mount(r, c) = data.at("mount_rotation").at(static_cast<std::size_t>(r)).at(static_cast<std::size_t>(c)).get<double>();
+    mount.block<3, 1>(0, 3) = vec(data.at("ops").at(0).at("place")) + Eigen::Vector3d(0, 0, .3);
+    const double touch = contactHeight(*contacts, mount, mount_local, kInverseMass);
+    ASSERT_TRUE(std::isfinite(touch)) << "no robot contact while lowering the claw onto the table";
+
+    mount(2, 3) = touch + .05;
+    const State free = stateAt(mount, mount_local, {0, 0, -.2});
+    EXPECT_TRUE(contacts->resolve(free, kInverseMass).isApprox(free, 1e-12));
+
+    mount(2, 3) = touch - .01; // 1 cm into the table, still sinking
+    const State pressed = stateAt(mount, mount_local, {0, 0, -.2});
+    const State out = contacts->resolve(pressed, kInverseMass);
+    EXPECT_GT(out[2] - pressed[2], .008) << "pushed back out of the table";
+    EXPECT_GT(worldVelocity(out).z(), -1e-6) << "approach velocity removed";
+}
+
+// The held prop belongs to the robot: pressing it into the table pushes the robot back instead of
+// driving the prop through scenery, so the finite grasp holds. Without robot contacts the same
+// press tears the prop out of the grasp (the "wobble, then dropped" of the missing port).
+TEST(PropWorld, HeldPropIsPartOfTheRobotAgainstScenery) {
+    const Json fixture = readFixture();
+    const Json &data = fixture.at("cases").at("grasp_carry_release");
+    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    const double dt = fixture.at("dt").get<double>();
+    const Matrix4 mount_local = matrixOf(data.at("mount_local"));
+    const auto press = [&](bool robot_contacts) {
+        PropWorld world(scenario, "table");
+        auto contacts = world.vehicleContacts(0.4);
+        Matrix4 mount;
+        const auto run = replay(scenario, data, dt, fixture.at("sample_ticks").get<int>(), &world, false, 5, &mount);
+        EXPECT_TRUE(world.props().at("pill").attached) << "script prefix grasps the pill";
+        std::vector<std::string> detached;
+        // From where the script holds it (the pill just above the table), drive the claw straight
+        // down at 0.15 m/s for 1.5 s.
+        State x = stateAt(mount, mount_local, {0, 0, -.15});
+        std::int64_t time_ns = static_cast<std::int64_t>(std::llround(run.ticks * dt * 1e9));
+        double lowest = x[2];
+        for (int i = 0; i < static_cast<int>(1.5 / dt); ++i) {
+            x.segment<3>(7) = Eigen::Quaterniond(x[3], x[4], x[5], x[6]).conjugate() * Eigen::Vector3d(0, 0, -.15);
+            if (robot_contacts)
+                x = contacts->resolve(x, kInverseMass);
+            x.head<3>() += worldVelocity(x) * dt;
+            if (robot_contacts)
+                x = contacts->resolve(x, kInverseMass);
+            lowest = std::min(lowest, x[2]);
+            robotics::spatial::Pose pose;
+            pose.translation = x.head<3>();
+            pose.rotation = Eigen::Quaterniond(x[3], x[4], x[5], x[6]).normalized();
+            time_ns += std::llround(dt * 1e9);
+            for (const auto &e : world.step(dt, time_ns, pose, worldVelocity(x), Eigen::Vector3d::Zero(),
+                                            {0.0, 0.0}, Water{}, true))
+                if (e.at("type") == "detach")
+                    detached.push_back(e.at("data").at("reason").get<std::string>());
+        }
+        return std::make_pair(detached, stateAt(mount, mount_local, {}).head<3>().z() - lowest);
+    };
+    const auto [with, depth_with] = press(true);
+    EXPECT_TRUE(with.empty()) << "grasp lost with robot contacts: " << (with.empty() ? "" : with.front());
+    EXPECT_LT(depth_with, .01) << "robot stopped at the table";
+    const auto [without, depth_without] = press(false);
+    std::cout << "[observed] without robot contacts: sank " << depth_without << " m, detach "
+              << (without.empty() ? "none" : without.front()) << "\n";
+    EXPECT_FALSE(without.empty()) << "the same press without robot contacts should tear the prop out";
 }
 
 TEST(PropWorld, RejectsInvalidInputsAndMissingAssets) {

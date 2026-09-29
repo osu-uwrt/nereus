@@ -239,6 +239,7 @@ struct Plant::Impl {
     detail::ThrusterDynamics actuators;
     std::unique_ptr<PoolContacts> pool_contacts;
     std::unique_ptr<detail::BoxContacts> box_contacts;
+    std::shared_ptr<ContactResolver> resolver;
     Eigen::Matrix<double, 6, Eigen::Dynamic> allocation;
     detail::State13d state;
     Eigen::VectorXd committed_forces;
@@ -311,12 +312,17 @@ Snapshot Plant::advance(std::uint64_t ticks) {
             auto start = p.state;
             if (p.box_contacts)
                 start = p.box_contacts->resolve(start, p.dynamics.inverseMass());
+            if (p.resolver)
+                start = p.resolver->resolve(start, p.dynamics.inverseMass());
             const double time = static_cast<double>(p.tick) * dt;
             auto next = detail::integrateBodyRk4(start, dt, [&](const auto &stage, double offset) {
                 return p.derivative(stage, p.actuators.forces(), time + offset);
             });
-            if (p.box_contacts) {
+            if (p.box_contacts)
                 next = p.box_contacts->resolve(next, p.dynamics.inverseMass());
+            if (p.resolver)
+                next = p.resolver->resolve(next, p.dynamics.inverseMass());
+            if (p.box_contacts || p.resolver) {
                 const auto q = Eigen::Quaterniond(next[3], next[4], next[5], next[6]).normalized();
                 next[3] = q.w();
                 next.segment<3>(4) = q.vec();
@@ -336,6 +342,10 @@ Snapshot Plant::advance(std::uint64_t ticks) {
         throw;
     }
     return observe();
+}
+
+void Plant::setContactResolver(std::shared_ptr<ContactResolver> resolver) {
+    impl_->resolver = std::move(resolver);
 }
 
 Snapshot Plant::place(const BodyState &state, bool clear_actuators) {

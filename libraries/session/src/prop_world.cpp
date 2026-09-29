@@ -127,6 +127,171 @@ struct ClosestPoints : btManifoldResult {
         btManifoldResult::addContactPoint(normalOnB, point, depth);
     }
 };
+// Pair exclusions (pybullet setCollisionFilterPair). btMultiBodyLinkCollider overrides
+// checkCollideWithOverride without consulting setIgnoreCollisionCheck, so the ignore list alone never
+// stops multibody pairs; this filter keeps excluded pairs out of the broadphase instead.
+struct PairFilter : btOverlapFilterCallback {
+    std::set<std::pair<const void *, const void *>> excluded;
+    static std::pair<const void *, const void *> key(const void *a, const void *b) {
+        return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
+    }
+    bool needBroadphaseCollision(btBroadphaseProxy *a, btBroadphaseProxy *b) const override {
+        return (a->m_collisionFilterGroup & b->m_collisionFilterMask) != 0 &&
+               (b->m_collisionFilterGroup & a->m_collisionFilterMask) != 0 &&
+               !excluded.count(key(a->m_clientObject, b->m_clientObject));
+    }
+};
+
+// Robot-side collision world (port of c_simulator task_contacts.cpp). Robot shapes (pads, a held
+// prop) are posed COM-locally and follow the plant state; scenery is fixed in the world; free props
+// sit where the prop world left them. A free prop pushes back only while resting on scenery and
+// only when the robot presses down onto it (side pushes stay in the prop world). Resolution: move
+// out along the deepest contact, then sequential normal impulses with Coulomb friction (<= 8 passes).
+class VehicleContacts final : public simulation::ContactResolver {
+  public:
+    enum Kind { kRobot = 1, kScenery = 2, kProp = 4 };
+    explicit VehicleContacts(double friction) : friction_(friction) {
+        if (!std::isfinite(friction) || friction < 0)
+            throw std::invalid_argument("contact friction must be finite and nonnegative");
+    }
+    ~VehicleContacts() override {
+        for (auto &e : entries_)
+            world_.removeCollisionObject(&e->object);
+    }
+    int add(std::unique_ptr<btCollisionShape> shape, std::unique_ptr<btTriangleMesh> mesh, Kind kind,
+            const Matrix4 &pose) {
+        auto e = std::make_unique<Entry>();
+        e->kind = kind;
+        e->pose = pose;
+        e->shape = std::move(shape);
+        e->mesh = std::move(mesh);
+        e->shape->setMargin(kPadMarginM);
+        e->object.setCollisionShape(e->shape.get());
+        e->object.setWorldTransform(transformOf(pose));
+        e->object.setUserPointer(e.get());
+        e->object.setCollisionFlags(kind == kScenery ? btCollisionObject::CF_STATIC_OBJECT
+                                                     : btCollisionObject::CF_KINEMATIC_OBJECT);
+        // Only robot pairs are detected every pass; prop support is queried when the robot touches a prop.
+        world_.addCollisionObject(&e->object, kind, kind == kRobot ? kScenery | kProp : kRobot);
+        entries_.push_back(std::move(e));
+        return static_cast<int>(entries_.size()) - 1;
+    }
+    // Robot shape: COM-local pose. Prop: world pose, or COM-local when attached to the robot.
+    void pose(int index, const Matrix4 &pose, bool attached = false) {
+        auto &e = *entries_.at(static_cast<std::size_t>(index));
+        e.pose = pose;
+        e.attached = attached;
+    }
+    State resolve(State state, const Matrix6 &inverse_mass) override {
+        Eigen::Quaterniond q(state[3], state[4], state[5], state[6]);
+        q.normalize();
+        for (int pass = 0; pass < 8; ++pass) {
+            const auto contacts = detect(state, q);
+            if (contacts.empty())
+                break;
+            const auto deepest = std::max_element(contacts.begin(), contacts.end(),
+                                                  [](const Hit &a, const Hit &b) { return a.depth < b.depth; });
+            bool changed = deepest->depth > 1e-5;
+            if (changed)
+                state.head<3>() += deepest->normal * (deepest->depth + .00005);
+            for (const auto &c : contacts) {
+                const Vec3 n = q.conjugate() * c.normal, r = q.conjugate() * (c.point - Vec3(state.head<3>()));
+                Eigen::Matrix<double, 6, 1> j;
+                j << n, r.cross(n);
+                const double speed = j.dot(state.segment<6>(7)), den = j.dot(inverse_mass * j);
+                if (speed >= -1e-5 || den < 1e-12)
+                    continue;
+                changed = true;
+                const double impulse = -speed / den;
+                state.segment<6>(7) += inverse_mass * j * impulse;
+                const Vec3 v = Vec3(state.segment<3>(7)) + Vec3(state.segment<3>(10)).cross(r);
+                Vec3 tangent = v - n * v.dot(n);
+                if (tangent.norm() > 1e-9) {
+                    tangent.normalize();
+                    Eigen::Matrix<double, 6, 1> jt;
+                    jt << tangent, r.cross(tangent);
+                    const double d = jt.dot(inverse_mass * jt);
+                    if (d > 1e-12)
+                        state.segment<6>(7) -=
+                            inverse_mass * jt * std::min(friction_ * impulse, jt.dot(state.segment<6>(7)) / d);
+                }
+            }
+            if (!changed)
+                break;
+        }
+        return state;
+    }
+
+  private:
+    struct Entry {
+        Kind kind{kScenery};
+        bool attached{false};
+        Matrix4 pose{Matrix4::Identity()};
+        std::unique_ptr<btCollisionShape> shape;
+        std::unique_ptr<btTriangleMesh> mesh;
+        btCollisionObject object;
+        bool robot() const { return kind == kRobot || attached; }
+    };
+    struct Hit {
+        Vec3 point, normal; // world; normal pushes the robot out
+        double depth;
+    };
+    std::vector<Hit> detect(const State &state, const Eigen::Quaterniond &q) {
+        const Matrix4 body = matrixFrom(state.head<3>(), q);
+        for (auto &e : entries_) {
+            if (e->kind == kScenery)
+                continue;
+            e->object.setWorldTransform(transformOf(e->robot() ? Matrix4(body * e->pose) : e->pose));
+            world_.updateSingleAabb(&e->object);
+        }
+        world_.performDiscreteCollisionDetection();
+        const auto entry = [](const btCollisionObject *o) { return static_cast<Entry *>(o->getUserPointer()); };
+        std::vector<Hit> out;
+        for (int i = 0; i < dispatcher_.getNumManifolds(); ++i) {
+            const auto *m = dispatcher_.getManifoldByIndexInternal(i);
+            const auto *a = entry(m->getBody0()), *b = entry(m->getBody1());
+            if (a->robot() == b->robot())
+                continue;
+            const auto *obstacle = a->robot() ? b : a;
+            for (int k = 0; k < m->getNumContacts(); ++k) {
+                const auto &p = m->getContactPoint(k);
+                if (p.getDistance() > .0005)
+                    continue;
+                const Vec3 normal = fromBt(p.m_normalWorldOnB) * (a->robot() ? 1.0 : -1.0);
+                if (obstacle->kind == kProp && (normal.z() < .7 || !supported(*obstacle)))
+                    continue;
+                out.push_back({fromBt(a->robot() ? p.getPositionWorldOnA() : p.getPositionWorldOnB()), normal,
+                               std::max(0.0, -double(p.getDistance()))});
+            }
+        }
+        return out;
+    }
+    // A free prop resting on scenery (a contact within 3 mm whose normal points up at the prop).
+    bool supported(const Entry &prop) {
+        struct Support : btCollisionWorld::ContactResultCallback {
+            const btCollisionObject *prop{nullptr};
+            bool up{false};
+            btScalar addSingleResult(btManifoldPoint &p, const btCollisionObjectWrapper *a, int, int,
+                                     const btCollisionObjectWrapper *, int, int) override {
+                const double z = p.m_normalWorldOnB.z();
+                up = up || (p.getDistance() <= .003 && (a->getCollisionObject() == prop ? z > .5 : z < -.5));
+                return 0;
+            }
+        } support;
+        support.prop = &prop.object;
+        support.m_closestDistanceThreshold = .003;
+        for (auto &e : entries_)
+            if (e->kind == kScenery && !support.up)
+                world_.contactPairTest(const_cast<btCollisionObject *>(&prop.object), &e->object, support);
+        return support.up;
+    }
+    double friction_;
+    btDefaultCollisionConfiguration configuration_;
+    btCollisionDispatcher dispatcher_{&configuration_};
+    btDbvtBroadphase broadphase_;
+    btCollisionWorld world_{&dispatcher_, &broadphase_, &configuration_};
+    std::vector<std::unique_ptr<Entry>> entries_;
+};
 } // namespace
 
 struct PropWorld::Impl {
@@ -174,6 +339,7 @@ struct PropWorld::Impl {
     std::unique_ptr<btDefaultCollisionConfiguration> configuration;
     std::unique_ptr<btCollisionDispatcher> dispatcher;
     std::unique_ptr<btHashedOverlappingPairCache> pair_cache;
+    PairFilter pair_filter;
     std::unique_ptr<btDbvtBroadphase> broadphase;
     std::unique_ptr<btMultiBodyConstraintSolver> solver;
     std::unique_ptr<btMultiBodyDynamicsWorld> world;
@@ -195,6 +361,12 @@ struct PropWorld::Impl {
     Events pending;
     std::optional<std::int64_t> time_ns;
     double dt{1.0 / 240};
+
+    // Robot-side contacts (created on demand, survive reset()); entry indices of pads and props.
+    std::shared_ptr<VehicleContacts> vehicle;
+    std::vector<int> vehicle_pads, vehicle_props;
+    void buildVehicle(double friction);
+    void syncVehicle();
 
     Impl(const ResolvedScenario &resolved, const std::string &task_id, const std::string &mechanism);
     ~Impl() { teardown(); }
@@ -434,8 +606,20 @@ std::pair<Vec3, Vec3> PropWorld::Impl::baseVelocity(int index) const {
 void PropWorld::Impl::setCollisionPair(int a, int b, bool enabled) {
     auto *ca = bodies[static_cast<std::size_t>(a)].collider.get();
     auto *cb = bodies[static_cast<std::size_t>(b)].collider.get();
-    ca->setIgnoreCollisionCheck(cb, !enabled);
-    cb->setIgnoreCollisionCheck(ca, !enabled);
+    const auto key = PairFilter::key(ca, cb);
+    if (enabled) {
+        // The broadphase only re-reports a pair when a proxy leaves its fattened bounds, so an
+        // overlapping pair is restored here (pybullet contacts resume on the next step).
+        if (pair_filter.excluded.erase(key)) {
+            btBroadphaseProxy *pa = ca->getBroadphaseHandle(), *pb = cb->getBroadphaseHandle();
+            if (TestAabbAgainstAabb2(pa->m_aabbMin, pa->m_aabbMax, pb->m_aabbMin, pb->m_aabbMax) &&
+                !pair_cache->findPair(pa, pb))
+                pair_cache->addOverlappingPair(pa, pb);
+        }
+    } else {
+        pair_filter.excluded.insert(key);
+        pair_cache->removeOverlappingPair(ca->getBroadphaseHandle(), cb->getBroadphaseHandle(), dispatcher.get());
+    }
 }
 
 void PropWorld::Impl::build() {
@@ -443,6 +627,8 @@ void PropWorld::Impl::build() {
     configuration = std::make_unique<btDefaultCollisionConfiguration>();
     dispatcher = std::make_unique<btCollisionDispatcher>(configuration.get());
     pair_cache = std::make_unique<btHashedOverlappingPairCache>();
+    pair_filter.excluded.clear();
+    pair_cache->setOverlapFilterCallback(&pair_filter);
     broadphase = std::make_unique<btDbvtBroadphase>(pair_cache.get());
     solver = std::make_unique<btMultiBodyConstraintSolver>();
     world = std::make_unique<btMultiBodyDynamicsWorld>(dispatcher.get(), broadphase.get(),
@@ -868,6 +1054,70 @@ void PropWorld::Impl::settle(double dt_s, std::int64_t t) {
     }
 }
 
+// ----------------------------------------------------------------------------- robot contacts
+
+void PropWorld::Impl::buildVehicle(double friction) {
+    vehicle = std::make_shared<VehicleContacts>(friction);
+    const auto meshShape = [](const ObjMesh &obj) {
+        auto triangles = std::make_unique<btTriangleMesh>();
+        for (const auto &t : obj.triangles)
+            triangles->addTriangle(toBt(obj.vertices[static_cast<std::size_t>(t[0])]),
+                                   toBt(obj.vertices[static_cast<std::size_t>(t[1])]),
+                                   toBt(obj.vertices[static_cast<std::size_t>(t[2])]));
+        auto shape = std::make_unique<btBvhTriangleMeshShape>(triangles.get(), true, true);
+        return std::make_pair(std::move(shape), std::move(triangles));
+    };
+    const auto hull = [](const std::vector<Vec3> &vertices, const Vec3 &center) {
+        auto shape = std::make_unique<btConvexHullShape>();
+        for (const auto &v : vertices)
+            shape->addPoint(toBt(v - center), false);
+        shape->recalcLocalAabb();
+        shape->optimizeConvexHull();
+        return shape;
+    };
+    for (const auto &box : pool_boxes)
+        vehicle->add(std::make_unique<btBoxShape>(toBt(box.half)), nullptr, VehicleContacts::kScenery, box.transform);
+    for (const auto &prop : statics) {
+        const Json &parameters = prop.at("parameters");
+        if (parameters.contains("collision_meshes"))
+            for (const auto &mesh : parameters.at("collision_meshes")) {
+                auto [shape, triangles] = meshShape(loadObj(task_assets.at(mesh.at("asset").get<std::string>())));
+                vehicle->add(std::move(shape), std::move(triangles), VehicleContacts::kScenery,
+                             frames.at(mesh.at("frame").get<std::string>()));
+            }
+        for (const auto &box : parameters.at("collision_boxes"))
+            vehicle->add(std::make_unique<btBoxShape>(toBt(vec3(box.at("size_m"), "size_m") / 2)), nullptr,
+                         VehicleContacts::kScenery,
+                         world_from_task * poseOf(box.at("center_m"), box.at("orientation_wxyz")));
+    }
+    for (const auto &path : pad_paths)
+        vehicle_pads.push_back(vehicle->add(hull(loadObj(path).referenced(), Vec3::Zero()), nullptr,
+                                            VehicleContacts::kRobot, mount));
+    for (const auto &p : props) {
+        const auto obj = loadObj(task_assets.at(p.config->at("collision_asset").get<std::string>()));
+        vehicle_props.push_back(
+            vehicle->add(hull(obj.vertices, p.center), nullptr, VehicleContacts::kProp, basePose(p.body)));
+    }
+    syncVehicle();
+}
+
+void PropWorld::Impl::syncVehicle() {
+    if (!vehicle)
+        return;
+    const double signs[2] = {1, -1};
+    for (int i = 0; i < 2; ++i) {
+        Matrix4 offset = Matrix4::Identity();
+        offset(1, 3) = signs[i] * q;
+        vehicle->pose(vehicle_pads[static_cast<std::size_t>(i)], mount * offset);
+    }
+    for (std::size_t key = 0; key < props.size(); ++key) {
+        if (held && *held == key) // the grasp holds it at the grasp pose relative to the claw
+            vehicle->pose(vehicle_props[key], mount * held_relative, true);
+        else
+            vehicle->pose(vehicle_props[key], basePose(props[key].body));
+    }
+}
+
 // ------------------------------------------------------------------------------------ facade
 
 PropWorld::PropWorld(const ResolvedScenario &scenario, const std::string &task,
@@ -883,6 +1133,13 @@ void PropWorld::reset() {
     // Recreate the contact world (clears broadphase caches, constraints and poses).
     impl_->teardown();
     impl_->build();
+    impl_->syncVehicle();
+}
+
+std::shared_ptr<simulation::ContactResolver> PropWorld::vehicleContacts(double friction) {
+    if (!impl_->vehicle)
+        impl_->buildVehicle(friction);
+    return impl_->vehicle;
 }
 
 std::map<std::string, PropState> PropWorld::props() const {
@@ -983,6 +1240,7 @@ Events PropWorld::step(double dt_s, std::int64_t time_ns, const spatial::Pose &r
     if (!s.held && s.direction < 0 && enabled)
         s.tryGrasp(dt_s, mount, time_ns);
     s.settle(dt_s, time_ns);
+    s.syncVehicle();
     Events events;
     events.swap(s.pending);
     return events;

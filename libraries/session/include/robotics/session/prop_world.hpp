@@ -4,6 +4,7 @@
 // The plant stays authoritative for the robot; jaws are placed kinematically from the robot
 // pose and claw joint positions. One private btDiscreteDynamicsWorld per instance.
 #include <robotics/session/tasks.hpp>
+#include <robotics/simulation/contacts.hpp>
 
 #include <array>
 #include <map>
@@ -44,6 +45,11 @@ class PropWorld {
     std::map<std::string, PropState> props() const;
     std::map<std::string, std::string> basketContents() const;
     double jawPosition() const; // physical jaw travel (lags the mechanism while blocked)
+    // Robot-side contacts for the plant (port of c_simulator task_contacts.cpp): the claw pads and a
+    // held prop move with the robot and push it back from this task's scenery, the pool boxes and
+    // props resting on scenery. Updated by step()/reset(); install with Runtime::setContactResolver.
+    // friction: Coulomb coefficient of the robot contacts (the plant's contact friction).
+    std::shared_ptr<simulation::ContactResolver> vehicleContacts(double friction);
 
   private:
     struct Impl;
