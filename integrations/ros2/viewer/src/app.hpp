@@ -24,7 +24,13 @@ struct Options {
     std::vector<float> injectF;     // test aid: hover this window position and press F mid-run
     std::vector<float> orbit;       // optional initial orbit: yaw pitch distance (radians, metres)
     int frames = 0;                 // render N frames, save the screenshot, exit
-    double renderRate = 30;
+    double renderRate = 0;          // frame cap in Hz; 0 = uncapped (vsync paces; hidden runs use 30)
+    bool vsync = true;              // swap interval 1 (ignored for --hidden)
+    bool profile = false;           // log frame-time statistics every few seconds
+    double truthDelay = -1;         // seconds behind the latest truth stamp (<0: host yaml, default 0.02)
+    double otherDelay = -1;         // same for estimate / other TF frames (default 0.06)
+    std::string poseSource;         // auto | truth | estimate (empty: host yaml, default auto)
+    bool robotOnly = false;         // draw only the robot (no pool, water or course)
     std::optional<bool> useSimTime; // default: on unless --demo
     std::vector<std::string> rosArgs;
 };

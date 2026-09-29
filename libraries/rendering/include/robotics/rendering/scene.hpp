@@ -47,6 +47,10 @@ struct Appearance {
     bool surface = true, shadows = true, reflections = true, outdoor = false;
     float sun_azimuth = 225, sun_elevation = 55; // degrees
     float direct_light = 1, ambient_light = .7f, glare = .5f;
+    // Cheap preview draw (camera cards, thumbnails): renders into its own targets (no resize churn against
+    // the main view), reuses the shadow map of the last full draw when one exists, and skips the surface
+    // reflection and bloom passes. Default false keeps every existing draw bit-identical.
+    bool preview = false;
 };
 struct PoolGeometry {
     Eigen::Vector3f dimensions = {50, 22.86f, 2.1336f};

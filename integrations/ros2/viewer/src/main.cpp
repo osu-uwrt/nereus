@@ -23,7 +23,15 @@ void usage() {
         "  --open NAME            open scene-settings, map, tf, pool-viewer or depth (camera cards) at start (repeatable)\n"
         "  --show-tf --detections --mpc-path --show-scorecard   initial toggle states\n"
         "  --hidden --frames N --screenshot out.png   render N frames, save a PNG, exit\n"
-        "  --render-rate HZ       frame cap (default 30)\n"
+        "  --render-rate HZ       optional frame cap (default: none, vsync paces)\n"
+        "  --no-vsync             disable vsync (swap interval 0)\n"
+        "  --profile              log frame time mean/p50/p95/p99/max and per-phase cost every 5 s (F3 toggles\n"
+        "                         the on-screen readout)\n"
+        "  --pose-source auto|truth|estimate  robot pose: simulator truth when fresh (auto), always truth, or\n"
+        "                         the localization estimate (real robot: no simulator, no bridge)\n"
+        "  --display-delay S      seconds behind the latest truth stamp shown (default 0.02)\n"
+        "  --estimate-delay S     same for estimate / other TF frames (default 0.06)\n"
+        "  --robot-only           draw only the robot: no pool, water or course (real-robot use)\n"
         "  --shaders DIR          renderer shader folder\n"
         "  --use-sim-time [true|false]   follow /clock (default true unless --demo)\n"
         "  --ros-args ...         passed to rclcpp\n";
@@ -83,6 +91,18 @@ int main(int argc, char **argv) {
                 v = argv[++i];
             options.localCameras = v != "false" && v != "0";
         }
+        else if (arg == "--no-vsync")
+            options.vsync = false;
+        else if (arg == "--profile")
+            options.profile = true;
+        else if (arg == "--robot-only")
+            options.robotOnly = true;
+        else if (arg == "--pose-source")
+            options.poseSource = value();
+        else if (arg == "--display-delay")
+            options.truthDelay = std::atof(value().c_str());
+        else if (arg == "--estimate-delay")
+            options.otherDelay = std::atof(value().c_str());
         else if (arg == "--hidden")
             options.hidden = true;
         else if (arg == "--show-tf")

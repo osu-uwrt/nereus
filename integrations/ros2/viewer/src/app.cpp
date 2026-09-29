@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "frame_profiler.hpp"
 #include "overlay_draw.hpp"
 #include "ros_side.hpp"
 #include "scene_model.hpp"
@@ -49,6 +50,20 @@ fs::path contentDirectory() {
     return fs::current_path();
 #endif
 }
+
+// Adds the wall time of a scope to a profiler phase; with `sync` the GL queue is drained first so the
+// cost of asynchronous draw calls lands in the phase that issued them (profiling only).
+struct PhaseTimer {
+    FrameProfiler &profiler;
+    Phase phase;
+    bool sync;
+    Clock::time_point begin = Clock::now();
+    ~PhaseTimer() {
+        if (sync)
+            glFinish();
+        profiler.add(phase, std::chrono::duration<double>(Clock::now() - begin).count());
+    }
+};
 
 // Observer-only look: never touches the bridge's sensor renders.
 struct Look {
@@ -179,7 +194,7 @@ class App {
     void sectionHeading(const char *text);
     std::string runTime() const;
     void saveCameraImages(const fs::path &screenshot);
-    void renderLocalCards(double t);
+    void renderLocalCards(double t, const rendering::Scene &mainScene);
 
     Options opt_;
     YAML::Node config_;
@@ -230,13 +245,24 @@ class App {
     std::deque<glm::vec3> trail_;
     std::string status_ = "WAITING FOR SCENARIO";
     std::vector<CardTexture> cards_;
-    double nextCard_ = 0;
+    std::vector<double> cardDue_;        // next render time per card
+    std::vector<char> cardVisible_;      // drawn on screen last frame (scrolled-out / hidden cards are skipped)
+    std::size_t nextCardTurn_ = 0;       // round-robin start so cards share the frame budget evenly
     // layout
     float cameraSidebarWidth_ = 0, toolbarHeight_ = 80;
     bool cameraSidebarVisible_ = true, cameraSidebarResized_ = false;
     PanelEdge panelEdge_, cameraEdge_;
     Clock::time_point start_;
     double frameSeconds_ = 0;
+    // profiling
+    FrameProfiler profiler_;
+    bool showProfile_ = false;
+    Clock::time_point profileLogAt_{};
+    double profileCachedAt_ = -1;
+    std::string profileText_;
+    bool profileSync() const {
+        return opt_.profile || showProfile_;
+    }
     std::vector<glm::mat4> lastLoaded_;
     int argc_;
     char **argv_;
@@ -269,7 +295,7 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
               height = lookup(config_, {"window", "height"}).as<int>(940);
     window_ = std::make_unique<Window>(width, height,
                                        lookup(config_, {"branding", "window_title"}).as<std::string>("Robotics Pool Viewer"),
-                                       opt_.hidden);
+                                       opt_.hidden, opt_.vsync);
     fs::path shaders = opt_.shaders;
 #ifdef RP_RENDERING_SHADERS
     if (shaders.empty())
@@ -281,8 +307,8 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     glGenFramebuffers(1, &readFbo_);
     glGenFramebuffers(1, &drawFbo_);
     start_ = Clock::now();
-    if (opt_.renderRate <= 0 || opt_.renderRate > 240)
-        throw std::runtime_error("render rate must be in (0,240]");
+    if (opt_.renderRate < 0 || opt_.renderRate > 240)
+        throw std::runtime_error("render rate must be in [0,240] (0 = uncapped)");
 
     if (!opt_.scenarioFile.empty()) {
         std::ifstream file(opt_.scenarioFile);
@@ -487,6 +513,8 @@ void App::loadScenario(const std::string &json) {
     look_.appearance = scenario_->appearance;
     look_.tag = lookup(config_, {"calibration_board", "visible"}).as<bool>(true);
     cards_.assign(scenario_->cameras.size(), {});
+    cardDue_.assign(cards_.size(), 0.);
+    cardVisible_.assign(cards_.size(), 1);
     for (auto &feed : ros_->feeds) {
         feed.wantDepth = openDepth_;
         feed.rosMode = !opt_.localCameras && !demoMode_; // local cards render from this viewer's scene
@@ -881,7 +909,7 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
         if (ImGui::Checkbox("What the stack sees (ROS)", &ros)) {
             feed.rosMode = ros;
             ros_->refreshCameras();
-            nextCard_ = 0; // render the local view immediately when switching back
+            cardDue_[index] = 0; // render the local view immediately when switching back
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Off: this viewer renders the card from its own scene at the truth pose.\n"
@@ -909,6 +937,7 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
         auto *draw = ImGui::GetWindowDrawList();
         draw->AddRectFilled(pos, {pos.x + w, pos.y + h}, IM_COL32(4, 13, 19, 255));
     }
+    cardVisible_[index] = ImGui::IsItemVisible();
     const bool ready = demoMode_ || ros_->truthFresh();
     if (!ready || !texture) {
         auto *draw = ImGui::GetWindowDrawList();
@@ -1146,6 +1175,7 @@ void App::drawToolbar(float left, int &oldMode) {
         ImGui::Checkbox("Water", &observer_.water);
         ImGui::Checkbox("Pool walls", &observer_.walls);
         ImGui::Checkbox("Surface reflections", &observer_.reflections);
+        ImGui::Checkbox("Frame stats (F3)", &showProfile_);
         ImGui::SeparatorText("Viewer lighting");
         ImGui::BeginDisabled(observer_.lighting == 3);
         ImGui::Checkbox("Shadows", &observer_.shadows);
@@ -1374,11 +1404,19 @@ void App::drawInterface(double time, float dt) {
         view = sensorView(body_ * sensor->opticalInBase, k);
         viewportView_ = view;
     }
-    const auto scene = model_->build(buildState());
-    renderLocalCards(time);
+    rendering::Scene scene;
+    {
+        PhaseTimer timer{profiler_, Phase::Scene, false};
+        scene = model_->build(buildState());
+    }
+    renderLocalCards(time, scene);
     const rendering::View renderView{toEigen(view.view), toEigen(view.projection), Eigen::Vector3f(view.eye.x, view.eye.y, view.eye.z)};
     const auto appearance = observer_.apply(look_.appearance);
-    const auto frame = renderer_->draw(scene, renderView, appearance, float(time), rw, rh);
+    rendering::RenderedFrame frame;
+    {
+        PhaseTimer timer{profiler_, Phase::Main, profileSync()};
+        frame = renderer_->draw(scene, renderView, appearance, float(time), rw, rh);
+    }
     lastFrame_ = frame;
     haveFrame_ = true;
     if (mode_ == 0 && hovered && !dragging && !io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F))
@@ -1429,6 +1467,29 @@ void App::drawInterface(double time, float dt) {
     d->AddText(window_->small, 12, {position.x + 25, position.y + 22}, color(white),
                (scenario_->poolId + " / " + fixed(scenario_->poolLength, 1) + " x " + fixed(scenario_->poolWidth, 2) + " m")
                    .c_str());
+    if (showProfile_ && !profiler_.recent().empty()) {
+        if (time - profileCachedAt_ > .5) {
+            profileCachedAt_ = time;
+            std::vector<FrameSample> samples(profiler_.recent().begin(), profiler_.recent().end());
+            const auto f = frameDistribution(samples);
+            char text[640];
+            std::snprintf(text, sizeof(text), "%.0f fps  frame ms  mean %.1f  p50 %.1f  p95 %.1f  p99 %.1f  max %.1f\n",
+                          f.mean > 0 ? 1000 / f.mean : 0., f.mean, f.p50, f.p95, f.p99, f.max);
+            profileText_ = text;
+            profileText_ += "phase ms mean/max:";
+            for (int i = 0; i < kPhaseCount; ++i) {
+                const auto d = phaseDistribution(samples, Phase(i));
+                std::snprintf(text, sizeof(text), "  %s %.1f/%.1f", phaseName(Phase(i)), d.mean, d.max);
+                profileText_ += text;
+            }
+        }
+        ImGui::PushFont(window_->small);
+        const ImVec2 size = ImGui::CalcTextSize(profileText_.c_str());
+        ImGui::PopFont();
+        d->AddRectFilled({position.x + 14, position.y + 50}, {position.x + 30 + size.x, position.y + 62 + size.y},
+                         IM_COL32(8, 22, 29, 225), 4);
+        d->AddText(window_->small, 12, {position.x + 22, position.y + 56}, color(white), profileText_.c_str());
+    }
     if (runScore_ && runScore_["total"]) {
         std::string readout = fixed(runScore_["total"].as<double>(), 1) + " pts   /   " + runTime();
         if (runScore_["running"].as<bool>(false))
@@ -1484,18 +1545,37 @@ void App::drawInterface(double time, float dt) {
 
 // Local camera cards: this viewer's own render from each sensor pose (the truth pose live, the fixed preview
 // pose in demo mode). Scene preview has no bridge; live cards can switch to the bridge's images per card.
-void App::renderLocalCards(double t) {
-    if (t < nextCard_ || !scenario_ || !model_ || !(demoMode_ || opt_.localCameras) || !cameraSidebarVisible_)
+// Cost control: at most ONE card per frame (each card refreshes every 0.1 s, staggered by the round-robin), only
+// cards drawn on screen whose RGB is not replaced by the depth image or the ROS feed, the main frame's scene
+// is reused, and the renderer's preview mode skips shadow/bloom/reflection passes.
+void App::renderLocalCards(double t, const rendering::Scene &mainScene) {
+    if (!scenario_ || !model_ || !(demoMode_ || opt_.localCameras) || !cameraSidebarVisible_)
         return;
     if (!demoMode_ && !ros_->truthFresh())
         return; // no pose to render from yet
-    nextCard_ = t + (demoMode_ ? .25 : .1);
-    auto state = buildState();
-    state.showWalls = true; // the robot's camera sees the pool whatever the observer hides
-    const auto scene = model_->build(state);
-    for (std::size_t i = 0; i < scenario_->cameras.size() && i < cards_.size(); ++i) {
-        if (!demoMode_ && i < ros_->feeds.size() && ros_->feeds[i].rosMode)
-            continue;
+    const std::size_t count = std::min(scenario_->cameras.size(), cards_.size());
+    std::size_t index = count;
+    for (std::size_t n = 0; n < count && index == count; ++n) {
+        const std::size_t i = (nextCardTurn_ + n) % count;
+        const bool ros = !demoMode_ && i < ros_->feeds.size() && ros_->feeds[i].rosMode;
+        const bool depthShown = i < ros_->feeds.size() && ros_->feeds[i].wantDepth && cards_[i].depth;
+        if (!ros && !depthShown && cardVisible_[i] && t >= cardDue_[i])
+            index = i;
+    }
+    if (index == count)
+        return;
+    nextCardTurn_ = index + 1;
+    cardDue_[index] = t + (demoMode_ ? .25 : .1);
+    PhaseTimer timer{profiler_, Phase::Cards, profileSync()};
+    rendering::Scene ownScene;
+    if (!observer_.walls) { // the robot's camera sees the pool whatever the observer hides
+        auto state = buildState();
+        state.showWalls = true;
+        ownScene = model_->build(state);
+    }
+    const rendering::Scene &scene = observer_.walls ? mainScene : ownScene;
+    {
+        const std::size_t i = index;
         const auto &camera = scenario_->cameras[i];
         auto k = camera.k;
         const int w = 480, h = std::max(16, int(std::lround(480.0 * k.height / k.width)));
@@ -1507,7 +1587,9 @@ void App::renderLocalCards(double t) {
         k.height = h;
         const auto v = sensorView(body_ * camera.opticalInBase, k);
         const rendering::View renderView{toEigen(v.view), toEigen(v.projection), Eigen::Vector3f(v.eye.x, v.eye.y, v.eye.z)};
-        const auto frame = renderer_->draw(scene, renderView, look_.appearance, float(t), w, h);
+        auto appearance = look_.appearance;
+        appearance.preview = true;
+        const auto frame = renderer_->draw(scene, renderView, appearance, float(t), w, h);
         auto &card = cards_[i];
         if (!card.rgb || card.rgbWidth != w || card.rgbHeight != h) {
             if (!card.rgb)
@@ -1565,7 +1647,10 @@ int App::loop() {
         const double t = std::chrono::duration<double>(frameStart - start_).count();
         const float dt = float(std::min(std::chrono::duration<double>(frameStart - previous).count(), .1));
         previous = frameStart;
-        ros_->spin();
+        {
+            PhaseTimer timer{profiler_, Phase::Spin, false};
+            ros_->spin();
+        }
         if (!pendingScenario_.empty()) {
             const auto json = std::move(pendingScenario_);
             pendingScenario_.clear();
@@ -1590,6 +1675,7 @@ int App::loop() {
                 std::cout << "inject-f: target=(" << target_.x << "," << target_.y << "," << target_.z
                           << ") distance=" << distance_ << " follow=" << follow_ << "\n";
         }
+        profiler_.setPosition(body_[3].x, body_[3].y, body_[3].z);
         window_->beginFrame();
         drawInterface(t, dt);
         if (largeMap_ && scenario_) {
@@ -1619,7 +1705,20 @@ int App::loop() {
         else if (opt_.frames > 0 && t > 30)
             throw std::runtime_error("no scenario document received within 30 s");
         const bool last = opt_.frames > 0 && frames >= opt_.frames;
+        if (ImGui::IsKeyPressed(ImGuiKey_F3, false) && !ImGui::GetIO().WantTextInput)
+            showProfile_ = !showProfile_;
         window_->present(last, opt_.screenshot);
+        const auto preSwap = Clock::now();
+        window_->swap();
+        const auto postSwap = Clock::now();
+        {
+            const auto sec = [](Clock::duration d) { return std::chrono::duration<double>(d).count(); };
+            profiler_.add(Phase::Swap, sec(postSwap - preSwap));
+            const auto phases = profiler_.pendingPhases();
+            profiler_.add(Phase::Ui, std::max(0., sec(preSwap - frameStart) - phases[int(Phase::Spin)] -
+                                                       phases[int(Phase::Scene)] - phases[int(Phase::Main)] -
+                                                       phases[int(Phase::Cards)]));
+        }
         if (last) {
             if (scenario_)
                 std::cout << "capture: status=" << status_ << " detections stored/placed=" << ros_->detectionCount() << "/"
@@ -1631,9 +1730,27 @@ int App::loop() {
             saveCameraImages(opt_.screenshot);
             break;
         }
-        std::this_thread::sleep_until(frameStart + std::chrono::duration_cast<Clock::duration>(
-                                                       std::chrono::duration<double>(1. / opt_.renderRate)));
+        const double cap = opt_.renderRate > 0 ? opt_.renderRate : (opt_.hidden ? 30. : 0.);
+        if (cap > 0) {
+            const auto before = Clock::now();
+            std::this_thread::sleep_until(frameStart + std::chrono::duration_cast<Clock::duration>(
+                                                           std::chrono::duration<double>(1. / cap)));
+            profiler_.add(Phase::Sleep, std::chrono::duration<double>(Clock::now() - before).count());
+        }
+        profiler_.endFrame(Clock::now());
+        if (opt_.profile) {
+            const auto now = Clock::now();
+            if (profileLogAt_ == Clock::time_point{})
+                profileLogAt_ = now;
+            if (now - profileLogAt_ >= std::chrono::seconds(5)) {
+                std::cout << profileReport(profiler_.takeInterval(), std::chrono::duration<double>(now - profileLogAt_).count())
+                          << std::endl;
+                profileLogAt_ = now;
+            }
+        }
     }
+    if (opt_.profile && profiler_.pending() > 1)
+        std::cout << profileReport(profiler_.takeInterval(), 0) << std::endl;
     return 0;
 }
 

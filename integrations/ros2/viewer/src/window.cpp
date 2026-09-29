@@ -15,7 +15,7 @@ namespace {
 const ImVec4 cyan(.32f, .86f, .82f, 1), muted(.47f, .57f, .64f, 1), white(.87f, .92f, .95f, 1);
 } // namespace
 
-Window::Window(int width, int height, const std::string &titleText, bool hidden) {
+Window::Window(int width, int height, const std::string &titleText, bool hidden, bool vsync) {
     glfwSetErrorCallback([](int, const char *text) { std::cerr << "GLFW: " << text << '\n'; });
     if (!glfwInit())
         throw std::runtime_error("GLFW initialization failed. OpenGL 3.3 and an X/Wayland display are required.");
@@ -30,7 +30,7 @@ Window::Window(int width, int height, const std::string &titleText, bool hidden)
         throw std::runtime_error("Cannot create an OpenGL 3.3 window");
     }
     glfwMakeContextCurrent(window_);
-    glfwSwapInterval(0);
+    glfwSwapInterval(vsync && !hidden ? 1 : 0);
     glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK)
         throw std::runtime_error("OpenGL loading failed");
@@ -124,6 +124,8 @@ void Window::present(bool screenshotFrame, const std::filesystem::path &screensh
         writePng(screenshot, w, h, flipped);
         std::cout << "Saved " << screenshot << '\n';
     }
+}
+void Window::swap() {
     glfwSwapBuffers(window_);
 }
 

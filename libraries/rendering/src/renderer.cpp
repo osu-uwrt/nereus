@@ -36,6 +36,7 @@ struct Look {
     float caustics, exposure;
     bool surface, shadows, surfaceReflections, outdoor;
     float sunAzimuth, sunElevation, directLight, ambientLight, glare;
+    bool bloom = true;
     glm::vec3 sunDirection() const {
         float a = glm::radians(sunAzimuth), e = glm::radians(sunElevation);
         return {cos(e) * cos(a), cos(e) * sin(a), sin(e)};
@@ -377,6 +378,15 @@ struct Target {
         if (depth)
             glDeleteTextures(1, &depth);
     }
+    void swap(Target &o) {
+        std::swap(fbo, o.fbo);
+        std::swap(color, o.color);
+        std::swap(depth, o.depth);
+        std::swap(width, o.width);
+        std::swap(height, o.height);
+        std::swap(hdr, o.hdr);
+        std::swap(depthOnly, o.depthOnly);
+    }
     void resize(int w, int h, bool high = true, bool onlyDepth = false) {
         if (width == w && height == h && hdr == high && depthOnly == onlyDepth)
             return;
@@ -433,6 +443,13 @@ struct Frame {
         for (auto &b : bloom)
             b.resize(std::max(1, w / 4), std::max(1, h / 4));
     }
+    void swap(Frame &o) {
+        opaque.swap(o.opaque);
+        composite.swap(o.composite);
+        final.swap(o.final);
+        bloom[0].swap(o.bloom[0]);
+        bloom[1].swap(o.bloom[1]);
+    }
 };
 bool affine(const Eigen::Matrix4f &m) {
     return m.allFinite() && m.row(3).isApprox(Eigen::RowVector4f(0, 0, 0, 1)) &&
@@ -443,7 +460,8 @@ struct Renderer::Resources {
     // Every new owned GL object must also be zeroed by abandon() after context loss.
     GLuint sceneProgram = 0, waterProgram = 0, shadowProgram = 0, postProgram = 0, bloomProgram = 0,
            quad = 0;
-    Frame f;
+    Frame f, preview; // `preview` is swapped into `f` for Appearance::preview draws
+    bool shadow_valid = false; // the shadow map holds a real (shadows-on) pass
     Target shadow, reflection;
     glm::mat4 lightMatrix{1}, poolToMap{1}, mapToPool{1};
     glm::vec3 poolSize{1}, center{0};
@@ -483,7 +501,8 @@ struct Renderer::Resources {
     }
     void abandon() noexcept {
         sceneProgram = waterProgram = shadowProgram = postProgram = bloomProgram = quad = 0;
-        for (auto *target : {&f.opaque, &f.composite, &f.final, &f.bloom[0], &f.bloom[1],
+        for (auto *target : {&f.opaque, &f.composite, &f.final, &f.bloom[0], &f.bloom[1], &preview.opaque,
+                             &preview.composite, &preview.final, &preview.bloom[0], &preview.bloom[1],
                              &shadow, &reflection})
             target->fbo = target->color = target->depth = 0;
         const auto forget = [](auto &meshes) {
@@ -736,7 +755,12 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
     integer(bloomProgram, "source", 0);
     glBindVertexArray(quad);
     glViewport(0, 0, f.bloom[0].width, f.bloom[0].height);
-    for (int pass = 0; pass < 3; ++pass) {
+    if (!look.bloom) { // the post pass still samples the bloom target: give it black
+        glBindFramebuffer(GL_FRAMEBUFFER, f.bloom[0].fbo);
+        glClearColor(0, 0, 0, 0);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
+    for (int pass = 0; pass < (look.bloom ? 3 : 0); ++pass) {
         glBindFramebuffer(GL_FRAMEBUFFER, f.bloom[pass % 2].fbo);
         integer(bloomProgram, "extractBright", pass == 0);
         bindTexture(pass == 0 ? f.composite.color : f.bloom[(pass - 1) % 2].color, 0);
@@ -791,8 +815,10 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
     r.frame_valid = false;
     struct Guard {
         Resources &r;
-        bool success = false;
+        bool success = false, swapped = false;
         ~Guard() {
+            if (swapped)
+                r.f.swap(r.preview);
             if (!success) {
                 r.objects.clear();
                 r.water = {};
@@ -888,6 +914,10 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
         else
             ++it;
     }
+    if (a.preview) {
+        r.f.swap(r.preview);
+        guard.swapped = true;
+    }
     r.f.resize(width, height);
     const Look look{{vector(a.water.tint), vector(a.water.absorption), a.water.scattering,
                      a.water.distance_scale, a.water.distance_power, a.water.clear_distance},
@@ -895,14 +925,18 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
                     a.exposure,
                     a.surface,
                     a.shadows,
-                    a.reflections,
+                    a.reflections && !a.preview,
                     a.outdoor,
                     a.sun_azimuth,
                     a.sun_elevation,
                     a.direct_light,
                     a.ambient_light,
-                    a.glare};
-    r.shadows(look);
+                    a.glare,
+                    !a.preview};
+    if (!(a.preview && r.shadow_valid)) { // previews reuse the last full pass's shadow map and light matrix
+        r.shadows(look);
+        r.shadow_valid = look.shadows;
+    }
     r.render({matrix(view.view), matrix(view.projection), vector(view.eye)}, look, time);
     checkGl("scene rendering");
     r.frame_valid = true;
