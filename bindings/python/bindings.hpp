@@ -18,6 +18,7 @@ void readCopy(py::class_<T> &type, const char *name, Value T::*member) {
 }
 void bindSpatial(py::module_ &);
 void bindPlant(py::module_ &);
+void bindPayload(py::module_ &);
 void bindSensors(py::module_ &);
 void bindRuntime(py::module_ &);
 } // namespace robotics::python

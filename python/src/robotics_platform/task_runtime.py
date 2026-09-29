@@ -16,6 +16,8 @@ import numpy as np
 from . import _native as native
 from .pack_runtime import _frames, _pose
 from .packs import ResolvedScenario
+from .packs._semantics import hook_module
+from .task_projectiles import PerforatedPanel, vector3
 from .task_regions import PortalEvent, PortalTracker
 
 
@@ -61,7 +63,7 @@ def _envelope(robot: dict[str, Any]) -> np.ndarray:
 class TaskRuntime:
     """Explicit task observer with detached, recursively read-only snapshots.
 
-    The first implemented slice supports rectangular portals, robot/prop contact-entry
+    Implemented geometry includes portals, projectile panels and robot/prop contact-entry
     events and event-points rules. Unsupported selected types fail at construction; use
     task_ids explicitly for a partial scripted acceptance run. Contact pairs are supplied
     by the physical contact owner, not inferred from a scoring region. Task hooks are
@@ -90,10 +92,15 @@ class TaskRuntime:
         placements = {item["task"]: _placement(item)
                       for item in resolved.scenario["task_placements"]}
         self._portals: dict[tuple[str, str], PortalTracker] = {}
+        self._panels: dict[tuple[str, str], PerforatedPanel] = {}
         self._contacts: dict[tuple[str, str], list[dict[str, Any]]] = {}
         self._rules: list[tuple[str, dict[str, Any]]] = []
         for identifier, task in self._tasks.items():
             for region in task["regions"]:
+                if region["type"] == "perforated_panel":
+                    self._panels[identifier, region["id"]] = PerforatedPanel(
+                        region["parameters"], placements[identifier])
+                    continue
                 if region["type"] != "rectangular_portal":
                     raise ValueError(f"task {identifier}: unsupported region {region['type']!r}")
                 self._portals[identifier, region["id"]] = PortalTracker(
@@ -103,7 +110,7 @@ class TaskRuntime:
             for event in task["events"]:
                 if event["type"] == "contact" and event["parameters"]["with"] == "robot":
                     self._contacts.setdefault((identifier, event["parameters"]["prop"]), []).append(event)
-                elif event["type"] != "pass_through":
+                elif event["type"] not in ("pass_through", "hit"):
                     raise ValueError(f"task {identifier}: unsupported event {event['type']!r}")
             for rule in task["scoring"]:
                 if rule["type"] != "event_points":
@@ -113,8 +120,8 @@ class TaskRuntime:
         pack_path = (resolved.path.parent / resolved.scenario["tasks"]).resolve()
         root = pack_path if pack_path.is_dir() else pack_path.parent
         for hook in resolved.tasks["scoring_hooks"]:
-            path = (root / (hook["module"].replace(".", "/") + ".py")).resolve()
-            if not path.is_relative_to(root):
+            path = hook_module(root, hook["module"])
+            if path is None:
                 raise ValueError("task hook escapes its pack")
             source = path.read_bytes()
             if hashlib.sha256(source).hexdigest() != resolved.source_sha256.get(path):
@@ -139,6 +146,7 @@ class TaskRuntime:
         self._history: list[dict[str, Any]] = []
         self._award_counts: dict[tuple[str, str], int] = {}
         self._active_contacts: set[tuple[str, str]] = set()
+        self._projectiles: dict[int, tuple[str, float]] = {}
         self._last_time = 0
         self._failed = False
         self._run = {"running": self._auto_start, "ended": False, "started_ns": 0,
@@ -217,6 +225,81 @@ class TaskRuntime:
                 and binding["parameters"]["region"] == region
                 and binding["parameters"]["from_side"] == event.from_side
                 and binding["parameters"]["to_side"] == event.to_side]
+
+    def release_projectile(self, time_ns: int, identifier: int, mechanism_type: str,
+                           tip_world: Sequence[float], radius_m: float
+                           ) -> tuple[Mapping[str, Any], ...]:
+        """Observe a successful physical release; the mechanism owner supplies its tip."""
+        self._check_time(time_ns)
+        if type(identifier) is not int or identifier < 0 or identifier in self._projectiles:
+            raise ValueError("projectile identifiers must be unique nonnegative integers")
+        if mechanism_type not in ("launcher", "dropper"):
+            raise ValueError("unsupported projectile mechanism type")
+        tip = vector3(tip_world, "projectile tip")
+        if isinstance(radius_m, bool) or not math.isfinite(radius_m) or radius_m <= 0:
+            raise ValueError("projectile radius must be positive and finite")
+        events = []
+        for (task, region), panel in self._panels.items():
+            bindings = self._tasks[task]["events"]
+            if any(b["type"] == "hit" and b["parameters"]["region"] == region
+                   and b["parameters"]["projectile_mechanism_type"] == mechanism_type
+                   for b in bindings):
+                events.append({"id": "payload_released", "type": "payload_released",
+                               "task": task, "region": region, "time_ns": time_ns,
+                               "data": {"projectile_id": identifier,
+                                        "mechanism_type": mechanism_type,
+                                        "release_distance_m": panel.release_distance(tip)}})
+        try:
+            result = self._evaluate(events)
+        except Exception:
+            self._failed = True
+            raise
+        self._projectiles[identifier] = (mechanism_type, float(radius_m))
+        self._last_time = time_ns
+        return result
+
+    def observe_projectile(self, time_ns: int, identifier: int,
+                           start_center_world: Sequence[float], end_center_world: Sequence[float],
+                           axis_world: Sequence[float]) -> tuple[Mapping[str, Any], ...]:
+        """Judge swept mesh-center motion; hit data tells the physical owner to stop.
+
+        The original panel contact uses mesh centers; only release-distance scoring uses
+        the projectile tip. Keeping these distinct preserves near-panel outcomes.
+        """
+        self._check_time(time_ns)
+        if type(identifier) is not int or identifier < 0 or identifier not in self._projectiles:
+            raise ValueError("projectile must be released before observing its motion")
+        start = vector3(start_center_world, "projectile start center")
+        end = vector3(end_center_world, "projectile end center")
+        axis = vector3(axis_world, "projectile axis")
+        if abs(float(np.linalg.norm(axis)) - 1) > 1e-6:
+            raise ValueError("projectile axis must be unit length")
+        mechanism, radius = self._projectiles[identifier]
+        events = []
+        for (task, region), panel in self._panels.items():
+            hit = panel.intersect(start, end, axis, radius)
+            if hit is None:
+                continue
+            for binding in self._tasks[task]["events"]:
+                p = binding["parameters"]
+                if (binding["type"] == "hit" and p["region"] == region
+                        and p["projectile_mechanism_type"] == mechanism
+                        and p["outcome"] == hit.outcome):
+                    events.append({"id": binding["id"], "type": "hit", "task": task,
+                                   "region": region, "time_ns": time_ns,
+                                   "data": {"projectile_id": identifier,
+                                            "mechanism_type": mechanism, "outcome": hit.outcome,
+                                            "hole_id": hit.hole_id, "hole_class": hit.hole_class,
+                                            "hole_size": hit.hole_size,
+                                            "hit_point_local": hit.point_local,
+                                            "stop_projectile": p["stop_projectile"]}})
+        try:
+            result = self._evaluate(events)
+        except Exception:
+            self._failed = True
+            raise
+        self._last_time = time_ns
+        return result
 
     def _evaluate(self, events: list[dict[str, Any]]) -> tuple[Mapping[str, Any], ...]:
         if not events:

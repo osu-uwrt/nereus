@@ -92,8 +92,10 @@ class TaskRuntimeTests(unittest.TestCase):
         self.assertEqual(self.task.snapshot()['run']['options']['role'], 'repair')
 
     def test_no_implicit_partial_support_or_unknown_contacts(self):
+        unsupported = copy.deepcopy(self.r)
+        unsupported.task_definitions[1]['regions'][0]['type'] = 'unsupported_region'
         with self.assertRaisesRegex(ValueError, 'unsupported region'):
-            TaskRuntime(self.r)
+            TaskRuntime(unsupported)
         for identifiers in ([], ['missing'], ['gate', 'gate']):
             with self.assertRaises(ValueError):
                 TaskRuntime(self.r, task_ids=identifiers)

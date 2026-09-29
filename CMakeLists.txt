@@ -71,6 +71,7 @@ add_library(rp_simulation
   libraries/simulation/src/marine_dynamics.cpp
   libraries/simulation/src/thruster_dynamics.cpp
   libraries/simulation/src/box_contacts.cpp
+  libraries/simulation/src/payload.cpp
   libraries/simulation/src/plant.cpp)
 add_library(RoboticsPlatform::simulation ALIAS rp_simulation)
 set_target_properties(rp_simulation PROPERTIES EXPORT_NAME simulation)
@@ -122,7 +123,7 @@ if(RP_BUILD_PYTHON)
   find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
   find_package(pybind11 2.13 REQUIRED CONFIG)
   pybind11_add_module(_native NO_EXTRAS bindings/python/module.cpp
-    bindings/python/spatial.cpp bindings/python/plant.cpp bindings/python/sensors.cpp bindings/python/runtime.cpp)
+    bindings/python/spatial.cpp bindings/python/plant.cpp bindings/python/payload.cpp bindings/python/sensors.cpp bindings/python/runtime.cpp)
   target_link_libraries(_native PRIVATE rp_config)
   rp_project_options(_native)
   install(TARGETS _native LIBRARY DESTINATION robotics_platform COMPONENT python)
@@ -210,6 +211,11 @@ if(BUILD_TESTING AND RP_BUILD_SIMULATION)
   target_link_libraries(plant_tests PRIVATE rp_simulation GTest::gtest_main)
   rp_project_options(plant_tests)
   gtest_discover_tests(plant_tests DISCOVERY_MODE PRE_TEST)
+  add_executable(payload_tests libraries/simulation/tests/payload_test.cpp)
+  target_compile_definitions(payload_tests PRIVATE RP_PAYLOAD_FIXTURE="${PROJECT_SOURCE_DIR}/libraries/simulation/tests/fixtures/payload_reference.csv")
+  target_link_libraries(payload_tests PRIVATE rp_simulation GTest::gtest_main)
+  rp_project_options(payload_tests)
+  gtest_discover_tests(payload_tests DISCOVERY_MODE PRE_TEST)
   add_executable(sensor_tests libraries/sensors/tests/sensors_test.cpp)
   target_link_libraries(sensor_tests PRIVATE rp_sensors GTest::gtest_main)
   rp_project_options(sensor_tests)

@@ -59,6 +59,22 @@ def finished(turns=(0.0, 0.0, 0.0), attempt=1, time_ns=30):
             "data": {"rotation_vector_body": turns, "attempt_id": attempt}}
 
 
+def release(identifier=1, distance=0.5, time_ns=40):
+    return {"id": "payload_released", "type": "payload_released", "task": "torpedo",
+            "region": "", "time_ns": time_ns,
+            "data": {"projectile_id": identifier, "mechanism_type": "launcher",
+                     "release_distance_m": distance}}
+
+
+def hit(identifier=1, *, outcome="pass", hole_class="fire", size="large", time_ns=50):
+    return {"id": "hole_pass" if outcome == "pass" else "panel_blocked", "type": "hit",
+            "task": "torpedo", "region": "panel", "time_ns": time_ns,
+            "data": {"projectile_id": identifier, "mechanism_type": "launcher",
+                     "outcome": outcome, "hole_id": f"{hole_class}_{size}",
+                     "hole_class": hole_class, "hole_size": size,
+                     "hit_point_local": (0.0, 0.1, 0.2)}}
+
+
 def apply(snapshot, *events, parameters=PARAMETERS):
     before = copy.deepcopy(snapshot)
     result = HOOK.evaluate(frozen(snapshot), frozen(events), frozen(parameters))
@@ -157,9 +173,124 @@ class GateHomeScoringTests(unittest.TestCase):
         self.assertEqual(result["scores"], [{"row": "gate", "points": 550}])
 
 
+class TorpedoScoringTests(unittest.TestCase):
+    def test_sequence_uses_release_order_not_result_order(self):
+        run = state()
+        apply(run, crossing(), release(1, .3048), release(2, .4572))
+        apply(run, hit(2, size="small"), hit(1, size="large"))
+        self.assertEqual(run["scores"], {"gate": 550, "torpedoes": 1200,
+                                         "distance": 600, "sequence": 1400})
+        self.assertEqual(apply(run, hit(1, outcome="blocked"))["scores"], [])
+        self.assertEqual(apply(run, release(3), hit(3))["events"], [])
+
+    def test_pre_gate_shot_registration_consumes_capacity_but_never_scores(self):
+        run = state()
+        registered = apply(run, release(1))
+        self.assertFalse(registered["events"][0]["data"]["eligible"])
+        self.assertEqual(apply(run, hit(1))["events"], [])
+        apply(run, crossing(), hit(1), release(2), release(3), hit(3), hit(2))
+        self.assertEqual(run["scores"], {"gate": 550, "torpedoes": 600, "distance": 400})
+        self.assertEqual(apply(run, release(1), hit(1))["events"], [])
+
+    def test_wrong_class_still_scores_shot_and_distance_but_not_sequence(self):
+        run = state(role="repair")
+        apply(run, crossing(.5), release(1), release(2), hit(1), hit(2, size="small"))
+        self.assertEqual(run["scores"], {"gate": 400, "torpedoes": 1200, "distance": 800})
+        results = [event["data"]["result"] for event in run["history"]
+                   if event["type"] == "shot_result"]
+        self.assertEqual(results, ["wrong_target", "wrong_target"])
+
+    def test_failed_first_result_is_terminal_and_unknown_results_are_ignored(self):
+        for outcome in ("blocked", "timeout"):
+            run = state()
+            apply(run, crossing())
+            self.assertEqual(apply(run, hit(1))["events"], [])
+            apply(run, release(1), hit(1, outcome=outcome))
+            self.assertEqual(apply(run, hit(1))["events"], [])
+            self.assertEqual(run["scores"], {"gate": 550})
+
+    def test_distance_thresholds_and_duplicate_release_keep_original_distance(self):
+        for distance, expected in ((.3048 - 1e-9, 0), (.3048, 200),
+                                   (.4572 - 1e-9, 200), (.4572, 400)):
+            run = state()
+            apply(run, crossing(), release(1, distance), release(1, 999), hit(1))
+            self.assertEqual(run["scores"].get("distance", 0), expected)
+
+    def test_reverse_sequence_stopped_ended_and_unsupported_mechanisms(self):
+        run = state()
+        apply(run, crossing(), release(1), release(2), hit(1, size="small"), hit(2))
+        self.assertNotIn("sequence", run["scores"])
+        for field in ("running", "ended"):
+            closed = state()
+            closed["run"][field] = field == "ended"
+            self.assertEqual(apply(closed, release(), hit()), {"scores": [], "events": []})
+        event = release()
+        event["data"]["mechanism_type"] = "dropper"
+        self.assertEqual(apply(state(), event), {"scores": [], "events": []})
+
+    def test_malformed_launcher_events_raise_without_mutating_input(self):
+        bad_events = [release(True), release(-1), release(distance=float("nan")),
+                      release(distance=-1), hit(outcome="unknown")]
+        bad = hit()
+        del bad["data"]["hole_size"]
+        bad_events.append(bad)
+        for event in bad_events:
+            with self.subTest(event=event), self.assertRaises(ValueError):
+                HOOK.evaluate(frozen(state()), frozen([event]), frozen(PARAMETERS))
+
+    def test_batch_and_separate_calls_replay_the_same_accepted_ledger(self):
+        events = [release(1), crossing(), release(2), hit(2), hit(1), release(3)]
+        together, separate = state(), state()
+        apply(together, *events)
+        for event in events:
+            apply(separate, event)
+        self.assertEqual(together["scores"], separate["scores"])
+        def emitted(run):
+            return [event for event in run["history"]
+                    if event["type"] in ("shot_registered", "shot_result", "role_selected")]
+
+        self.assertEqual(emitted(together), emitted(separate))
+
+
 @unittest.skipUnless(os.environ.get("RP_SCORING_REFERENCE"),
                      "set RP_SCORING_REFERENCE to original behavior/scoring.py")
 class OriginalScoringReferenceTests(unittest.TestCase):
+    def test_torpedo_release_result_and_bonus_ledger_matches_original(self):
+        original = module_at(Path(os.environ["RP_SCORING_REFERENCE"]), "original_shot_reference")
+        traces = [
+            [crossing(), release(1, .3048), release(2, .4572),
+             hit(2, size="small"), hit(1), hit(1, outcome="blocked"), release(3), hit(3)],
+            [release(1), hit(1), crossing(), hit(1), release(2), hit(2, size="small")],
+            [crossing(.5), release(1), release(2), hit(1), hit(2, size="small")],
+            [crossing(), release(1), hit(1, outcome="blocked"), hit(1),
+             release(2, .3048 - 1e-9), hit(2, outcome="timeout"), hit(2)],
+            [crossing(), release(1, .4572 - 1e-9), release(1, 999), release(2),
+             hit(1, size="small"), hit(2)],
+        ]
+        for trace in traces:
+            for intended in ("repair", "rescue"):
+                ledger = original.RunScore()
+                ledger.start(0, role=intended, heading_coin=True, role_coin=True)
+                run = state(role=intended)
+                for event in trace:
+                    data = event["data"]
+                    if event["type"] == "pass_through":
+                        y = data["crossing_point_local"][1]
+                        ledger.gate("repair" if y < 0 else "rescue", 1 if y > 0 else -1)
+                    elif event["type"] == "payload_released":
+                        ledger.release_payload("torpedo", data["projectile_id"],
+                                               data["release_distance_m"])
+                    else:
+                        outcome = data["outcome"]
+                        result = ("success" if data["hole_class"] == ledger.target_class
+                                  else "wrong_target") if outcome == "pass" else outcome
+                        ledger.payload_result("torpedo", data["projectile_id"], result,
+                                              data["hole_id"], data["hole_class"], data["hole_size"])
+                    apply(run, event)
+                    for row in ("gate", "torpedoes", "distance", "sequence"):
+                        self.assertEqual(run["scores"].get(row, 0), ledger.points[row],
+                                         (intended, row, event))
+
     def test_gate_home_and_style_match_unchanged_runscore_and_coursejudge(self):
         original = module_at(Path(os.environ["RP_SCORING_REFERENCE"]), "original_score_reference")
         import numpy as np

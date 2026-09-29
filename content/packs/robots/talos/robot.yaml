@@ -352,6 +352,7 @@ mechanisms:
     min_gap_m: 0.0012
     max_gap_m: 0.14
     jaw_speed_m_s: 0.033             # per jaw
+    completion_tolerance_m: 0.002   # original claw status: per-jaw remaining travel
     hold_force_n: 12.0
     friction: 1.2
     contact_margin_m: 0.001

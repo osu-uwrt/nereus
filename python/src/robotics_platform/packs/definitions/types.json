@@ -927,6 +927,11 @@
             "closed",
             "open"
           ]
+        },
+        "completion_tolerance_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Per-jaw remaining travel at which motion status becomes complete."
         }
       },
       "required": [
@@ -940,7 +945,8 @@
         "slip_distance_m",
         "pads",
         "timed_command",
-        "initial_state"
+        "initial_state",
+        "completion_tolerance_m"
       ],
       "additionalProperties": false,
       "description": "Two-jaw claw in SI: gaps and margins in m, jaw speed per jaw in m/s, hold force in N, dwell in s, friction dimensionless. min_gap_m < max_gap_m is a semantic check.",
