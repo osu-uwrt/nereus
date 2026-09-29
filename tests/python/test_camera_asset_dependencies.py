@@ -53,6 +53,13 @@ class CameraAssetDependencyTests(unittest.TestCase):
                        "sha256": hashlib.sha256(material.read_bytes()).hexdigest(),
                        "used_by": ["hull_mesh"]}, record)
 
+    def test_bin_vinyl_texture_override_is_verified_and_recorded(self):
+        content = Path(__file__).resolve().parents[2] / "content/packs/scenarios/talos_uwrt"
+        record = pc.PackCameras(resolve_scenario(content)).describe()["scene"]["files"]
+        used = {item["id"] for item in record if item["kind"] == "texture"
+                and "bin_vinyl_mesh" in item["used_by"]}
+        self.assertEqual(used, {"bin_vinyl_blood_texture", "bin_vinyl_fire_texture"})
+
     def test_undeclared_material_is_rejected(self):
         resolved, _, _ = self.material_pack(declared=False)
         with self.assertRaisesRegex(ValueError, "importer_dependency .* not a declared"):

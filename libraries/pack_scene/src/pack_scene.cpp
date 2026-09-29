@@ -145,8 +145,10 @@ r::Instance PackScene::instance(const std::string &role, const std::string &asse
 
 void PackScene::buildPool() {
     const auto &pool = resolved_.pool;
-    if (pool.at("type").get<std::string>() != "rectangular_pool")
-        throw std::runtime_error("pool type '" + pool.at("type").get<std::string>() + "' has no camera scene");
+    // Interactive (non-strict) previews of hand-written documents may omit the type; packs never do.
+    const auto type = options_.strict ? pool.at("type").get<std::string>() : pool.value("type", std::string("rectangular_pool"));
+    if (type != "rectangular_pool")
+        throw std::runtime_error("pool type '" + type + "' has no camera scene");
     const auto &p = pool.at("parameters");
     const auto &placementJson = resolved_.scenario.at("pool_placement");
     const auto &at = placementJson.at("position_m");

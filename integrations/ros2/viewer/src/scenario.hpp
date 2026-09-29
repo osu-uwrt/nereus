@@ -4,8 +4,10 @@
 #include "camera_geometry.hpp"
 #include "frame_graph.hpp"
 #include <robotics/rendering/scene.hpp>
+#include <robotics/session/scenario.hpp>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -64,6 +66,10 @@ struct Scenario {
     std::map<std::string, std::filesystem::path> robotAssets;
     std::map<std::string, std::string> frameNames; // pack frame id -> ROS frame
     YAML::Node runOptions;
+    // The same document as the session's resolved scenario (asset_paths filled from the pack folder for
+    // local previews); null with `resolvedError` set when it lacks what scene composition needs.
+    std::shared_ptr<const session::ResolvedScenario> resolved;
+    std::string resolvedError;
 
     std::string absolute(const std::string &relative) const; // bridge-namespaced topic
     const SensorCamera *camera(const std::string &id) const;

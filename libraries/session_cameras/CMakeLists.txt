@@ -21,5 +21,8 @@ if(BUILD_TESTING)
   target_compile_definitions(session_cameras_tests PRIVATE RP_RESOLVED_TALOS="${rp_resolved_talos}"
     RP_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
   rp_project_options(session_cameras_tests)
+  add_executable(session_cameras_capture tests/capture_tool.cpp)
+  target_link_libraries(session_cameras_capture PRIVATE rp_session_cameras)
+  rp_project_options(session_cameras_capture)
   gtest_discover_tests(session_cameras_tests DISCOVERY_MODE PRE_TEST PROPERTIES FIXTURES_REQUIRED session_resolved)
 endif()

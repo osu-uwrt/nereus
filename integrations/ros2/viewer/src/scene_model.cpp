@@ -32,62 +32,30 @@ std::shared_ptr<const r::MeshAsset> SceneModel::mesh(const std::filesystem::path
 SceneModel::SceneModel(const Scenario &scenario, const SceneModelOptions &options, const ThrusterVisuals &thrusters,
                        const StatusLights &lights)
     : scenario_(scenario), thrusters_(thrusters), lights_(lights) {
-    // Pool, water and deck.
-    r::PoolGeometry geometry;
-    geometry.dimensions = {scenario.poolLength, scenario.poolWidth, scenario.poolDepth};
-    geometry.water_level = scenario.waterLevel;
-    geometry.deck_height = scenario.deckHeight;
-    geometry.local_to_world = toEigen(scenario.poolToWorld);
-    static_ = r::makePoolScene(geometry);
-    poolInstances_ = static_.instances.size();
+    // Pool, task visuals (cutouts, texture overrides) and robot visuals: the shared pack composition.
+    if (!scenario.resolved)
+        throw std::runtime_error("scenario document cannot be composed: " + scenario.resolvedError);
+    pack_scene::Options packOptions;
+    packOptions.strict = false; // a missing asset draws the rest of the scene and warns
+    pack_ = std::make_unique<pack_scene::PackScene>(*scenario.resolved, packOptions);
+    for (const auto &text : pack_->warnings())
+        warnings_.push_back(text);
+    baseFromRoot_ = pack_->rootFromFrame(scenario.baseId).inverse();
     box_ = r::makeBoxMesh();
 
-    // Task visuals (with perforated-panel cutouts) at their placements.
-    for (const auto &visual : scenario.taskVisuals) {
-        auto asset = mesh(visual.path);
-        if (!asset) {
-            warn("task '" + visual.task + "' visual '" + visual.asset + "' has no readable asset");
-            continue;
-        }
-        if (visual.cutouts) {
-            r::PanelCutouts panel;
-            panel.asset_to_panel = toEigen(visual.taskFromAsset);
-            panel.faces_x = visual.cutouts->facesX;
-            panel.half_size = visual.cutouts->halfSize;
-            panel.cutouts = visual.cutouts->holes;
-            try {
-                asset = std::make_shared<const r::MeshAsset>(r::perforatePanel(*asset, panel).mesh);
-            } catch (const std::exception &error) {
-                warn("task '" + visual.task + "' cutouts failed: " + error.what());
-                continue;
-            }
-        }
-        r::Instance instance;
-        instance.mesh = asset;
-        instance.transform = toEigen(visual.world);
-        static_.instances.push_back(std::move(instance));
-    }
-
-    // Robot visuals; rotor and claw parts are recognised by asset id from viewer data.
+    // Rotor and claw parts are recognised by asset id from viewer data.
     std::set<std::string> leftAssets, rightAssets;
     for (const auto &id : lookup(options.config, {"claw", "left_assets"}))
         leftAssets.insert(id.as<std::string>());
     for (const auto &id : lookup(options.config, {"claw", "right_assets"}))
         rightAssets.insert(id.as<std::string>());
-    for (const auto &visual : scenario.robotVisuals) {
-        RobotInstance item;
-        item.mesh = mesh(visual.path);
-        if (!item.mesh) {
-            warn("robot visual '" + visual.asset + "' has no readable asset");
-            continue;
-        }
-        item.frameInBase = visual.frameInBase;
-        item.local = visual.local;
+    for (const auto &visual : pack_->robotVisuals()) {
+        RobotAnimation item;
         for (std::size_t i = 0; i < thrusters.rotors.size(); ++i)
             if (thrusters.rotors[i].asset == visual.asset)
                 item.rotor = int(i);
         item.clawSide = leftAssets.count(visual.asset) ? 1 : rightAssets.count(visual.asset) ? -1 : 0;
-        robot_.push_back(std::move(item));
+        animation_.push_back(item);
     }
     // Viewer-only robot visuals that the pack lists as assets but not as visuals (launcher, magnet).
     for (const auto &entry : options.config["extra_visuals"]) {
@@ -153,34 +121,41 @@ std::vector<glm::mat4> SceneModel::payloadMounts(const std::string &mechanism) c
     return result;
 }
 
+Eigen::Matrix4d SceneModel::worldFromRoot(const glm::mat4 &worldFromBase) const {
+    return toEigen(worldFromBase).cast<double>() * baseFromRoot_;
+}
+
 r::Scene SceneModel::build(const VisualState &state) const {
-    r::Scene scene = static_;
-    if (!state.showWalls)
-        for (std::size_t i = 1; i <= 4 && i < poolInstances_; ++i)
-            scene.instances[i].visible = false;
-    if (board_ && state.showBoard) {
-        r::Instance instance;
-        instance.mesh = board_;
-        instance.transform = toEigen(boardPose_);
-        scene.instances.push_back(std::move(instance));
-    }
-    const auto add = [&](const std::shared_ptr<const r::MeshAsset> &asset, const glm::mat4 &world) {
+    const auto add = [&](std::vector<r::Instance> &into, const std::shared_ptr<const r::MeshAsset> &asset,
+                         const glm::mat4 &world) {
         r::Instance instance;
         instance.mesh = asset;
         instance.transform = toEigen(world);
-        scene.instances.push_back(std::move(instance));
+        into.push_back(std::move(instance));
     };
-    for (const auto &item : robot_) {
-        glm::mat4 local = item.local;
+    std::vector<r::Instance> dynamic;
+    if (board_ && state.showBoard)
+        add(dynamic, board_, boardPose_);
+    // Rotor spin and claw travel replace the reset placement of those robot visuals.
+    std::vector<pack_scene::RobotOverride> overrides;
+    for (std::size_t i = 0; i < animation_.size(); ++i) {
+        const auto &part = pack_->robotVisuals()[i];
+        const auto &item = animation_[i];
+        if (item.rotor < 0 && item.clawSide == 0)
+            continue;
+        Eigen::Matrix4d local = part.frame_from_asset;
         if (item.rotor >= 0 && std::size_t(item.rotor) < state.rotorSpin.size())
-            local = local * state.rotorSpin[std::size_t(item.rotor)];
-        glm::mat4 world = state.body * item.frameInBase;
-        if (item.clawSide)
-            world = world * glm::translate(glm::mat4(1), {0, item.clawSide > 0 ? state.claw[0] : -state.claw[1], 0});
-        add(item.mesh, world * local);
+            local = local * toEigen(state.rotorSpin[std::size_t(item.rotor)]).cast<double>();
+        Eigen::Matrix4d rootFromFrame = part.root_from_frame;
+        if (item.clawSide) {
+            Eigen::Matrix4d slide = Eigen::Matrix4d::Identity();
+            slide(1, 3) = item.clawSide > 0 ? state.claw[0] : -state.claw[1];
+            rootFromFrame = rootFromFrame * slide;
+        }
+        overrides.push_back({i, rootFromFrame * local});
     }
     for (const auto &[asset, base] : extras_)
-        add(asset, state.body * base);
+        add(dynamic, asset, state.body * base);
     for (std::size_t i = 0; i < lights_.lights.size(); ++i) {
         const auto &light = lights_.lights[i];
         r::Instance instance;
@@ -193,12 +168,12 @@ r::Scene SceneModel::build(const VisualState &state) const {
         instance.transform =
             toEigen(state.body * scenario_.frames.relative(scenario_.baseId, light.frame) * light.mount *
                     glm::scale(glm::mat4(1), light.size));
-        scene.instances.push_back(std::move(instance));
+        dynamic.push_back(std::move(instance));
     }
     if (!payloadMesh_.empty())
         if (auto payload = mesh(payloadMesh_))
             for (const auto &world : state.loadedPayloads)
-                add(payload, world);
+                add(dynamic, payload, world);
     for (const auto &marker : state.markers) {
         r::Instance instance;
         instance.mesh = marker.mesh.empty() ? box_ : mesh(marker.mesh);
@@ -211,8 +186,12 @@ r::Scene SceneModel::build(const VisualState &state) const {
             instance.casts_shadow = false;
             instance.tint = Eigen::Vector4f(marker.tint.x, marker.tint.y, marker.tint.z, marker.tint.w);
         }
-        scene.instances.push_back(std::move(instance));
+        dynamic.push_back(std::move(instance));
     }
+    r::Scene scene = pack_->compose(worldFromRoot(state.body), dynamic, overrides);
+    if (!state.showWalls)
+        for (std::size_t i = 1; i <= 4 && i < pack_->poolInstanceCount(); ++i)
+            scene.instances[i].visible = false;
     return scene;
 }
 } // namespace robotics::ros_viewer::host

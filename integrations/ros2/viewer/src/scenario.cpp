@@ -138,6 +138,19 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
     };
     if (assets.count("robot"))
         s.robotAssets = assets.at("robot");
+    try {
+        auto document = nlohmann::json::parse(json);
+        if (!document.contains("format"))
+            document["format"] = "robotics_platform.resolved_scenario";
+        nlohmann::json paths = nlohmann::json::object();
+        for (const auto &[role, byId] : assets)
+            for (const auto &[id, path] : byId)
+                paths[role][id] = path.string();
+        document["asset_paths"] = std::move(paths);
+        s.resolved = std::make_shared<const session::ResolvedScenario>(session::parseResolvedScenario(document));
+    } catch (const std::exception &error) {
+        s.resolvedError = error.what();
+    }
 
     // Pool geometry, placement and appearance.
     const auto pp = pool["parameters"];

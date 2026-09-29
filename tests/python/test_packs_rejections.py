@@ -348,6 +348,11 @@ class TaskRejectionTests(PackRejectionCase):
         self.edit("tasks/hoop.yaml", "asset: hoop_mesh", "asset: ghost_mesh")
         self.assert_resolve_rejects("unknown asset 'ghost_mesh'")
 
+    def test_visual_texture_must_be_a_declared_asset(self) -> None:
+        self.edit("tasks/hoop.yaml", "frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}\nregions",
+                  "frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: ghost_png}\nregions")
+        self.assert_resolve_rejects("unknown texture asset 'ghost_png'")
+
     def test_pass_through_sides_must_differ(self) -> None:
         self.edit("tasks/hoop.yaml", "to_side: negative", "to_side: positive")
         self.assert_resolve_rejects("from_side and to_side must differ")

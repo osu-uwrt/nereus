@@ -83,6 +83,16 @@ void RosSide::watchScenario(const std::string &topic, std::function<void(const s
 void RosSide::spin() {
     if (node_)
         executor_->spin_some();
+    // Collect JPEGs the worker finished (newest only) for the GUI to upload.
+    for (auto &feed : feeds) {
+        DecodedImage image;
+        if (feed.decoder && feed.decoder->take(image)) {
+            feed.rgbWidth = image.width;
+            feed.rgbHeight = image.height;
+            feed.rgb = std::move(image.rgb);
+            feed.rgbDirty = true;
+        }
+    }
 }
 
 void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusLights &lights,
@@ -169,12 +179,12 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
 
 void RosSide::subscribeCamera(CameraFeed &feed) {
     const auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable();
-    if (!feed.camera->rgbTopic.empty() && !feed.rgbSub && camerasWanted_)
+    if (!feed.camera->rgbTopic.empty() && !feed.rgbSub && camerasWanted_ && feed.rosMode) {
+        if (!feed.decoder)
+            feed.decoder = std::make_unique<AsyncJpegDecoder>(kPreviewWidth);
         feed.rgbSub = node_->create_subscription<sensor_msgs::msg::CompressedImage>(
             feed.camera->rgbTopic, qos, [&feed](const sensor_msgs::msg::CompressedImage::ConstSharedPtr &msg) {
-                DecodedImage image;
-                if (!decodeJpeg(msg->data.data(), msg->data.size(), kPreviewWidth, image))
-                    return;
+                // Arrival bookkeeping only; the decode (and its cost) belongs to the worker.
                 const auto now = Clock::now();
                 if (feed.frames > 0) {
                     const double dt = std::chrono::duration<double>(now - feed.lastFrame).count();
@@ -183,11 +193,9 @@ void RosSide::subscribeCamera(CameraFeed &feed) {
                 }
                 feed.lastFrame = now;
                 ++feed.frames;
-                feed.rgbWidth = image.width;
-                feed.rgbHeight = image.height;
-                feed.rgb = std::move(image.rgb);
-                feed.rgbDirty = true;
+                feed.decoder->submit(msg->data);
             });
+    }
     if (!feed.camera->depthTopic.empty() && feed.wantDepth && camerasWanted_ && !feed.depthSub)
         feed.depthSub = node_->create_subscription<sensor_msgs::msg::Image>(
             feed.camera->depthTopic, qos, [&feed](const sensor_msgs::msg::Image::ConstSharedPtr &msg) {
@@ -212,7 +220,7 @@ void RosSide::subscribeCamera(CameraFeed &feed) {
             });
     if (!feed.wantDepth || !camerasWanted_)
         feed.depthSub.reset();
-    if (!camerasWanted_)
+    if (!camerasWanted_ || !feed.rosMode)
         feed.rgbSub.reset();
 }
 

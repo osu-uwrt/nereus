@@ -1,10 +1,13 @@
 // Composes the renderer scene (pool, course, robot, mechanisms, lights) from a Scenario and the
-// per-frame VisualState. Mirrors python/src/robotics_platform/pack_cameras.py composition.
+// per-frame VisualState. Pool, task visuals (cutouts, texture overrides) and robot visuals come from
+// rp_pack_scene, the same composition the simulator's cameras use; this class adds the viewer-only
+// content (rotor/claw animation, status lights, calibration board, markers, payloads).
 #pragma once
 #include "scenario.hpp"
 #include "status_lights.hpp"
 #include "thruster_visuals.hpp"
 #include "visual_state.hpp"
+#include <robotics/pack_scene/pack_scene.hpp>
 #include <robotics/rendering/scene.hpp>
 #include <map>
 #include <memory>
@@ -29,8 +32,16 @@ class SceneModel {
         return warnings_;
     }
     std::size_t robotVisualCount() const {
-        return robot_.size();
+        std::size_t count = 0;
+        for (const auto &visual : pack_->robotVisuals())
+            count += visual.mesh != nullptr;
+        return count;
     }
+    const pack_scene::PackScene &pack() const {
+        return *pack_;
+    }
+    // Truth base_link pose -> robot frame root (the pack's pose convention).
+    Eigen::Matrix4d worldFromRoot(const glm::mat4 &worldFromBase) const;
     // Slot poses for `mechanism` in base_link, scaled to the projectile size (drawn by loadedPayloads).
     std::vector<glm::mat4> payloadMounts(const std::string &mechanism) const;
     std::filesystem::path payloadMesh() const {
@@ -38,18 +49,16 @@ class SceneModel {
     }
 
   private:
-    struct RobotInstance {
-        std::shared_ptr<const rendering::MeshAsset> mesh;
-        glm::mat4 frameInBase{1}, local{1};
+    struct RobotAnimation {
         int rotor = -1;
         int clawSide = 0; // -1 right, +1 left
     };
     const Scenario &scenario_;
     const ThrusterVisuals &thrusters_;
     const StatusLights &lights_;
-    rendering::Scene static_;
-    std::size_t poolInstances_ = 0;
-    std::vector<RobotInstance> robot_;
+    std::unique_ptr<pack_scene::PackScene> pack_;
+    std::vector<RobotAnimation> animation_; // parallel to pack_->robotVisuals()
+    Eigen::Matrix4d baseFromRoot_ = Eigen::Matrix4d::Identity();
     std::vector<std::pair<std::shared_ptr<const rendering::MeshAsset>, glm::mat4>> extras_; // base_link poses
     std::shared_ptr<const rendering::MeshAsset> box_, board_;
     glm::mat4 boardPose_{1};
