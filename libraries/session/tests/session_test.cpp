@@ -3,6 +3,8 @@
 // counters and the run_score document builder. Reports ticks/s of the C++ session.
 #include "session_test_util.hpp"
 
+#include <rules/registry.hpp>
+
 #include <gtest/gtest.h>
 
 #include <chrono>
@@ -24,23 +26,33 @@ Json payloadsJson(const Session &s) {
                        {"velocity", flat(p.state.velocity)}, {"angular_velocity", flat(p.state.angular_velocity)}});
     return out;
 }
-Json checkpoint(Session &s) {
+Json checkpoint(Session &s, bool tasks) {
     Json jaws = Json::object();
     for (const auto &[k, v] : s.clawJaws())
         jaws[k] = Json::array({v[0], v[1]});
-    return {{"time_ns", s.timeNs()}, {"killed", s.killed()},
+    Json extra = Json::object();
+    if (tasks) {
+        extra["run"] = *s.runSnapshot();
+        extra["indicators"] = s.indicators();
+    }
+    Json result = {{"time_ns", s.timeNs()}, {"killed", s.killed()},
             {"body", bodyJson(s.lastStep().snapshot.body)}, {"forces", flat(s.thrusterForces())},
             {"payloads", payloadsJson(s)}, {"mechanisms", mechJson(*s.mechanismState())}, {"jaws", jaws},
             {"sensors", sensorsJson(s.runtime(), s.pack())}};
+    result.update(extra);
+    return result;
 }
-} // namespace
 
-TEST(Session, ReplaysThePythonScript) {
-    const auto fixture = loadFixture("session_reference.json");
+void replay(const std::string &fixture_name, bool tasks) {
+    const auto fixture = loadFixture(fixture_name);
     const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
-    const RulesRegistry rules;
+    const RulesRegistry rules = robotics::rules::standardRules();
     const auto sensors = sensorNames(scenario);
-    Session s(scenario, createRuntime(scenario, &sensors), rules, SessionOptions{nullptr, false});
+    std::vector<std::string> task_ids;
+    if (fixture.contains("task_ids"))
+        task_ids = fixture.at("task_ids").get<std::vector<std::string>>();
+    Session s(scenario, createRuntime(scenario, &sensors), rules,
+              SessionOptions{tasks ? &task_ids : nullptr, tasks});
     EXPECT_EQ(s.timestepNs(), fixture.at("timestep_ns").get<std::int64_t>());
     const auto &ops = fixture.at("ops");
     const auto &log = fixture.at("log");
@@ -50,12 +62,14 @@ TEST(Session, ReplaysThePythonScript) {
         const std::string name = op[0];
         const std::string where = "$.log[" + std::to_string(i) + "] " + op.dump();
         Json actual = Json::object();
+        Json events = Json::array();
         if (name == "advance") {
             Json checkpoints = Json::array();
             for (int n = 0; n < op[1].get<int>(); ++n) {
-                s.advance();
+                for (const auto &e : s.advance().task_events)
+                    events.push_back(e);
                 if (++tick % 50 == 0)
-                    checkpoints.push_back(checkpoint(s));
+                    checkpoints.push_back(checkpoint(s, tasks));
                 drain(s.runtime(), s.pack());
             }
             actual["checkpoints"] = checkpoints;
@@ -88,6 +102,12 @@ TEST(Session, ReplaysThePythonScript) {
             state.position = Eigen::Vector3d(op[1][0], op[1][1], op[1][2]);
             state.orientation = Eigen::Quaterniond(op[2][0], op[2][1], op[2][2], op[2][3]);
             actual["body"] = bodyJson(s.place(state, op[3]).body);
+        } else if (name == "place_moving") {
+            robotics::simulation::BodyState state;
+            state.position = Eigen::Vector3d(op[1][0], op[1][1], op[1][2]);
+            state.orientation = Eigen::Quaterniond(op[2][0], op[2][1], op[2][2], op[2][3]);
+            state.linear_velocity = Eigen::Vector3d(op[3][0], op[3][1], op[3][2]);
+            actual["body"] = bodyJson(s.place(state, true).body);
         } else if (name == "reset_tasks") {
             actual["result"] = resultJson(s.resetTasks());
         } else if (name == "full_reset") {
@@ -95,7 +115,7 @@ TEST(Session, ReplaysThePythonScript) {
             actual["seed"] = s.seed();
             tick = 0;
         } else if (name == "run_start") {
-            actual["result"] = resultJson(s.runStart());
+            actual["result"] = resultJson(s.runStart(op.size() > 1 && op[1].is_object() ? op[1] : Json::object()));
             actual["running"] = s.running();
             actual["snapshot"] = s.runSnapshot() ? *s.runSnapshot() : Json();
         } else if (name == "run_stop") {
@@ -107,11 +127,25 @@ TEST(Session, ReplaysThePythonScript) {
             actual["running"] = s.running();
             actual["snapshot"] = s.runSnapshot() ? *s.runSnapshot() : Json();
         }
+        if (name != "advance")
+            for (const auto &e : s.lastStep().task_events)
+                events.push_back(e);
+        actual["events"] = events;
         actual["feed"] = s.takeFeed();
         actual["counters"] = s.taskCounters();
-        actual["final"] = checkpoint(s);
+        actual["final"] = checkpoint(s, tasks);
         ASSERT_EQ(diff(log[i], actual, where), "");
     }
+}
+
+} // namespace
+
+TEST(Session, ReplaysThePythonScriptWithTasksDisabled) {
+    replay("session_reference.json", false);
+}
+
+TEST(Session, ReplaysThePythonScriptWithTasksAndRunControl) {
+    replay("session_tasks_reference.json", true);
 }
 
 TEST(Session, RunSnapshotDocumentMatchesPython) {
@@ -124,22 +158,37 @@ TEST(Session, RunSnapshotDocumentMatchesPython) {
     }
 }
 
-TEST(Session, ThroughputWithTasksDisabled) {
+namespace {
+void throughput(bool tasks, const char *label) {
     const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
-    const RulesRegistry rules;
+    const RulesRegistry rules = robotics::rules::standardRules();
     const auto sensors = sensorNames(scenario);
-    Session s(scenario, createRuntime(scenario, &sensors), rules, SessionOptions{nullptr, false});
+    const std::vector<std::string> task_ids{"gate", "torpedo", "slalom"};
+    Session s(scenario, createRuntime(scenario, &sensors), rules, SessionOptions{tasks ? &task_ids : nullptr, tasks});
     s.setKilled(false);
     s.setArmed(true);
     s.commandThrusters(Eigen::VectorXd::Constant(8, 3.0));
-    constexpr int ticks = 20000;
+#ifdef NDEBUG
+    constexpr int ticks = 50000;
+#else
+    constexpr int ticks = 3000; // Debug builds are ~150x slower; the number is only meaningful in Release
+#endif
     const auto start = std::chrono::steady_clock::now();
     for (int i = 0; i < ticks; ++i) {
         s.advance();
         drain(s.runtime(), s.pack());
     }
     const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-    std::printf("[ THROUGHPUT ] %d ticks in %.3f s = %.0f ticks/s (%.1fx real time at 500 Hz)\n", ticks, seconds,
-                ticks / seconds, ticks / seconds / 500.0);
+    std::printf("[ THROUGHPUT ] %s: %d ticks in %.3f s = %.0f ticks/s (%.1fx real time at 500 Hz)\n", label, ticks,
+                seconds, ticks / seconds, ticks / seconds / 500.0);
     EXPECT_EQ(s.timeNs(), static_cast<std::int64_t>(ticks) * s.timestepNs());
+}
+} // namespace
+
+TEST(Session, ThroughputWithTasksDisabled) {
+    throughput(false, "tasks disabled");
+}
+
+TEST(Session, ThroughputWithTasksEnabled) {
+    throughput(true, "tasks gate+torpedo+slalom");
 }

@@ -25,6 +25,20 @@ ROOT = HERE.parents[3]
 SCENARIO = ROOT / "content/packs/scenarios/talos_uwrt"
 
 
+def norm(value):
+    """JSON-normalise task documents (frozen mappings, tuples, numpy scalars)."""
+    from collections.abc import Mapping
+
+    def default(o):
+        if isinstance(o, Mapping):
+            return dict(o)
+        if isinstance(o, np.generic):
+            return o.item()
+        return list(o)
+
+    return json.loads(json.dumps(value, default=default, allow_nan=False))
+
+
 def f(values) -> list[float]:
     return [float(v) for v in np.asarray(values, float).ravel()]
 
@@ -213,6 +227,21 @@ SESSION_OPS = [
 ]
 
 
+TASK_IDS = ["gate", "torpedo", "slalom"]  # no contact_world task: the prop world is separate
+Q0 = [1.0, 0.0, 0.0, 0.0]
+TASK_OPS = [
+    ["run_start", {"role": "rescue"}], ["advance", 50],
+    ["place_moving", [4.6, -2.9, -0.75], Q0, [2.5, 0.0, 0.0]], ["advance", 250],
+    ["run_start", {}], ["run_start", None], ["run_adjust", 5.0],
+    ["place_moving", [17.6, 2.48, -1.37], Q0, [0.0, 0.0, 0.0]], ["unkill"], ["arm", True],
+    ["fire", "torpedo_launcher"], ["advance", 250], ["fire", "dropper"], ["advance", 500],
+    ["fire", "torpedo_launcher"], ["advance", 250], ["run_stop"], ["advance", 10],
+    ["run_start", {"bogus": 1}], ["run_start", {"role": "x"}], ["run_start", {"heading_coin": "yes"}],
+    ["reset_tasks"], ["advance", 20], ["run_stop"], ["run_start", {"role": "repair", "heading_coin": False}],
+    ["advance", 30], ["full_reset", None], ["advance", 20],
+]
+
+
 class FakeTasks:
     """Stands in for TaskRuntime to capture the run_snapshot document builder."""
 
@@ -226,9 +255,10 @@ class FakeTasks:
         return dict(self._e)
 
 
-def capture_session() -> dict:
+def capture_session(ops=None, task_ids=None, tasks=False) -> dict:
+    ops = SESSION_OPS if ops is None else ops
     pack = create_runtime(RESOLVED, sensor_ids=SENSORS)
-    s = Session(RESOLVED, pack, tasks=False)
+    s = Session(RESOLVED, pack, task_ids=task_ids, tasks=tasks)
     dt = s.timestep_ns
     log = []
     tick = 0
@@ -236,7 +266,8 @@ def capture_session() -> dict:
     def checkpoint() -> dict:
         snapshot = s.last_step.snapshot
         state = s.mechanism_state()
-        return {"time_ns": s.time_ns, "killed": s.killed, "body": body(snapshot.body),
+        extra = {"run": norm(s.run_snapshot()), "indicators": norm(s.indicators())} if tasks else {}
+        return {**extra, "time_ns": s.time_ns, "killed": s.killed, "body": body(snapshot.body),
                 "forces": f(s.thruster_forces()),
                 "payloads": [{"id": p.identifier, "mechanism_id": p.mechanism_id,
                               "mechanism_type": p.mechanism_type, "active": p.active,
@@ -248,13 +279,14 @@ def capture_session() -> dict:
                 "mechanisms": mech_state(state), "jaws": {k: list(v) for k, v in s.claw_jaws().items()},
                 "sensors": sensors(pack)}
 
-    for op in SESSION_OPS:
+    for op in ops:
         name = op[0]
         entry: dict = {}
+        events: list = []
         if name == "advance":
             entry["checkpoints"] = []
             for _ in range(op[1]):
-                s.advance()
+                events += norm(list(s.advance().task_events))
                 tick += 1
                 if tick % 50 == 0:
                     entry["checkpoints"].append(checkpoint())
@@ -280,6 +312,10 @@ def capture_session() -> dict:
             state.position, state.orientation_wxyz = op[1], op[2]
             snap = s.place(state, clear_actuators=op[3])
             entry["body"] = body(snap.body)
+        elif name == "place_moving":
+            state = native.BodyState()
+            state.position, state.orientation_wxyz, state.linear_velocity = op[1], op[2], op[3]
+            entry["body"] = body(s.place(state, clear_actuators=True).body)
         elif name == "reset_tasks":
             ok, message = s.reset_tasks()
             entry["result"] = {"accepted": ok, "message": message}
@@ -289,12 +325,15 @@ def capture_session() -> dict:
             entry["body"] = body(snap.body)
             entry["seed"] = s.seed
         elif name.startswith("run_"):
-            r = {"run_start": lambda: s.run_start({}), "run_stop": s.run_stop,
+            r = {"run_start": lambda: s.run_start(op[1] if len(op) > 1 else {}), "run_stop": s.run_stop,
                  "run_adjust": lambda: s.run_adjust(op[1])}[name]()
             entry["result"] = result(r)
             entry["running"] = s.running
             entry["snapshot"] = s.run_snapshot()
-        entry["feed"] = s.take_feed()
+        if name != "advance":
+            events = norm(list(s.last_step.task_events))
+        entry["events"] = events
+        entry["feed"] = norm(s.take_feed())
         entry["counters"] = dict(s.task_counters)
         entry["final"] = checkpoint()
         log.append(entry)
@@ -315,13 +354,16 @@ def capture_session() -> dict:
         session.last_step = type(session.last_step)(type("S", (), {"elapsed_ns": now})())
         cases.append({"snapshot": fake._s, "extra": extra, "now_ns": now, "adjustment": adjust,
                       "message": msg, "expected": session.run_snapshot()})
-    return {"timestep_ns": dt, "ops": SESSION_OPS, "log": log, "run_snapshot_cases": cases,
+    if tasks:
+        return {"timestep_ns": dt, "ops": ops, "task_ids": task_ids, "log": log}
+    return {"timestep_ns": dt, "ops": ops, "log": log, "run_snapshot_cases": cases,
             "score_row_keys": [r["key"] for r in rows]}
 
 
 def main() -> None:
     for name, data in (("pack_runtime", capture_pack_runtime()), ("mechanisms", capture_mechanisms()),
-                       ("session", capture_session())):
+                       ("session", capture_session()),
+                       ("session_tasks", capture_session(TASK_OPS, TASK_IDS, True))):
         (HERE / f"{name}_reference.json").write_text(json.dumps(data, sort_keys=True, allow_nan=False))
         print("wrote", f"{name}_reference.json")
 
