@@ -11,8 +11,11 @@
 #include <robotics/simulation/payload.hpp>
 #include <robotics/simulation/plant.hpp>
 
+#include <map>
 #include <memory>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace robotics::session {
 // Plant + sensors built from pack data (port of pack_runtime.create_runtime).
@@ -22,6 +25,7 @@ struct PackRuntime {
     std::shared_ptr<const spatial::FixedFrames> frames;
     simulation::BodyState initial; // COM frame
     std::vector<std::string> sensor_ids, deferred_sensor_ids; // executed / not executed
+    std::map<std::string, std::string> sensor_types;         // executed sensor id -> pack type
 };
 // sensor_ids: explicit selection (nullptr = every enabled non-camera sensor).
 PackRuntime createRuntime(const ResolvedScenario &scenario,
