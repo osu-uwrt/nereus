@@ -30,6 +30,14 @@ class BridgeNode {
 
     rclcpp::Node &node() { return *node_; }
 
+    // Stepping-loop cost: tick() wall time (step, publish, camera request) and achieved speed.
+    struct Performance {
+        std::int64_t ticks{0}, tick_ns_total{0}, tick_ns_max{0}, wall_ns{0}, sim_ns{0};
+        double meanTickUs() const { return ticks ? tick_ns_total / 1e3 / static_cast<double>(ticks) : 0.0; }
+        double realTimeFactor() const { return wall_ns ? static_cast<double>(sim_ns) / static_cast<double>(wall_ns) : 0.0; }
+    };
+    const Performance &performance() const { return performance_; }
+
   private:
     void send(const std::vector<Publication> &publications);
     void publishClock(std::int64_t ns);
@@ -40,6 +48,7 @@ class BridgeNode {
     BridgeCore &core_;
     std::shared_ptr<rclcpp::Node> node_;
     std::atomic<bool> stop_{false};
+    Performance performance_;
 };
 
 } // namespace robotics::ros_bridge

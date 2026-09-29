@@ -331,6 +331,7 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
         }
     };
     std::int64_t ticks = 0;
+    const auto run_start = Clock::now();
     double owed = 0.0;
     auto previous = Clock::now(), last_refresh = previous;
     constexpr double kPausedRefreshS = 0.02; // viewer state refresh while paused (original 50 Hz timer)
@@ -354,12 +355,20 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
         previous = now;
         int steps = 0;
         while (owed >= step_s && steps < max_catchup_ticks) {
+            const auto started = Clock::now();
             tick();
+            const auto cost = std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - started).count();
+            performance_.tick_ns_total += cost;
+            performance_.tick_ns_max = std::max<std::int64_t>(performance_.tick_ns_max, cost);
+            ++performance_.ticks;
             ++ticks;
             owed -= step_s;
             ++steps;
-            if (duration_ns && ticks * core_.timestepNs() >= *duration_ns)
+            if (duration_ns && ticks * core_.timestepNs() >= *duration_ns) {
+                performance_.wall_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - run_start).count();
+                performance_.sim_ns = ticks * core_.timestepNs();
                 return ticks;
+            }
         }
         if (steps == max_catchup_ticks && owed >= step_s) {
             RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
@@ -370,6 +379,8 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
         if (remaining > 2e-4)
             std::this_thread::sleep_for(std::chrono::duration<double>(remaining - 1e-4));
     }
+    performance_.wall_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - run_start).count();
+    performance_.sim_ns = ticks * core_.timestepNs();
     return ticks;
 }
 

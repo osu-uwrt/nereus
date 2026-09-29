@@ -79,6 +79,11 @@ class BridgeCore {
     static std::optional<std::string> checkRealTimeFactor(double value);
     void setLookup(Lookup lookup) { lookup_ = std::move(lookup); }
     bool killed() const { return session_.killed(); }
+    // Cumulative wall time inside step(): session advance, sensor mapping, timed streams.
+    struct Timing {
+        std::int64_t advance_ns{0}, sensors_ns{0}, timed_ns{0};
+    };
+    const Timing &timing() const { return timing_; }
     const Counters &counters() const { return counters_; }
     Counters &counters() { return counters_; }
     const Json &taskEvents() const { return task_events_; }
@@ -171,6 +176,7 @@ class BridgeCore {
     CameraSink *cameras_;
     Lookup lookup_;
     Counters counters_;
+    Timing timing_;
     std::int64_t timestep_ns_;
     std::atomic<double> real_time_factor_;
     std::int64_t epoch_ns_;

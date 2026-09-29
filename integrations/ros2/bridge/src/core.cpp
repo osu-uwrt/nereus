@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <cstdio>
 #include <regex>
 #include <set>
@@ -715,8 +716,17 @@ Value BridgeCore::mechanismValues() const {
     return Value::map(std::move(values));
 }
 
+namespace {
+std::int64_t nowNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+} // namespace
+
 StepOutput BridgeCore::step() {
+    const std::int64_t t0 = nowNs();
     StepResult result = session_.advance();
+    const std::int64_t t1 = nowNs();
+    timing_.advance_ns += t1 - t0;
     const auto &snapshot = result.snapshot;
     for (auto &event : result.task_events)
         task_events_.push_back(event);
@@ -741,6 +751,8 @@ StepOutput BridgeCore::step() {
         for (const auto &stream : streams->second)
             out.publications.push_back(publish(stream, values));
     }
+    const std::int64_t t2 = nowNs();
+    timing_.sensors_ns += t2 - t1;
     std::optional<Value> state;
     const auto robot = [&]() -> const Value & {
         if (!state)
@@ -777,6 +789,7 @@ StepOutput BridgeCore::step() {
     }
     for (auto &publication : flush())
         out.publications.push_back(std::move(publication));
+    timing_.timed_ns += nowNs() - t2;
     return out;
 }
 

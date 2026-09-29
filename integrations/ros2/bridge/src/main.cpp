@@ -208,7 +208,18 @@ int main(int argc, char **argv) {
         if (cameras)
             cameras->close(); // finish workers before writing counters or destroying publishers
         writeJson(arguments.output / "tasks.json", tasksRecord(*core));
-        writeJson(arguments.output / "summary.json", summaryRecord(*core, reason, cameras.get()));
+        Json summary = summaryRecord(*core, reason, cameras.get());
+        if (node) {
+            const auto &perf = node->performance();
+            summary["performance"] = {{"ticks", perf.ticks}, {"mean_tick_us", perf.meanTickUs()},
+                                      {"max_tick_us", perf.tick_ns_max / 1e3},
+                                      {"session_advance_us_per_tick", core->timing().advance_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
+                                      {"sensor_mapping_us_per_tick", core->timing().sensors_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
+                                      {"streams_us_per_tick", core->timing().timed_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
+                                      {"wall_s", perf.wall_ns / 1e9}, {"sim_s", perf.sim_ns / 1e9},
+                                      {"real_time_factor", perf.realTimeFactor()}};
+        }
+        writeJson(arguments.output / "summary.json", summary);
     } catch (const std::exception &error) {
         std::cerr << "robotics_platform_ros: " << error.what() << "\n";
         status = 1;
