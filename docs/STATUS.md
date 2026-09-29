@@ -70,6 +70,14 @@ The optional build requires `RP_BUILD_CAMERAS`, `RP_BUILD_SCENE_RENDERER`,
 `RP_BUILD_OFFSCREEN_RENDERER`, and `RP_BUILD_CAMERA_PYTHON`; all default off.
 This is a tested Linux EGL backend, not a claim of cross-platform capture support.
 
+The bridge now publishes configured static transforms from robot-pack frame poses.
+Talos supplies its left/right optical joints while navigation retains ownership of
+the camera links and estimator frames. Validation rejects unknown robot frames,
+alias conflicts, duplicate TF owners, cycles and forbidden children. All 114 ROS
+bridge tests pass, including a live FastDDS test where a late subscriber receives
+the static transform before any physics step. The 79 existing pack tests and three
+new static-TF cases pass. Image publication and real perception remain unfinished.
+
 Step 1 passed joint review. `proposals/step1/` contains nine proposed JSON Schemas
 and eight YAML documents: Talos robot, 2026 pool, gate/torpedo task definitions,
 task manifest, UWRT bridge, scenario and the exception ledger. One task-pack

@@ -54,6 +54,9 @@ Step 3 progress:
   context cleanup and image ownership. Camera-only wheel built from the source
   archive passes the five Python cases without DISPLAY, simulation or ROS.
   Opus reviewed and approved the host/binding corrections.
+- [x] Configure static optical TF from robot-pack poses; validate frame ownership and
+  names. All 114 ROS tests pass, including a late-subscriber static-TF delivery test;
+  79 existing and three new pack tests pass.
 - [ ] Compose sensor scenes from pack data, including robot visual placement.
 - [ ] Execute the existing robot-pack camera/stereo definitions offscreen.
 - [ ] Publish calibrated, synchronized image/CameraInfo products through the bridge.

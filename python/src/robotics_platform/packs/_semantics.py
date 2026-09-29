@@ -5,6 +5,7 @@ Every function returns problem strings; nothing here imports task code or builds
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import math
 import re
@@ -399,6 +400,24 @@ def bridge(data: dict[str, Any]) -> list[str]:
     uses_thrusters = any(item["native"].startswith("command:thrusters") for item in data["streams"])
     if uses_thrusters and thrusters is None:
         problems.append("/streams: thruster command stream requires a thrusters block")
+    tf = data.get("tf", {})
+    published = [*tf.get("publish", []), *tf.get("static", [])]
+    edges = [*published, *tf.get("lookup", [])]
+    duplicates((edge["child"] for edge in edges), "TF child/owner", problems)
+    parents = {edge["child"]: edge["parent"] for edge in edges}
+    for edge in published:
+        if any(fnmatch.fnmatchcase(edge["child"], pattern)
+               for pattern in tf.get("never_publish", [])):
+            problems.append(f"/tf: '{edge['child']}' is listed in never_publish")
+    for child in parents:
+        seen: set[str] = set()
+        current = child
+        while current in parents and current not in seen:
+            seen.add(current)
+            current = parents[current]
+        if current in seen:
+            problems.append(f"/tf: cycle at '{current}'")
+            break
     return problems
 
 
@@ -415,6 +434,14 @@ def bridge_binding(data: dict[str, Any], robot_data: dict[str, Any]) -> list[str
     for name in data.get("frame_names", {}):
         if name not in frames:
             problems.append(f"/frame_names: unknown robot frame '{name}'")
+    names = data.get("frame_names", {})
+    for index, edge in enumerate(data.get("tf", {}).get("static", [])):
+        for native_name, ros_name in (("from_frame", "parent"), ("to_frame", "child")):
+            frame = edge[native_name]
+            if frame not in frames or frame == WORLD:
+                problems.append(f"/tf/static/{index}/{native_name}: unknown robot frame '{frame}'")
+            elif frame in names and names[frame] != edge[ros_name]:
+                problems.append(f"/tf/static/{index}/{ros_name}: differs from frame_names['{frame}']")
     sensors = {item["id"]: item for item in robot_data["sensors"]}
     mechanisms = {item["id"] for item in robot_data["mechanisms"]}
     for item in [*data["streams"], *data.get("services", [])]:

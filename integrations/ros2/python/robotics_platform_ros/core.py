@@ -193,6 +193,7 @@ class BridgeCore:
         self.services: dict[str, tuple[mapping.Reader, mapping.Writer, dict[str, Any]]] = {}
         self._compile_services()
         self._tf = self._compile_tf()
+        self.static_transforms = self._compile_static_tf()
         self._compile_alignment()
         self._check_bindings()
         self.latest_estimate: dict[str, Any] | None = None
@@ -315,6 +316,38 @@ class BridgeCore:
             entries.append((entry, _Timed(period, period)))
         return entries
 
+    def _compile_static_tf(self) -> tuple[Transform, ...]:
+        tf = self.config.get("tf", {})
+        edges = [*tf.get("publish", []), *tf.get("static", []), *tf.get("lookup", [])]
+        parents: dict[str, str] = {}
+        for edge in edges:
+            if edge["child"] in parents:
+                raise BridgeError(f"tf: duplicate child/owner {edge['child']!r}")
+            parents[edge["child"]] = edge["parent"]
+        for child in parents:
+            seen: set[str] = set()
+            current = child
+            while current in parents and current not in seen:
+                seen.add(current)
+                current = parents[current]
+            if current in seen:
+                raise BridgeError(f"tf: cycle at {current!r}")
+        names = self.config.get("frame_names", {})
+        transforms = []
+        for edge in tf.get("static", []):
+            for native_name, ros_name in (("from_frame", "parent"), ("to_frame", "child")):
+                frame = edge[native_name]
+                if frame in names and names[frame] != edge[ros_name]:
+                    raise BridgeError(f"tf: {ros_name} differs from frame_names[{frame!r}]")
+            try:
+                pose = self.frames.lookup(edge["from_frame"], edge["to_frame"])
+            except (ValueError, IndexError) as error:
+                raise BridgeError(f"tf: invalid static robot frames: {error}") from None
+            transforms.append(Transform(edge["parent"], edge["child"], self._last_ros_ns,
+                                        np.array(pose.translation, copy=True),
+                                        np.array(pose.orientation_wxyz, copy=True)))
+        return tuple(transforms)
+
     def _compile_alignment(self) -> None:
         self.alignment = self.config.get("placement", {}).get("estimator_alignment")
         self.alignment_pending: str | None = None
@@ -384,10 +417,11 @@ class BridgeCore:
                         stream["frame_id"] == expected,
                         f"{expected!r} (frame_names of sensor frame {sensors[name]['frame']!r})")
         forbidden = self.config.get("tf", {}).get("never_publish", [])
-        for entry, _ in self._tf:
+        for child in [*(entry["child"] for entry, _ in self._tf),
+                      *(entry.child for entry in self.static_transforms)]:
             for pattern in forbidden:
-                if fnmatch.fnmatchcase(entry["child"], pattern):
-                    raise BridgeError(f"tf: {entry['child']!r} is listed in never_publish")
+                if fnmatch.fnmatchcase(child, pattern):
+                    raise BridgeError(f"tf: {child!r} is listed in never_publish")
 
     # ------------------------------------------------------------ time
 

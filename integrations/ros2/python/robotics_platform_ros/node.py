@@ -18,7 +18,13 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from robotics_platform import _native as native
 from rosgraph_msgs.msg import Clock
-from tf2_ros import Buffer, TransformBroadcaster, TransformException, TransformListener
+from tf2_ros import (
+    Buffer,
+    StaticTransformBroadcaster,
+    TransformBroadcaster,
+    TransformException,
+    TransformListener,
+)
 
 from . import mapping
 from .core import BridgeCore, Counters, Publication, Transform
@@ -40,6 +46,19 @@ def _stamp(nanoseconds: int) -> Time:
     return Time(sec=seconds, nanosec=rest)
 
 
+def _transform_message(item: Transform) -> TransformStamped:
+    message = TransformStamped()
+    message.header.stamp = _stamp(item.stamp_ns)
+    message.header.frame_id, message.child_frame_id = item.parent, item.child
+    x, y, z = (float(value) for value in item.translation)
+    message.transform.translation.x, message.transform.translation.y = x, y
+    message.transform.translation.z = z
+    w, qx, qy, qz = (float(value) for value in item.orientation_wxyz)
+    rotation = message.transform.rotation
+    rotation.w, rotation.x, rotation.y, rotation.z = w, qx, qy, qz
+    return message
+
+
 class BridgeNode(Node):
     """Owns every ROS entity of one bridge pack; never advances the runtime itself."""
 
@@ -54,6 +73,11 @@ class BridgeNode(Node):
         self.clock_publisher = self.create_publisher(Clock, clock["topic"], qos(clock["qos"]))
         self.tf_broadcaster = TransformBroadcaster(self) if config.get("tf", {}).get(
             "publish") else None
+        self.static_tf_broadcaster = None
+        if self.core.static_transforms:
+            self.static_tf_broadcaster = StaticTransformBroadcaster(self)
+            self.static_tf_broadcaster.sendTransform([
+                _transform_message(item) for item in self.core.static_transforms])
         self.publishers_by_stream = {}
         for stream in config["streams"]:
             cls = mapping.message_class(stream["message_type"])
@@ -96,18 +120,7 @@ class BridgeNode(Node):
     def broadcast(self, transforms: list[Transform]) -> None:
         if not transforms or self.tf_broadcaster is None:
             return
-        messages = []
-        for item in transforms:
-            message = TransformStamped()
-            message.header.stamp = _stamp(item.stamp_ns)
-            message.header.frame_id, message.child_frame_id = item.parent, item.child
-            x, y, z = (float(value) for value in item.translation)
-            message.transform.translation.x, message.transform.translation.y = x, y
-            message.transform.translation.z = z
-            w, qx, qy, qz = (float(value) for value in item.orientation_wxyz)
-            rotation = message.transform.rotation
-            rotation.w, rotation.x, rotation.y, rotation.z = w, qx, qy, qz
-            messages.append(message)
+        messages = [_transform_message(item) for item in transforms]
         self.tf_broadcaster.sendTransform(messages)
 
     def tick(self) -> None:

@@ -34,8 +34,12 @@ frame_names:
   imu_mount: talos/imu_link
   fog_mount: talos/fog_link
   dvl_mount: talos/dvl_link
+  ffc_mount: talos/ffc_camera_link
+  dfc_mount: talos/dfc_camera_link
   ffc_left_optical: talos/ffc_left_camera_optical_frame
+  ffc_right_optical: talos/ffc_right_camera_optical_frame
   dfc_left_optical: talos/dfc_left_camera_optical_frame
+  dfc_right_optical: talos/dfc_right_camera_optical_frame
 
 clock:
   topic: /clock                          # rosgraph_msgs/msg/Clock
@@ -55,11 +59,19 @@ thrusters:
 tf:
   publish:
   - {parent: map, child: simulator/talos/base_link, native: 'state:robot.reference_pose', rate_hz: 100}   # truth, STATE_PUB_TIME
+  # Navigation owns the camera links. The old camera faker supplied their optical
+  # joints when the ZED wrapper was absent; poses now come from robot-pack frames.
+  static:
+  - {parent: talos/ffc_camera_link, child: talos/ffc_left_camera_optical_frame, from_frame: ffc_mount, to_frame: ffc_left_optical}
+  - {parent: talos/ffc_left_camera_optical_frame, child: talos/ffc_right_camera_optical_frame, from_frame: ffc_left_optical, to_frame: ffc_right_optical}
+  - {parent: talos/dfc_camera_link, child: talos/dfc_left_camera_optical_frame, from_frame: dfc_mount, to_frame: dfc_left_optical}
+  - {parent: talos/dfc_left_camera_optical_frame, child: talos/dfc_right_camera_optical_frame, from_frame: dfc_left_optical, to_frame: dfc_right_optical}
   # Transforms the bridge only reads live. Owners are external; the bridge never republishes them.
   lookup:
   - {parent: world, child: map, owner: 'riptide_mapping2 mapping.launch.py chameleon_tf world_to_map (identity start; XY/yaw free)'}
   - {parent: world, child: odom, owner: 'riptide_hardware2 navigation.launch.py static world->odom'}
-  never_publish: ['talos/*', world, odom, map]
+  never_publish: [talos/base_link, talos/imu_link, talos/fog_link, talos/dvl_link,
+                  talos/ffc_camera_link, talos/dfc_camera_link, world, odom, map]
 
 kill:
   command_stream: software_kill

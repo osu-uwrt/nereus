@@ -367,6 +367,34 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "static": {
+          "type": "array",
+          "description": "Fixed robot-pack transforms; ROS names are explicit and pose is resolved from the robot frame tree.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "parent": {
+                "$ref": "#/$defs/ros_frame"
+              },
+              "child": {
+                "$ref": "#/$defs/ros_frame"
+              },
+              "from_frame": {
+                "$ref": "common.schema.json#/$defs/name"
+              },
+              "to_frame": {
+                "$ref": "common.schema.json#/$defs/name"
+              }
+            },
+            "required": [
+              "parent",
+              "child",
+              "from_frame",
+              "to_frame"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [
