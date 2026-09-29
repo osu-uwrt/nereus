@@ -28,8 +28,20 @@ struct WaterSurface {
     float level = 0;                                              // World Z; surface is horizontal.
     Eigen::Matrix4f local_to_world = Eigen::Matrix4f::Identity(); // XY translation and yaw only.
 };
+// Coloured points (e.g. a point cloud), drawn unlit and depth-tested after the water surface in
+// observer views only (never in Appearance::preview draws). Each distinct PointData is uploaded once and
+// kept on the GPU while a scene references it, so share one object across frames until it changes.
+struct PointData {
+    std::vector<float> xyzrgb; // per point: x, y, z in the set's local frame (metres), r, g, b in [0, 1]
+};
+struct PointSet {
+    std::shared_ptr<const PointData> data;
+    Eigen::Matrix4f transform = Eigen::Matrix4f::Identity(); // local -> world
+    float size = 3;                                          // pixels
+};
 struct Scene {
     std::vector<Instance> instances;
+    std::vector<PointSet> points;
     std::optional<WaterSurface> water;
     Eigen::Vector3f lighting_center = Eigen::Vector3f::Zero();
 };

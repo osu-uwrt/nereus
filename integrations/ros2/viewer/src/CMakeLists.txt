@@ -36,7 +36,7 @@ if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
   set(_host_tests viewer_input tf_tree detection_pose status_lights thruster_visuals camera_geometry jpeg scenario
-      display_clock frame_profiler)
+      display_clock frame_profiler point_cloud)
   foreach(name ${_host_tests})
     add_executable(host_${name}_test ../tests/host_${name}.cpp)
     target_link_libraries(host_${name}_test PRIVATE rp_viewer_host_core GTest::gtest_main)

@@ -11,6 +11,7 @@
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
 
 #include <cmath>
 #include <cstring>
@@ -21,12 +22,20 @@ namespace sc = robotics::session_cameras;
 namespace {
 struct CameraStream {
     std::string id, camera, output;
-    bool info{false}, right_eye{false}, jpeg{false}, depth{false}, bgr{false};
+    bool info{false}, right_eye{false}, jpeg{false}, depth{false}, bgr{false}, cloud{false};
     std::string encoding, jpeg_format;
     std::shared_ptr<const MessageType> type;
     Writer header;
-    std::optional<sc::Output> demand_output;
+    std::vector<sc::Output> demand_outputs;
+    int stride{1}, every{1}; // point_cloud: pixel step; publish every Nth capture (stream rate = sensor rate / N)
 };
+// PCL PointXYZRGB layout, as the original simulator and the ZED driver publish (point_step 32).
+struct CloudPoint {
+    float x, y, z, padding;
+    std::uint8_t b, g, r, alpha;
+    std::uint32_t reserved[3];
+};
+static_assert(sizeof(CloudPoint) == 32 && offsetof(CloudPoint, b) == 16);
 
 SpecTree infoSources() {
     SpecTree sample(std::map<std::string, SpecTree>{{"time", timeSpec()}});
@@ -75,8 +84,13 @@ class SessionCameraSink final : public CameraSink {
             if (!listed)
                 throw MappingError("camera " + repr(camera) + " has no configured output " + repr(output));
             const double rate = stream.at("rate_hz").get<double>();
-            if (std::fabs(rate * config.at("period_ns").get<double>() / 1e9 - 1) > 1e-6)
-                throw MappingError("camera stream " + repr(id) + " rate differs from its sensor");
+            // Point clouds may be published at an integer fraction of the camera rate.
+            const double ratio = rate > 0 ? 1e9 / (rate * config.at("period_ns").get<double>()) : 0;
+            const int every = static_cast<int>(std::lround(ratio));
+            if (output == "point_cloud" ? (every < 1 || std::fabs(ratio - every) > 1e-6) : std::fabs(ratio - 1) > 1e-6)
+                throw MappingError("camera stream " + repr(id) + (output == "point_cloud"
+                                                                      ? " rate must be the sensor rate divided by an integer"
+                                                                      : " rate differs from its sensor"));
             const bool right = output.size() >= 5 && output.compare(output.size() - 5, 5, "right") == 0;
             const std::string frame = right ? config.at("parameters").at("right_frame").get<std::string>()
                                             : config.at("frame").get<std::string>();
@@ -91,6 +105,8 @@ class SessionCameraSink final : public CameraSink {
             const std::string frame_id = stream.value("frame_id", "");
             if (output.rfind("camera_info", 0) == 0)
                 compileInfo(item, stream, where, frame_id);
+            else if (output == "point_cloud")
+                compileCloud(item, stream, where, frame_id, every, config);
             else
                 compileImage(item, stream, where, frame_id, camera, quality);
             streams_[camera].push_back(item);
@@ -141,8 +157,9 @@ class SessionCameraSink final : public CameraSink {
     void setDemand(const std::string &stream, bool wanted) override {
         for (const auto &[camera, list] : streams_)
             for (const auto &item : list)
-                if (item.id == stream && item.demand_output) {
-                    cameras_->setDemand(camera, *item.demand_output, wanted, "ros:" + stream);
+                if (item.id == stream && !item.demand_outputs.empty()) {
+                    for (const auto output : item.demand_outputs)
+                        cameras_->setDemand(camera, output, wanted, "ros:" + stream);
                     if (wanted)
                         demanded_.insert(stream);
                     else
@@ -246,9 +263,79 @@ class SessionCameraSink final : public CameraSink {
             item.bgr = item.encoding == "bgr8";
         }
         item.header = compileWriter(item.type->members(), fields, sampleSources(), frame_id, where);
-        item.demand_output = output == "rgb_left" ? sc::Output::RgbLeft
-                             : output == "rgb_right" ? sc::Output::RgbRight
-                                                     : sc::Output::DepthLeft;
+        item.demand_outputs = {output == "rgb_left"    ? sc::Output::RgbLeft
+                               : output == "rgb_right" ? sc::Output::RgbRight
+                                                       : sc::Output::DepthLeft};
+    }
+
+    // Coloured cloud from the left depth and RGB of one capture, decimated by `stride`, organized
+    // (height x width grid, NaN where depth is invalid) in the stream's (optical) frame.
+    void compileCloud(CameraStream &item, const Json &stream, const std::string &where, const std::string &frame_id,
+                      int every, const Json &sensor) {
+        if (stream.at("direction") != "publish" || stream.at("message_type") != "sensor_msgs/msg/PointCloud2")
+            throw MappingError(where + ": point_cloud requires a sensor_msgs/msg/PointCloud2 publication");
+        bool rgb = false, depth = false;
+        for (const auto &output : sensor.at("parameters").at("outputs"))
+            rgb = rgb || output == "rgb_left", depth = depth || output == "depth_left";
+        if (!rgb || !depth)
+            throw MappingError(where + ": point_cloud needs the camera's rgb_left and depth_left outputs");
+        const Json &fields = stream.at("fields");
+        if (fields != Json{{"header.stamp", {{"from", "sample.time"}}}})
+            throw MappingError(where + ": point_cloud fields must map header.stamp from sample.time");
+        const Json options = stream.value("point_cloud", Json::object());
+        for (const auto &[key, value] : options.items())
+            if (key != "stride")
+                throw MappingError(where + ": unknown point_cloud option " + repr(key));
+        const Json stride = options.value("stride", Json(1));
+        if (!stride.is_number_integer() || stride.get<int>() < 1)
+            throw MappingError(where + ": point_cloud stride must be a positive integer");
+        item.cloud = true;
+        item.stride = stride.get<int>();
+        item.every = every;
+        item.header = compileWriter(item.type->members(), fields, sampleSources(), frame_id, where);
+        item.demand_outputs = {sc::Output::RgbLeft, sc::Output::DepthLeft};
+    }
+
+    static void fillCloud(const CameraStream &item, const cameras::Frame &frame, const sc::CameraInfo &info,
+                          void *message) {
+        const int width = frame.width, height = frame.height;
+        if (frame.depth.size() != static_cast<std::size_t>(width) * height ||
+            frame.rgb.size() != static_cast<std::size_t>(width) * height * 3)
+            throw MappingError("point cloud needs matching depth and RGB frames");
+        const double fx = info.k[0], cx = info.k[2], fy = info.k[4], cy = info.k[5];
+        const int columns = (width - 1) / item.stride + 1, rows = (height - 1) / item.stride + 1;
+        auto &cloud = *static_cast<sensor_msgs::msg::PointCloud2 *>(message);
+        cloud.height = static_cast<std::uint32_t>(rows);
+        cloud.width = static_cast<std::uint32_t>(columns);
+        cloud.is_bigendian = false;
+        cloud.is_dense = false;
+        cloud.point_step = sizeof(CloudPoint);
+        cloud.row_step = cloud.point_step * cloud.width;
+        cloud.fields.clear();
+        for (const auto &[name, offset] : {std::pair<const char *, std::uint32_t>{"x", 0}, {"y", 4}, {"z", 8}, {"rgb", 16}}) {
+            sensor_msgs::msg::PointField field;
+            field.name = name;
+            field.offset = offset;
+            field.datatype = sensor_msgs::msg::PointField::FLOAT32;
+            field.count = 1;
+            cloud.fields.push_back(field);
+        }
+        cloud.data.assign(static_cast<std::size_t>(cloud.row_step) * cloud.height, 0);
+        auto *points = reinterpret_cast<CloudPoint *>(cloud.data.data());
+        for (int y = 0; y < rows; ++y)
+            for (int x = 0; x < columns; ++x) {
+                const int u = x * item.stride, v = y * item.stride;
+                const std::size_t pixel = static_cast<std::size_t>(v) * width + u;
+                const float d = frame.depth[pixel];
+                auto &p = points[static_cast<std::size_t>(y) * columns + x];
+                p.x = static_cast<float>((u - cx) * d / fx);
+                p.y = static_cast<float>((v - cy) * d / fy);
+                p.z = d;
+                p.r = frame.rgb[3 * pixel];
+                p.g = frame.rgb[3 * pixel + 1];
+                p.b = frame.rgb[3 * pixel + 2];
+                p.alpha = 255;
+            }
     }
 
     std::vector<rendering::Instance> dynamicInstances() {
@@ -332,14 +419,20 @@ class SessionCameraSink final : public CameraSink {
                 const auto &frame = item.right_eye ? products.right : products.left;
                 if (!frame)
                     continue; // output not produced (no demand)
-                const bool produced = item.jpeg ? !frame->jpeg.empty()
+                const bool produced = item.cloud  ? !frame->depth.empty() && !frame->rgb.empty()
+                                      : item.jpeg ? !frame->jpeg.empty()
                                       : item.depth ? !frame->depth.empty()
                                                    : !frame->rgb.empty();
                 if (!produced)
                     continue;
+                if (item.cloud && cloud_count_[item.id]++ % item.every != 0)
+                    continue;
                 item.header.apply(message->data(),
                                   Value::map({{"sample", Value::map({{"time", Value::time(products.ros_stamp_ns)}})}}));
-                fillImage(item, *frame, message->data());
+                if (item.cloud)
+                    fillCloud(item, *frame, products.left_info, message->data());
+                else
+                    fillImage(item, *frame, message->data());
             }
             publish_({item.id, message});
         }
@@ -355,6 +448,7 @@ class SessionCameraSink final : public CameraSink {
     std::optional<std::string> payload_asset_;
     std::shared_ptr<const rendering::MeshAsset> payload_mesh_;
     std::set<std::string> demanded_;
+    std::map<std::string, std::uint64_t> cloud_count_; // deliveries are serialized across cameras
     bool always_{false};
 
   public:

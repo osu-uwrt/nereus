@@ -45,6 +45,7 @@ class CameraBridge:
             raise MappingError("camera provider must select unique enabled robot cameras")
         self.streams: dict[str, list[tuple[str, str, Any]]] = {s: [] for s in self.sensors}
         self.quality: dict[str, int | None] = dict.fromkeys(self.sensors)
+        unpublished: set[str] = set()
         for stream in resolved.bridge["streams"]:
             endpoint = stream["native"]
             if not endpoint.startswith("sensor:"):
@@ -55,6 +56,10 @@ class CameraBridge:
             config = self.sensors[sensor]
             if output not in config["parameters"]["outputs"]:
                 raise MappingError(f"camera {sensor!r} has no configured output {output!r}")
+            if output == "point_cloud":
+                # Published by the C++ bridge only; this reference bridge owns the stream but never publishes it.
+                unpublished.add(stream["id"])
+                continue
             if abs(stream["rate_hz"] * config["period_ns"] / 1e9 - 1) > 1e-6:
                 raise MappingError(f"camera stream {stream['id']!r} rate differs from its sensor")
             frame = (config["parameters"]["right_frame"] if output.endswith("right")
@@ -71,7 +76,7 @@ class CameraBridge:
                 self.quality[sensor] = writer.jpeg_quality
             self.streams[sensor].append((stream["id"], output, writer))
         self.stream_ids = frozenset(stream for streams in self.streams.values()
-                                    for stream, _, _ in streams)
+                                    for stream, _, _ in streams) | unpublished
         for sensor, config in self.sensors.items():
             if config.get("latency_ns", 0) != 0:
                 raise MappingError(f"camera {sensor!r}: nonzero delivery latency is not implemented")

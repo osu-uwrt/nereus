@@ -254,7 +254,7 @@ sensors:
     intrinsics_left: {fx: 1863.9341697853888, fy: 1863.9341697853888, cx: 955.8471374511719, cy: 584.7962646484375}
     intrinsics_right: {fx: 1863.9341697853888, fy: 1863.9341697853888, cx: 955.8471374511719, cy: 584.7962646484375}
     distortion_left_plumb_bob: [0.2678975458895328, 0.060526966446929266, 0.0, 0.0, -1.0363393179270073]   # raw calibration metadata only; rectified outputs publish zero D (O5)
-    outputs: [rgb_left, depth_left, camera_info]
+    outputs: [rgb_left, depth_left, camera_info, point_cloud]
     depth:
       min_range_m: 0.15
       max_range_m: 4.0         # ffc_config depth.max_depth and cameras.yaml depth_model.max_range
@@ -284,7 +284,7 @@ sensors:
     intrinsics_left: {fx: 1857.5388723099845, fy: 1857.5388723099845, cx: 974.8830642700195, cy: 604.2220611572266}
     intrinsics_right: {fx: 1857.5388723099845, fy: 1857.5388723099845, cx: 974.8830642700195, cy: 604.2220611572266}
     distortion_left_plumb_bob: [0.23711268288264142, -0.14781371703855056, -0.0006042261836638719, 0.0013987545571711227, 0.0]   # raw calibration metadata only
-    outputs: [rgb_left, depth_left, camera_info]
+    outputs: [rgb_left, depth_left, camera_info, point_cloud]
     depth:
       min_range_m: 0.15
       max_range_m: 4.0         # dfc_config has no max_depth; camera_faker shared depth_model max_range

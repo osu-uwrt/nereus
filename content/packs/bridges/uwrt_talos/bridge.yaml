@@ -376,6 +376,17 @@ streams:
   qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
   image: {encoding: 32FC1}               # metres, NaN invalid (O5 resolved)
   fields: {header.stamp: {from: sample.time}}
+- id: ffc_point_cloud
+  direction: publish
+  topic: ffc/zed_node/point_cloud/cloud_registered
+  message_type: sensor_msgs/msg/PointCloud2
+  native: 'sensor:ffc.point_cloud'
+  frame_id: talos/ffc_left_camera_optical_frame
+  rate_hz: 5                             # every 3rd 15 Hz capture (original camera_faker point_cloud.rate 5)
+  qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
+  # Original point_cloud.stride 8: organized PointXYZRGB grid (point_step 32), NaN where depth is invalid.
+  point_cloud: {stride: 8}
+  fields: {header.stamp: {from: sample.time}}
 - id: dfc_rgb_compressed
   direction: publish
   topic: dfc/zed_node/rgb/image_rect_color/compressed
@@ -415,6 +426,17 @@ streams:
   fields: {header.stamp: {from: sample.time}}
 
 # ---------------- diagnostics (not consumed by the stack) ----------------
+- id: dfc_point_cloud
+  direction: publish
+  topic: dfc/zed_node/point_cloud/cloud_registered
+  message_type: sensor_msgs/msg/PointCloud2
+  native: 'sensor:dfc.point_cloud'
+  frame_id: talos/dfc_left_camera_optical_frame
+  rate_hz: 5                             # every 3rd 15 Hz capture (original camera_faker point_cloud.rate 5)
+  qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
+  # Original point_cloud.stride 8: organized PointXYZRGB grid (point_step 32), NaN where depth is invalid.
+  point_cloud: {stride: 8}
+  fields: {header.stamp: {from: sample.time}}
 - id: ground_truth
   direction: publish
   topic: simulator/ground_truth

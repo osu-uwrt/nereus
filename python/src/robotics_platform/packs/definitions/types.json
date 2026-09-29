@@ -565,7 +565,8 @@
               "depth_left",
               "camera_info",
               "rgb_right",
-              "camera_info_right"
+              "camera_info_right",
+              "point_cloud"
             ]
           },
           "minItems": 1,

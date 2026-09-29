@@ -48,6 +48,13 @@ detections:
   # frame's detections show (RViz behaviour). false: ignore DELETEALL; observations live out their lifetime.
   honor_delete_all: true
 
+# PointCloud2 layers (Vision panel; off until enabled, subscribed only while on). Topics are relative to the
+# robot namespace; the simulator bridge publishes the camera clouds on the ZED driver's topics.
+point_clouds:
+  - {id: yolo, title: YOLO detections, topic: yolo_orientation/point_cloud, size: 4}
+  - {id: ffc, title: Front camera, topic: ffc/zed_node/point_cloud/cloud_registered, size: 2}
+  - {id: dfc, title: Down camera, topic: dfc/zed_node/point_cloud/cloud_registered, size: 2}
+
 # Visual-state streams, relative to the bridge namespace. Missing publishers are simply absent.
 # (thruster force and LED topics come from the two documents above.)
 topics:

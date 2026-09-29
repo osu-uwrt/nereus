@@ -5,6 +5,7 @@
 #include "detection_pose.hpp"
 #include "display_clock.hpp"
 #include "jpeg_decode.hpp"
+#include "point_cloud_convert.hpp"
 #include "scenario.hpp"
 #include "status_lights.hpp"
 #include "tf_tree.hpp"
@@ -14,6 +15,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/color_rgba.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
@@ -70,6 +72,21 @@ struct CameraFeed {
     bool connected() const {
         return frames > 0 && std::chrono::duration<double>(Clock::now() - lastFrame).count() < 2.0;
     }
+};
+// One configured PointCloud2 topic (host config `point_clouds:`). Subscribed only while enabled; like RViz's
+// default (decay 0) only the newest message is shown, placed once in the fixed frame and then left in place.
+struct PointCloudLayer {
+    std::string id, title, topic;
+    float size = 3;
+    bool enabled = false;
+    Eigen::Vector3f fallback{.9f, .9f, .9f}; // colour for clouds without an rgb field
+    std::shared_ptr<const rendering::PointData> data;
+    std::string frame;
+    builtin_interfaces::msg::Time stamp;
+    Clock::time_point received{};
+    bool placed = false, approximate = false;
+    glm::mat4 world{1};
+    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription;
 };
 struct TfSnapshot {
     std::map<std::string, glm::mat4> frames; // enabled, resolved frames in the fixed frame
@@ -129,6 +146,11 @@ class RosSide {
         return usingTruth_ ? scenario_->truthBaseFrame : scenario_->estimateBaseFrame;
     }
     void captureDetections(bool show);
+    // Point clouds: (un)subscribe per layer and place pending messages (truth camera pose when the simulator
+    // truth is the pose source, else TF at the stamp, latest after 0.5 s). Called once per frame.
+    void capturePointClouds();
+    std::vector<rendering::PointSet> pointSets() const;
+    std::vector<PointCloudLayer> pointClouds;
     // Which placement(s) of each detection to draw (requested); detectionShow() is what is effective now.
     void setDetectionMode(DetectionMode mode) {
         detectionMode_ = mode;

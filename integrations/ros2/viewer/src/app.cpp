@@ -217,6 +217,7 @@ class App {
     void toolbarPoolViewer();
     void toolbarView();
     void toolbarFocus();
+    void drawPointCloudSettings();
     void toolbarFollow();
     void toolbarLabels();
     void toolbarTf();
@@ -704,6 +705,8 @@ void App::step(double t) {
     } else
         tf_ = {};
     ros_->captureDetections(detections_ && !demoMode_);
+    if (!demoMode_)
+        ros_->capturePointClouds();
     ros_->captureMpc(showMpc_ && !demoMode_);
     thrusters_.advance(clockSeconds());
     (void)t;
@@ -1390,6 +1393,33 @@ void App::drawDetectionSettings(bool includeEnable) {
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("The detector clears its markers every frame; keeping them lets each observation live out\n"
                           "its lifetime.");
+    drawPointCloudSettings();
+}
+
+// Point cloud layers from the host config: one toggle each (subscribes only while on) and a point size.
+void App::drawPointCloudSettings() {
+    if (ros_->pointClouds.empty() || demoMode_)
+        return;
+    ImGui::SeparatorText("Point clouds");
+    for (auto &layer : ros_->pointClouds) {
+        ImGui::PushID(layer.id.c_str());
+        ImGui::Checkbox(layer.title.c_str(), &layer.enabled);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s\nNewest message only, placed once in the fixed frame%s.", layer.topic.c_str(),
+                              ros_->truthActive() ? " (camera clouds at the simulator truth pose)" : "");
+        if (layer.enabled) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(80);
+            ImGui::SliderFloat("##size", &layer.size, 1, 8, "%.0f px");
+            ImGui::SameLine();
+            const bool stale = layer.data && std::chrono::duration<double>(Clock::now() - layer.received).count() > 2;
+            ImGui::TextDisabled("%s", !layer.data ? "waiting"
+                                      : !layer.placed ? "no transform"
+                                      : stale ? "stale"
+                                              : layer.approximate ? "approx" : "");
+        }
+        ImGui::PopID();
+    }
 }
 
 // Sidebar form: full settings plus the legend. Toolbar form (below): the checkbox and a dropdown of the rest.
@@ -1599,6 +1629,8 @@ void App::drawInterface(double time, float dt) {
         scene = model_->build(buildState());
     }
     renderLocalCards(time, scene);
+    if (!demoMode_)
+        scene.points = ros_->pointSets(); // main view only (cards render without points)
     const rendering::View renderView{toEigen(view.view), toEigen(view.projection), Eigen::Vector3f(view.eye.x, view.eye.y, view.eye.z)};
     auto appearance = observer_.apply(look_.appearance);
     // Original viewer: a 3D focus disc at the orbit target while orbiting/zooming without Follow.
@@ -1925,7 +1957,12 @@ int App::loop() {
                           << " props=" << ros_->props.size() << " projectiles=" << ros_->projectiles.size()
                           << " magnet_lights=" << ros_->magnetLights.size() << " tf_frames=" << tf_.frames.size()
                           << " camera_frames=" << (ros_->feeds.empty() ? 0 : ros_->feeds[0].frames) << " body=("
-                          << body_[3].x << "," << body_[3].y << "," << body_[3].z << ")\n";
+                          << body_[3].x << "," << body_[3].y << "," << body_[3].z << ")";
+                for (const auto &layer : ros_->pointClouds)
+                    if (layer.enabled)
+                        std::cout << " cloud[" << layer.id << "]=" << (layer.data ? layer.data->xyzrgb.size() / 6 : 0)
+                                  << (layer.placed ? " placed" : " unplaced");
+                std::cout << "\n";
             saveCameraImages(opt_.screenshot);
             break;
         }

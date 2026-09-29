@@ -483,7 +483,66 @@ bool affine(const Eigen::Matrix4f &m) {
 struct Renderer::Resources {
     // Every new owned GL object must also be zeroed by abandon() after context loss.
     GLuint sceneProgram = 0, waterProgram = 0, shadowProgram = 0, postProgram = 0, bloomProgram = 0,
-           focusProgram = 0, quad = 0;
+           focusProgram = 0, pointsProgram = 0, quad = 0;
+    struct PointBuffer {
+        std::shared_ptr<const PointData> source;
+        GLuint vao = 0, vbo = 0;
+        GLsizei count = 0;
+        bool used = false;
+    };
+    std::map<const PointData *, PointBuffer> pointBuffers;
+    struct PointDraw {
+        GLuint vao;
+        GLsizei count;
+        glm::mat4 model;
+        float size;
+    };
+    std::vector<PointDraw> pointDraws;
+    void releasePoints(PointBuffer &buffer) {
+        if (buffer.vbo)
+            glDeleteBuffers(1, &buffer.vbo);
+        if (buffer.vao)
+            glDeleteVertexArrays(1, &buffer.vao);
+        buffer.vao = buffer.vbo = 0;
+    }
+    void points(const std::vector<PointSet> &sets) {
+        for (auto &entry : pointBuffers)
+            entry.second.used = false;
+        pointDraws.clear();
+        for (const auto &set : sets) {
+            if (!set.data || set.data->xyzrgb.empty())
+                continue;
+            if (set.data->xyzrgb.size() % 6 || set.data->xyzrgb.size() > 6 * 4000000 || !affine(set.transform) ||
+                !std::isfinite(set.size) || set.size <= 0 || set.size > 64)
+                throw std::invalid_argument("invalid point set");
+            auto &buffer = pointBuffers[set.data.get()];
+            if (!buffer.vao) {
+                buffer.source = set.data;
+                buffer.count = static_cast<GLsizei>(set.data->xyzrgb.size() / 6);
+                glGenVertexArrays(1, &buffer.vao);
+                glGenBuffers(1, &buffer.vbo);
+                glBindVertexArray(buffer.vao);
+                glBindBuffer(GL_ARRAY_BUFFER, buffer.vbo);
+                glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(set.data->xyzrgb.size() * sizeof(float)),
+                             set.data->xyzrgb.data(), GL_STATIC_DRAW);
+                glEnableVertexAttribArray(0);
+                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), nullptr);
+                glEnableVertexAttribArray(1);
+                glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
+                                      reinterpret_cast<void *>(3 * sizeof(float)));
+                glBindVertexArray(0);
+            }
+            buffer.used = true;
+            pointDraws.push_back({buffer.vao, buffer.count, matrix(set.transform), set.size});
+        }
+        for (auto it = pointBuffers.begin(); it != pointBuffers.end();)
+            if (!it->second.used) {
+                releasePoints(it->second);
+                it = pointBuffers.erase(it);
+            } else {
+                ++it;
+            }
+    }
     std::shared_ptr<Mesh> focusDisc;
     Frame f, preview; // `preview` is swapped into `f` for Appearance::preview draws
     bool shadow_valid = false; // the shadow map holds a real (shadows-on) pass
@@ -518,14 +577,20 @@ struct Renderer::Resources {
         return uploaded;
     }
     ~Resources() {
-        for (auto id : {sceneProgram, waterProgram, shadowProgram, postProgram, bloomProgram, focusProgram})
+        for (auto &entry : pointBuffers)
+            releasePoints(entry.second);
+        for (auto id : {sceneProgram, waterProgram, shadowProgram, postProgram, bloomProgram, focusProgram, pointsProgram})
             if (id)
                 glDeleteProgram(id);
         if (quad)
             glDeleteVertexArrays(1, &quad);
     }
     void abandon() noexcept {
-        sceneProgram = waterProgram = shadowProgram = postProgram = bloomProgram = focusProgram = quad = 0;
+        sceneProgram = waterProgram = shadowProgram = postProgram = bloomProgram = focusProgram = pointsProgram = quad = 0;
+        for (auto &entry : pointBuffers)
+            entry.second.vao = entry.second.vbo = 0;
+        pointBuffers.clear();
+        pointDraws.clear();
         for (auto *target : {&f.opaque, &f.composite, &f.final, &f.bloom[0], &f.bloom[1], &preview.opaque,
                              &preview.composite, &preview.final, &preview.bloom[0], &preview.bloom[1],
                              &shadow, &reflection})
@@ -558,6 +623,7 @@ struct Renderer::Resources {
         postProgram = program(root, "post");
         bloomProgram = program(root, "bloom");
         focusProgram = program(root, "focus");
+        pointsProgram = program(root, "points");
         focusDisc = std::make_shared<Mesh>(focusDiscMesh(), TextureLoader{});
         glGenVertexArrays(1, &quad);
         shadow.resize(4096, 4096, false, true);
@@ -798,6 +864,24 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
         glDisable(GL_BLEND);
         glDisable(GL_CULL_FACE);
     }
+    if (!pointDraws.empty()) {
+        // Point clouds: unlit, depth-tested against the scene and water, observer views only.
+        glUseProgram(pointsProgram);
+        uniform(pointsProgram, "view", camera.view);
+        uniform(pointsProgram, "projection", camera.projection);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_PROGRAM_POINT_SIZE);
+        glDisable(GL_BLEND);
+        glDisable(GL_CULL_FACE);
+        for (const auto &draw : pointDraws) {
+            uniform(pointsProgram, "model", draw.model);
+            glUniform1f(glGetUniformLocation(pointsProgram, "pointSize"), draw.size);
+            glBindVertexArray(draw.vao);
+            glDrawArrays(GL_POINTS, 0, draw.count);
+        }
+        glBindVertexArray(0);
+        glDisable(GL_PROGRAM_POINT_SIZE);
+    }
     // Filter the HDR bright pass before tone mapping. A continuous low-resolution
     // blur avoids the replicated bars produced by sparse full-resolution rings.
     glDisable(GL_DEPTH_TEST);
@@ -920,6 +1004,10 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
     r.hasWater = scene.water.has_value();
     for (const auto &item : scene.instances)
         r.objects.push_back(r.instance(item));
+    if (a.preview) // previews draw no points and keep the observer's uploaded point buffers
+        r.pointDraws.clear();
+    else
+        r.points(scene.points);
     r.center = vector(scene.lighting_center);
     r.poolToMap = glm::mat4(1);
     r.mapToPool = glm::mat4(1);

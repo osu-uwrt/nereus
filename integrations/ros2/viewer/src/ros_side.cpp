@@ -1,6 +1,7 @@
 #include "ros_side.hpp"
 #include "jpeg_decode.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 #ifdef RP_VIEWER_UWRT
@@ -166,6 +167,18 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
         feeds.back().camera = &camera;
     }
     mpcTopic = scenario.absolute(lookup(config, {"topics", "mpc_path"}).as<std::string>("controller/mpc/predicted_path"));
+    pointClouds.clear();
+    for (const auto &entry : config["point_clouds"]) {
+        PointCloudLayer layer;
+        layer.id = entry["id"].as<std::string>();
+        layer.title = entry["title"].as<std::string>(layer.id);
+        layer.topic = scenario.absolute(entry["topic"].as<std::string>());
+        layer.size = std::clamp(entry["size"].as<float>(3), 1.f, 16.f);
+        layer.enabled = entry["enabled"].as<bool>(false);
+        if (entry["color"] && entry["color"].IsSequence() && entry["color"].size() == 3)
+            layer.fallback = {entry["color"][0].as<float>(), entry["color"][1].as<float>(), entry["color"][2].as<float>()};
+        pointClouds.push_back(std::move(layer));
+    }
     detectionTopic =
         scenario.absolute(lookup(config, {"topics", "detections"}).as<std::string>("yolo_orientation/visualization_marker_array"));
     if (!live)
@@ -528,6 +541,78 @@ void RosSide::captureDetections(bool show) {
                                         entry.estimate.approximate() ? PlacedDetection::Kind::EstimateApprox
                                                                      : PlacedDetection::Kind::Estimate});
     }
+}
+
+void RosSide::capturePointClouds() {
+    const auto now = Clock::now();
+    for (std::size_t index = 0; index < pointClouds.size(); ++index) {
+        auto &layer = pointClouds[index];
+        const bool wanted = layer.enabled && live_ && scenario_;
+        if (wanted && !layer.subscription) {
+            layer.subscription = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
+                layer.topic, rclcpp::QoS(1).best_effort(), [this, index](const sensor_msgs::msg::PointCloud2 &msg) {
+                    auto &target = pointClouds[index];
+                    auto data = convertPointCloud(msg, target.fallback);
+                    if (!data)
+                        return;
+                    target.data = std::move(data);
+                    target.frame = msg.header.frame_id;
+                    target.stamp = msg.header.stamp;
+                    target.received = Clock::now();
+                    target.placed = target.approximate = false;
+                });
+        } else if (!wanted && layer.subscription) {
+            layer.subscription.reset();
+            layer.data.reset();
+        }
+        if (!layer.data || layer.placed || !scenario_)
+            continue;
+        const rclcpp::Time stamp(layer.stamp);
+        if (truthActive()) {
+            // Simulator: place camera clouds from the truth pose at capture, like truth detections.
+            const glm::mat4 *baseToCamera = nullptr;
+            for (const auto &c : scenario_->cameras) {
+                if (layer.frame == c.rosOpticalFrame)
+                    baseToCamera = &c.opticalInBase;
+                else if (layer.frame == scenario_->rosFrame(c.mountFrame))
+                    baseToCamera = &c.mountInBase;
+                if (baseToCamera)
+                    break;
+            }
+            if (baseToCamera) {
+                layer.placed = truthAcquisitionPose(*buffer_, scenario_->mapFrame, scenario_->truthBaseFrame, stamp,
+                                                    *baseToCamera, layer.world);
+                continue;
+            }
+        }
+        const auto lookup = [&](const rclcpp::Time &at) {
+            try {
+                layer.world = matrixOf(buffer_->lookupTransform(scenario_->mapFrame, layer.frame, at).transform);
+                return true;
+            } catch (const tf2::TransformException &) {
+                return false;
+            }
+        };
+        if (lookup(stamp))
+            layer.placed = true;
+        else if (std::chrono::duration<double>(now - layer.received).count() > .5 && lookup(rclcpp::Time(0, 0, stamp.get_clock_type())))
+            layer.placed = layer.approximate = true;
+    }
+}
+
+std::vector<rendering::PointSet> RosSide::pointSets() const {
+    std::vector<rendering::PointSet> sets;
+    for (const auto &layer : pointClouds)
+        if (layer.enabled && layer.data && layer.placed) {
+            rendering::PointSet set;
+            set.data = layer.data;
+            for (int c = 0; c < 4; ++c)
+                for (int r = 0; r < 4; ++r)
+                    set.transform(r, c) = layer.world[c][r];
+            set.size = layer.size;
+            sets.push_back(std::move(set));
+        }
+    return sets;
 }
 
 // The controller steers its estimate, so the true vehicle follows the same motion relative to itself:

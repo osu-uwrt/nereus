@@ -572,6 +572,17 @@
         "reply_stream": {
           "$ref": "common.schema.json#/$defs/name"
         },
+        "point_cloud": {
+          "type": "object",
+          "description": "Camera point_cloud output: coloured cloud from the left depth and RGB of one capture, every stride-th pixel (organized grid, NaN where depth is invalid).",
+          "properties": {
+            "stride": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
         "image": {
           "oneOf": [
             {
