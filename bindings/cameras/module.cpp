@@ -172,7 +172,18 @@ PYBIND11_MODULE(_camera, m) {
                 if (part.material.diffuse_texture)
                     paths.insert(*part.material.diffuse_texture);
             return std::vector<std::filesystem::path>(paths.begin(), paths.end());
-        }, "Sorted external texture files the renderer opens at first draw.");
+        }, "Sorted external texture files the renderer opens at first draw.")
+        .def("with_texture", [](const r::MeshAsset &mesh, const std::filesystem::path &texture) {
+            auto copy = std::make_shared<r::MeshAsset>(mesh);
+            bool textured = false;
+            for (const auto &part : copy->submeshes)
+                textured = textured || part.material.diffuse_texture.has_value();
+            for (auto &part : copy->submeshes)
+                if (!textured || part.material.diffuse_texture)
+                    part.material.diffuse_texture = texture;
+            return copy;
+        }, py::arg("texture"),
+           "Copy whose textured submeshes (every submesh when none is textured) use this PNG.");
     m.def("load_mesh", [](const std::filesystem::path &path) {
         return std::make_shared<r::MeshAsset>(r::loadMesh(path));
     }, py::call_guard<py::gil_scoped_release>());

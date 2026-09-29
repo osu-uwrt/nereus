@@ -159,7 +159,10 @@
         "RP_BUILD_ROS_VIEWER": "ON",
         "RP_BUILD_MESH_ASSETS": "ON",
         "BUILD_TESTING": "ON",
+        "RP_BUILD_SIMULATION": "ON",
         "RP_BUILD_SESSION": "ON",
+        "RP_BUILD_PACK_SCENE": "ON",
+        "RP_BUILD_SESSION_CAMERAS": "ON",
         "RP_BUILD_ROS_BRIDGE": "ON",
         "RP_BUILD_CAMERAS": "ON",
         "RP_BUILD_OFFSCREEN_RENDERER": "ON"
