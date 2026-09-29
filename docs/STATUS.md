@@ -34,11 +34,23 @@ linked the camera and renderer libraries without simulation. All 79 pack-tooling
 tests, pack validation and asset hash checks pass. These checks do not establish
 the real-perception gate.
 Opus implemented the renderer change and delegated asset/calibration imports to
-Sonnet. Codex integrated and tested them. Opus's independent camera-library review
-was interrupted by Claude Code's session usage limit (reported reset: 7 a.m.
-America/New_York, September 29). Resume that review before accepting the increment;
-no joint approval or perception result is claimed. UI and visual comparison stay
-frozen. Remaining camera work must keep rendering off the 500 Hz physics loop.
+Sonnet. Codex integrated and tested them. After the usage-limit reset, Opus completed
+the independent camera-library review and approved it without must-fix findings.
+The old optical-mount convention is retained; it does not add calibration R1 or
+the physical left-eye offset. There is no old right-eye image to compare against.
+No perception result is claimed. UI and visual comparison stay frozen. Remaining
+camera work must keep rendering off the 500 Hz physics loop.
+
+Robot packs now declare visual placements using the same shape as task visuals.
+Talos body/rotors use the CAD frame; its initially closed claw uses the original
+task claw pose. Optional stereo right-eye outputs require a matching optical frame
+and baseline. Pool packs now declare water tint and lighting. Per user clarification,
+the reference is Talos bringup startup, not the viewer's Pool preset: water distance
+scale 1.88, exponent 0.40, scattering 0.458, absorption [0.648, 0.145, 0.025], and
+outdoor lighting with ambient 0.8. Launch and source hashes record that choice.
+All 79 existing pack tests and 10 new pack-field cases pass; invalid references,
+camera limits and appearance values are rejected, and saves remain byte-exact.
+These fields are data foundations; camera scene construction remains to be wired.
 
 Step 1 passed joint review. `proposals/step1/` contains nine proposed JSON Schemas
 and eight YAML documents: Talos robot, 2026 pool, gate/torpedo task definitions,

@@ -131,6 +131,33 @@ def robot_frames(robot: dict[str, Any]) -> set[str]:
     return {frames["root"], *(item["child"] for item in frames["transforms"])}
 
 
+_RIGHT_OUTPUTS = frozenset({"rgb_right", "camera_info_right"})
+
+
+def _stereo(item: dict[str, Any], parent_of: dict[str, str], transforms: dict[str, Any],
+            where: str, problems: list[str]) -> None:
+    """Depth range order and a rectified right eye one baseline along the left optical +X."""
+    parameters = item["parameters"]
+    depth = parameters["depth"]
+    if depth["min_range_m"] >= depth["max_range_m"]:
+        problems.append(f"{where}/parameters/depth: min_range_m must be < max_range_m")
+    right = parameters.get("right_frame")
+    if right is None:
+        if _RIGHT_OUTPUTS.intersection(parameters["outputs"]):
+            problems.append(f"{where}/parameters: right-eye outputs require right_frame")
+        return
+    if parent_of.get(right) != item["frame"]:
+        problems.append(f"{where}/parameters/right_frame: '{right}' must be a child of "
+                        f"sensor frame '{item['frame']}'")
+        return
+    transform = transforms[right]
+    offset = np.subtract(transform["position_m"], [parameters["baseline_m"], 0, 0])
+    rotation = np.abs(transform["orientation_wxyz"]) - [1, 0, 0, 0]
+    if np.abs(offset).max() > DIRECTION_TOLERANCE or np.abs(rotation).max() > QUATERNION_TOLERANCE:
+        problems.append(f"{where}/parameters/right_frame: '{right}' must be at [baseline_m, 0, 0] "
+                        "with identity orientation")
+
+
 def robot(data: dict[str, Any]) -> list[str]:
     problems: list[str] = []
     frames = data["frames"]
@@ -140,6 +167,7 @@ def robot(data: dict[str, Any]) -> list[str]:
     if root in children:
         problems.append(f"/frames: root '{root}' cannot also be a child")
     parent_of = {item["child"]: item["parent"] for item in frames["transforms"]}
+    transforms = {item["child"]: item for item in frames["transforms"]}
     names = robot_frames(data)
     for child, parent in parent_of.items():
         if parent not in names:
@@ -187,11 +215,14 @@ def robot(data: dict[str, Any]) -> list[str]:
         for index, axis in enumerate(parameters.get("axes", [])):
             if math.hypot(*axis) == 0:
                 problems.append(f"{where}/parameters/axes/{index}: zero axis")
-        depth = parameters.get("depth")
-        if item["type"] == "stereo_camera" and depth["min_range_m"] >= depth["max_range_m"]:
-            problems.append(f"{where}/parameters/depth: min_range_m must be < max_range_m")
+        if item["type"] == "stereo_camera":
+            _stereo(item, parent_of, transforms, where, problems)
 
     asset_ids = {item["id"] for item in data.get("assets", [])}
+    for index, visual in enumerate(data.get("visuals", [])):
+        if visual["asset"] not in asset_ids:
+            problems.append(f"/visuals/{index}/asset: unknown asset '{visual['asset']}'")
+        frame(visual["frame"], f"/visuals/{index}/frame")
     mechanisms = {item["id"]: item for item in data["mechanisms"]}
     duplicates((item["id"] for item in data["mechanisms"]), "mechanism", problems)
     for identifier, item in mechanisms.items():

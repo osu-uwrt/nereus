@@ -396,24 +396,45 @@
         "required_from_step": {
           "$ref": "common.schema.json#/$defs/step"
         },
+        "tint_rgb": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
         "distance_scale": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "minimum": 0,
+          "maximum": 5
         },
         "distance_power": {
           "type": "number",
-          "minimum": 0
+          "minimum": 0.25,
+          "maximum": 3
         },
         "clear_distance_m": {
           "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 20
         },
         "scattering": {
           "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 5
         },
         "absorption_per_m_rgb": {
-          "$ref": "common.schema.json#/$defs/nonnegative_vector3"
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "minItems": 3,
+          "maxItems": 3
         }
       },
       "required": [
@@ -425,7 +446,52 @@
         "absorption_per_m_rgb"
       ],
       "additionalProperties": false,
-      "description": "Sensor-affecting water appearance for offscreen cameras. Distances in m, absorption per m in RGB order; dimensionless otherwise."
+      "description": "Sensor-affecting water appearance for offscreen cameras, with the original renderer's validated ranges. tint_rgb is linear RGB in 0..1 (omitted: the original default [0.025, 0.22, 0.29]); distances in m; scattering and absorption per m (RGB order); other values dimensionless."
+    },
+    "lighting": {
+      "type": "object",
+      "properties": {
+        "required_from_step": {
+          "$ref": "common.schema.json#/$defs/step"
+        },
+        "profile": {
+          "enum": [
+            "indoor",
+            "outdoor"
+          ]
+        },
+        "direct_light": {
+          "type": "number",
+          "minimum": 0
+        },
+        "ambient_light": {
+          "type": "number",
+          "minimum": 0
+        },
+        "sun_azimuth_deg": {
+          "type": "number"
+        },
+        "sun_elevation_deg": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 90
+        },
+        "glare": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "required_from_step",
+        "profile",
+        "direct_light",
+        "ambient_light",
+        "sun_azimuth_deg",
+        "sun_elevation_deg",
+        "glare"
+      ],
+      "additionalProperties": false,
+      "description": "Sensor-affecting scene lighting for offscreen cameras. direct_light, ambient_light and glare are dimensionless multipliers; sun angles in degrees. The indoor profile uses a fixed overhead light, so the original renderer ignores sun angles and glare for it."
     },
     "pinhole_intrinsics": {
       "type": "object",
@@ -463,11 +529,16 @@
           "type": "number",
           "exclusiveMinimum": 0
         },
+        "right_frame": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Rectified right-eye frame: a child of the sensor frame at [baseline_m, 0, 0] with identity orientation (semantic check). Required by right-eye outputs."
+        },
         "resolution_px": {
           "type": "array",
           "items": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 4096
           },
           "minItems": 2,
           "maxItems": 2
@@ -492,7 +563,9 @@
             "enum": [
               "rgb_left",
               "depth_left",
-              "camera_info"
+              "camera_info",
+              "rgb_right",
+              "camera_info_right"
             ]
           },
           "minItems": 1,
@@ -503,11 +576,12 @@
           "properties": {
             "min_range_m": {
               "type": "number",
-              "minimum": 0
+              "exclusiveMinimum": 0
             },
             "max_range_m": {
               "type": "number",
-              "exclusiveMinimum": 0
+              "exclusiveMinimum": 0,
+              "maximum": 100
             },
             "noise": {
               "type": "object",
@@ -522,7 +596,8 @@
                 },
                 "range_exponent": {
                   "type": "number",
-                  "minimum": 0
+                  "minimum": 0,
+                  "maximum": 4
                 },
                 "bias_m": {
                   "type": "number"
@@ -554,7 +629,8 @@
                 },
                 "patch_size_px": {
                   "type": "integer",
-                  "minimum": 1
+                  "minimum": 1,
+                  "maximum": 64
                 }
               },
               "required": [
@@ -592,7 +668,7 @@
         "depth"
       ],
       "additionalProperties": false,
-      "description": "Offscreen-rendered stereo camera. Baseline in m along optical +X, resolution [width, height] px, plumb-bob distortion [k1, k2, p1, p2, k3] for the left camera.",
+      "description": "Offscreen-rendered rectified stereo camera. Baseline in m along optical +X, resolution [width, height] px (at most 4096 each), plumb-bob distortion [k1, k2, p1, p2, k3] for the left camera (metadata; rectified outputs publish zero distortion). camera_info describes the left eye; right-eye outputs require right_frame.",
       "x-category": "sensor"
     },
     "projectile": {
@@ -888,6 +964,31 @@
       "description": "Magnet tip position in m in the mechanism frame; actuated false means passive (proximity is judged by the task pack).",
       "x-category": "mechanism"
     },
+    "visual": {
+      "type": "object",
+      "properties": {
+        "asset": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "frame": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "position_m": {
+          "$ref": "common.schema.json#/$defs/vector3"
+        },
+        "orientation_wxyz": {
+          "$ref": "common.schema.json#/$defs/quaternion"
+        }
+      },
+      "required": [
+        "asset",
+        "frame",
+        "position_m",
+        "orientation_wxyz"
+      ],
+      "additionalProperties": false,
+      "description": "Rigid mesh placement: the asset id is drawn in its authored coordinates, offset by position_m (m) and orientation_wxyz in the named frame of the owning pack."
+    },
     "static_body": {
       "type": "object",
       "properties": {
@@ -900,28 +1001,7 @@
         "visuals": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "asset": {
-                "$ref": "common.schema.json#/$defs/name"
-              },
-              "frame": {
-                "$ref": "common.schema.json#/$defs/name"
-              },
-              "position_m": {
-                "$ref": "common.schema.json#/$defs/vector3"
-              },
-              "orientation_wxyz": {
-                "$ref": "common.schema.json#/$defs/quaternion"
-              }
-            },
-            "required": [
-              "asset",
-              "frame",
-              "position_m",
-              "orientation_wxyz"
-            ],
-            "additionalProperties": false
+            "$ref": "#/$defs/visual"
           }
         },
         "cutouts": {

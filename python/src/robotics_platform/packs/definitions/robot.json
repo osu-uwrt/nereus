@@ -42,6 +42,13 @@
     "frames": {
       "$ref": "common.schema.json#/$defs/frames"
     },
+    "visuals": {
+      "type": "array",
+      "items": {
+        "$ref": "types.schema.json#/$defs/visual"
+      },
+      "description": "Rigid robot meshes for offscreen cameras, in robot frames, at their initial (reset) configuration."
+    },
     "collision_boxes": {
       "type": "array",
       "items": {

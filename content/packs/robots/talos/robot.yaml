@@ -1,4 +1,4 @@
-# Robot pack for native navigation; rendering assets remain explicitly unresolved.
+# Robot pack for native navigation and offscreen cameras; mechanism assets remain unresolved (step 4).
 # Values are copied from the verified native assembly content/robots/talos_navigation.yaml
 # (sha256 14ce5067...d746) unless a field says otherwise. Units: SI; frames: ROS ENU/FLU.
 # Working copy for the step-2 navigation bridge; the approved full contract is proposals/step1/packs.
@@ -33,15 +33,7 @@ provenance:
 # Pack-relative assets; unresolved mechanism assets remain listed for step 4.
 # Milestone numbers describe the plan and never select runtime behavior.
 assets:
-# Visual assets copied byte-for-byte (cp); sha256 verified by the loader. No pose fields: the robot schema has no
-# visual placement section. Placement evidence for the consumer:
-#  - Body/rotors: all GLB vertices, pivots and axes are in the CAD/model origin (frame `cad` below);
-#    content/visuals/talos/provenance/thrusters.yaml (rotors[].pivot/axis/direction/mesh, metres) and provenance/README.md.
-#  - Claw: camera_faker/src/pool_viewer/renderer.cpp:488-501 loads gripper.glb (left pad, clawAsset), gripper_right.glb,
-#    assembly_static.glb, assembly_left.glb, assembly_right.glb, each at identity (glm::mat4(1)) so vertices are
-#    already in the claw mount frame; renderer.cpp:652-663 clawPose(mount, left, right) draws them as
-#    mount * local * identity, local = translate(0, +left, 0) for names containing "left" and translate(0, -right, 0)
-#    for "right" (jaw travel along the claw-mount Y axis); static assembly has no local offset.
+# Visual assets copied byte-for-byte (cp); sha256 verified by the loader. Placement is the `visuals` list below.
 - {id: body_mesh, path: assets/visual/Talos3_body.glb, required_from_step: 3, status: present, sha256: 5827668235d30dcde556d2cd1cf2c3352bf71adaeeaa1bc9840925d9eaa2460d, source: "robotics_platform content/visuals/talos/Talos3_body.glb (orig camera_faker/models/talos3/Talos3_body.glb @07647eeb)"}
 - {id: rotor_VUS, path: assets/visual/rotors/VUS.glb, required_from_step: 3, status: present, sha256: bcefa0cd37a3c3166cee03e33dcf3fa55342f239aba5b5a28e0c82fb64631f4d, source: "robotics_platform content/visuals/talos/rotors/VUS.glb"}
 - {id: rotor_VUP, path: assets/visual/rotors/VUP.glb, required_from_step: 3, status: present, sha256: 7b34f2f1be6b251fc94b00b46de65bb5071014b4eb355cc0ff6b32d3b0c76be3, source: "robotics_platform content/visuals/talos/rotors/VUP.glb"}
@@ -130,6 +122,31 @@ frames:
   - {parent: ffc_left_optical, child: ffc_right_optical, position_m: [0.04975591649077412, 0, 0], orientation_wxyz: [1, 0, 0, 0]}   # = rectified baseline_m (ffc)
   - {parent: dfc_mount, child: dfc_left_optical, position_m: [0, 0, 0], orientation_wxyz: [0.5, -0.5, 0.5, -0.5]}
   - {parent: dfc_left_optical, child: dfc_right_optical, position_m: [0.05030758651145167, 0, 0], orientation_wxyz: [1, 0, 0, 0]}   # = rectified baseline_m (dfc)
+
+# Offscreen-camera meshes at their initial (reset) configuration; no animation state here.
+#  - Body and rotors: camera_faker main.cpp:661-663 draws robot objects at body * modelOffset * robotMount, where
+#    modelOffset = baseToOrigin (camera.hpp:33-35, the `cad` frame) and a rotor's robotMount is its spin about its
+#    pivot (thruster_visuals.hpp:15-19), identity at angle 0. Vertices are authored in the CAD origin.
+#  - Claw: renderer.cpp:488-501 loads the five claw meshes at identity; renderer.cpp:652-663 clawPose draws
+#    mount * translate(0, +left | -right, 0), with mount = task claw.pose when present (main.cpp:493-494;
+#    talos_tasks.yaml claw.pose = frame claw_pinch). Jaw joints start at 0 (main.cpp:496, 869) and 0 is closed:
+#    claw_world.py q = 0 at reset, gap = min_gap (_reset_bodies, command: target 0 closes). So every claw mesh
+#    is at identity in claw_pinch. Carriers/pads opening travel belongs to the mechanism runtime.
+visuals:
+- {asset: body_mesh, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_VUS, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_VUP, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_HUS, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_HUP, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_HLS, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_HLP, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_VLS, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_VLP, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: claw_static_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: claw_left_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: claw_right_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: claw_left_pad_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: claw_right_pad_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
 
 # Effective original physics proxies (talos.urdf box origins are COM-relative).
 collision_boxes:
@@ -231,6 +248,7 @@ sensors:
     # Raw K_RIGHT = fx 1698.3287694267367, fy 1699.664166238939, cx 944.3162080348961, cy 590.0641457266676
     # Raw D_RIGHT = [0.2759779552328478, -0.008533485244699875, 0.0, 0.0, -0.868687260703704]
     baseline_m: 0.04975591649077412
+    right_frame: ffc_right_optical   # right-eye outputs are supported but not listed: the original published left only
     resolution_px: [1920, 1200]      # HD1200 grab_resolution
     intrinsics_left: {fx: 1863.9341697853888, fy: 1863.9341697853888, cx: 955.8471374511719, cy: 584.7962646484375}
     intrinsics_right: {fx: 1863.9341697853888, fy: 1863.9341697853888, cx: 955.8471374511719, cy: 584.7962646484375}
@@ -260,6 +278,7 @@ sensors:
     # Raw K_RIGHT = fx 1714.2065310272428, fy 1680.0645526326848, cx 964.2105180096831, cy 594.2566643655323
     # Raw D_RIGHT = [0.2358914896564815, -0.11300807135219121, -0.0010622670919948295, 0.00937432162663741, 0.0]
     baseline_m: 0.05030758651145167
+    right_frame: dfc_right_optical
     resolution_px: [1920, 1200]
     intrinsics_left: {fx: 1857.5388723099845, fy: 1857.5388723099845, cx: 974.8830642700195, cy: 604.2220611572266}
     intrinsics_right: {fx: 1857.5388723099845, fy: 1857.5388723099845, cx: 974.8830642700195, cy: 604.2220611572266}

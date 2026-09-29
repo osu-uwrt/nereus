@@ -37,7 +37,7 @@ Step 2 progress:
   passed two trial pairs and independent Opus evidence review. New physical
   depth RMS 3.18–3.83 mm; heading RMS 0.27–0.38 degrees; real-time operation.
 
-Step 3 progress (independent Opus review pending; Claude session limit interrupted it):
+Step 3 progress:
 
 - [x] Optional camera projection, owned image/depth processing, original depth noise
   and JPEG encoding; 12 CPU/frame tests pass in release and ASan/UBSan builds.
@@ -45,7 +45,10 @@ Step 3 progress (independent Opus review pending; Claude session limit interrupt
   pass on the current machine, with an installed camera/renderer consumer checked.
 - [x] Import declared Talos and gate/torpedo sensor-scene assets with verified hashes;
   use the original rectified calibration and calibrated stereo baseline.
-- [ ] Finish independent review of camera processing and stereo calibration.
+- [x] Finish independent Opus review of camera processing and stereo calibration.
+- [x] Declare robot visual placements, right-eye frames, water tint and lighting in
+  packs; 79 existing and 10 new pack tests pass, including lossless saves.
+  Water and lighting match Talos bringup startup, not the UI Pool preset.
 - [ ] Compose sensor scenes from pack data, including robot visual placement.
 - [ ] Execute the existing robot-pack camera/stereo definitions offscreen.
 - [ ] Publish calibrated, synchronized image/CameraInfo products through the bridge.

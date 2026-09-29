@@ -36,6 +36,9 @@
     "water_optics": {
       "$ref": "types.schema.json#/$defs/water_optics"
     },
+    "lighting": {
+      "$ref": "types.schema.json#/$defs/lighting"
+    },
     "pending": {
       "$ref": "common.schema.json#/$defs/pending"
     },
