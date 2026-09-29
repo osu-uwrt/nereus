@@ -150,6 +150,11 @@ class RosSide {
     // truth is the pose source, else TF at the stamp, latest after 0.5 s). Called once per frame.
     void capturePointClouds();
     std::vector<rendering::PointSet> pointSets() const;
+    // Latest transform of `frame` in the fixed frame (false while TF cannot resolve it).
+    bool latestInFixed(const std::string &frame, glm::mat4 &world) const;
+    // truth * estimate^-1 with both base links sampled at the same (estimate display) time, so motion between
+    // the two display clocks does not leak into the offset: only the estimation error remains.
+    bool truthFromEstimate(glm::mat4 &offset);
     std::vector<PointCloudLayer> pointClouds;
     // Which placement(s) of each detection to draw (requested); detectionShow() is what is effective now.
     void setDetectionMode(DetectionMode mode) {

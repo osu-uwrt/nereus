@@ -600,6 +600,26 @@ void RosSide::capturePointClouds() {
     }
 }
 
+bool RosSide::truthFromEstimate(glm::mat4 &offset) {
+    glm::mat4 truth, estimate;
+    if (!usingTruth_ || !haveTime_ || !scenario_ || !lookupAt(scenario_->estimateBaseFrame, otherTime_, true, estimate) ||
+        !lookupAt(scenario_->truthBaseFrame, otherTime_, true, truth))
+        return false;
+    offset = truth * glm::inverse(estimate);
+    return true;
+}
+
+bool RosSide::latestInFixed(const std::string &frame, glm::mat4 &world) const {
+    if (!scenario_ || !buffer_)
+        return false;
+    try {
+        world = matrixOf(buffer_->lookupTransform(scenario_->mapFrame, frame, tf2::TimePointZero).transform);
+        return true;
+    } catch (const tf2::TransformException &) {
+        return false;
+    }
+}
+
 std::vector<rendering::PointSet> RosSide::pointSets() const {
     std::vector<rendering::PointSet> sets;
     for (const auto &layer : pointClouds)

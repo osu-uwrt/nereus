@@ -175,6 +175,20 @@ r::Scene SceneModel::build(const VisualState &state) const {
         if (auto payload = mesh(payloadMesh_))
             for (const auto &world : state.loadedPayloads)
                 add(dynamic, payload, world);
+    if (state.ghostBody) { // estimate robot: the pack's robot visuals at the estimate pose, translucent
+        const Eigen::Matrix4d root = worldFromRoot(*state.ghostBody);
+        for (const auto &visual : pack_->robotVisuals()) {
+            if (!visual.mesh)
+                continue;
+            r::Instance instance;
+            instance.mesh = visual.mesh;
+            instance.transform = (root * visual.rootFromAsset()).cast<float>();
+            instance.material = r::SurfaceMaterial::Clear;
+            instance.tint = Eigen::Vector4f(.4f, 1.f, 1.f, .45f);
+            instance.casts_shadow = false;
+            dynamic.push_back(std::move(instance));
+        }
+    }
     for (const auto &marker : state.markers) {
         r::Instance instance;
         instance.mesh = marker.mesh.empty() ? box_ : mesh(marker.mesh);
@@ -187,6 +201,11 @@ r::Scene SceneModel::build(const VisualState &state) const {
             instance.casts_shadow = false;
             instance.tint = Eigen::Vector4f(marker.tint.x, marker.tint.y, marker.tint.z, marker.tint.w);
         }
+        if (marker.ghost) {
+            instance.material = r::SurfaceMaterial::Clear;
+            instance.tint = Eigen::Vector4f(.4f, 1.f, 1.f, .6f);
+            instance.casts_shadow = false;
+        }
         dynamic.push_back(std::move(instance));
     }
     r::Scene scene = pack_->compose(worldFromRoot(state.body), dynamic, overrides, state.indicatorLatched);
@@ -195,6 +214,9 @@ r::Scene SceneModel::build(const VisualState &state) const {
             scene.instances[i].visible = false;
         scene.water.reset();
     }
+    if (!state.showCourse) // task visuals follow the pool instances in the static scene
+        for (std::size_t i = pack_->poolInstanceCount(); i < pack_->staticScene().instances.size(); ++i)
+            scene.instances[i].visible = false;
     // Pool instance order (rendering/scene.hpp): floor, four walls, four decks, four coping strips.
     const std::size_t pool = std::min(pack_->poolInstanceCount(), scene.instances.size());
     if (!state.showFloor && pool > 0)

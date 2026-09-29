@@ -1,5 +1,6 @@
 #include "app.hpp"
 #include "frame_profiler.hpp"
+#include "mapping_markers.hpp"
 #include "overlay_draw.hpp"
 #include "ros_side.hpp"
 #include "scene_model.hpp"
@@ -8,6 +9,7 @@
 #include "robotics/ros_viewer/panel_layout.hpp"
 #include "robotics/ros_viewer/panels/composition.hpp"
 #include "robotics/ros_viewer/panels/ros_providers.hpp"
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <robotics/rendering/renderer.hpp>
@@ -217,6 +219,7 @@ class App {
     void toolbarPoolViewer();
     void toolbarView();
     void toolbarFocus();
+    void loadMappingMarkers();
     void drawPointCloudSettings();
     void toolbarFollow();
     void toolbarLabels();
@@ -280,6 +283,18 @@ class App {
          showMpc_ = false, largeMap_ = false, focusMap_ = false, demoMode_ = false;
     float tfAxisLength_ = .12f, mapZoom_ = 1, toolbarLeft_ = 0;
     int toolbarOldMode_ = 0;
+    // Course source: 0 auto (pack layout with simulator truth, mapping markers otherwise), 1 pack, 2 mapping.
+    std::vector<MappingMarker> mappingMarkers_;
+    int courseMode_ = 0;
+    bool mappingGhost_ = false;
+    bool courseFromMapping() const;
+    // Simulator only (truth is the pose source): the localization estimate at its display time, drawn as a
+    // translucent robot ghost; the control gizmo and Follow are anchored together on it or on the truth robot.
+    glm::mat4 estimateBody_{1};
+    bool haveEstimate_ = false, robotGhost_ = false, anchorEstimate_ = false;
+    glm::mat4 followBody() const {
+        return anchorEstimate_ && haveEstimate_ ? estimateBody_ : body_;
+    }
     ImVec2 mapPan_{0, 0};
     TfTree tfTree_;
     TfSnapshot tf_;
@@ -341,6 +356,8 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
                                                  : lookup(config_, {"pose", "source"}).as<std::string>("auto")),
         opt_.truthDelay >= 0 ? opt_.truthDelay : lookup(config_, {"pose", "truth_delay_s"}).as<double>(.02),
         opt_.otherDelay >= 0 ? opt_.otherDelay : lookup(config_, {"pose", "other_delay_s"}).as<double>(.06));
+    robotGhost_ = lookup(config_, {"pose", "robot_ghost"}).as<bool>(false);
+    anchorEstimate_ = lookup(config_, {"pose", "anchor"}).as<std::string>("estimate") == "estimate";
     ros_->setDetectionMode(parseDetectionMode(
         !opt_.detectionPlacement.empty() ? opt_.detectionPlacement
                                          : lookup(config_, {"detections", "placement"}).as<std::string>("pose_source")));
@@ -434,11 +451,12 @@ bool App::focusable(const std::string &name) const {
 
 glm::vec3 App::focusTarget(const std::string &name) const {
     const auto p = presetFor(name);
+    const glm::mat4 body = followBody(); // truth robot, or the estimate when Follow is anchored on it
     if (!scenario_)
-        return glm::vec3(body_[3]);
+        return glm::vec3(body[3]);
     if (p.target == "mechanism")
         if (const auto *m = scenario_->mechanism(p.mechanism))
-            return glm::vec3(body_ * m->frameInBase * glm::vec4(p.offset, 1));
+            return glm::vec3(body * m->frameInBase * glm::vec4(p.offset, 1));
     if (p.target == "mechanisms") {
         glm::vec3 sum(0);
         int count = 0;
@@ -449,14 +467,14 @@ glm::vec3 App::focusTarget(const std::string &name) const {
                     ++count;
                 }
         if (count)
-            return glm::vec3(body_ * glm::vec4(sum / float(count), 1));
+            return glm::vec3(body * glm::vec4(sum / float(count), 1));
     }
     if (p.target == "landmark") {
         const auto it = scenario_->landmarks.find(name);
         if (it != scenario_->landmarks.end())
             return glm::vec3(it->second.world[3]);
     }
-    return glm::vec3(body_[3]);
+    return glm::vec3(body[3]);
 }
 
 void App::focus(const std::string &name) {
@@ -565,6 +583,7 @@ void App::loadScenario(const std::string &json) {
     options.robotOnly = opt_.robotOnly;
     model_ = std::make_unique<SceneModel>(*scenario_, options, thrusters_, lights_);
     ros_->attach(*scenario_, config_, lights_, thrusters_, !demoMode_);
+    loadMappingMarkers();
     look_.appearance = scenario_->appearance;
     look_.tag = lookup(config_, {"calibration_board", "visible"}).as<bool>(true);
     cards_.assign(scenario_->cameras.size(), {});
@@ -647,7 +666,13 @@ void App::updatePose() {
         return;
     }
     bool first = false;
-    if (ros_->updatePose(body_, first)) {
+    const bool updated = ros_->updatePose(body_, first);
+    // Estimate relative to the displayed truth robot, from one-time sampled offset (no display-clock lag).
+    glm::mat4 truthFromEstimate;
+    haveEstimate_ = ros_->truthFromEstimate(truthFromEstimate);
+    if (haveEstimate_)
+        estimateBody_ = glm::inverse(truthFromEstimate) * body_;
+    if (updated) {
         if (first) {
             const auto p = presetFor(focusName_);
             if (p.target == "vehicle" || p.target == "mechanism" || p.target == "mechanisms")
@@ -712,6 +737,37 @@ void App::step(double t) {
     (void)t;
 }
 
+bool App::courseFromMapping() const {
+    return !demoMode_ && !mappingMarkers_.empty() &&
+           (courseMode_ == 2 || (courseMode_ == 0 && !ros_->truthActive()));
+}
+
+// Host config `mapping_markers:` {config: <package>/<path> or a file, meshes: optional local mesh folder,
+// course: auto|pack|mapping, ghost: bool}. The file is the stack's RViz marker list (riptide_rviz markers.yaml).
+void App::loadMappingMarkers() {
+    mappingMarkers_.clear();
+    const auto cfg = lookup(config_, {"mapping_markers"});
+    if (!cfg || demoMode_)
+        return;
+    const auto share = [](const std::string &package) {
+        return fs::path(ament_index_cpp::get_package_share_directory(package));
+    };
+    try {
+        fs::path file = cfg["config"].as<std::string>();
+        if (!file.is_absolute() && !fs::exists(file)) { // <package>/<path inside its share directory>
+            const auto package = file.begin()->string();
+            file = share(package) / file.lexically_relative(package);
+        }
+        mappingMarkers_ = host::loadMappingMarkers(file, share, cfg["meshes"].as<std::string>(""));
+        const auto course = cfg["course"].as<std::string>("auto");
+        courseMode_ = course == "pack" ? 1 : course == "mapping" ? 2 : 0;
+        mappingGhost_ = cfg["ghost"].as<bool>(false);
+    } catch (const std::exception &error) {
+        std::cerr << "robotics-pool-viewer: mapping course disabled: " << error.what() << '\n';
+        mappingMarkers_.clear();
+    }
+}
+
 VisualState App::buildState() {
     VisualState state;
     state.body = body_;
@@ -724,6 +780,8 @@ VisualState App::buildState() {
     state.showBoard = look_.tag;
     state.showWalls = observer_.walls;
     state.showFloor = observer_.floor;
+    if (robotGhost_ && haveEstimate_)
+        state.ghostBody = estimateBody_;
     const auto payloads = lookup(config_, {"payloads", "loaded_namespaces"});
     if (demoMode_) {
         for (const auto &entry : payloads)
@@ -731,7 +789,25 @@ VisualState App::buildState() {
                 state.loadedPayloads.push_back(body_ * mount);
         return state;
     }
+    // Mapping course (RViz markers at the mapping frames): the course itself on a real robot, or a translucent
+    // ghost of the mapping estimate over the simulator's course.
+    const bool mappingCourse = courseFromMapping();
+    state.showCourse = !mappingCourse;
+    if (mappingCourse || (mappingGhost_ && ros_->truthActive()))
+        for (const auto &marker : mappingMarkers_) {
+            glm::mat4 frame;
+            if (!ros_->latestInFixed(marker.frame, frame))
+                continue; // RViz does not draw a marker whose frame is unavailable
+            MarkerDraw draw;
+            draw.mesh = marker.path;
+            draw.world = frame * marker.local;
+            draw.ghost = !mappingCourse;
+            draw.observerOnly = true;
+            state.markers.push_back(std::move(draw));
+        }
     for (const auto &[key, record] : ros_->props) {
+        if (mappingCourse) // simulator props duplicate the mapped table items
+            break;
         if (record.mesh.empty())
             continue;
         MarkerDraw draw;
@@ -1269,6 +1345,35 @@ void App::toolbarPoolViewer() {
         ImGui::Checkbox("Water", &observer_.water);
         ImGui::Checkbox("Pool walls & deck", &observer_.walls);
         ImGui::Checkbox("Pool floor", &observer_.floor);
+        if (!mappingMarkers_.empty() && !demoMode_) {
+            ImGui::SeparatorText("Course");
+            ImGui::SetNextItemWidth(170);
+            ImGui::Combo("Source", &courseMode_, "Auto\0Pack layout\0Mapping (RViz)\0");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Auto: the pack layout with simulator truth, the mapping estimate otherwise.\n"
+                                  "Mapping: riptide_meshes at the mapping TF frames, as RViz shows them.");
+            if (ros_->truthActive()) {
+                ImGui::BeginDisabled(courseFromMapping());
+                ImGui::Checkbox("Mapping ghost", &mappingGhost_);
+                ImGui::EndDisabled();
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    ImGui::SetTooltip("Draw the mapping estimate translucent over the simulator course.");
+            }
+        }
+        if (ros_->truthActive() && !demoMode_) { // simulator only: a real robot has the estimate alone
+            ImGui::SeparatorText("Localization estimate");
+            ImGui::Checkbox("Robot ghost", &robotGhost_);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Draw the robot translucent at the localization estimate (TF base_link).");
+            int anchor = anchorEstimate_ ? 1 : 0;
+            ImGui::SetNextItemWidth(170);
+            if (ImGui::Combo("Anchor", &anchor, "Truth (sim)\0Estimate (TF)\0"))
+                anchorEstimate_ = anchor == 1;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Robot the control gizmo and the Follow camera centre on. Commands always go to\n"
+                                  "the controller in its (estimate) frame; on Truth they are shown re-rooted at the\n"
+                                  "sim robot.");
+        }
         ImGui::Checkbox("Surface reflections", &observer_.reflections);
         ImGui::Checkbox("Frame stats (F3)", &showProfile_);
         ImGui::SeparatorText("Viewer lighting");
@@ -1598,6 +1703,10 @@ void App::drawInterface(double time, float dt) {
                                {left, viewHeight},
                                hovered && mode_ == 0,
                                bool(glfwGetWindowAttrib(window_->handle(), GLFW_FOCUSED))};
+    // Commands live in the estimate frame; anchored on the truth robot, draw them re-rooted there (offset
+    // sampled at one time for both poses, see RosSide::truthFromEstimate).
+    if (!anchorEstimate_ && haveEstimate_)
+        panelView.displayFromCommand = body_ * glm::inverse(estimateBody_);
     const bool dragging = composition_ && mode_ == 0 && composition_->input(panelView);
     bool unused = false;
     SensorView view = viewFor(left / viewHeight, dt, hovered && !dragging, viewHeight, unused);
@@ -1799,13 +1908,29 @@ void App::renderLocalCards(double t, const rendering::Scene &mainScene) {
     }
     PhaseTimer timer{profiler_, Phase::Cards, profileSync()};
     rendering::Scene ownScene;
-    const bool poolHidden = !observer_.walls || !observer_.floor;
-    if (poolHidden || opt_.legacyCards) { // the robot's camera sees the pool whatever the observer hides
+    // The robot's camera sees the simulated pool and course whatever the observer hides or overlays.
+    const bool observerOnly = !observer_.walls || !observer_.floor || courseFromMapping() ||
+                              (robotGhost_ && haveEstimate_) || mappingGhost_;
+    if (observerOnly || opt_.legacyCards) {
         auto state = buildState();
-        state.showWalls = state.showFloor = true;
+        state.showWalls = state.showFloor = state.showCourse = true;
+        state.ghostBody.reset();
+        state.markers.erase(std::remove_if(state.markers.begin(), state.markers.end(),
+                                           [](const MarkerDraw &m) { return m.observerOnly; }),
+                            state.markers.end());
+        if (courseFromMapping()) // buildState skipped the simulator props for the mapped course
+            for (const auto &[key, record] : ros_->props)
+                if (!record.mesh.empty()) {
+                    MarkerDraw draw;
+                    draw.mesh = record.mesh;
+                    draw.world = record.attached ? body_ * record.pose : record.pose;
+                    draw.scale = {float(record.marker.scale.x), float(record.marker.scale.y),
+                                  float(record.marker.scale.z)};
+                    state.markers.push_back(std::move(draw));
+                }
         ownScene = model_->build(state);
     }
-    const rendering::Scene &scene = !poolHidden && !opt_.legacyCards ? mainScene : ownScene;
+    const rendering::Scene &scene = !observerOnly && !opt_.legacyCards ? mainScene : ownScene;
     for (const auto i : todo) {
         const auto &camera = scenario_->cameras[i];
         auto k = camera.k;

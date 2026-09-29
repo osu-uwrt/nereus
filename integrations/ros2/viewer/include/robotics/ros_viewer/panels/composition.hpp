@@ -19,6 +19,11 @@ struct Viewport {
     glm::vec3 eye{0};
     glm::vec2 origin{0}, size{1};
     bool interactive = false, focused = true;
+    // Where motion commands are drawn: display = displayFromCommand * command (identity: the command
+    // frame itself). The host re-roots them, e.g. at the simulator truth robot instead of the estimate.
+    // Overlays hold the offset per command (captured when the command changes), so a fixed command
+    // stays still while the offset carries estimation noise; large jumps are taken at once.
+    glm::mat4 displayFromCommand{1};
 };
 struct Panel {
     virtual ~Panel() = default;

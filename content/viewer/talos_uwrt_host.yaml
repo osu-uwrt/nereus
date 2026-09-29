@@ -33,6 +33,11 @@ pose:
   source: auto
   truth_delay_s: 0.02
   other_delay_s: 0.06
+  # Simulator only (ignored on a real robot, where the estimate is the only pose): defaults of the Pool Viewer
+  # menu's "Localization estimate" section. robot_ghost: translucent robot at the estimate (TF base_link);
+  # anchor: truth | estimate, the robot the control gizmo and the Follow camera centre on.
+  robot_ghost: false
+  anchor: estimate
 
 # Detector markers (topics.detections). Each observation is placed once and then stays fixed in the world.
 #   enabled:   overlay on at start (CLI: --detections / --no-detections).
@@ -47,6 +52,15 @@ detections:
   # The stack's detector sends DELETEALL before every frame's markers, so with true only the newest
   # frame's detections show (RViz behaviour). false: ignore DELETEALL; observations live out their lifetime.
   honor_delete_all: true
+
+# Course from the mapping estimate, drawn like RViz: the stack's marker list (riptide_rviz MarkerPublisher config:
+# one riptide_meshes model per mapping TF frame). config: <package>/<path in its share> or a file path;
+# meshes: optional local folder of <mesh>/model.dae (default: the file's mesh_pkg). course: auto (pack layout with
+# simulator truth, mapping otherwise) | pack | mapping. ghost: draw the mapping estimate over the simulator course.
+mapping_markers:
+  config: riptide_rviz/config/markers.yaml
+  course: auto
+  ghost: false
 
 # PointCloud2 layers (Vision panel; off until enabled, subscribed only while on). Topics are relative to the
 # robot namespace; the simulator bridge publishes the camera clouds on the ZED driver's topics.

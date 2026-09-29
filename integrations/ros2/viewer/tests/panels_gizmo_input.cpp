@@ -24,7 +24,9 @@ glm::vec2 project(const Viewport &v, glm::vec3 point) {
     auto clip = v.projection * v.view * glm::vec4(point, 1);
     return v.origin + glm::vec2(clip.x / clip.w * .5f + .5f, .5f - clip.y / clip.w * .5f) * v.size;
 }
-glm::vec3 dragAxis(Registry &registry, int axis, bool cameraMoves) {
+// `display`: Viewport::displayFromCommand (gizmo drawn re-rooted, e.g. at the simulator truth robot). Drags
+// are made on the displayed gizmo and must still move the command along its own body axis.
+glm::vec3 dragAxis(Registry &registry, int axis, bool cameraMoves, const glm::mat4 &display = glm::mat4(1)) {
     auto motion = std::make_shared<MotionProbe>();
     motion->s.enabled = motion->s.fresh = motion->s.hasCommand = true;
     motion->s.mode = Mode::Position;
@@ -38,7 +40,12 @@ glm::vec3 dragAxis(Registry &registry, int axis, bool cameraMoves) {
     view.projection = glm::perspective(glm::radians(53.f), 4.f / 3.f, .05f, 100.f);
     view.size = {800, 600};
     view.interactive = view.focused = true;
-    const auto start = project(view, direction * .43f), end = project(view, direction * .53f);
+    // The camera moves with the re-rooted gizmo, so the picture (and the handle grabbed) is unchanged.
+    view.displayFromCommand = display;
+    view.eye = glm::vec3(display * glm::vec4(view.eye, 1));
+    view.view = glm::lookAt(view.eye, glm::vec3(display[3]), glm::vec3(display * glm::vec4(0, 0, 1, 0)));
+    const auto shown = [&](float along) { return glm::vec3(display * glm::vec4(direction * along, 1)); };
+    const auto start = project(view, shown(.43f)), end = project(view, shown(.53f));
     auto frame = [&](glm::vec2 cursor, bool pressed) {
         auto &io = ImGui::GetIO();
         io.AddMousePosEvent(cursor.x, cursor.y);
@@ -168,6 +175,10 @@ int main() {
         const auto stationary = dragAxis(registry, axis, false);
         const auto following = dragAxis(registry, axis, true);
         assert(glm::length(stationary - following) < 1e-5f);
+        // Re-rooted display (rotated and shifted): the command still moves 10 cm along its own axis.
+        const auto offset = glm::rotate(glm::translate(glm::mat4(1), glm::vec3(.3, -.2, .1)), .35f, glm::vec3(0, 0, 1));
+        const auto rerooted = dragAxis(registry, axis, false, offset);
+        assert(glm::length(stationary - rerooted) < 1e-4f);
     }
     for (int axis = 0; axis < 3; ++axis)
         for (float direction : {-1.f, 1.f})

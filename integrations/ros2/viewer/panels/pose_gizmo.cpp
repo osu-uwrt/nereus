@@ -8,7 +8,10 @@ namespace {
 class PoseGizmo final : public Overlay {
     std::shared_ptr<Motion> control;
     int targetDrag = -1;
-    Pose dragStart{1};
+    Pose dragStart{1}, dragDisplay{1}; // gesture start (display space) and its frozen display offset
+    Pose shownDisplay{1};              // display offset held for the current command revision
+    uint64_t shownRevision = 0;
+    bool haveShown = false, adoptNext = false; // adoptNext: our own Esc restore is not a new command
     glm::mat4 dragProjectionView{1};
     glm::vec2 dragOrigin{0}, dragSize{1};
     glm::vec3 dragRpy{0}, dragPoint{0}, dragDirection{0}, dragNormal{0};
@@ -42,15 +45,31 @@ class PoseGizmo final : public Overlay {
             return false;
         }
         const auto vp = view.projection * view.view;
-        const glm::vec3 p(state.commanded[3]);
+        // Hold the display offset per command: re-capture on a new command (not mid-drag) or a large change
+        // (anchor switch, reset), never for small frame-to-frame noise, so an unchanged command stays still.
+        const glm::mat4 delta = glm::inverse(shownDisplay) * view.displayFromCommand;
+        const bool jump = glm::length(glm::vec3(delta[3])) > .25f || glm::vec3(delta[0]).x < .985f;
+        if (adoptNext && state.revision != shownRevision) {
+            shownRevision = state.revision;
+            adoptNext = false;
+        }
+        if (!haveShown || jump || (state.revision != shownRevision && targetDrag < 0)) {
+            shownDisplay = view.displayFromCommand;
+            shownRevision = state.revision;
+            haveShown = true;
+        }
+        const Pose commanded = shownDisplay * state.commanded;
+        // Drags are made in display space and sent in the command frame, through the offset frozen at
+        // the start of the gesture so drift between the two frames cannot move the target mid-drag.
+        const auto send = [&](const Pose &display) { control->drag(glm::inverse(dragDisplay) * display); };
+        const glm::vec3 p(commanded[3]);
         const float length = sizeMetres;
-        const glm::vec3 axes[] = {glm::normalize(glm::vec3(state.commanded[0])),
-                                  glm::normalize(glm::vec3(state.commanded[1])),
-                                  glm::normalize(glm::vec3(state.commanded[2]))};
+        const glm::vec3 axes[] = {glm::normalize(glm::vec3(commanded[0])), glm::normalize(glm::vec3(commanded[1])),
+                                  glm::normalize(glm::vec3(commanded[2]))};
         const ImU32 colors[] = {IM_COL32(90, 235, 230, 255), IM_COL32(235, 75, 75, 255), IM_COL32(90, 215, 110, 255),
                                 IM_COL32(80, 145, 255, 255), IM_COL32(235, 75, 75, 255), IM_COL32(90, 215, 110, 255),
                                 IM_COL32(80, 145, 255, 255)};
-        const auto angles = glm::eulerAngles(glm::quat_cast(state.commanded));
+        const auto angles = glm::eulerAngles(glm::quat_cast(commanded));
         const auto project = [&](const glm::vec3 &point, ImVec2 &pixel) {
             const auto clip = vp * glm::vec4(point, 1);
             if (clip.w <= 0)
@@ -202,7 +221,8 @@ class PoseGizmo final : public Overlay {
                 }
                 if (valid) {
                     targetDrag = hit;
-                    dragStart = state.commanded;
+                    dragStart = commanded;
+                    dragDisplay = shownDisplay;
                     dragProjectionView = vp;
                     dragOrigin = view.origin;
                     dragSize = view.size;
@@ -211,10 +231,12 @@ class PoseGizmo final : public Overlay {
         }
         if (targetDrag >= 0) {
             if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-                control->drag(dragStart);
+                send(dragStart);
                 targetDrag = -1;
+                adoptNext = true;
             } else if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || !view.focused) {
                 targetDrag = -1;
+                shownRevision = state.revision; // our drag's commands: keep the offset it was drawn with
             } else {
                 glm::mat4 next = dragStart;
                 glm::vec3 point;
@@ -247,17 +269,17 @@ class PoseGizmo final : public Overlay {
                     if (changed) {
                         auto nextAngles = dragRpy;
                         nextAngles[targetDrag - 4] += dragAngle;
-                        control->drag(robotics::ros_viewer::rpyPose(glm::vec3(dragStart[3]), nextAngles));
+                        send(robotics::ros_viewer::rpyPose(glm::vec3(dragStart[3]), nextAngles));
                     }
                 } else if (targetDrag == 0 && robotics::ros_viewer::planeHit(ray, glm::vec3(dragStart[3]), dragNormal, point)) {
                     next[3] += glm::vec4(point - dragPoint, 0);
                     if (glm::length(glm::vec2(io.MouseDelta.x, io.MouseDelta.y)) > 0)
-                        control->drag(next);
+                        send(next);
                 } else if (targetDrag > 0 && targetDrag < 4 &&
                            robotics::ros_viewer::axisHit(ray, glm::vec3(dragStart[3]), dragDirection, along)) {
                     next[3] += glm::vec4(dragDirection * (along - dragAxis), 0);
                     if (glm::length(glm::vec2(io.MouseDelta.x, io.MouseDelta.y)) > 0)
-                        control->drag(next);
+                        send(next);
                 }
             }
         }
