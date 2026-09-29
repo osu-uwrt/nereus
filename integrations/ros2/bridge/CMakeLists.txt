@@ -25,6 +25,12 @@ rp_project_options(rp_bridge_core)
 add_executable(robotics-sim-ros src/main.cpp src/node.cpp src/session_adapter.cpp src/records.cpp src/camera_sink.cpp)
 target_link_libraries(robotics-sim-ros PRIVATE rp_bridge_core rp_rules tf2_ros::tf2_ros
   ${tf2_msgs_TARGETS} ${rosgraph_msgs_TARGETS})
+if(TARGET rp_session_cameras)
+  target_sources(robotics-sim-ros PRIVATE src/session_camera_sink.cpp)
+  target_compile_definitions(robotics-sim-ros PRIVATE RP_BRIDGE_CAMERAS)
+  find_package(sensor_msgs REQUIRED)
+  target_link_libraries(robotics-sim-ros PRIVATE rp_session_cameras ${sensor_msgs_TARGETS})
+endif()
 rp_project_options(robotics-sim-ros)
 
 if(BUILD_TESTING)

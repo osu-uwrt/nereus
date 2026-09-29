@@ -315,6 +315,21 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
             impl_->publishers.at(image.stream)->publish(buffer);
         });
     }
+    std::map<std::string, bool> demand; // camera stream -> has subscribers
+    auto last_demand = Clock::now() - std::chrono::seconds(1);
+    const auto pollDemand = [&](Clock::time_point now) {
+        if (impl_->cameras == nullptr || now - last_demand < std::chrono::milliseconds(500))
+            return;
+        last_demand = now;
+        for (const auto &stream : impl_->cameras->streamIds()) {
+            const bool wanted = impl_->publishers.at(stream)->get_subscription_count() > 0;
+            const auto known = demand.find(stream);
+            if (known == demand.end() || known->second != wanted) {
+                demand[stream] = wanted;
+                impl_->cameras->setDemand(stream, wanted);
+            }
+        }
+    };
     std::int64_t ticks = 0;
     double owed = 0.0;
     auto previous = Clock::now(), last_refresh = previous;
@@ -323,6 +338,7 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
         impl_->drainInbox();
         send(core_.flush()); // operator events, also while paused
         const auto now = Clock::now();
+        pollDemand(now);
         const double rtf = core_.realTimeFactor();
         if (rtf <= 0) {
             owed = 0.0; // paused: no stepping and no /clock; viewers still get fresh state

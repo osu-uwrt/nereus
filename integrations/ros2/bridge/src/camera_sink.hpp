@@ -31,6 +31,9 @@ class CameraSink {
     virtual void start(std::function<void(EncodedImage)> publish) = 0;
     // Non-blocking request to acquire for the state at ROS stamp `ros_ns`.
     virtual void acquire(const simulation::Snapshot &snapshot, std::int64_t ros_ns) = 0;
+    // Consumer interest in one of streamIds() (the node derives it from subscriber counts and
+    // calls this when it changes); output-less streams such as camera_info ignore it.
+    virtual void setDemand(const std::string &stream, bool wanted) = 0;
     // Discard pending work after a placement or reset; `seed` set for a full reset.
     virtual void invalidate(std::optional<std::uint64_t> seed) = 0;
     virtual void close() = 0;
@@ -38,9 +41,15 @@ class CameraSink {
     virtual Json stats() const = 0;    // summary.json "camera_stats"
 };
 
+struct CameraSinkOptions {
+    bool always{false}; // render every pack output regardless of subscribers (reproducible runs)
+};
+class SessionPort;
 // Builds the camera runtime for the given camera sensor ids of a scenario; nullptr when this
-// build has no camera acquisition (the bridge then requires --no-cameras).
+// build has no camera acquisition (the bridge then requires --no-cameras). Throws
+// MappingError/BridgeError for unusable camera stream declarations.
 std::unique_ptr<CameraSink> createCameraSink(const session::ResolvedScenario &scenario,
-                                             const std::vector<std::string> &camera_ids);
+                                             const std::vector<std::string> &camera_ids,
+                                             SessionPort &session, const CameraSinkOptions &options);
 
 } // namespace robotics::ros_bridge

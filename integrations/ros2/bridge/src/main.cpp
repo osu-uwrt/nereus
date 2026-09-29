@@ -1,5 +1,5 @@
 // robotics-sim-ros <resolved.json> --output <run dir> [--sensors a,b] [--duration s]
-//                  [--no-cameras] [--validate-only]
+//                  [--no-cameras] [--always-cameras] [--validate-only]
 // The C++ simulator bridge (port of python -m robotics_platform_ros): validates the bridge pack
 // against the installed ROS types before the first step, then runs the session in real time and
 // writes resolved.json, execution.json, and on exit tasks.json and summary.json.
@@ -25,7 +25,7 @@ struct Arguments {
     fs::path scenario, output;
     std::optional<std::string> sensors;
     std::optional<double> duration;
-    bool no_cameras{false}, validate_only{false};
+    bool no_cameras{false}, validate_only{false}, always_cameras{false};
 };
 
 std::vector<std::string> split(const std::string &text) {
@@ -55,6 +55,8 @@ Arguments parse(int argc, char **argv) {
             arguments.duration = std::stod(value());
         else if (arg == "--no-cameras")
             arguments.no_cameras = true;
+        else if (arg == "--always-cameras")
+            arguments.always_cameras = true;
         else if (arg == "--validate-only")
             arguments.validate_only = true;
         else if (!arg.empty() && arg[0] == '-')
@@ -64,7 +66,7 @@ Arguments parse(int argc, char **argv) {
     }
     if (arguments.scenario.empty() || arguments.output.empty())
         throw std::invalid_argument("usage: robotics-sim-ros <resolved.json> --output <run dir> "
-                                    "[--sensors a,b] [--duration s] [--no-cameras] [--validate-only]");
+                                    "[--sensors a,b] [--duration s] [--no-cameras] [--always-cameras] [--validate-only]");
     return arguments;
 }
 
@@ -148,13 +150,15 @@ int main(int argc, char **argv) {
                 throw std::invalid_argument("selected sensor is disabled in the robot pack");
             (isCamera(by_id.at(id)) ? camera_ids : native_ids).push_back(id);
         }
+        adapter = std::make_unique<SessionAdapter>(*resolved, rules::standardRules(), &native_ids);
         if (!camera_ids.empty()) {
-            cameras = createCameraSink(*resolved, camera_ids);
+            CameraSinkOptions camera_options;
+            camera_options.always = arguments.always_cameras;
+            cameras = createCameraSink(*resolved, camera_ids, *adapter, camera_options);
             if (!cameras)
                 throw std::runtime_error("camera sensors need the camera runtime, which this build does not "
                                          "include; run with --no-cameras");
         }
-        adapter = std::make_unique<SessionAdapter>(*resolved, rules::standardRules(), &native_ids);
         sensors = selection;
         for (const auto &id : adapter->deferredSensorIds())
             if (std::find(camera_ids.begin(), camera_ids.end(), id) == camera_ids.end())
