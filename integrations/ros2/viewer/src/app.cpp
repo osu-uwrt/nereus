@@ -1791,7 +1791,7 @@ int App::loop() {
             if (profileLogAt_ == Clock::time_point{})
                 profileLogAt_ = now;
             if (now - profileLogAt_ >= std::chrono::seconds(5)) {
-                std::cout << profileReport(profiler_.takeInterval(), std::chrono::duration<double>(now - profileLogAt_).count())
+                std::cout << profileReport(profiler_.takeInterval(), std::chrono::duration<double>(now - profileLogAt_).count()) << (ros_ ? ros_->timingReport() : std::string())
                           << std::endl;
                 profileLogAt_ = now;
             }

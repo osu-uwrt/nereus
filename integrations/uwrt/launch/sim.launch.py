@@ -1,7 +1,7 @@
 """One-command UWRT simulation: new simulator bridge + unchanged robot stack + pool viewer.
 
     ros2 launch integrations/uwrt/launch/sim.launch.py [stack:=false] [viewer:=false]
-        [scenario:=<pack folder>] [output:=<run dir>] [rmw:=rmw_fastrtps_cpp]
+        [scenario:=<pack folder>] [output:=<run dir>] [rmw:=<rmw implementation>]
         [bridge:=python|cpp] [cameras:=true|false] [always_cameras:=true|false]
 
 bridge:=cpp runs the rclcpp simulator (build/ros-viewer/.../robotics-sim-ros) on the pack resolved
@@ -86,7 +86,10 @@ def generate_launch_description():
         DeclareLaunchArgument("cameras", default_value="true", description="run camera acquisition"),
         DeclareLaunchArgument("always_cameras", default_value="false",
                               description="cpp bridge: render cameras regardless of subscribers"),
-        DeclareLaunchArgument("rmw", default_value="rmw_fastrtps_cpp",
-                              description="RMW for every process; empty keeps the shell's"),
+        # Default: the shell's RMW (UWRT uses rmw_zenoh_cpp with a running `ros2 run rmw_zenoh_cpp
+        # rmw_zenohd`). FastDDS showed 0.4-0.9 s reliable-delivery stalls of the simulator's /tf under
+        # full-stack load with camera traffic; Zenoh delivered the same run without stalls.
+        DeclareLaunchArgument("rmw", default_value="",
+                              description="RMW for every process (e.g. rmw_zenoh_cpp); empty keeps the shell's"),
         OpaqueFunction(function=_processes),
     ])

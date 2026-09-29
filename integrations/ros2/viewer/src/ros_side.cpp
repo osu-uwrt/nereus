@@ -61,9 +61,52 @@ RosSide::RosSide(rclcpp::Node::SharedPtr node) : node_(std::move(node)) {
     executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
     executor_->add_node(node_);
     buffer_ = std::make_unique<tf2_ros::Buffer>(node_->get_clock());
-    listener_ = std::make_unique<tf2_ros::TransformListener>(*buffer_, node_, false);
-    // Data arrives via spin() on this thread and every lookup uses a zero timeout, so nothing ever waits.
+    // TF is received on a dedicated thread (not once per rendered frame): each transform enters the buffer
+    // and only then feeds the display clocks, so a display time never runs ahead of the buffered data.
+    // Lookups never wait (zero timeout).
     buffer_->setUsingDedicatedThread(true);
+    rclcpp::NodeOptions options;
+    options.start_parameter_services(false).start_parameter_event_publisher(false);
+    options.parameter_overrides({rclcpp::Parameter("use_sim_time", node_->get_parameter("use_sim_time").as_bool())});
+    timingNode_ = std::make_shared<rclcpp::Node>(node_->get_name() + std::string("_timing"), node_->get_namespace(), options);
+    timingStaticSub_ = timingNode_->create_subscription<tf2_msgs::msg::TFMessage>(
+        "/tf_static", rclcpp::QoS(100).reliable().transient_local(), [this](const tf2_msgs::msg::TFMessage &msg) {
+            for (const auto &t : msg.transforms)
+                buffer_->setTransform(t, "tf_static", true);
+        });
+    timingSub_ = timingNode_->create_subscription<tf2_msgs::msg::TFMessage>(
+        "/tf", rclcpp::QoS(100), [this](const tf2_msgs::msg::TFMessage &msg) {
+            const double wall = wallSeconds();
+            for (const auto &t : msg.transforms) {
+                try {
+                    buffer_->setTransform(t, "tf", false);
+                } catch (const tf2::TransformException &) {
+                }
+            }
+            std::string truth, estimate;
+            {
+                std::lock_guard<std::mutex> lock(framesMutex_);
+                truth = truthFrame_;
+                estimate = estimateFrame_;
+            }
+            for (const auto &t : msg.transforms) {
+                const double stamp = rclcpp::Time(t.header.stamp).seconds();
+                if (!truth.empty() && t.child_frame_id == truth)
+                    truthClock_.observe(stamp, wall);
+                else if (!estimate.empty() && t.child_frame_id == estimate)
+                    estimateClock_.observe(stamp, wall);
+            }
+        });
+    timingExecutor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
+    timingExecutor_->add_node(timingNode_);
+    timingThread_ = std::thread([this] { timingExecutor_->spin(); });
+}
+
+RosSide::~RosSide() {
+    if (timingExecutor_)
+        timingExecutor_->cancel();
+    if (timingThread_.joinable())
+        timingThread_.join();
 }
 
 glm::mat4 RosSide::matrixOf(const geometry_msgs::msg::Transform &t) const {
@@ -95,9 +138,23 @@ void RosSide::spin() {
     }
 }
 
+std::string RosSide::timingReport() {
+    const auto truth = truthClock_.takeCounts(), estimate = estimateClock_.takeCounts();
+    char line[200];
+    std::snprintf(line, sizeof(line), "\n  pose timing: truth re-anchors %d holds %d delay %.0f ms | estimate re-anchors %d holds "
+                  "%d delay %.0f ms | lookup fallbacks %d", truth.first, truth.second, 1e3 * truthClock_.delay(truthDelay_),
+                  estimate.first, estimate.second, 1e3 * estimateClock_.delay(otherDelay_), lookupFallbacks_.exchange(0));
+    return line;
+}
+
 void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusLights &lights,
                      ThrusterVisuals &thrusters, bool live) {
     scenario_ = &scenario;
+    {
+        std::lock_guard<std::mutex> lock(framesMutex_);
+        truthFrame_ = scenario.truthBaseFrame;
+        estimateFrame_ = scenario.estimateBaseFrame;
+    }
     lights_ = &lights;
     thrusters_ = &thrusters;
     live_ = live;
@@ -278,7 +335,6 @@ void RosSide::probe(Probe &p, const std::string &frame) {
             p.stamp = stamp;
             p.wall = Clock::now();
             p.changed = true;
-            p.clock.observe(stamp, wallSeconds());
         }
     } catch (const tf2::TransformException &) {
     }
@@ -296,6 +352,7 @@ bool RosSide::lookupAt(const std::string &frame, double t, bool useTime, glm::ma
             out = matrixOf(buffer_->lookupTransform(map, frame, rclcpp::Time(int64_t(t * 1e9), RCL_ROS_TIME)).transform);
             return true;
         } catch (const tf2::TransformException &) {
+            ++lookupFallbacks_;
         } // outside the buffered range for this frame: fall back to its latest transform
     }
     try {
@@ -334,10 +391,15 @@ bool RosSide::updatePose(glm::mat4 &body, bool &first) {
     }
     fresh_ = src.fresh;
     status_ = truth ? (src.fresh ? "PHYSICS CONNECTED" : "POSE STALE") : (src.fresh ? "ROBOT (ESTIMATE)" : "ESTIMATE STALE");
-    // One display clock (the active source's) serves the pose and every TF frame drawn this frame.
+    // The active source's display clock places the robot; frames of the estimate stream (and the rest of
+    // the TF tree) use the estimate clock, each sampled once per frame.
     const double wall = wallSeconds();
-    truthTime_ = src.clock.at(wall, truthDelay_);
-    otherTime_ = src.clock.at(wall, otherDelay_);
+    auto &clock = truth ? truthClock_ : estimateClock_;
+    if (!clock.valid()) // no arrival observed yet on the timing thread: fall back to the latest pose
+        clock.observe(src.stamp, wall);
+    truthTime_ = clock.at(wall, truth ? truthDelay_ : otherDelay_);
+    otherTime_ = truth && estimateClock_.valid() ? estimateClock_.at(wall, otherDelay_)
+                                                 : truthTime_ - (truth ? otherDelay_ - truthDelay_ : 0.);
     haveTime_ = true;
     glm::mat4 pose;
     if (lookupAt(poseFrame(), truth ? truthTime_ : otherTime_, true, pose))

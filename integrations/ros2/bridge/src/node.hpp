@@ -31,18 +31,32 @@ class BridgeNode {
     rclcpp::Node &node() { return *node_; }
 
     // Stepping-loop cost: tick() wall time (step, publish, camera request) and achieved speed.
+    struct Phase { // wall cost of one phase of the stepping loop
+        std::int64_t total_ns{0}, max_ns{0}, over_1ms{0}, over_5ms{0};
+        void add(std::int64_t ns) {
+            total_ns += ns;
+            max_ns = std::max(max_ns, ns);
+            over_1ms += ns > 1'000'000;
+            over_5ms += ns > 5'000'000;
+        }
+    };
     struct Performance {
         std::int64_t ticks{0}, tick_ns_total{0}, tick_ns_max{0}, wall_ns{0}, sim_ns{0};
+        Phase drain, step, publish, cameras, oversleep; // oversleep: wake-up later than requested
+        std::int64_t max_behind_ns{0}, catchup_bursts{0};  // simulated time owed; iterations with >=5 ticks
         double meanTickUs() const { return ticks ? tick_ns_total / 1e3 / static_cast<double>(ticks) : 0.0; }
         double realTimeFactor() const { return wall_ns ? static_cast<double>(sim_ns) / static_cast<double>(wall_ns) : 0.0; }
     };
     const Performance &performance() const { return performance_; }
+    // Publications skipped because the topic had no subscribers, per stream (plus "/clock", "/tf").
+    std::map<std::string, std::int64_t> skippedPublications() const;
 
   private:
     void send(const std::vector<Publication> &publications);
     void publishClock(std::int64_t ns);
     void broadcast(const std::vector<Transform> &transforms);
     void tick();
+    void refreshSubscribers();
     struct Impl;
     std::unique_ptr<Impl> impl_;
     BridgeCore &core_;

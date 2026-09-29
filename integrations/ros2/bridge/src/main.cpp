@@ -217,7 +217,17 @@ int main(int argc, char **argv) {
                                       {"sensor_mapping_us_per_tick", core->timing().sensors_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
                                       {"streams_us_per_tick", core->timing().timed_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
                                       {"wall_s", perf.wall_ns / 1e9}, {"sim_s", perf.sim_ns / 1e9},
-                                      {"real_time_factor", perf.realTimeFactor()}};
+                                      {"real_time_factor", perf.realTimeFactor()},
+                                      {"max_behind_ms", perf.max_behind_ns / 1e6},
+                                      {"catchup_bursts", perf.catchup_bursts}};
+            const auto phase = [&](const robotics::ros_bridge::BridgeNode::Phase &item) {
+                return Json{{"mean_us", item.total_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
+                            {"max_ms", item.max_ns / 1e6}, {"over_1ms", item.over_1ms}, {"over_5ms", item.over_5ms}};
+            };
+            summary["skipped_without_subscribers"] = node->skippedPublications();
+            summary["performance"]["phases"] = {{"drain", phase(perf.drain)}, {"step", phase(perf.step)},
+                                                {"publish", phase(perf.publish)}, {"cameras", phase(perf.cameras)},
+                                                {"oversleep", phase(perf.oversleep)}};
         }
         writeJson(arguments.output / "summary.json", summary);
     } catch (const std::exception &error) {

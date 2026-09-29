@@ -8,7 +8,9 @@
 #include <std_srvs/srv/trigger.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/static_transform_broadcaster.h>
-#include <tf2_ros/transform_broadcaster.h>
+#include <tf2_ros/qos.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
+#include <set>
 #include <tf2_ros/transform_listener.h>
 
 #include <chrono>
@@ -92,7 +94,14 @@ struct BridgeNode::Impl {
     std::shared_ptr<rclcpp::Publisher<rosgraph_msgs::msg::Clock>> clock;
     std::shared_ptr<tf2_ros::Buffer> buffer;
     std::shared_ptr<tf2_ros::TransformListener> listener;
-    std::shared_ptr<tf2_ros::TransformBroadcaster> broadcaster;
+    // Dynamic TF: a plain /tf publisher (tf2 broadcaster QoS) so its subscriber count can gate publishing.
+    std::shared_ptr<rclcpp::Publisher<tf2_msgs::msg::TFMessage>> tf;
+    // Publishing is skipped for topics without subscribers (refreshed every 500 ms by the stepping loop);
+    // latched (transient_local) topics always publish so late joiners receive them.
+    std::map<std::string, bool> wanted;
+    std::set<std::string> latched;
+    bool clock_wanted = true, tf_wanted = true;
+    std::map<std::string, std::int64_t> skipped;
     std::shared_ptr<tf2_ros::StaticTransformBroadcaster> static_broadcaster;
     rclcpp::Client<robot_localization::srv::SetPose>::SharedPtr alignment_client;
     rclcpp::SerializedMessage buffer_message; // reused by the stepping thread
@@ -172,7 +181,7 @@ BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras)
     const Json &clock = config.at("clock");
     impl_->clock = node_->create_publisher<rosgraph_msgs::msg::Clock>(clock.at("topic"), qosFrom(clock.at("qos")));
     if (config.value("tf", Json::object()).contains("publish") && !config["tf"]["publish"].empty())
-        impl_->broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(node_);
+        impl_->tf = node_->create_publisher<tf2_msgs::msg::TFMessage>("/tf", tf2_ros::DynamicBroadcasterQoS());
     if (!core.staticTransforms().empty()) {
         impl_->static_broadcaster = std::make_shared<tf2_ros::StaticTransformBroadcaster>(node_);
         std::vector<geometry_msgs::msg::TransformStamped> messages;
@@ -189,6 +198,9 @@ BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras)
         impl->serializers[id] = std::make_shared<rclcpp::SerializationBase>(type->typeSupport());
         if (stream.at("direction") == "publish") {
             impl->publishers[id] = node_->create_generic_publisher(topic, type->name(), qos);
+            impl->wanted[id] = true;
+            if (stream.at("qos").value("durability", "volatile") == "transient_local")
+                impl->latched.insert(id);
         } else {
             const auto serializer = impl->serializers[id];
             impl->subscriptions.push_back(node_->create_generic_subscription(
@@ -235,38 +247,72 @@ void BridgeNode::stopExecutor() {
     }
 }
 
+void BridgeNode::refreshSubscribers() {
+    for (auto &[id, publisher] : impl_->publishers)
+        impl_->wanted[id] = impl_->latched.count(id) || publisher->get_subscription_count() > 0;
+    impl_->clock_wanted = impl_->clock->get_subscription_count() > 0;
+    impl_->tf_wanted = impl_->tf && impl_->tf->get_subscription_count() > 0;
+}
+
+std::map<std::string, std::int64_t> BridgeNode::skippedPublications() const {
+    return impl_->skipped;
+}
+
 void BridgeNode::send(const std::vector<Publication> &publications) {
     for (const auto &item : publications) {
+        if (!impl_->wanted.at(item.stream)) {
+            ++impl_->skipped[item.stream];
+            continue;
+        }
         impl_->serializers.at(item.stream)->serialize_message(item.message->data(), &impl_->buffer_message);
         impl_->publishers.at(item.stream)->publish(impl_->buffer_message);
     }
 }
 
 void BridgeNode::publishClock(std::int64_t ns) {
+    if (!impl_->clock_wanted) {
+        ++impl_->skipped["/clock"];
+        return;
+    }
     rosgraph_msgs::msg::Clock message;
     message.clock = stampOf(ns);
     impl_->clock->publish(message);
 }
 
 void BridgeNode::broadcast(const std::vector<Transform> &transforms) {
-    if (transforms.empty() || !impl_->broadcaster)
+    if (transforms.empty() || !impl_->tf)
         return;
-    std::vector<geometry_msgs::msg::TransformStamped> messages;
+    if (!impl_->tf_wanted) {
+        ++impl_->skipped["/tf"];
+        return;
+    }
+    tf2_msgs::msg::TFMessage message;
     for (const auto &item : transforms)
-        messages.push_back(transformMessage(item));
-    impl_->broadcaster->sendTransform(messages);
+        message.transforms.push_back(transformMessage(item));
+    impl_->tf->publish(message);
 }
 
 void BridgeNode::tick() {
+    const auto elapsed = [](Clock::time_point &mark) {
+        const auto now = Clock::now();
+        const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now - mark).count();
+        mark = now;
+        return ns;
+    };
+    auto mark = Clock::now();
     impl_->drainInbox();
+    performance_.drain.add(elapsed(mark));
     StepOutput out = core_.step();
+    performance_.step.add(elapsed(mark));
     for (const auto stamp : out.clocks) // clock strictly before data carrying that time
         publishClock(stamp);
     send(out.publications);
     broadcast(out.transforms);
+    performance_.publish.add(elapsed(mark));
     if (impl_->cameras != nullptr) {
         const auto snapshot = core_.session().observe();
         impl_->cameras->acquire(snapshot, core_.rosNs(snapshot.elapsed.count()));
+        performance_.cameras.add(elapsed(mark));
     }
     if (impl_->alignment_client && impl_->alignment_client->service_is_ready()) {
         if (const auto alignment = core_.pendingAlignment()) {
@@ -317,10 +363,14 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
     }
     std::map<std::string, bool> demand; // camera stream -> has subscribers
     auto last_demand = Clock::now() - std::chrono::seconds(1);
+    refreshSubscribers();
     const auto pollDemand = [&](Clock::time_point now) {
-        if (impl_->cameras == nullptr || now - last_demand < std::chrono::milliseconds(500))
+        if (now - last_demand < std::chrono::milliseconds(500))
             return;
         last_demand = now;
+        refreshSubscribers();
+        if (impl_->cameras == nullptr)
+            return;
         for (const auto &stream : impl_->cameras->streamIds()) {
             const bool wanted = impl_->publishers.at(stream)->get_subscription_count() > 0;
             const auto known = demand.find(stream);
@@ -353,6 +403,7 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
         }
         owed += std::chrono::duration<double>(now - previous).count() * rtf;
         previous = now;
+        performance_.max_behind_ns = std::max<std::int64_t>(performance_.max_behind_ns, static_cast<std::int64_t>(owed * 1e9));
         int steps = 0;
         while (owed >= step_s && steps < max_catchup_ticks) {
             const auto started = Clock::now();
@@ -375,9 +426,15 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
                                  "falling behind wall time; dropping %.4f s backlog", owed);
             owed = 0.0;
         }
+        performance_.catchup_bursts += steps >= 5;
         const double remaining = (step_s - owed) / std::max(rtf, 1e-9);
-        if (remaining > 2e-4)
-            std::this_thread::sleep_for(std::chrono::duration<double>(remaining - 1e-4));
+        if (remaining > 2e-4) {
+            const auto requested = std::chrono::duration<double>(remaining - 1e-4);
+            const auto before = Clock::now();
+            std::this_thread::sleep_for(requested);
+            const auto slept = std::chrono::duration<double>(Clock::now() - before);
+            performance_.oversleep.add(std::max<std::int64_t>(0, static_cast<std::int64_t>((slept - requested).count() * 1e9)));
+        }
     }
     performance_.wall_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - run_start).count();
     performance_.sim_ns = ticks * core_.timestepNs();

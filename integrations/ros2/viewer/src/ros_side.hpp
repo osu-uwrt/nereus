@@ -21,7 +21,11 @@
 #include <std_msgs/msg/string.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
+#include <tf2_msgs/msg/tf_message.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
+#include <atomic>
+#include <mutex>
+#include <thread>
 #include <chrono>
 #include <deque>
 #include <functional>
@@ -74,6 +78,10 @@ struct TfSnapshot {
 class RosSide {
   public:
     explicit RosSide(rclcpp::Node::SharedPtr node);
+    ~RosSide();
+    std::string timingReport(); // display-clock diagnostics since the last call (for --profile)
+    RosSide(const RosSide &) = delete;
+    RosSide &operator=(const RosSide &) = delete;
     // Latched scenario document (std_msgs/String JSON, transient_local).
     void watchScenario(const std::string &topic, std::function<void(const std::string &)> callback);
     // Create every subscription that depends on scenario data; also usable for a demo without a node graph
@@ -151,7 +159,6 @@ class RosSide {
         bool seen = false, fresh = false, changed = false;
         double stamp = -1;
         Clock::time_point wall{};
-        DisplayClock clock;
     };
     void probe(Probe &, const std::string &frame);
     double wallSeconds() const;
@@ -164,7 +171,7 @@ class RosSide {
     rclcpp::Node::SharedPtr node_;
     std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
     std::unique_ptr<tf2_ros::Buffer> buffer_;
-    std::unique_ptr<tf2_ros::TransformListener> listener_;
+    std::atomic<int> lookupFallbacks_{0};
     const Scenario *scenario_ = nullptr;
     StatusLights *lights_ = nullptr;
     ThrusterVisuals *thrusters_ = nullptr;
@@ -174,6 +181,15 @@ class RosSide {
     PoseSource source_ = PoseSource::Auto;
     double truthDelay_ = .02, otherDelay_ = .06;
     Probe truth_, estimate_;
+    // Display clocks fed with exact arrival times by a dedicated receive thread (timingThread_), so frame
+    // pacing and UI-thread spinning never distort them.
+    DisplayClock truthClock_, estimateClock_;
+    std::mutex framesMutex_;
+    std::string truthFrame_, estimateFrame_;
+    rclcpp::Node::SharedPtr timingNode_;
+    std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> timingExecutor_;
+    rclcpp::SubscriptionBase::SharedPtr timingSub_, timingStaticSub_;
+    std::thread timingThread_;
     bool haveTime_ = false;
     double truthTime_ = 0, otherTime_ = 0; // display stamps of this frame (valid when haveTime_)
     Clock::time_point origin_ = Clock::now();

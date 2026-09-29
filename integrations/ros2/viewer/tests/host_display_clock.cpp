@@ -81,3 +81,94 @@ TEST(HostDisplayClock, DelayLargerThanPeriodKeepsInterpolationInsideBuffer) {
     for (double wall = 3.0; wall < 3.3; wall += 1. / 60)
         EXPECT_LE(clock.at(wall, .06), newest);
 }
+
+namespace {
+// Stamps every `period` s (at `rate` simulated s per wall s) arriving with loaded-machine delivery jitter
+// (uniform 0-15 ms plus a 40 ms burst every ~2 s); a 60 Hz renderer samples the clock.
+struct Loaded {
+    double cv = 0, maxStepRatio = 0;
+    int held = 0, frames = 0;
+    bool ahead = false, backwards = false;
+};
+Loaded loaded(double period, double rate = 1., double seconds = 20) {
+    DisplayClock clock;
+    std::mt19937 rng(11);
+    std::uniform_real_distribution<double> jitter(0, .015);
+    std::vector<std::pair<double, double>> arrivals;
+    for (int i = 0; i * period < seconds * rate; ++i) {
+        const double wall = i * period / rate;
+        const double late = jitter(rng) + (std::fmod(wall, 2.) < period / rate ? .04 : 0.);
+        arrivals.emplace_back(wall + late, 500 + i * period);
+    }
+    std::sort(arrivals.begin(), arrivals.end());
+    Loaded result;
+    std::size_t next = 0;
+    double latest = 0, previous = -1;
+    std::vector<double> steps;
+    for (double wall = 0; wall < seconds - .1; wall += 1. / 60) {
+        while (next < arrivals.size() && arrivals[next].first <= wall) {
+            clock.observe(arrivals[next].second, arrivals[next].first);
+            latest = std::max(latest, arrivals[next].second);
+            ++next;
+        }
+        if (!clock.valid())
+            continue;
+        const double t = clock.at(wall, .02);
+        result.ahead |= t > latest + 1e-9;
+        if (wall > 3) { // after the jitter envelope has formed
+            ++result.frames;
+            result.held += std::abs(t - latest) < 1e-9;
+            if (previous >= 0) {
+                result.backwards |= t < previous;
+                steps.push_back(t - previous);
+            }
+        }
+        previous = t;
+    }
+    double mean = 0, var = 0;
+    for (double s : steps)
+        mean += s;
+    mean /= double(steps.size());
+    for (double s : steps) {
+        var += (s - mean) * (s - mean);
+        result.maxStepRatio = std::max(result.maxStepRatio, s / mean);
+    }
+    result.cv = std::sqrt(var / double(steps.size())) / mean;
+    return result;
+}
+} // namespace
+
+TEST(HostDisplayClock, LoadedDeliveryStaysEvenWithoutHolding) {
+    const auto truth = loaded(.01); // 100 Hz truth
+    EXPECT_FALSE(truth.ahead);
+    EXPECT_FALSE(truth.backwards);
+    EXPECT_LT(truth.cv, .05) << "displayed time must advance evenly frame to frame";
+    EXPECT_LT(truth.maxStepRatio, 1.2);
+    EXPECT_LT(truth.held, truth.frames / 100) << "display must almost never wait at the newest stamp";
+    const auto estimate = loaded(.034); // 30 Hz EKF
+    EXPECT_FALSE(estimate.ahead);
+    EXPECT_LT(estimate.cv, .05) << "held " << estimate.held << "/" << estimate.frames << " max step ratio " << estimate.maxStepRatio;
+    EXPECT_LT(estimate.held, estimate.frames / 100);
+}
+
+TEST(HostDisplayClock, FollowsFasterSimulation) {
+    const auto fast = loaded(.01, 2.); // real_time_factor 2
+    EXPECT_FALSE(fast.ahead);
+    EXPECT_LT(fast.cv, .05);
+    EXPECT_LT(fast.held, fast.frames / 50);
+}
+
+TEST(HostDisplayClock, HoldsWhilePausedAndReanchorsOnResume) {
+    DisplayClock clock;
+    for (int i = 0; i <= 300; ++i)
+        clock.observe(10 + i * .01, i * .01); // 3 s at 100 Hz
+    const double paused = clock.at(3.0, .02);
+    for (double wall = 3.0; wall < 5.0; wall += 1. / 60) // no data: simulation paused
+        EXPECT_LE(clock.at(wall, .02), 13.0);
+    clock.observe(13.01, 5.0); // resumes 2 s (wall) later
+    for (int i = 2; i < 30; ++i)
+        clock.observe(13 + i * .01, 5.0 + (i - 1) * .01);
+    const double resumed = clock.at(5.3, .02);
+    EXPECT_GE(resumed, paused);
+    EXPECT_NEAR(resumed, 13.29 - .02, .04);
+}
