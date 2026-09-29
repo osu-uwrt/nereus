@@ -65,6 +65,7 @@ Document load(const std::filesystem::path &path) {
         Document result;
         std::set<std::string> ids;
         std::map<std::filesystem::path, std::shared_ptr<const rendering::MeshAsset>> meshes;
+        std::shared_ptr<const rendering::MeshAsset> box_mesh;
         std::size_t instance_count = 0;
         bool has_water = false;
         for (const auto &node : root["groups"]) {
@@ -95,19 +96,41 @@ Document load(const std::filesystem::path &path) {
                 if (instance_count > 4096)
                     throw std::invalid_argument("scene exceeds 4096 mesh instances");
                 for (const auto &item : node["instances"]) {
-                    fields(item, {"mesh", "pose", "tint", "material", "radiance", "casts_shadow"});
-                    const auto filename = item["mesh"].as<std::string>();
-                    if (filename.empty() || filename.size() > 4096)
-                        throw std::invalid_argument("invalid mesh path");
-                    const auto resource =
-                        std::filesystem::weakly_canonical(path.parent_path() / filename);
-                    auto &mesh = meshes[resource];
-                    if (!mesh)
-                        mesh = std::make_shared<const rendering::MeshAsset>(
-                            rendering::loadMesh(resource));
+                    fields(item, {"mesh", "box", "pose", "tint", "material", "radiance",
+                                  "casts_shadow", "color_channel"});
+                    if (static_cast<bool>(item["mesh"]) == static_cast<bool>(item["box"]))
+                        throw std::invalid_argument("instance requires exactly one mesh or box");
                     rendering::Instance instance;
-                    instance.mesh = mesh;
                     instance.transform = pose(item["pose"]);
+                    if (item["mesh"]) {
+                        const auto filename = item["mesh"].as<std::string>();
+                        if (filename.empty() || filename.size() > 4096)
+                            throw std::invalid_argument("invalid mesh path");
+                        const auto resource =
+                            std::filesystem::weakly_canonical(path.parent_path() / filename);
+                        auto &mesh = meshes[resource];
+                        if (!mesh)
+                            mesh = std::make_shared<const rendering::MeshAsset>(
+                                rendering::loadMesh(resource));
+                        instance.mesh = mesh;
+                    } else {
+                        const auto size = vector<3>(item["box"]);
+                        if ((size.array() <= 0).any())
+                            throw std::invalid_argument("box dimensions must be positive");
+                        if (!box_mesh)
+                            box_mesh = rendering::makeBoxMesh();
+                        instance.mesh = box_mesh;
+                        for (int axis = 0; axis < 3; ++axis)
+                            instance.transform.col(axis) *= size[axis];
+                    }
+                    if (!instance.transform.allFinite())
+                        throw std::invalid_argument("instance transform overflow");
+                    if (item["color_channel"]) {
+                        if (group.source.empty())
+                            throw std::invalid_argument("color binding requires a source");
+                        group.colors.push_back(
+                            {group.content.instances.size(), name(item["color_channel"])});
+                    }
                     if (item["tint"])
                         instance.tint = vector<4>(item["tint"]);
                     if ((instance.tint.array() < 0).any() || (instance.tint.array() > 1).any())

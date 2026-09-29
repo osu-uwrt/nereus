@@ -4,7 +4,9 @@ The neutral visualization library exposes `RotorAnimator`, `pivotRotation()` and
 `Indicator` in `robotics/visualization/animation.hpp`. They reproduce the original
 rotor/LED state calculations without robot identifiers, ROS message types, resource
 loading, graphics or wall clocks. The simulation adapter now publishes moving
-rotor frames for the interactive scene. LEDs are not yet assembled.
+rotor frames for the interactive scene. Original LED bars now consume named
+color observations in standalone scenes; live simulation command ownership is
+still pending. See [INDICATORS.md](INDICATORS.md).
 
 ## Rotor timing and ownership
 
@@ -118,7 +120,8 @@ Additional tests cover rejected-packet timeout preservation, explicit reset,
 independent instances and shaft invariance. The installed viewer extension exercises
 both models without a window or simulation.
 
-Next: original LED bar geometry/material/radiance and source color bindings,
-then animated renderer comparisons. ROS target routing, complete Talos mechanisms,
+Next: simulation-side indicator command ownership and sampling, followed by
+optional ROS routing and animated whole-assembly comparisons. Original LED
+geometry/color bindings and fixed-image comparisons are now covered in INDICATORS.md. ROS target routing, complete Talos mechanisms,
 camera acquisition and full-stack acceptance remain open. The original source-clock
 formulas are preserved; whole-stack delivery/scheduling is not yet validated here.

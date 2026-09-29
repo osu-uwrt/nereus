@@ -1,0 +1,17 @@
+version: 1
+sources:
+- id: simulation
+  type: local
+  file: talos_indicator_recording.yaml
+selected_source: simulation
+fixed_frame: world
+scene: talos_indicator_pool.yaml
+camera:
+  target:
+  - 3.014
+  - 0.1173
+  - -0.858
+  yaw: 1.411
+  pitch: 0.585
+  distance: 0.648
+displays: []

@@ -204,3 +204,32 @@ TEST(LiveSource, MovingTopologyAndCombinedHistoryAreValidatedAtConstruction) {
     options.moving_frames.pop_back();
     EXPECT_NO_THROW((LivePoseSource(options)));
 }
+
+TEST(LiveSource, ColorBatchSharesPoseCutoffAndRejectsPartialOrInvalidUpdates) {
+    LivePoseOptions options{"live", "clock", "world", "body", "pose", 1, 2};
+    options.color_channels = {"status"};
+    LivePoseSource source(options);
+    source.publish({0, 1, {}, {}, {{1, 0, 0}}});
+    const auto retained = source.snapshot();
+    EXPECT_THROW(source.publish({1, 0, {}}), std::invalid_argument);
+    EXPECT_THROW(source.publish({1, 0, {}, {}, {{0, -1, 0}}}), std::invalid_argument);
+    EXPECT_EQ(source.snapshot().generation, retained.generation);
+    source.publish({0, 2, {}, {}, {{0, 1, 0}}});
+    source.publish({0, 3, {}, {}, {{0, 0, 1}}});
+    const auto latest = source.snapshot();
+    EXPECT_EQ(latest.time_ns, 3);
+    EXPECT_EQ(latest.delivery.dropped_queue, 1U);
+    EXPECT_EQ(colorAt(latest.data->colors.at("status"), 3).value(), Eigen::Vector3f(0, 0, 1));
+    source.disconnect();
+    source.publish({1, 0, {}, {}, {{0, 0, 0}}});
+    source.reconnect();
+    const auto reset = source.snapshot();
+    EXPECT_EQ(reset.time_ns, 0);
+    EXPECT_EQ(reset.data->colors.at("status").size(), 1U);
+    EXPECT_EQ(colorAt(reset.data->colors.at("status"), 0).value(), Eigen::Vector3f::Zero());
+    EXPECT_EQ(colorAt(retained.data->colors.at("status"), 1).value(), Eigen::Vector3f(1, 0, 0));
+    options.color_channels = {"duplicate", "duplicate"};
+    EXPECT_THROW((LivePoseSource(options)), std::invalid_argument);
+    options.color_channels = {""};
+    EXPECT_THROW((LivePoseSource(options)), std::invalid_argument);
+}

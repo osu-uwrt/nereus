@@ -256,7 +256,7 @@ std::string serializeWorkspace(const Workspace &workspace,
 v::Recording loadRecording(const std::filesystem::path &path) {
     try {
         const auto node = document(path);
-        fields(node, {"version", "clock", "duration_ns", "root", "frames", "streams"});
+        fields(node, {"version", "clock", "duration_ns", "root", "frames", "streams", "colors"});
         v::Recording result;
         result.data.clock = name(node["clock"]);
         result.duration_ns = node["duration_ns"].as<v::Time>();
@@ -289,6 +289,23 @@ v::Recording loadRecording(const std::filesystem::path &path) {
             }
             if (!result.data.streams.emplace(name(stream["id"]), std::move(samples)).second)
                 throw std::invalid_argument("duplicate stream id");
+        }
+        if (node["colors"]) {
+            sequence(node["colors"], 64);
+            for (const auto &channel : node["colors"]) {
+                fields(channel, {"id", "samples"});
+                sequence(channel["samples"], 10000);
+                v::ColorHistory samples;
+                for (const auto &sample : channel["samples"]) {
+                    fields(sample, {"time_ns", "rgb"});
+                    const auto rgb = vector(sample["rgb"]);
+                    if ((rgb.array() < 0).any() || (rgb.array() > 1).any())
+                        throw std::invalid_argument("source RGB must be within [0,1]");
+                    samples.push_back({sample["time_ns"].as<v::Time>(), rgb.cast<float>()});
+                }
+                if (!result.data.colors.emplace(name(channel["id"]), std::move(samples)).second)
+                    throw std::invalid_argument("duplicate color channel");
+            }
         }
         v::validate(result);
         return result;

@@ -1,7 +1,7 @@
 {
   "source_repository": "https://github.com/osu-uwrt/riptide_simulator",
   "source_revision": "07647eebe706f96ea7b76db3cc9802735a146698",
-  "scope": "Original body and eight rotors only; launcher, claw, magnet and LEDs still separate work.",
+  "scope": "Original body, eight rotors and indicator geometry; launcher, claw and magnet remain separate work.",
   "sources_sha256": {
     "camera_faker/models/talos3/thrusters.yaml": "ed5733e949f5a64d12e1d674cf2bb3ba6d17bf06ddb6f86f3a2867386f49aaf3",
     "camera_faker/models/talos3/Talos3_body.glb": "5827668235d30dcde556d2cd1cf2c3352bf71adaeeaa1bc9840925d9eaa2460d",
@@ -15,9 +15,13 @@
     "camera_faker/models/talos3/rotors/VLP.glb": "e9abcc47da85069b25cbdc780f1a9f75ab56317b523297626970246be7bf98ca",
     "camera_faker/models/talos3/Talos3_body.json": "2ef1371a8a55294ce2e05423811b72ddca20395551c5b521bd38cb0e7a1833eb",
     "camera_faker/models/talos3/material_repairs.json": "bc021630f3861b90710b5b35e8680e38e14a9613272b093f9409fbfe8d5d340c",
-    "camera_faker/models/talos3/README.md": "1554f7d3f540d77c9db105afc69943c381c3040f201974eeca7c01ef4cd34dd9"
+    "camera_faker/models/talos3/README.md": "1554f7d3f540d77c9db105afc69943c381c3040f201974eeca7c01ef4cd34dd9",
+    "c_simulator/robots/talos/config/status_lights.yaml": "6741a74dd95132f03afc6a9ae03c8267bfc8f90c0c40bd2d75a818104deb5536"
   },
-  "importer_sha256": "044baba6358062c18e4a06266bc668d2d5070952a45909687d52824e56544265",
+  "composition_sources_sha256": {
+    "content/visuals/scenes/talos_pool.yaml": "e4bba7fe064fa7e2d1f4703fe3cabf8fda7908576ee0d47c4405ff0f3e9aef4f"
+  },
+  "importer_sha256": "552fd4af4a130bae46dcce1e87b0d7fb6ed2ef1647796b4e153143b678efbf3f",
   "outputs_sha256": {
     "content/visuals/talos/Talos3_body.glb": "5827668235d30dcde556d2cd1cf2c3352bf71adaeeaa1bc9840925d9eaa2460d",
     "content/visuals/talos/rotors/VUS.glb": "bcefa0cd37a3c3166cee03e33dcf3fa55342f239aba5b5a28e0c82fb64631f4d",
@@ -32,8 +36,11 @@
     "content/visuals/talos/provenance/material_repairs.json": "bc021630f3861b90710b5b35e8680e38e14a9613272b093f9409fbfe8d5d340c",
     "content/visuals/talos/provenance/README.md": "1554f7d3f540d77c9db105afc69943c381c3040f201974eeca7c01ef4cd34dd9",
     "content/visuals/talos/provenance/thrusters.yaml": "ed5733e949f5a64d12e1d674cf2bb3ba6d17bf06ddb6f86f3a2867386f49aaf3",
-    "content/visuals/talos/inventory.json": "849180ec5a2bb385f5251a783a25173e9d0dc092f7a54296ab71dbb40f5bdebe",
-    "content/visuals/scenes/talos_rotors.yaml": "da311638331209d3eae617ecd1f9eb96e83778764cc87267f18b865dea2ebb5f"
+    "content/visuals/talos/inventory.json": "7d6ec7eb02ee22ab63563cb85f3fe26dc81796974e34e03b5535b79378ba2be8",
+    "content/visuals/scenes/talos_rotors.yaml": "da311638331209d3eae617ecd1f9eb96e83778764cc87267f18b865dea2ebb5f",
+    "content/visuals/talos/provenance/status_lights.yaml": "6741a74dd95132f03afc6a9ae03c8267bfc8f90c0c40bd2d75a818104deb5536",
+    "content/visuals/scenes/talos_indicators.yaml": "43d89a1ba58570848ebceb4476fcc6bad43fa35c8f08d9daff7108ba5bd055a5",
+    "content/visuals/scenes/talos_indicator_pool.yaml": "e8e70792289cc225bc7fb1827adc274d3c953fd05075e3e8ab6168208cce27c8"
   },
   "license_status": "Unresolved original asset metadata; local use authorized. See docs/PROVENANCE.md before public redistribution."
 }

@@ -31,6 +31,7 @@ def main():
         "camera_faker/models/talos3/Talos3_body.glb",
         "camera_faker/models/talos3/rotors",
         "camera_faker/textures/objects/April Tag.jpg",
+        "c_simulator/robots/talos/config/status_lights.yaml",
     ]
     archive = subprocess.check_output(
         ["git", "-C", str(args.simulator_repo), "archive", REVISION, *inputs]
@@ -111,11 +112,12 @@ def main():
         "display": os.environ.get("DISPLAY"),
         "dimensions": [640, 400],
         "time_seconds": 12.5,
-        "scope": "Six fixed original Talos body/rotor and pool scenes. No tasks, mechanisms, LEDs, overlays, ROS or mission parity.",
+        "cases": list(range(9)),
+        "scope": "Six fixed body/rotor/pool views plus three original indicator closeups (off, red, individual RGB). No animated rotors, task mechanisms, overlays, ROS or mission parity.",
         "outputs_sha256": {
             p.name: hashlib.sha256(p.read_bytes()).hexdigest()
             for p in sorted(output.iterdir())
-            if p.suffix in (".view", ".rgba", ".opaque", ".depth", ".composite", ".composite-depth")
+            if p.suffix in (".view", ".rgba", ".opaque", ".depth", ".composite", ".composite-depth", ".lights")
         },
     }
     (output / "manifest.json").write_text(json.dumps(metadata, indent=2) + "\n")

@@ -1,10 +1,11 @@
 {
   "schema_version": 1,
   "kind": "visual_resource_inventory",
-  "scope": "Original body and eight rotors only; launcher, claw, magnet and LEDs still separate work.",
+  "scope": "Original body, eight rotors and indicator geometry; launcher, claw and magnet remain separate work.",
   "coordinate_frame": "cad",
   "position_units": "metres",
   "body_mesh": "Talos3_body.glb",
+  "indicators_scene": "../scenes/talos_indicators.yaml",
   "rotors": [
     {
       "id": "VUS",

@@ -1,4 +1,5 @@
 #include <robotics/scene_view/scene.hpp>
+#include <stdexcept>
 
 namespace robotics::scene_view {
 Resolved resolve(const Document &document, const std::string &fixed_frame,
@@ -25,6 +26,35 @@ Resolved resolve(const Document &document, const std::string &fixed_frame,
             transform.topLeftCorner<3, 3>() = found.pose->rotation.toRotationMatrix().cast<float>();
             transform.topRightCorner<3, 1>() = found.pose->translation.cast<float>();
         }
+        std::map<std::size_t, Eigen::Vector3f> colors;
+        for (const auto &binding : group.colors) {
+            if (binding.instance >= group.content.instances.size() || binding.channel.empty() ||
+                colors.count(binding.instance)) {
+                result.issues[group.id] = "Invalid instance color binding";
+                break;
+            }
+            if (group.source.empty() || !source || !source->data) {
+                result.issues[group.id] = "Color binding requires a source";
+                break;
+            }
+            const auto channel = source->data->colors.find(binding.channel);
+            const auto color = channel == source->data->colors.end()
+                                   ? std::nullopt
+                                   : visualization::colorAt(channel->second, source->time_ns);
+            if (!color) {
+                result.issues[group.id] = "Awaiting color channel: " + binding.channel;
+                break;
+            }
+            try {
+                visualization::validateColor(*color);
+            } catch (const std::invalid_argument &error) {
+                result.issues[group.id] = error.what();
+                break;
+            }
+            colors.emplace(binding.instance, *color);
+        }
+        if (result.issues.count(group.id))
+            continue;
         auto water = group.content.water;
         if (water) {
             if (result.scene.water) {
@@ -41,8 +71,11 @@ Resolved resolve(const Document &document, const std::string &fixed_frame,
             water->local_to_world = transform * water->local_to_world;
             water->local_to_world(2, 3) = 0;
         }
-        for (const auto &instance : group.content.instances) {
+        for (std::size_t i = 0; i < group.content.instances.size(); ++i) {
+            const auto &instance = group.content.instances[i];
             auto resolved = instance;
+            if (colors.count(i))
+                resolved.tint.head<3>() = resolved.tint.head<3>().cwiseProduct(colors.at(i));
             resolved.transform = transform * instance.transform;
             result.scene.instances.push_back(std::move(resolved));
         }

@@ -5,9 +5,14 @@
 namespace robotics::scene_view {
 // A group is resolved atomically. Empty source means a fixed-frame asset, not
 // permission to align unrelated source frames that happen to share a name.
+struct ColorBinding {
+    std::size_t instance{0};
+    std::string channel;
+};
 struct Group {
     std::string id, source, frame;
     rendering::Scene content;
+    std::vector<ColorBinding> colors{}; // Multiply instance RGB; preserve alpha and radiance.
 };
 struct Document {
     std::vector<Group> groups;

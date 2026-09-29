@@ -1,12 +1,25 @@
 #include <robotics/visualization/source.hpp>
 
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 
 namespace robotics::visualization {
+void validateColor(const Eigen::Vector3f &rgb) {
+    if (!rgb.allFinite() || (rgb.array() < 0).any() || (rgb.array() > 1).any())
+        throw std::invalid_argument("source RGB must be finite and within [0,1]");
+}
+std::optional<Eigen::Vector3f> colorAt(const ColorHistory &history, Time time_ns) {
+    if (history.empty() || time_ns < history.front().time_ns || time_ns > history.back().time_ns)
+        return std::nullopt;
+    const auto end = std::upper_bound(
+        history.begin(), history.end(), time_ns,
+        [](Time time, const ColorSample &sample) { return time < sample.time_ns; });
+    return std::prev(end)->rgb;
+}
 void validate(const Recording &recording) {
     if (recording.data.clock.empty() || !recording.data.frames || recording.duration_ns < 0 ||
-        recording.data.streams.size() > 64)
+        recording.data.streams.size() > 64 || recording.data.colors.size() > 64)
         throw std::invalid_argument(
             "invalid source identity, clock, frames, duration, or stream count");
     std::size_t total = 0;
@@ -23,8 +36,20 @@ void validate(const Recording &recording) {
         }
         total += samples.size();
     }
+    for (const auto &[channel, samples] : recording.data.colors) {
+        if (channel.empty() || channel.size() > 256 || samples.size() > 10000)
+            throw std::invalid_argument("color channel requires a name and at most 10000 samples");
+        Time previous = -1;
+        for (const auto &sample : samples) {
+            validateColor(sample.rgb);
+            if (sample.time_ns <= previous || sample.time_ns > recording.duration_ns)
+                throw std::invalid_argument("color times must increase within recording duration");
+            previous = sample.time_ns;
+        }
+        total += samples.size();
+    }
     if (total > 100000)
-        throw std::invalid_argument("pose histories exceed 100000 samples");
+        throw std::invalid_argument("source histories exceed 100000 samples");
 }
 LocalSource::LocalSource(std::string id, Recording recording) : id_(std::move(id)) {
     if (id_.empty())

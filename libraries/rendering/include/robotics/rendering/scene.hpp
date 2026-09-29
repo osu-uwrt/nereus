@@ -53,6 +53,8 @@ struct PoolGeometry {
     float water_level = 0, deck_height = .305288888f;
     Eigen::Matrix4f local_to_world = Eigen::Matrix4f::Identity();
 };
+// Unit cube centered on origin, six separate normal/UV faces. CPU-only geometry.
+std::shared_ptr<const MeshAsset> makeBoxMesh();
 // Optional original pool appearance geometry. No robot, task, fluid dynamics or transport.
 // Instance order: floor, four walls, four decks, four coping strips.
 Scene makePoolScene(const PoolGeometry &parameters = {});

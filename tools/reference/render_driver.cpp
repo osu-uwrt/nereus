@@ -125,6 +125,51 @@ int main(int argc, char **argv) {
                 renderer.render(frame, view, appearance, time, true, true, false);
             },
             [] { glFinish(); });
+        const pool::StatusLights lights(
+            (root / "c_simulator/robots/talos/config/status_lights.yaml").string());
+        pool::Renderer illuminated(
+            (root / "camera_faker/shaders/pool").string(), root.string(),
+            (root / "camera_faker/textures").string(), (root / "mapping.yaml").string(),
+            (root / "markers.yaml").string(), (root / "scene.yaml").string(), "fixture",
+            (root / "camera_faker/models/talos3/Talos3_body.glb").string(), "", "", "", "",
+            lights.lights, rotors);
+        illuminated.robotPose(glm::translate(glm::mat4(1), {3, 0, -1}) *
+                              glm::translate(glm::mat4(1), {.157f, -.040f, .048f}));
+        std::vector<float> geometry;
+        for (const auto &light : lights.lights) {
+            const auto mount = glm::scale(light.mount, light.size);
+            geometry.insert(geometry.end(), glm::value_ptr(mount), glm::value_ptr(mount) + 16);
+            geometry.push_back(light.radiance);
+        }
+        if (lights.lights.size() != 3)
+            throw std::runtime_error("unexpected pinned indicator count");
+        binary(output / "indicators.lights", geometry);
+        frame.resize(640, 400);
+        view.eye = {3.1f, .65f, -.5f};
+        view.view = glm::lookAt(view.eye, glm::vec3(3.014f, .1173f, -.858f), glm::vec3(0, 0, 1));
+        view.projection = glm::perspective(glm::radians(65.f), 640.f / 400, .05f, 150.f);
+        appearance = pool::Look{};
+        appearance.tag = false;
+        for (int variant = 0; variant < 3; ++variant) {
+            for (std::size_t i = 0; i < lights.lights.size(); ++i) {
+                glm::vec3 rgb(0);
+                if (variant == 1)
+                    rgb.r = 1;
+                else if (variant == 2)
+                    rgb[static_cast<int>(i)] = 1;
+                illuminated.statusLight(lights.lights[i].id, rgb);
+            }
+            std::vector<float> camera(glm::value_ptr(view.view), glm::value_ptr(view.view) + 16);
+            camera.insert(camera.end(), glm::value_ptr(view.projection),
+                          glm::value_ptr(view.projection) + 16);
+            camera.insert(camera.end(), glm::value_ptr(view.eye), glm::value_ptr(view.eye) + 3);
+            binary(output / (std::to_string(6 + variant) + ".view"), camera);
+            illuminated.shadows(appearance);
+            illuminated.render(frame, view, appearance, 12.5f, true, true, false);
+            capture(frame, output / std::to_string(6 + variant));
+            if (glGetError() != GL_NO_ERROR)
+                throw std::runtime_error("OpenGL error during original indicator capture");
+        }
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';
         return 1;

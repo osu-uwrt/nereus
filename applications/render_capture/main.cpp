@@ -160,6 +160,30 @@ int main(int argc, char **argv) {
             object.transform = eigen(model);
             scene.instances.push_back(std::move(object));
         }
+        auto indicator_scene = scene;
+        const bool have_indicators =
+            argc == 5 &&
+            std::filesystem::exists(std::filesystem::path(argv[4]) / "indicators.lights");
+        if (have_indicators) {
+            // Shared fixed input captured from the unchanged original config loader.
+            // Public scene loading and source-color binding are validated separately.
+            std::ifstream lights(std::filesystem::path(argv[4]) / "indicators.lights",
+                                 std::ios::binary);
+            const auto geometry = r::makeBoxMesh();
+            for (int i = 0; i < 3; ++i) {
+                r::Instance instance;
+                Eigen::Matrix4f mount;
+                lights.read(reinterpret_cast<char *>(mount.data()), 16 * sizeof(float));
+                lights.read(reinterpret_cast<char *>(&instance.radiance), sizeof(float));
+                instance.mesh = geometry;
+                instance.transform = eigen(model * glm::make_mat4(mount.data()));
+                instance.material = r::SurfaceMaterial::Emissive;
+                instance.casts_shadow = false;
+                indicator_scene.instances.push_back(std::move(instance));
+            }
+            if (!lights || lights.peek() != std::char_traits<char>::eof())
+                throw std::runtime_error("invalid indicator reference geometry");
+        }
         // A caller may have a pixel upload buffer bound when the renderer is constructed.
         GLuint unpack = 0;
         glGenBuffers(1, &unpack);
@@ -167,9 +191,10 @@ int main(int argc, char **argv) {
         glBufferData(GL_PIXEL_UNPACK_BUFFER, 4, nullptr, GL_STATIC_DRAW);
         r::Renderer renderer(argv[1]);
         glDeleteBuffers(1, &unpack);
-        const std::vector<glm::vec3> eyes = {{6, -4, 3},         {4.5f, -2, -.8f}, {3.8f, -1, .03f},
-                                             {3.5f, -.7f, -.9f}, {6, -4, 3},       {6, -4, 3}};
-        for (std::size_t i = 0; i < eyes.size(); ++i) {
+        const std::vector<glm::vec3> eyes = {
+            {6, -4, 3}, {4.5f, -2, -.8f},   {3.8f, -1, .03f},   {3.5f, -.7f, -.9f}, {6, -4, 3},
+            {6, -4, 3}, {3.1f, .65f, -.5f}, {3.1f, .65f, -.5f}, {3.1f, .65f, -.5f}};
+        for (std::size_t i = 0; i < (have_indicators ? eyes.size() : 6U); ++i) {
             r::View view;
             view.view = eigen(glm::lookAt(eyes[i], glm::vec3(3, 0, -1), glm::vec3(0, 0, 1)));
             view.projection = eigen(glm::perspective(glm::radians(65.f), 640.f / 400, .05f, 150.f));
@@ -184,10 +209,20 @@ int main(int argc, char **argv) {
                     throw std::runtime_error("invalid reference view");
             }
             r::Appearance appearance;
-            appearance.outdoor = i != 1 && i != 5;
+            appearance.outdoor = i < 6 && i != 1 && i != 5;
             appearance.shadows = i != 5;
             appearance.reflections = i != 3 && i != 4;
-            renderer.draw(scene, view, appearance, 12.5f, 640, 400);
+            if (i >= 6) {
+                for (std::size_t light = 0; light < 3; ++light) {
+                    auto &instance = indicator_scene.instances[scene.instances.size() + light];
+                    instance.tint = {0, 0, 0, 1};
+                    if (i == 7)
+                        instance.tint[0] = 1;
+                    else if (i == 8)
+                        instance.tint[static_cast<Eigen::Index>(light)] = 1;
+                }
+            }
+            renderer.draw(i < 6 ? scene : indicator_scene, view, appearance, 12.5f, 640, 400);
             const auto capture = renderer.capture();
             const auto prefix = output / std::to_string(i);
             binary(prefix.string() + ".rgba", capture.rgba);

@@ -2,6 +2,7 @@
 
 #include <deque>
 #include <mutex>
+#include <set>
 #include <stdexcept>
 #include <utility>
 
@@ -13,10 +14,16 @@ struct LivePoseSource::Impl {
             options.stream.empty() || options.queue_capacity < 1 || options.queue_capacity > 4096 ||
             options.history_capacity < 1 || options.history_capacity > 10000 ||
             options.moving_frames.size() > 127 || options.fixed_frames.size() > 127 ||
-            (options.moving_frames.size() + 1) * options.history_capacity +
+            options.color_channels.size() > 64 ||
+            (options.moving_frames.size() + options.color_channels.size() + 1) *
+                        options.history_capacity +
                     options.fixed_frames.size() >
                 100000)
             throw std::invalid_argument("invalid live source identity, frames, or capacities");
+        std::set<std::string> channels;
+        for (const auto &channel : options.color_channels)
+            if (channel.empty() || channel.size() > 256 || !channels.insert(channel).second)
+                throw std::invalid_argument("color channel names must be unique and nonempty");
         std::vector<FrameEdge> edges{{options.world_frame, options.body_frame, false, {{0, {}}}}};
         for (const auto &frame : options.fixed_frames)
             edges.push_back({frame.parent, frame.child, true, {{0, frame.pose}}});
@@ -27,9 +34,12 @@ struct LivePoseSource::Impl {
         pending.resize(options.queue_capacity);
         drained.resize(options.queue_capacity);
         for (auto *buffer : {&pending, &drained})
-            for (auto &packet : *buffer)
+            for (auto &packet : *buffer) {
                 packet.moving_poses.resize(options.moving_frames.size());
+                packet.colors.resize(options.color_channels.size());
+            }
         latest.moving_poses.resize(options.moving_frames.size());
+        latest.colors.resize(options.color_channels.size());
     }
     LivePoseOptions options;
     std::mutex mutex;
@@ -63,6 +73,9 @@ LivePoseSource::~LivePoseSource() = default;
 const std::vector<MovingFrame> &LivePoseSource::movingFrames() const {
     return impl_->options.moving_frames;
 }
+const std::vector<std::string> &LivePoseSource::colorChannels() const {
+    return impl_->options.color_channels;
+}
 void LivePoseSource::publish(const PoseUpdate &update) {
     validate(update.pose);
     if (update.time_ns < 0)
@@ -72,6 +85,10 @@ void LivePoseSource::publish(const PoseUpdate &update) {
         throw std::invalid_argument("moving-frame batch does not match source topology");
     for (const auto &pose : update.moving_poses)
         validate(pose);
+    if (update.colors.size() != state.options.color_channels.size())
+        throw std::invalid_argument("color batch does not match source channels");
+    for (const auto &color : update.colors)
+        validateColor(color);
     const std::lock_guard<std::mutex> lock(state.mutex);
     if (state.has_latest) {
         if (update.generation < state.latest.generation ||
@@ -145,6 +162,12 @@ SourceSnapshot LivePoseSource::snapshot() const {
             for (const auto &update : state.history)
                 edge.samples.push_back({update.time_ns, update.moving_poses[i]});
             edges.push_back(std::move(edge));
+        }
+        for (std::size_t i = 0; i < state.options.color_channels.size(); ++i) {
+            auto &samples = data.colors[state.options.color_channels[i]];
+            samples.reserve(state.history.size());
+            for (const auto &update : state.history)
+                samples.push_back({update.time_ns, update.colors[i]});
         }
         data.frames =
             std::make_shared<const FrameGraph>(state.options.world_frame, std::move(edges));

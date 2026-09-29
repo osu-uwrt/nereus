@@ -10,7 +10,8 @@ namespace {
 Eigen::Matrix4f eigen(const glm::mat4 &m) {
     return Eigen::Map<const Eigen::Matrix4f>(glm::value_ptr(m));
 }
-std::shared_ptr<const MeshAsset> cube() {
+} // namespace
+std::shared_ptr<const MeshAsset> makeBoxMesh() {
     auto result = std::make_shared<MeshAsset>();
     Submesh mesh;
     for (int axis = 0; axis < 3; ++axis)
@@ -31,7 +32,6 @@ std::shared_ptr<const MeshAsset> cube() {
     result->maximum.setConstant(.5f);
     return result;
 }
-} // namespace
 Scene makePoolScene(const PoolGeometry &p) {
     if (!p.dimensions.allFinite() || (p.dimensions.array() <= 0).any() ||
         !std::isfinite(p.water_level) || !std::isfinite(p.deck_height) || p.deck_height < 0 ||
@@ -46,7 +46,7 @@ Scene makePoolScene(const PoolGeometry &p) {
         throw std::invalid_argument(
             "pool appearance requires positive dimensions and a horizontal rigid frame");
     Scene scene;
-    const auto geometry = cube();
+    const auto geometry = makeBoxMesh();
     const float length = p.dimensions.x(), width = p.dimensions.y(), depth = p.dimensions.z(),
                 deck = p.deck_height;
     const auto pool = glm::make_mat4(p.local_to_world.data());

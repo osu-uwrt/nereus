@@ -5,7 +5,9 @@ viewer. It runs independently of simulation and ROS, using the same source frame
 contract for recordings and live pose sources. The supplied Talos example contains
 the original body and eight rotors, plus the original pool geometry and water
 passes. The live simulation example animates rotors from realized forces; the
-recording example retains static rotors. LED/mechanism animation, complete course content, original
+recording example retains static rotors. [Original LED bars](INDICATORS.md) can
+follow recorded/live source colors; simulation command ownership remains open.
+Mechanism animation, complete course content, original
 operator panels and camera products remain separate required work.
 
 ## Run a recording or simulation
@@ -87,6 +89,12 @@ source identity, be connected, and provide a transform from the group's frame to
 the workspace fixed frame at the snapshot timestamp. Omitting `source` means a
 static asset authored directly in the named fixed frame; that frame must equal
 the workspace fixed frame. Frame names never imply alignment between sources.
+
+An instance declares exactly one `mesh` or `box: [x, y, z]`. Boxes use centered
+unit geometry scaled to positive metre dimensions. Optional `color_channel` binds
+a named color history from the group source at the same snapshot time as its
+frame; it multiplies RGB while preserving alpha/radiance. Missing color omits the
+group. See [INDICATORS.md](INDICATORS.md) for timing and bounds.
 
 Instance pose defaults to identity, tint to white, material to `asset`, radiance
 to 60 and shadow casting to true. Supported overrides are `asset`, `clear` and

@@ -10,10 +10,20 @@ struct PoseSample {
     Pose pose;
 };
 using PoseHistory = std::vector<PoseSample>;
+struct ColorSample {
+    Time time_ns{0};
+    Eigen::Vector3f rgb{Eigen::Vector3f::Zero()}; // Linear normalized RGB, no radiance.
+};
+using ColorHistory = std::vector<ColorSample>;
+void validateColor(const Eigen::Vector3f &rgb);
+// Validated, strictly increasing history. Hold preceding value within the observed
+// range; no interpolation across transitions and no extrapolation past the last sample.
+std::optional<Eigen::Vector3f> colorAt(const ColorHistory &, Time time_ns);
 struct SourceData {
     std::string clock;
     std::shared_ptr<const FrameGraph> frames;
     std::map<std::string, PoseHistory> streams;
+    std::map<std::string, ColorHistory> colors;
 };
 struct Recording {
     SourceData data;

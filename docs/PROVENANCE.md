@@ -138,7 +138,11 @@ historical conversion metadata from simulator revision
 importer's hash. `inventory.json` removes transport settings and retains authored
 CAD pivots, axes, order and force/RPM settings. The same importer produces
 `content/visuals/scenes/talos_rotors.yaml`, a transport-free named-input rig, and
-records its output hash in the manifest. It is not a complete robot assembly.
+records its output hash in the manifest. It also imports the three LED bars from
+`c_simulator/robots/talos/config/status_lights.yaml` as neutral emissive box groups.
+The composed LED/pool example records the local scene input hash. Historical ROS
+fields remain only in provenance; runtime scene data contains none. This is not
+a complete robot assembly.
 Original source/asset licensing remains unresolved as described above; local work
 is authorized and public redistribution still requires that review.
 

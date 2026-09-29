@@ -376,3 +376,57 @@ rotors:
                   "axis: [1, 0, 0], direction: 1}\n");
     EXPECT_THROW(ui::loadRotorRig(path), std::invalid_argument);
 }
+
+TEST(Source, ColorTransitionsHoldWithoutFutureLeakOrExtrapolation) {
+    auto recorded = recording();
+    recorded.data.colors["lamp"] = {{10, {1, 0, 0}}, {20, {0, 1, 0}}, {100, {0, 1, 0}}};
+    EXPECT_NO_THROW(v::validate(recorded));
+    const auto &colors = recorded.data.colors.at("lamp");
+    EXPECT_FALSE(v::colorAt(colors, 9));
+    EXPECT_EQ(v::colorAt(colors, 19).value(), Eigen::Vector3f(1, 0, 0));
+    EXPECT_EQ(v::colorAt(colors, 20).value(), Eigen::Vector3f(0, 1, 0));
+    EXPECT_EQ(v::colorAt(colors, 100).value(), Eigen::Vector3f(0, 1, 0));
+    EXPECT_FALSE(v::colorAt(colors, 101));
+    v::LocalSource source("recording", recorded);
+    source.seek(20);
+    const auto retained = source.snapshot();
+    source.seek(10);
+    EXPECT_GT(source.snapshot().generation, retained.generation);
+    EXPECT_EQ(v::colorAt(retained.data->colors.at("lamp"), retained.time_ns).value(),
+              Eigen::Vector3f(0, 1, 0));
+    recorded.data.colors["lamp"][1].time_ns = 10;
+    EXPECT_THROW(v::validate(recorded), std::invalid_argument);
+    recorded.data.colors["lamp"] = {{101, {0, 0, 0}}};
+    EXPECT_THROW(v::validate(recorded), std::invalid_argument);
+    recorded.data.colors["lamp"] = {{0, {1.1f, 0, 0}}};
+    EXPECT_THROW(v::validate(recorded), std::invalid_argument);
+    recorded.data.colors["lamp"] = {{0, {std::numeric_limits<float>::quiet_NaN(), 0, 0}}};
+    EXPECT_THROW(v::validate(recorded), std::invalid_argument);
+}
+
+TEST(Workspace, LoadsBoundedNamedColorHistories) {
+    Temporary temporary;
+    const auto path = temporary.directory / "colors.yaml";
+    const std::string prefix = "version: 1\nclock: recorded\nduration_ns: 100\nroot: "
+                               "world\nframes: []\nstreams: []\ncolors:\n";
+    const std::string channel = "  - id: status\n    samples:\n      - {time_ns: 0, rgb: [1, 0, "
+                                "0]}\n      - {time_ns: 100, rgb: [0, 0, 0]}\n";
+    {
+        std::ofstream(path) << prefix << channel;
+    }
+    const auto recorded = ui::loadRecording(path);
+    EXPECT_EQ(v::colorAt(recorded.data.colors.at("status"), 50).value(), Eigen::Vector3f(1, 0, 0));
+    {
+        std::ofstream(path) << prefix << channel << channel;
+    }
+    EXPECT_THROW(ui::loadRecording(path), std::invalid_argument);
+    {
+        std::ofstream(path) << prefix << "  - {id: status, samples: [{time_ns: 0, rgb: [1, 2]}]}\n";
+    }
+    EXPECT_THROW(ui::loadRecording(path), std::invalid_argument);
+    {
+        std::ofstream(path)
+            << prefix << "  - {id: status, samples: [{time_ns: 0, rgb: [1.00000001, 0, 0]}]}\n";
+    }
+    EXPECT_THROW(ui::loadRecording(path), std::invalid_argument);
+}

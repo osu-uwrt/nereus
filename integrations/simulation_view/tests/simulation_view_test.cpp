@@ -176,6 +176,11 @@ TEST(SimulationView, InvalidPivotOutputDoesNotPartiallyCommitPhase) {
 }
 
 TEST(SimulationView, RigAndDestinationMustAgreeBeforePublishing) {
+    auto colored_options = options();
+    colored_options.color_channels = {"status"};
+    visualization::LivePoseSource colored(colored_options);
+    EXPECT_THROW((integrations::SimulationPosePublisher(colored, {"thrust"}, rig())),
+                 std::invalid_argument);
     visualization::LivePoseSource source(options());
     EXPECT_THROW((integrations::SimulationPosePublisher(source, {"missing"}, rig())),
                  std::invalid_argument);

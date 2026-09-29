@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy pinned original Talos body/rotors and preserve visual metadata; offline only."""
+"""Import pinned Talos body/rotors and indicator geometry; offline only."""
 
 import argparse
 import hashlib
@@ -21,12 +21,15 @@ def main():
     sources = {}
     outputs = {}
 
-    def read(name):
+    def read_path(path):
         data = subprocess.check_output(
-            ["git", "-C", str(args.simulator_repo), "show", f"{REVISION}:{source_root}{name}"]
+            ["git", "-C", str(args.simulator_repo), "show", f"{REVISION}:{path}"]
         )
-        sources[source_root + name] = hashlib.sha256(data).hexdigest()
+        sources[path] = hashlib.sha256(data).hexdigest()
         return data
+
+    def read(name):
+        return read_path(source_root + name)
 
     settings = yaml.safe_load(read("thrusters.yaml"))
     outputs[destination + "Talos3_body.glb"] = read("Talos3_body.glb")
@@ -44,10 +47,11 @@ def main():
     inventory = {
         "schema_version": 1,
         "kind": "visual_resource_inventory",
-        "scope": "Original body and eight rotors only; launcher, claw, magnet and LEDs still separate work.",
+        "scope": "Original body, eight rotors and indicator geometry; launcher, claw and magnet remain separate work.",
         "coordinate_frame": "cad",
         "position_units": "metres",
         "body_mesh": "Talos3_body.glb",
+        "indicators_scene": "../scenes/talos_indicators.yaml",
         "rotors": rotors,
         "rotor_animation": {
             key: settings[key]
@@ -75,11 +79,42 @@ def main():
     outputs["content/visuals/scenes/talos_rotors.yaml"] = yaml.safe_dump(
         rig, sort_keys=False
     ).encode()
+    indicator_bytes = read_path("c_simulator/robots/talos/config/status_lights.yaml")
+    outputs[destination + "provenance/status_lights.yaml"] = indicator_bytes
+    indicators = yaml.safe_load(indicator_bytes)
+    groups = []
+    for light in indicators["lights"]:
+        if light["pose"][3:] != [0, 0, 0]:
+            raise ValueError("pinned indicator mount requires a rotation conversion")
+        groups.append({
+            "id": "indicator/" + light["id"],
+            "source": "simulation",
+            "frame": "cad",
+            "instances": [{
+                "box": light["size"],
+                "pose": {"position": light["pose"][:3], "orientation_wxyz": [1, 0, 0, 0]},
+                "material": "emissive",
+                "radiance": light["radiance"],
+                "casts_shadow": False,
+                "color_channel": "indicator/" + light["id"],
+            }],
+        })
+    outputs["content/visuals/scenes/talos_indicators.yaml"] = yaml.safe_dump(
+        {"version": 1, "groups": groups}, sort_keys=False
+    ).encode()
+    composition_source = "content/visuals/scenes/talos_pool.yaml"
+    composition_bytes = (ROOT / composition_source).read_bytes()
+    composition = yaml.safe_load(composition_bytes)
+    composition["groups"].extend(groups)
+    outputs["content/visuals/scenes/talos_indicator_pool.yaml"] = yaml.safe_dump(
+        composition, sort_keys=False
+    ).encode()
     manifest = {
         "source_repository": "https://github.com/osu-uwrt/riptide_simulator",
         "source_revision": REVISION,
         "scope": inventory["scope"],
         "sources_sha256": sources,
+        "composition_sources_sha256": {composition_source: hashlib.sha256(composition_bytes).hexdigest()},
         "importer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "outputs_sha256": {
             name: hashlib.sha256(data).hexdigest() for name, data in outputs.items()

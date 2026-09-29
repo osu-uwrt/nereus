@@ -16,6 +16,9 @@ SimulationPosePublisher::SimulationPosePublisher(visualization::LivePoseSource &
                                                  std::vector<std::string> plant_inputs,
                                                  std::optional<visualization::RotorRig> rig)
     : destination_(destination), plant_input_count_(plant_inputs.size()), rig_(std::move(rig)) {
+    if (!destination_.colorChannels().empty())
+        throw std::invalid_argument(
+            "simulation color channels require a separate presentation provider");
     if (std::set<std::string>(plant_inputs.begin(), plant_inputs.end()).size() !=
         plant_inputs.size())
         throw std::invalid_argument("duplicate plant force channel IDs");

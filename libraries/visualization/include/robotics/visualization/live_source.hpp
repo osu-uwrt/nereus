@@ -7,6 +7,7 @@ struct PoseUpdate {
     Time time_ns{0};
     Pose pose;                        // Body frame into the configured world frame.
     std::vector<Pose> moving_poses{}; // Complete configured moving-frame batch, same timestamp.
+    std::vector<Eigen::Vector3f> colors{}; // Complete ordered color batch, same timestamp.
 };
 struct MovingFrame {
     std::string parent, child;
@@ -21,6 +22,7 @@ struct LivePoseOptions {
     std::size_t history_capacity{1000};
     std::vector<spatial::FixedFrame> fixed_frames{}; // Immutable source-owned mount/world frames.
     std::vector<MovingFrame> moving_frames{}; // Ordered per-update poses, without topology changes.
+    std::vector<std::string> color_channels{};
 };
 // One producer calls publish; one presentation thread calls snapshot/disconnect/reconnect.
 // Join both callers before destruction.
@@ -34,6 +36,7 @@ class LivePoseSource final : public Source {
     LivePoseSource &operator=(const LivePoseSource &) = delete;
     const std::vector<MovingFrame> &
     movingFrames() const; // Immutable configuration, source lifetime.
+    const std::vector<std::string> &colorChannels() const;
     void publish(const PoseUpdate &update);
     SourceSnapshot snapshot() const override;
     void disconnect() override;

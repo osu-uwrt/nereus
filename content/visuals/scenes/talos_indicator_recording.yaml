@@ -1,0 +1,99 @@
+# Synthetic color observations for binding/seek demonstration, not robot telemetry.
+version: 1
+clock: indicator-demonstration
+duration_ns: 3000000000
+root: world
+frames:
+- parent: world
+  child: body
+  static: false
+  samples:
+  - time_ns: 0
+    pose:
+      position: &id001
+      - 3
+      - 0
+      - -1
+      orientation_wxyz: &id002
+      - 1
+      - 0
+      - 0
+      - 0
+  - time_ns: 3000000000
+    pose:
+      position: *id001
+      orientation_wxyz: *id002
+- parent: body
+  child: cad
+  static: true
+  samples:
+  - time_ns: 0
+    pose:
+      position:
+      - 0.157
+      - -0.04
+      - 0.048
+      orientation_wxyz:
+      - 1
+      - 0
+      - 0
+      - 0
+streams: []
+colors:
+- id: indicator/port_hull_aft
+  samples:
+  - time_ns: 0
+    rgb:
+    - 0
+    - 0
+    - 0
+  - time_ns: 1000000000
+    rgb:
+    - 1
+    - 0
+    - 0
+  - time_ns: 2000000000
+    rgb: &id003
+    - 1
+    - 0
+    - 0
+  - time_ns: 3000000000
+    rgb: *id003
+- id: indicator/port_hull_middle
+  samples:
+  - time_ns: 0
+    rgb:
+    - 0
+    - 0
+    - 0
+  - time_ns: 1000000000
+    rgb:
+    - 1
+    - 0
+    - 0
+  - time_ns: 2000000000
+    rgb: &id004
+    - 0
+    - 1
+    - 0
+  - time_ns: 3000000000
+    rgb: *id004
+- id: indicator/port_hull_fore
+  samples:
+  - time_ns: 0
+    rgb:
+    - 0
+    - 0
+    - 0
+  - time_ns: 1000000000
+    rgb:
+    - 1
+    - 0
+    - 0
+  - time_ns: 2000000000
+    rgb: &id005
+    - 0
+    - 0
+    - 1
+  - time_ns: 3000000000
+    rgb: *id005

@@ -103,6 +103,11 @@ def main():
                  content / "talos_workspace.yaml", content / "talos_motion.yaml"],
                 cwd=temp, env=env,
             )
+            run(
+                [temp / "scene-consumer-build/scene_consumer",
+                 content / "talos_indicator_workspace.yaml", content / "talos_indicator_recording.yaml"],
+                cwd=temp, env=env,
+            )
         executable = installed / "bin/robotics-viewer"
         run([executable, "--help"], cwd=temp, env=env)
         if args.graphics:

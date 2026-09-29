@@ -1,5 +1,6 @@
 #include <robotics/viewer/session.hpp>
 #include <robotics/visualization/animation.hpp>
+#include <robotics/visualization/live_source.hpp>
 
 #include <cmath>
 #include <iostream>
@@ -72,5 +73,13 @@ int main() {
         !indicator.color(.2).isApprox(Eigen::Vector3f(1, 0, 0)) ||
         !indicator.color(.3).isApprox(Eigen::Vector3f(0, 1, 0)))
         throw std::runtime_error("installed animation contract failed");
+    v::LivePoseOptions options{"indicators", "device-clock"};
+    options.color_channels = {"status"};
+    v::LivePoseSource live(options);
+    live.publish({0, 200000000, {}, {}, {indicator.color(.2)}});
+    const auto observed = live.snapshot();
+    const auto color = v::colorAt(observed.data->colors.at("status"), observed.time_ns);
+    if (!color || *color != Eigen::Vector3f(1, 0, 0))
+        throw std::runtime_error("installed source color contract failed");
     std::cout << "External source and display composed without simulation or a graphics context.\n";
 }
