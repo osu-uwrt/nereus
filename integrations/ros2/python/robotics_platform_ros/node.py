@@ -99,6 +99,15 @@ class BridgeNode(Node):
         self.alignment_client = None if alignment is None else self.create_client(
             mapping.service_class(alignment["service_type"]), alignment["client"])
 
+    def start_cameras(self) -> None:
+        if self.core.cameras is not None:
+            self.core.cameras.publish = self.send
+            self.core.cameras.start()
+
+    def stop_cameras(self) -> None:
+        if self.core.cameras is not None:
+            self.core.cameras.close()
+
     def lookup(self, target: str, source: str) -> native.Pose | None:
         try:
             transform = self.tf_buffer.lookup_transform(target, source, rclpy.time.Time())
@@ -129,6 +138,9 @@ class BridgeNode(Node):
             self.publish_clock(stamp)
         self.send(publications)
         self.broadcast(transforms)
+        if self.core.cameras is not None:
+            snapshot = self.core.runtime.observe()
+            self.core.cameras.acquire(snapshot, self.core.ros_ns(snapshot.elapsed_ns))
         if self.alignment_client is not None and self.alignment_client.service_is_ready():
             alignment = self.core.pending_alignment()
             if alignment is not None:

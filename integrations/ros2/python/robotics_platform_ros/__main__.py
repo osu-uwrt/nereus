@@ -20,8 +20,8 @@ from robotics_platform.packs import PackError, resolve_scenario
 from .core import BridgeCore, BridgeError
 from .mapping import MappingError
 
-GAP_NOTE = ("Diagnostic only: this bridge executes no task scoring, mechanisms or rendering, "
-            "so declared task assets, hook modules and pending items are not loaded.")
+GAP_NOTE = ("This bridge executes no task scoring or mechanisms. Selected cameras load their "
+            "referenced scene assets; missing hooks and unrelated assets remain unresolved.")
 
 
 def _write(path: Path, document: dict[str, Any]) -> None:
@@ -56,6 +56,7 @@ def execution_record(resolved: Any, core: BridgeCore, sensors: list[str],
             for service in config.get("services", [])
         ],
         "tf": config.get("tf", {}),
+        "cameras": None if core.cameras is None else core.cameras.describe(),
         "estimator_alignment": config.get("placement", {}).get("estimator_alignment"),
         "unresolved": {"note": GAP_NOTE, "items": resolved.unresolved},
         "not_executed_config": {
@@ -64,6 +65,19 @@ def execution_record(resolved: Any, core: BridgeCore, sensors: list[str],
             "services[].required_from_step": "planning metadata; never an execution switch",
         },
     }
+
+
+def select_sensors(resolved: Any, selection: list[str] | None) -> tuple[list[str], list[str]]:
+    """Separate camera acquisition from native navigation sensors without changing pack data."""
+    sensors = {sensor["id"]: sensor for sensor in resolved.robot["sensors"]}
+    chosen = ([key for key, value in sensors.items() if value.get("enabled", True)]
+              if selection is None else selection)
+    if len(chosen) != len(set(chosen)) or not set(chosen) <= sensors.keys():
+        raise ValueError("selected sensors must have unique ids from the robot pack")
+    if any(not sensors[key].get("enabled", True) for key in chosen):
+        raise ValueError("selected sensor is disabled in the robot pack")
+    cameras = [key for key in chosen if sensors[key]["type"] == "stereo_camera"]
+    return [key for key in chosen if key not in cameras], cameras
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -80,18 +94,27 @@ def main(argv: list[str] | None = None) -> int:
         resolved = resolve_scenario(arguments.scenario)
         selection = None if arguments.sensors is None else [
             item for item in arguments.sensors.split(",") if item]
-        pack = create_runtime(resolved, sensor_ids=selection)
-        sensors = list(pack.streams)
+        native_ids, camera_ids = select_sensors(resolved, selection)
+        pack = create_runtime(resolved, sensor_ids=native_ids)
+        cameras = None
+        if camera_ids:
+            from robotics_platform.pack_cameras import PackCameras
+
+            from .camera_bridge import CameraBridge
+
+            cameras = CameraBridge(resolved, PackCameras(resolved, camera_ids), lambda _: None)
+        sensors = [*native_ids, *camera_ids]
+        deferred = tuple(key for key in pack.deferred_sensor_ids if key not in camera_ids)
         epoch_ns = time.time_ns()
         duration_ns = None if arguments.duration is None else round(arguments.duration * 1e9)
         arguments.output.mkdir(parents=True, exist_ok=False)
         resolved.dump(arguments.output / "resolved.json")
         # Validate every mapping against installed ROS types before any middleware exists.
-        preflight = BridgeCore(resolved, pack, epoch_ns=epoch_ns)
+        preflight = BridgeCore(resolved, pack, epoch_ns=epoch_ns, cameras=cameras)
         _write(arguments.output / "execution.json",
-               execution_record(resolved, preflight, sensors, pack.deferred_sensor_ids,
+               execution_record(resolved, preflight, sensors, deferred,
                                 duration_ns))
-    except (PackError, BridgeError, MappingError, ValueError, FileExistsError) as error:
+    except (PackError, BridgeError, MappingError, ValueError, OSError, ImportError) as error:
         print(f"robotics_platform_ros: {error}", file=sys.stderr)
         return 1
     if arguments.validate_only:
@@ -103,23 +126,37 @@ def main(argv: list[str] | None = None) -> int:
     from .node import BridgeNode, run
 
     rclpy.init()
-    node = BridgeNode(lambda lookup: BridgeCore(resolved, pack, epoch_ns=epoch_ns, lookup=lookup),
-                      resolved.bridge["namespace"])
+    node = None
     reason = "duration reached"
+    failure = None
     try:
+        node = BridgeNode(lambda lookup: BridgeCore(resolved, pack, epoch_ns=epoch_ns,
+                                                   lookup=lookup, cameras=cameras),
+                          resolved.bridge["namespace"])
+        node.start_cameras()
         run(node, duration_ns)
     except KeyboardInterrupt:
         reason = "interrupted"
     except Exception as error:
         reason = f"failed: {type(error).__name__}: {error}"
+        failure = error
         raise
     finally:
+        camera_error = None
+        if cameras is not None:
+            try:
+                cameras.close()  # Finish workers before writing counters or destroying publishers.
+            except Exception as error:
+                camera_error = error
+                reason = f"failed: {type(error).__name__}: {error}"
         snapshot = pack.runtime.observe()
+        core = preflight if node is None else node.core
         _write(arguments.output / "summary.json", {
             "format": "robotics_platform_ros.summary", "version": 1, "stop": reason,
             "ticks": snapshot.tick, "elapsed_ns": snapshot.elapsed_ns,
             "generation": snapshot.generation,
-            "killed": node.core.killed, "counters": asdict(node.core.counters),
+            "killed": core.killed, "counters": asdict(core.counters),
+            "camera_stats": {} if cameras is None else cameras.stats(),
             "stream_stats": {name: {"acquired": stream.stats.acquired,
                                     "delivered": stream.stats.delivered,
                                     "unavailable": stream.stats.unavailable,
@@ -127,9 +164,12 @@ def main(argv: list[str] | None = None) -> int:
                                     "dropped_delivered": stream.stats.dropped_delivered}
                              for name, stream in pack.streams.items()},
         })
-        node.destroy_node()
+        if node is not None:
+            node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+        if camera_error is not None and failure is None:
+            raise camera_error
     return 0
 
 

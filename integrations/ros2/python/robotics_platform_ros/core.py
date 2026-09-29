@@ -11,7 +11,7 @@ import fnmatch
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from robotics_platform import _native as native
@@ -29,6 +29,9 @@ from .mapping import (
     MappingError,
     Spec,
 )
+
+if TYPE_CHECKING:
+    from .camera_bridge import CameraBridge
 
 Lookup = Callable[[str, str], "native.Pose | None"]  # (target frame, source frame) -> target_T_source
 
@@ -151,7 +154,7 @@ class BridgeCore:
     """Validated bridge over one PackRuntime; the only object that advances it."""
 
     def __init__(self, resolved: Any, pack: PackRuntime, *, epoch_ns: int,
-                 lookup: Lookup | None = None) -> None:
+                 lookup: Lookup | None = None, cameras: CameraBridge | None = None) -> None:
         if resolved.bridge is None:
             raise BridgeError("scenario selects no bridge pack")
         self.config = resolved.bridge
@@ -160,6 +163,7 @@ class BridgeCore:
         self.runtime = pack.runtime
         self.frames = pack.frames
         self.lookup = lookup
+        self.cameras = cameras
         self.counters = Counters()
         self.timestep_ns = int(pack.parameters.timestep_ns)
         clock = self.config["clock"]
@@ -233,6 +237,8 @@ class BridgeCore:
             where = f"streams/{stream['id']}"
             endpoint = stream["native"]
             try:
+                if self.cameras is not None and stream["id"] in self.cameras.stream_ids:
+                    continue  # CameraBridge compiled these mappings before construction.
                 cls = mapping.message_class(stream["message_type"])
                 if stream["direction"] == "subscribe":
                     if endpoint not in _COMMAND_ARGUMENTS:
@@ -409,6 +415,8 @@ class BridgeCore:
         sensors = {item["id"]: item for item in self.robot["sensors"]}
         names = self.config.get("frame_names", {})
         for stream in self.config["streams"]:
+            if self.cameras is not None and stream["id"] in self.cameras.stream_ids:
+                continue  # CameraBridge checks the appropriate left/right optical frame.
             name = stream["native"].removeprefix("sensor:").split(".")[0]
             if (stream["native"].startswith("sensor:") and stream["frame_id"]
                     and sensors[name]["frame"] in names):
@@ -431,6 +439,11 @@ class BridgeCore:
     def _observe_generation(self, snapshot: Any) -> None:
         if snapshot.generation == self._generation:
             return
+        if self.cameras is not None:
+            # Full reset will coordinate camera seeds with the native seed in step 4.
+            # Reject an uncoordinated native reset rather than silently replay wrong noise.
+            self.cameras.invalidate()
+            raise BridgeError("native reset with cameras needs a coordinated full reset")
         self._generation = snapshot.generation
         if self.reset_policy == "preserve_ros_epoch_and_time":
             self._offset_ns = self._last_ros_ns - self.epoch_ns + self.timestep_ns
@@ -622,6 +635,8 @@ class BridgeCore:
             target.linear_velocity, target.angular_velocity = (
                 state.linear_velocity, state.angular_velocity)
         try:
+            if self.cameras is not None:
+                self.cameras.invalidate()
             snapshot = self.runtime.place(target, clear_actuators=not keep_velocity)
         except ValueError as error:
             return False, str(error)

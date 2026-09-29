@@ -67,7 +67,12 @@ Step 3 progress:
   of simulation and ROS and uses the exact Talos-bringup startup water/lighting.
 - [ ] Complete Opus follow-up review after the usage-limit reset (September 29,
   1:30 p.m. Eastern); no gate-3 approval was returned.
-- [ ] Publish calibrated, synchronized image/CameraInfo products through the bridge.
+- [x] Publish calibrated, synchronized image/CameraInfo products through the bridge;
+  bounded worker, placement invalidation and shutdown pass 130 bridge checks.
+  A real two-camera run publishes all six products while delivering every native
+  navigation sample; production camera streams remain disabled pending gate 3.
+- [ ] Assess/resolve full-resolution camera throughput: one worker captures about
+  8–9 frames/s per camera against 15 Hz requests; overflow is fair, bounded and counted.
 - [ ] Run actual UWRT perception on those products and review its output.
 
 The user delegated approval to Codex and Claude Code, using Opus 5.5/high. Agree

@@ -15,6 +15,9 @@ part of step 3. Do not restructure unrelated components.
 
 Current step: **3 — offscreen cameras/stereo and the real perception gate.**
 Step 2 passed the repeated real-controller/EKF hold comparison and Opus review.
+Pack capture and bounded ROS publication are implemented. Next: finish the real
+detector/mapper run, assess the measured camera throughput, and complete Opus review.
+Production camera streams remain disabled until these checks are complete.
 
 The first camera increment adds optional CPU camera geometry and image processing
 (`RP_BUILD_CAMERAS`), with optical frames, rectified stereo projection, owned RGB
@@ -24,8 +27,8 @@ loads PNG task textures, applies UV cutouts and reads just camera RGB/depth.
 Talos and gate/torpedo sensor-scene assets are copied into their packs with hashes.
 Camera calibration now uses the old pipeline's rectified projection rather than
 raw calibration intrinsics; the right-eye spacing uses the calibrated baseline.
-No camera stream is enabled yet. Robot visual placement, scene composition,
-offscreen hosting, acquisition scheduling and bridge images/TF remain unfinished.
+At this checkpoint no camera stream was enabled; subsequent increments below add
+scene composition, offscreen hosting, scheduling and bridge images/TF.
 
 Validation: `ctest --test-dir build/camera-renderer --output-on-failure` passed
 24 cases, including eight GPU contracts on this machine. The 12 CPU camera/frame
@@ -109,6 +112,31 @@ python3 -m unittest discover -s tests/python -p 'test*camera*.py'`.
 An initial direct inference probe using the actual UWRT FFC NCNN model and startup
 water detects compass and hammer-and-wrench at 2.5 m. It does not establish ROS
 perception/mapping accuracy or mission behavior. Gate 3 remains open.
+
+The generic ROS bridge now separates camera selection from native navigation
+sensors, validates image mappings before running, and queues immutable poses and
+acquisition stamps after clock/TF publication. One bounded worker captures, formats
+and publishes the image group. Overflow keeps waiting cameras in order; placement
+discards queued/in-flight old images. Shutdown joins the worker before destroying
+publishers. Execution records include appearance, calibration, seeds and queue
+policy; summaries count capture, publication, overflow and stale discards.
+Nonzero camera delivery latency and uncoordinated full resets are explicitly
+unsupported; Talos has zero camera latency and full reset belongs to step 4.
+
+All 130 ROS bridge cases pass, including live FastDDS camera and static-TF delivery,
+nonblocking acquisition, fair overflow, placement, reset-request and failure handling.
+Ruff passes; scoped worker mypy passes. A three-second run with both full-resolution
+Talos RGB/depth/JPEG cameras executes 1,500 physics ticks and delivers every native
+navigation sample without drops. It captures 26 FFC and 25 DFC frames from 45
+requests each; CPU depth processing exceeds one worker's budget for two 15 Hz
+cameras. Pending images are dropped and counted. This is a throughput limit to
+resolve or evaluate against perception, not a claim of sustained 15 Hz stereo.
+The production pack remains disabled; the diagnostic copies and records are in
+`build/step3-perception-probe/`. Camera bridge changes still await Opus review.
+
+Proof: `PYTHONPATH=integrations/ros2/python:build/step3-camera-python:$PYTHONPATH
+RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_DOMAIN_ID=219 ROS_LOCALHOST_ONLY=1
+RP_TEST_ROS_LIVE=1 python3 -m unittest discover -s integrations/ros2/tests -p 'test*.py'`.
 
 Step 1 passed joint review. `proposals/step1/` contains nine proposed JSON Schemas
 and eight YAML documents: Talos robot, 2026 pool, gate/torpedo task definitions,
