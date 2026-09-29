@@ -463,11 +463,22 @@ void App::loadScenario(const std::string &json) {
         return configDir_ / lookup(config_, {key}).as<std::string>(fallback);
     };
     const auto lightsPath = resolve("status_lights_config", "talos_uwrt_status_lights.yaml");
-    if (fs::exists(lightsPath))
-        lights_ = StatusLights(YAML::LoadFile(lightsPath.string()));
+    // Robot-specific animation documents are optional: a scenario they do not fit runs without them.
+    try {
+        if (fs::exists(lightsPath))
+            lights_ = StatusLights(YAML::LoadFile(lightsPath.string()));
+    } catch (const std::exception &error) {
+        lights_ = {};
+        std::cerr << "robotics-pool-viewer: status lights disabled: " << error.what() << '\n';
+    }
     const auto thrusterPath = resolve("thruster_visuals_config", "talos_uwrt_thruster_visuals.yaml");
-    if (fs::exists(thrusterPath) && !scenario_->thrusterOrder.empty())
-        thrusters_ = ThrusterVisuals(YAML::LoadFile(thrusterPath.string()), scenario_->thrusterOrder);
+    try {
+        if (fs::exists(thrusterPath) && !scenario_->thrusterOrder.empty())
+            thrusters_ = ThrusterVisuals(YAML::LoadFile(thrusterPath.string()), scenario_->thrusterOrder);
+    } catch (const std::exception &error) {
+        thrusters_ = {};
+        std::cerr << "robotics-pool-viewer: thruster animation disabled: " << error.what() << '\n';
+    }
     SceneModelOptions options;
     options.config = config_;
     options.configDirectory = configDir_;
@@ -1347,7 +1358,13 @@ void App::drawInterface(double time, float dt) {
         focusAtCursor(view, frame, position, left, viewHeight);
     const ImVec2 imagePos(position.x + (left - iw) / 2, position.y + (viewHeight - ih) / 2);
     ImGui::SetCursorScreenPos(imagePos);
-    ImGui::Image(textureID(frame.color_texture), {iw, ih}, {0, 1}, {1, 0});
+    // A promoted sensor view shows the bridge's depth image instead while its card is on DEPTH.
+    const std::size_t sensorIndex = sensor ? std::size_t(mode_ - 2) : 0;
+    if (sensor && sensorIndex < cards_.size() && sensorIndex < ros_->feeds.size() && ros_->feeds[sensorIndex].wantDepth &&
+        cards_[sensorIndex].depth)
+        ImGui::Image(textureID(cards_[sensorIndex].depth), {iw, ih});
+    else
+        ImGui::Image(textureID(frame.color_texture), {iw, ih}, {0, 1}, {1, 0});
     const ScreenRect rect{imagePos, iw, ih};
     const auto vp = view.projection * view.view;
     if (showTf_) {
@@ -1512,6 +1529,18 @@ int App::loop() {
         if (composition_)
             composition_->touch();
         step(t);
+        if (opt_.injectF.size() == 2 && opt_.frames > 0) {
+            auto &io = ImGui::GetIO();
+            if (frames == opt_.frames / 2)
+                io.AddMousePosEvent(opt_.injectF[0], opt_.injectF[1]);
+            if (frames == opt_.frames / 2 + 2)
+                io.AddKeyEvent(ImGuiKey_F, true);
+            if (frames == opt_.frames / 2 + 3)
+                io.AddKeyEvent(ImGuiKey_F, false);
+            if (frames == opt_.frames / 2 + 6)
+                std::cout << "inject-f: target=(" << target_.x << "," << target_.y << "," << target_.z
+                          << ") distance=" << distance_ << " follow=" << follow_ << "\n";
+        }
         window_->beginFrame();
         drawInterface(t, dt);
         if (largeMap_ && scenario_) {

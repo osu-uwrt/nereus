@@ -44,4 +44,11 @@ if(BUILD_TESTING)
     add_test(NAME host_${name} COMMAND host_${name}_test)
   endforeach()
   target_link_libraries(host_jpeg_test PRIVATE JPEG::JPEG)
+  # Window/render smoke: needs a display; validates every ImGui frame and writes a screenshot.
+  if(DEFINED ENV{DISPLAY} OR DEFINED ENV{WAYLAND_DISPLAY})
+    add_test(NAME host_demo_capture COMMAND robotics-pool-viewer --demo
+      --scenario ${CMAKE_CURRENT_SOURCE_DIR}/../tests/host_smoke_scenario.json
+      --hidden --frames 6 --screenshot ${PROJECT_BINARY_DIR}/host_demo_capture.png)
+    set_tests_properties(host_demo_capture PROPERTIES TIMEOUT 60)
+  endif()
 endif()

@@ -1,0 +1,356 @@
+{
+ "scenario": {
+  "id": "s1",
+  "robot": "../r",
+  "pool": "../p",
+  "tasks": "../t",
+  "bridge": "../b",
+  "world_frame": "map",
+  "pool_placement": {
+   "position_m": [
+    1,
+    2,
+    0.5
+   ],
+   "yaw_deg": 90
+  },
+  "task_placements": [
+   {
+    "task": "gate",
+    "position_m": [
+     10,
+     0,
+     -1
+    ],
+    "yaw_deg": 180
+   }
+  ]
+ },
+ "robot": {
+  "id": "bot",
+  "reference_frame": "base_link",
+  "frames": {
+   "root": "com",
+   "transforms": [
+    {
+     "parent": "com",
+     "child": "cad",
+     "position_m": [
+      0.1,
+      0,
+      0
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "parent": "cad",
+     "child": "base_link",
+     "position_m": [
+      -0.1,
+      0,
+      0
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "parent": "cad",
+     "child": "cam_mount",
+     "position_m": [
+      0.3,
+      0,
+      0.1
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "parent": "cam_mount",
+     "child": "cam_optical",
+     "position_m": [
+      0,
+      0,
+      0
+     ],
+     "orientation_wxyz": [
+      0.5,
+      -0.5,
+      0.5,
+      -0.5
+     ]
+    },
+    {
+     "parent": "cad",
+     "child": "launch_mount",
+     "position_m": [
+      0,
+      0.2,
+      0
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    }
+   ]
+  },
+  "visuals": [
+   {
+    "asset": "body_mesh",
+    "frame": "cad",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   }
+  ],
+  "assets": [
+   {
+    "id": "body_mesh",
+    "path": "assets/body.glb"
+   }
+  ],
+  "sensors": [
+   {
+    "id": "cam",
+    "type": "stereo_camera",
+    "frame": "cam_optical",
+    "mount_frame": "cam_mount",
+    "period_ns": 66666667,
+    "parameters": {
+     "resolution_px": [
+      1920,
+      1200
+     ],
+     "intrinsics_left": {
+      "fx": 1800.0,
+      "fy": 1800.0,
+      "cx": 960.0,
+      "cy": 600.0
+     },
+     "depth": {
+      "min_range_m": 0.15,
+      "max_range_m": 4.0
+     }
+    }
+   },
+   {
+    "id": "imu",
+    "type": "ahrs",
+    "frame": "cad",
+    "parameters": {}
+   }
+  ],
+  "mechanisms": [
+   {
+    "id": "launcher",
+    "type": "launcher",
+    "frame": "launch_mount",
+    "parameters": {
+     "slots": [
+      {
+       "position_m": [
+        0.01,
+        0,
+        0
+       ],
+       "orientation_wxyz": [
+        1,
+        0,
+        0,
+        0
+       ]
+      }
+     ],
+     "projectile": {
+      "length_m": 0.08,
+      "radius_m": 0.013
+     }
+    }
+   }
+  ]
+ },
+ "pool": {
+  "id": "pool1",
+  "assets": [],
+  "parameters": {
+   "length_m": 50.0,
+   "width_m": 22.86,
+   "depth_m": 2.1336,
+   "deck_height_m": 0.3,
+   "water_level_m": 0.0
+  },
+  "water_optics": {
+   "tint_rgb": [
+    0.1,
+    0.2,
+    0.3
+   ],
+   "distance_scale": 1.5,
+   "distance_power": 0.5,
+   "clear_distance_m": 0.0,
+   "scattering": 0.4,
+   "absorption_per_m_rgb": [
+    0.1,
+    0.03,
+    0.02
+   ]
+  },
+  "lighting": {
+   "profile": "outdoor",
+   "direct_light": 1.0,
+   "ambient_light": 0.8,
+   "sun_azimuth_deg": 200.0,
+   "sun_elevation_deg": 50.0,
+   "glare": 0.5
+  }
+ },
+ "tasks": {
+  "id": "t",
+  "assets": [
+   {
+    "id": "gate_mesh",
+    "path": "assets/gate.dae"
+   }
+  ],
+  "ui": {
+   "focus": [
+    "Course",
+    "Vehicle",
+    "gate"
+   ],
+   "demo_targets": [
+    "gate"
+   ],
+   "map_landmarks": [
+    "gate"
+   ]
+  }
+ },
+ "task_definitions": [
+  {
+   "id": "gate",
+   "frames": [
+    {
+     "id": "gate_left",
+     "position_m": [
+      0,
+      -1,
+      0.5
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    }
+   ],
+   "regions": [],
+   "props": [
+    {
+     "id": "structure",
+     "type": "static_body",
+     "parameters": {
+      "visuals": [
+       {
+        "asset": "gate_mesh",
+        "frame": "task",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "asset_paths": {
+  "robot": {
+   "body_mesh": "/abs/body.glb"
+  },
+  "tasks": {
+   "gate_mesh": "/abs/gate.dae"
+  }
+ },
+ "bridge": {
+  "namespace": "/bot",
+  "frame_names": {
+   "world": "map",
+   "cam_mount": "bot/cam_link",
+   "cam_optical": "bot/cam_optical"
+  },
+  "thrusters": {
+   "order": [
+    "A",
+    "B"
+   ]
+  },
+  "tf": {
+   "publish": [
+    {
+     "parent": "map",
+     "child": "simulator/bot/base_link",
+     "native": "state:robot.reference_pose"
+    }
+   ]
+  },
+  "streams": [
+   {
+    "id": "rgb",
+    "direction": "publish",
+    "topic": "cam/rgb/compressed",
+    "native": "sensor:cam.rgb_left"
+   },
+   {
+    "id": "depth",
+    "direction": "publish",
+    "topic": "cam/depth",
+    "native": "sensor:cam.depth_left"
+   },
+   {
+    "id": "info",
+    "direction": "publish",
+    "topic": "/abs/info",
+    "native": "sensor:cam.camera_info"
+   },
+   {
+    "id": "kill",
+    "direction": "subscribe",
+    "topic": "command/software_kill",
+    "native": "command:robot.set_killed"
+   }
+  ]
+ }
+}

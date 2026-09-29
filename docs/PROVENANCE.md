@@ -197,3 +197,17 @@ compiles the unchanged original headers independently and records source archive
 harness and output hashes in `reference/animation_sources.json`. The fixture
 parameters are copied from the original Talos thruster/status-light configurations.
 Source licensing remains subject to the original metadata review above.
+
+## ROS pool viewer host
+
+`integrations/ros2/viewer/src/{viewer_input,tf_tree,detection_pose}.hpp` are ported from the pinned simulator
+revision's `camera_faker/include/pool_viewer/` headers of the same names (namespace and the truth-base acquisition
+helper added), and `status_lights.hpp`, `thruster_visuals.hpp` and `camera_geometry.hpp` re-express
+`status_lights.hpp`, `thruster_visuals.hpp` and the `Intrinsics`/`cameraView` part of `camera.hpp` with data-driven
+configuration (YAML documents under `content/viewer/`, frame graph from the robot pack). `app.cpp` and `overlay_draw.cpp`
+port the window layout, toolbar, camera controls, detection/MPC/TF overlays, course map and Scene settings from
+`camera_faker/src/pool_viewer/main.cpp`. `content/viewer/talos_uwrt_{status_lights,thruster_visuals}.yaml` are copies
+of the original Talos `status_lights.yaml` and `models/talos3/thrusters.yaml` (pivots/axes/RPM fit) with robot-pack
+ids; `content/viewer/assets/calibration_board.png` is the original `April Tag.jpg` converted to PNG.
+`tests/host_{viewer_input,tf_tree,detection_pose,status_lights,thruster_visuals,camera_geometry}.cpp` adapt the
+corresponding original unit tests to gtest. Licensing follows the original metadata review above.
