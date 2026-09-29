@@ -10,7 +10,7 @@ only; no pushes. No UI or visual-fidelity work until step 5 is complete.
   2026 pool, gate and torpedo data; UWRT bridge wiring; list every necessary task
   Python hook and custom-message converter with its reason. Joint source/schema
   review passed; production loaders and runtime checks remain in later gates.
-- [ ] 2. Generic YAML bridge, UWRT config and required converters: the existing
+- [x] 2. Generic YAML bridge, UWRT config and required converters: the existing
   controllers and EKF hold depth and heading about as well as the old simulator.
 - [ ] 3. Robot-pack offscreen camera and stereo products: real perception runs on them.
 - [ ] 4. Task runtime, launcher/dropper/claw mechanisms, all 2026 task packs and full
@@ -31,8 +31,18 @@ Step 2 progress:
   package; 110 installed ROS tests and 111 installed core Python tests pass.
 - [x] Record alignment acknowledgement, supersession and failure; preserve the
   original simulator's coalescing behavior. Native placement passes ASan/UBSan.
-- [ ] Old/new real-stack hold comparison: repeated runs, equal controller config,
+- [x] Old/new real-stack hold comparison: repeated runs, equal controller config,
   actual truth/EKF errors and real-time factor, no rejected input or missing alignment.
+  `python3 integrations/uwrt/acceptance/compare.py --output build/gate2-final`
+  passed two trial pairs and independent Opus evidence review. New physical
+  depth RMS 3.18–3.83 mm; heading RMS 0.27–0.38 degrees; real-time operation.
+
+Step 3 next:
+
+- [ ] Execute the existing robot-pack camera/stereo definitions offscreen.
+- [ ] Import the declared Talos/2026 assets required by the sensor scene.
+- [ ] Publish calibrated, synchronized image/CameraInfo products through the bridge.
+- [ ] Run actual UWRT perception on those products and review its output.
 
 The user delegated approval to Codex and Claude Code, using Opus 5.5/high. Agree
 ownership, have the other partner review each gate's evidence, and continue without

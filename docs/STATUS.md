@@ -13,7 +13,8 @@ Visual work stopped at local commit `9081760`. UI, LEDs, radiance and visual
 fidelity stay deferred until step 5 passes. Offscreen camera work is explicitly
 part of step 3. Do not restructure unrelated components.
 
-Current step: **2 — generic bridge and the real controller/EKF hold gate.**
+Current step: **3 — offscreen cameras/stereo and the real perception gate.**
+Step 2 passed the repeated real-controller/EKF hold comparison and Opus review.
 Step 1 passed joint review. `proposals/step1/` contains nine proposed JSON Schemas
 and eight YAML documents: Talos robot, 2026 pool, gate/torpedo task definitions,
 task manifest, UWRT bridge, scenario and the exception ledger. One task-pack
@@ -68,9 +69,8 @@ sensor phase/noise. Operator placement clears active and delayed propulsion;
 estimate synchronization can preserve it. Both discard buffered pre-placement
 readings and count the discarded samples. Invalid placement leaves state and
 sensor queues unchanged. Opus reviewed the native change without a blocker;
-48 plant, 44 sensor and 22 installed Python binding tests pass. The old simulator
-has completed an initial two-target controller/EKF baseline. The automated paired
-comparison and generic bridge review are in progress; gate 2 is still open.
+48 plant, 44 sensor and 22 installed Python binding tests pass. The repeated
+old/new controller/EKF comparison below passes gate 2.
 
 The optional `integrations/ros2` package now runs resolved data packs through
 rclpy. It validates message fields before stepping, applies configured QoS,
@@ -100,8 +100,8 @@ provisional FastDDS tests also set `ROS_LOCALHOST_ONLY=1`, a private
 
 The installed ROS wheel passes 110 mapping/core/rejection tests; installed core
 passes 111 Python tests including the C++ runner comparison. Installed data-pack
-preflight passes, and Ruff passes. These checks deliver the bridge increment;
-the paired real-stack depth/heading acceptance still determines gate 2.
+preflight passes, and Ruff passes. Native placement also passes all 92 plant and
+sensor tests under ASan/UBSan.
 
 The first two paired live trials met the unchanged hold and real-time bounds.
 An added request-count check exposed that both simulators coalesce an unsent
@@ -112,9 +112,39 @@ actual pose jump and acknowledgement rather than requiring redundant requests.
 An old-only diagnostic confirmed correct seeding followed by about 4.5 cm of
 horizontal EKF error while killed; the pose-jump check allows 10 cm for an 8 m
 placement, records per-axis errors, and compares post-placement error to the old
-baseline. Depth/heading hold bounds are unchanged. The final repeated run and
-peer evidence review remain open. Native placement also passes all 92 plant and
-sensor tests under ASan/UBSan.
+baseline. Depth/heading hold bounds are unchanged.
+
+**Gate 2 passed:** `python3 integrations/uwrt/acceptance/compare.py --output
+build/gate2-final` ran two fresh old/new trial pairs through the unchanged
+complete_controller, controller_overseer and robot_localization EKF. Each trial
+held two depth/heading targets, with 25 seconds settling and 20 seconds measured
+per target. Both pairs passed every declared bound; Opus independently approved
+the concrete evidence. The command needs the sourced UWRT/ROS environment and
+the native install at `build/step2-sdk` (or `--sdk`). Use a fresh output directory
+when repeating it. The harness isolates DDS domains and stops its own processes.
+
+Physical depth RMS was 3.18–3.83 mm on new versus 2.68–5.46 mm on old. Physical
+heading RMS was 0.27–0.38 degrees on new versus 0.25–0.30 on old: comparable,
+slightly worse in three of four phases, not identical. Estimated depth RMS was
+3.79–4.77 mm versus 3.57–6.67 mm. Measured real-time factors were 0.9996–1.0003.
+Both new runs published FOG once per 2 ms physics tick, with no rejected input,
+unavailable sensor samples or dropped sensor readings. Startup and placement
+seeds were acknowledged and independently checked against physical truth.
+Controller/estimator config hashes stayed unchanged.
+
+Evidence is in `build/gate2-final/comparison.json`, with command/config snapshots,
+per-sample traces, alignment traces and machine details alongside it. The
+provisional baseline is this aarch64 machine, 10 logical CPUs and 16 GB RAM.
+Limits: two targets at one XY station, fixed external TF, FastDDS, navigation
+sensors only. This does not prove XY holding, transit, disturbance response,
+perception, mechanisms, full resets or RepairCompTree. SetPose acknowledgement
+means a response arrived; the pose checks provide the seeding evidence.
+
+Next, use the existing camera/stereo pack definitions and calibration to connect
+offscreen scene capture, import the declared sensor-scene assets, publish the
+configured image/CameraInfo products and run actual perception. Camera execution
+and the missing assets remain open; the existing viewer does not satisfy this
+gate. UI, LED, radiance and visual-comparison work remain frozen through step 5.
 
 The user replaced human approval with joint Codex/Claude Code execution. Claude
 uses `claude-opus-5-5` with high effort. It may delegate bounded mechanical work
