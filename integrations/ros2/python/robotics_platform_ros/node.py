@@ -76,7 +76,7 @@ class BridgeNode(Node):
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE, dynamic_typing=True,
                 description="Simulation speed relative to wall time; 0 pauses stepping and /clock."))
-        self.add_on_set_parameters_callback(self._set_parameters)
+        self.add_on_set_parameters_callback(self._check_parameters)
         clock = config["clock"]
         self.clock_publisher = self.create_publisher(Clock, clock["topic"], qos(clock["qos"]))
         self.tf_broadcaster = TransformBroadcaster(self) if config.get("tf", {}).get(
@@ -107,7 +107,7 @@ class BridgeNode(Node):
         self.alignment_client = None if alignment is None else self.create_client(
             mapping.service_class(alignment["service_type"]), alignment["client"])
 
-    def _set_parameters(self, parameters: list[Parameter]) -> SetParametersResult:
+    def _check_parameters(self, parameters: list[Parameter]) -> SetParametersResult:
         for parameter in parameters:
             if parameter.name == "real_time_factor":
                 if parameter.type_ not in (Parameter.Type.DOUBLE, Parameter.Type.INTEGER):

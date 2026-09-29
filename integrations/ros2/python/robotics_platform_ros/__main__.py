@@ -90,6 +90,23 @@ def select_sensors(resolved: Any, selection: list[str] | None) -> tuple[list[str
     return [key for key in chosen if key not in cameras], cameras
 
 
+def without_cameras(resolved: Any) -> Any:
+    """The scenario with every camera sensor stream removed from its bridge (no GPU run)."""
+    import dataclasses
+
+    cameras = {item["id"] for item in resolved.robot["sensors"] if item["type"] == "stereo_camera"}
+    if resolved.bridge is None:
+        return resolved
+    bridge = dict(resolved.bridge)
+    bridge["streams"] = [
+        stream for stream in bridge["streams"]
+        if "image" not in stream and not (
+            stream["native"].startswith("sensor:")
+            and stream["native"].removeprefix("sensor:").split(".")[0] in cameras)
+    ]
+    return dataclasses.replace(resolved, bridge=bridge)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m robotics_platform_ros")
     parser.add_argument("scenario", type=Path, help="scenario pack folder or file")
@@ -97,11 +114,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--sensors", help="comma-separated robot sensor ids to execute "
                         "(default: every enabled sensor)")
     parser.add_argument("--duration", type=float, help="stop after this many simulated seconds")
+    parser.add_argument("--no-cameras", action="store_true",
+                        help="run without camera sensors and drop their image/camera_info streams "
+                        "(no GPU needed; smoke tests and operator-interface work)")
     parser.add_argument("--validate-only", action="store_true",
                         help="resolve, validate against ROS types and write records; no stepping")
     arguments = parser.parse_args(argv)
     try:
         resolved = resolve_scenario(arguments.scenario)
+        if arguments.no_cameras:
+            resolved = without_cameras(resolved)
+            arguments.sensors = ",".join(
+                item["id"] for item in resolved.robot["sensors"]
+                if item.get("enabled", True) and item["type"] != "stereo_camera"
+                and (arguments.sensors is None or item["id"] in arguments.sensors.split(",")))
         selection = None if arguments.sensors is None else [
             item for item in arguments.sensors.split(",") if item]
         native_ids, camera_ids = select_sensors(resolved, selection)
