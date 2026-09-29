@@ -129,6 +129,59 @@ streams:
     orientation_x: {from: pose.pose.orientation.x}
     orientation_y: {from: pose.pose.orientation.y}
     orientation_z: {from: pose.pose.orientation.z}
+# Topic-form actuator commands (firmware interface). riptide_hardware2's
+# actuator_service_translator (launched with autonomy) forwards the services here and
+# waits for state/actuator/cmd_status; the original simulator accepted both forms.
+- id: torpedo_topic
+  direction: subscribe
+  topic: command/actuator/torpedo
+  message_type: std_msgs/msg/Empty
+  native: 'command:mechanisms.torpedo_launcher.fire'
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {}
+  reply_stream: actuator_cmd_status
+- id: dropper_topic
+  direction: subscribe
+  topic: command/actuator/dropper
+  message_type: std_msgs/msg/Empty
+  native: 'command:mechanisms.dropper.fire'
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {}
+  reply_stream: actuator_cmd_status
+- id: arm_topic
+  direction: subscribe
+  topic: command/actuator/arm
+  message_type: std_msgs/msg/Bool
+  native: 'command:mechanisms.set_armed'
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {armed: {from: data}}
+  reply_stream: actuator_cmd_status
+- id: reload_topic
+  direction: subscribe
+  topic: command/actuator/notify_reload
+  message_type: std_msgs/msg/Empty
+  native: 'command:mechanisms.reload_all'
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {}
+  reply_stream: actuator_cmd_status
+- id: claw_topic
+  direction: subscribe
+  topic: command/actuator/claw
+  message_type: std_msgs/msg/Bool
+  native: 'command:mechanisms.claw.command'
+  frame_id: ''
+  rate_hz: 0
+  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
+  fields: {open: {from: data}}
+  reply_stream: actuator_cmd_status
 # ---------------- simulator -> ROS: EKF inputs (talos_ekf.yaml) ----------------
 - id: claw_timed_move
   direction: subscribe

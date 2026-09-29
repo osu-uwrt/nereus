@@ -117,6 +117,24 @@ class MechanismBridgeTest(unittest.TestCase):
         assert state is not None
         self.assertEqual(state.claws["claw"].state, "closed")
 
+    def test_topic_form_commands_reply_on_cmd_status(self) -> None:
+        from std_msgs.msg import Empty
+
+        core = _core()
+        core.set_killed(False)
+        replies = core.receive("arm_topic", Bool(data=True))
+        self.assertEqual([(p.stream, p.message.data) for p in replies],
+                         [("actuator_cmd_status", True)])
+        _run(core, 1)
+        self.assertTrue(core.receive("torpedo_topic", Empty())[0].message.data)
+        self.assertFalse(core.receive("dropper_topic", Empty())[0].message.data)  # cooldown
+        self.assertTrue(core.receive("claw_topic", Bool(data=True))[0].message.data)
+        self.assertTrue(core.receive("reload_topic", Empty())[0].message.data)
+        state = core.session.mechanism_state()
+        assert state is not None
+        self.assertFalse(state.armed)
+        self.assertEqual(len(core.session.payloads), 1)
+
     def test_task_reset_clears_payloads_reloads_and_disarms(self) -> None:
         core = _core()
         core.set_killed(False)

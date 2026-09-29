@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from robotics_platform import _native as native
+from robotics_platform.mechanisms import CommandResult
 from robotics_platform.pack_runtime import PackRuntime
 from robotics_platform.session import Session
 
@@ -280,10 +281,14 @@ class BridgeCore:
                 if stream["direction"] == "subscribe":
                     if endpoint in _COMMAND_ARGUMENTS:
                         arguments = _COMMAND_ARGUMENTS[endpoint]
-                    elif self._mechanism(endpoint, where)[1] == "timed_move":
-                        arguments = {"signed_duration_s": SCALAR}
-                    else:
-                        raise BridgeError(f"{where}: unsupported native endpoint {endpoint!r}")
+                    elif endpoint in _SIMPLE_ACTIONS - {"command:robot.reset_to_start"}:
+                        arguments = {}
+                    elif endpoint == "command:mechanisms.set_armed":
+                        arguments = {"armed": BOOLEAN}
+                    else:  # topic-form mechanism commands, as firmware/translators send them
+                        arguments = {"timed_move": {"signed_duration_s": SCALAR},
+                                     "command": {"open": BOOLEAN}, "fire": {}}[
+                                         self._mechanism(endpoint, where)[1]]
                     if endpoint == "command:thrusters.set_forces" and self._thruster_index is None:
                         raise BridgeError(f"{where}: thruster commands need a thrusters block")
                     self.readers[stream["id"]] = mapping.compile_reader(
@@ -613,8 +618,12 @@ class BridgeCore:
         if endpoint == "estimate:latest":
             self.latest_estimate = arguments
             return []
-        identifier, _ = self._mechanism(endpoint, stream)
-        result = self.session.move_claw(identifier, arguments["signed_duration_s"])
+        if endpoint == "command:scenario.reset":
+            accepted, message = self.full_reset()
+            self._request_alignment("full_reset")
+            result = CommandResult(accepted, message)
+        else:
+            result = self._mechanism_action(endpoint, arguments)
         reply = self.stream_config[stream].get("reply_stream")
         if reply is None:
             return []
@@ -688,15 +697,15 @@ class BridgeCore:
         return writer({"accepted": accepted, "message": message})
 
     def _mechanism_action(self, action: str, arguments: Mapping[str, Any]) -> Any:
-        from robotics_platform.mechanisms import CommandResult
-
         if action == "command:mechanisms.set_armed":
             return self.session.set_armed(arguments["armed"])
         if action == "command:mechanisms.reload_all":
             return self.session.reload_all()
         if action == "command:tasks.reset":
             return CommandResult(*self.session.reset_tasks())
-        identifier, operation = self._mechanism(action, "service")
+        identifier, operation = self._mechanism(action, "command")
+        if operation == "timed_move":
+            return self.session.move_claw(identifier, arguments["signed_duration_s"])
         if operation == "fire":
             result = self.session.fire(identifier)
             self.task_events.extend(self.session.last_step.task_events)
