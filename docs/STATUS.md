@@ -78,6 +78,14 @@ bridge tests pass, including a live FastDDS test where a late subscriber receive
 the static transform before any physics step. The 79 existing pack tests and three
 new static-TF cases pass. Image publication and real perception remain unfinished.
 
+Camera message formatters now produce owned ROS byte buffers in bulk: JPEG with
+the original transport format, RGB/BGR8, and float32 depth in metres with NaNs.
+CameraInfo uses the configured field maps and acquisition stamp, including the
+right-eye projection baseline. Six serialization tests pass against installed ROS
+message types. These formatters are not connected to publication yet; capture and
+formatting must run outside the physics thread. Unsupported encodings fail at
+preflight rather than changing pixel meaning.
+
 Step 1 passed joint review. `proposals/step1/` contains nine proposed JSON Schemas
 and eight YAML documents: Talos robot, 2026 pool, gate/torpedo task definitions,
 task manifest, UWRT bridge, scenario and the exception ledger. One task-pack

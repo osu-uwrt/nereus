@@ -57,6 +57,9 @@ Step 3 progress:
 - [x] Configure static optical TF from robot-pack poses; validate frame ownership and
   names. All 114 ROS tests pass, including a late-subscriber static-TF delivery test;
   79 existing and three new pack tests pass.
+- [x] Camera ROS message formatters preserve acquisition stamps, calibration, owned
+  pixel buffers, channel order and depth units/NaNs; six serialization tests pass.
+  Publication remains to be connected to the camera worker.
 - [ ] Compose sensor scenes from pack data, including robot visual placement.
 - [ ] Execute the existing robot-pack camera/stereo definitions offscreen.
 - [ ] Publish calibrated, synchronized image/CameraInfo products through the bridge.
