@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -251,7 +252,11 @@ TEST(SessionCameras, JpegAndCostReport) {
     }
     cameras->close();
     ASSERT_GE(sink.size(), std::size_t(frames));
-    const auto &p = sink.products.back();
+    // Cameras render on parallel workers, so the last delivery may be the camera without JPEG.
+    const auto last = std::find_if(sink.products.rbegin(), sink.products.rend(),
+                                   [&](const sc::Products &q) { return q.camera == id; });
+    ASSERT_NE(last, sink.products.rend());
+    const auto &p = *last;
     ASSERT_GT(p.left->jpeg.size(), 1000u);
     EXPECT_EQ(p.left->jpeg[0], 0xff);
     EXPECT_EQ(p.left->jpeg[1], 0xd8);
