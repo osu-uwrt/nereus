@@ -5,7 +5,7 @@
 # Width is 56 ft (eight 7 ft lanes); depth 14-17 ft per the published facility specs.
 kind: pool
 id: rpac_divewell
-description: Ohio State RPAC dive well, 25 m x 56 ft, 17 ft deep.
+description: Ohio State RPAC dive well, 25 m x 56 ft, 17 ft deep rising to 14 ft.
 
 type: rectangular_pool
 parameters:
@@ -19,10 +19,14 @@ parameters:
   current_m_s: [0.0, 0.0, 0.0]
   current_oscillation_amplitude_m_s: [0.0, 0.0, 0.0]
   current_oscillation_frequency_hz: 0.0
+  # 17 ft at the deep end curving up to 14 ft. The curve's middle (12.3 m) matches the published volume
+  # (536,792 gal over 4,638 sq ft: 15.47 ft mean depth).
+  floor_profile:
+    along: x
+    points_m: [[0, 5.1816], [9.3, 5.1816], [15.3, 4.2672], [25.0, 4.2672]]
 
-# Static contact boxes in pool coordinates. Walls are depth + deck + 1 m tall.
+# Static wall boxes in pool coordinates, depth + deck + 1 m tall; the floor's boxes come from the profile.
 collision_boxes:
-- {id: floor, size_m: [25.0, 17.0688, 1], center_m: [12.5, 8.5344, -5.6816], orientation_wxyz: [1, 0, 0, 0]}
 - {id: west_wall, size_m: [1, 19.0688, 6.4864], center_m: [-0.5, 8.5344, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
 - {id: east_wall, size_m: [1, 19.0688, 6.4864], center_m: [25.5, 8.5344, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
 - {id: south_wall, size_m: [25.0, 1, 6.4864], center_m: [12.5, -0.5, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
