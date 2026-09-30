@@ -13,7 +13,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libeigen3-dev libyaml-cpp-dev libgtest-dev clang-tidy
+          sudo apt-get install -y cmake g++ libeigen3-dev libgtest-dev clang-tidy
           python3 -m pip install clang-format==23.1.1
       - name: Check
         run: python3 tools/check.py --preset ${{ matrix.preset }} --install-check --tidy
@@ -32,37 +32,16 @@ jobs:
       - name: Install native and Python build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libeigen3-dev libyaml-cpp-dev python3-dev python3-venv clang-tidy
+          sudo apt-get install -y cmake g++ libeigen3-dev python3-dev python3-venv clang-tidy
           python3 -m venv /tmp/nereus-python-tools
           /tmp/nereus-python-tools/bin/pip install 'scikit-build-core>=0.11,<1.1' 'pybind11>=2.13,<4' 'build>=1.2,<2' 'ninja>=1.5' 'mypy>=1.11,<2' 'ruff>=0.9,<1' 'numpy>=1.23,<3'
-      - name: Build C++ reference runner
-        run: |
-          cmake -S . -B build/reference -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
-          cmake --build build/reference --parallel 2
       - name: Check wheel and installed API
         env:
           SANITIZERS: ${{ matrix.sanitizers }}
         run: |
           flags=()
           if [ "$SANITIZERS" = true ]; then flags+=(--sanitizers); fi
-          /tmp/nereus-python-tools/bin/python tools/check_python.py --tidy --reference-runner build/reference/nereus-run "${flags[@]}"
-
-  viewer:
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        preset: [viewer, viewer-asan, scene-viewer, scene-viewer-asan]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install standalone viewer dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake g++ libeigen3-dev libyaml-cpp-dev libgtest-dev libassimp-dev libglfw3-dev libglew-dev libgl1-mesa-dev clang-tidy xvfb xauth
-          python3 -m pip install clang-format==23.1.1
-      - name: Check contracts, relocated viewer install, and Mesa rendering
-        env:
-          LIBGL_ALWAYS_SOFTWARE: '1'
-        run: xvfb-run -a python3 tools/check_viewer.py --preset ${{ matrix.preset }} --tidy --graphics
+          /tmp/nereus-python-tools/bin/python tools/check_python.py --tidy "${flags[@]}"
 
   mesh-assets:
     runs-on: ubuntu-22.04

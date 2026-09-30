@@ -1,7 +1,5 @@
-# Talos UWRT operator panels: Talos viewer.yaml merged with the viewer_tools.yaml tools (one document).
-# Ported from riptide_simulator (talos/config/viewer.yaml, camera_faker/config/viewer_tools.yaml).
+# Talos UWRT operator panels and tools.
 # provider run/profile "task" refers to the host-supplied document "task" (task pack ui block).
-schema_version: 1
 sidebar_width_fraction: 0.29
 providers:
   motion:

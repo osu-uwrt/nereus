@@ -1,7 +1,6 @@
 # Talos status LED bars for the ROS pool viewer (three emitters under the clear top of the port hull).
 # Poses are xyz + roll/pitch/yaw (radians) in the named robot-pack frame (the CAD origin frame `cad`),
 # metres; visual estimate from the supplied Talos photograph and CAD hull bounds.
-schema_version: 1
 input:
   type: riptide_msgs2/msg/LedCommand
   topic: command/led

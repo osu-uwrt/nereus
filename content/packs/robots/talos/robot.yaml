@@ -141,14 +141,13 @@ safety:
     arm_rejected_while_killed: true
     applies_to: [torpedo_launcher, dropper, claw]
 
-# Sensor periods land on the 2 ms physics step.
+# Sample times land on the 2 ms physics step.
 sensors:
 - id: imu
   type: ahrs
   frame: imu_mount
   mount_frame: imu_mount
-  period_ns: 20000000   # 50 Hz
-  latency_ns: 0
+  rate_hz: 50
   parameters:
     inertial:
       acceleration_noise: {white_stddev: [0.016, 0.016, 0.016]}                      # m/s^2
@@ -165,8 +164,7 @@ sensors:
   type: fog
   frame: fog_mount
   mount_frame: fog_mount
-  period_ns: 2000000   # 500 Hz
-  latency_ns: 0
+  rate_hz: 500
   parameters:
     axes: [[0, 0, 1]]
     gyro_noise: {white_stddev: [0, 0, 0.00017453292519943296]}
@@ -175,8 +173,7 @@ sensors:
   type: reference_velocity
   frame: dvl_mount
   mount_frame: dvl_mount
-  period_ns: 125000000   # 8 Hz; the 2 ms step rounds this to 126/250/376 ms
-  latency_ns: 0
+  rate_hz: 8   # the 2 ms step rounds the period to 126/250/376 ms
   parameters:
     reference_velocity_world_m_s: [0, 0, 0]
     velocity_noise: {white_stddev: [0.001, 0.001, 0.001]}
@@ -186,8 +183,7 @@ sensors:
   type: reference_altitude
   frame: world
   mount_frame: depth_mount
-  period_ns: 50000000        # 20 Hz
-  latency_ns: 0
+  rate_hz: 20
   parameters:
     target_position_body_m: [0.016999999999999987, -0.010000000000000002, -0.041999999999999996]   # base_link in COM frame
     noise: {white_stddev: 0.01}
@@ -197,8 +193,7 @@ sensors:
   frame: ffc_left_optical
   mount_frame: ffc_mount
   enabled: true   # renders even when no viewer is subscribed
-  period_ns: 66666667   # 15 Hz
-  latency_ns: 0
+  rate_hz: 15
   parameters:
     # Rectified stereo calibration (1920x1200): both eyes share the rectified intrinsics, and published
     # CameraInfo uses them with zero distortion. baseline_m = -P2[0,3]/P2[0,0] from cv2.stereoRectify.
@@ -219,8 +214,7 @@ sensors:
   frame: dfc_left_optical
   mount_frame: dfc_mount
   enabled: true   # renders even when no viewer is subscribed
-  period_ns: 66666667   # 15 Hz
-  latency_ns: 0
+  rate_hz: 15
   parameters:
     # Rectified stereo calibration (1920x1200), as for ffc.
     baseline_m: 0.05030758651145167

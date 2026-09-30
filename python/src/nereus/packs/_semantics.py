@@ -533,8 +533,8 @@ def scenario(data: dict[str, Any], robot_data: dict[str, Any], tasks_data: dict[
         problems.append(f"/initial/frame: unknown robot frame '{data['initial']['frame']}'")
     for sensor in robot_data["sensors"]:
         if sensor.get("enabled", True) and sensor["period_ns"] < data["timestep_ns"]:
-            problems.append(f"robot sensor '{sensor['id']}': period_ns {sensor['period_ns']} is "
-                            f"shorter than timestep_ns {data['timestep_ns']}")
+            problems.append(f"robot sensor '{sensor['id']}': rate_hz {sensor['rate_hz']:g} is faster than "
+                            f"the {data['timestep_s']:g} s physics step")
     for requirement in tasks_data["requires"]:
         if requirement["task"] not in task_ids:
             problems.append(f"tasks /requires: unknown task '{requirement['task']}'")

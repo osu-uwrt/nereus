@@ -75,8 +75,7 @@ int main() {
                                                             ++created;
                                                             return std::make_shared<FakeMission>();
                                                         }});
-    const auto text = R"(schema_version: 1
-providers:
+    const auto text = R"(providers:
   motion: {type: fake.motion, options: {}}
   mission: {type: fake.mission, options: {}}
 panels:
@@ -109,7 +108,7 @@ ownership:
     ctx.preview = true;
     Composition preview(YAML::Load(text), ctx, r);
     assert(created == 2 && preview.providers().empty());
-    Composition empty(YAML::Load("schema_version: 1\nproviders: {}"), ctx, r);
+    Composition empty(YAML::Load("providers: {}"), ctx, r);
     assert(empty.empty());
     ctx.preview = false;
     auto fails = [&](const YAML::Node &cfg) {
@@ -148,9 +147,6 @@ ownership:
     fails(cfg);
     cfg = YAML::Load(text);
     cfg["overlays"][0]["options"]["size_metres"] = -5;
-    fails(cfg);
-    cfg = YAML::Load(text);
-    cfg["schema_version"] = 2;
     fails(cfg);
     cfg = YAML::Load(text);
     cfg["typo"] = true;
@@ -204,7 +200,7 @@ ownership:
         Composition c(YAML::Load(text), ctx, r);
         const std::vector<std::string> order{"scene_settings", "panels_menu", "view"};
         assert(c.toolbarIds() == order);
-        Composition none(YAML::Load("schema_version: 1\nproviders: {}\ntoolbar: []"), ctx, r);
+        Composition none(YAML::Load("providers: {}\ntoolbar: []"), ctx, r);
         assert(none.toolbarIds().empty());
     }
     {

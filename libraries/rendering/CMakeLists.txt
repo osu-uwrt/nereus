@@ -1,4 +1,4 @@
-# CPU assets are independently usable without visualization, OpenGL or simulation.
+# CPU assets are independently usable without OpenGL or simulation.
 find_package(assimp 5 REQUIRED CONFIG)
 add_library(nereus_mesh_assets src/assets.cpp)
 add_library(Nereus::mesh_assets ALIAS nereus_mesh_assets)
@@ -18,7 +18,7 @@ if(BUILD_TESTING)
   target_link_libraries(asset_tests PRIVATE nereus_mesh_assets GTest::gtest_main)
   target_compile_definitions(asset_tests PRIVATE
     NEREUS_ASSET_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures"
-    NEREUS_VISUAL_CONTENT="${PROJECT_SOURCE_DIR}/content/visuals")
+    NEREUS_PACK_CONTENT="${PROJECT_SOURCE_DIR}/content/packs")
   nereus_project_options(asset_tests)
   gtest_discover_tests(asset_tests DISCOVERY_MODE PRE_TEST)
 endif()

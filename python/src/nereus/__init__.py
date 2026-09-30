@@ -1,7 +1,6 @@
 """Standalone simulation; explicit stepping and copied, typed observations."""
 
 from importlib import import_module
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -61,22 +60,13 @@ if TYPE_CHECKING:
         Runtime,
         SampleHeader,
         ScalarNoiseParameters,
-        Scenario,
-        ScheduledCommand,
-        SensorInfo,
         Snapshot,
         StreamStats,
         Thruster,
         VelocityReading,
         VelocitySample,
         VelocityStream,
-        load_scenario,
     )
-
-
-def example_scenario() -> Path:
-    """Return the installed synthetic scenario and its relative profile tree."""
-    return Path(__file__).resolve().parent / "content" / "examples" / "profile_pool.yaml"
 
 
 __all__ = [
@@ -141,11 +131,6 @@ __all__ = [
     "DvlStream",
     "PressureStream",
     "Runtime",
-    "ScheduledCommand",
-    "SensorInfo",
-    "Scenario",
-    "load_scenario",
-    "example_scenario",
 ]
 
 

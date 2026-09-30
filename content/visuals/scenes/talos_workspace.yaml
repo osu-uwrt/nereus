@@ -1,9 +1,0 @@
-version: 1
-sources:
-  - {id: simulation, type: local, file: talos_motion.yaml}
-selected_source: simulation
-fixed_frame: world
-scene: talos_pool.yaml
-camera: {target: [3, 0, -1], yaw: -0.8, pitch: 0.45, distance: 4}
-displays:
-  - {id: CAD frame, type: axes, source: simulation, frame: cad, scale: 0.6}

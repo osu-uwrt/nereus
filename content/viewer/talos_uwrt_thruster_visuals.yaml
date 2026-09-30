@@ -3,7 +3,6 @@
 # `thruster` names a robot-pack thruster id (force-array index comes from the bridge thrusters.order),
 # `asset` a robot-pack asset id (rotor meshes are already listed in the pack visuals).
 # Signed RPM = c0 + c1*F + c2*tanh(F) + c3*abs(F)^0.25, separate forward/reverse fits, clamped at idle.
-schema_version: 1
 topic: simulator/actual_thruster_forces
 timeout: 0.5
 force_deadband: 0.01

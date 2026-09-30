@@ -10,7 +10,7 @@ tasks: ../../tasks/robosub_2026
 bridge: ../../bridges/uwrt_talos
 
 seed: 7
-timestep_ns: 2000000   # 2 ms physics step
+timestep_s: 0.002   # physics step
 sensor_noise: true
 
 # World = the robot's `map` frame: ENU, +Z up, z = 0 at the water surface. Placements are

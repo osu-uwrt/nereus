@@ -55,7 +55,7 @@ pool: ../../pools/my_pool
 tasks: ../../tasks/robosub_2026
 bridge: ../../bridges/my_stack        # optional: only the ROS simulator needs it
 seed: 7                               # all sensor noise is reproducible from this
-timestep_ns: 2000000                  # 2 ms physics step
+timestep_s: 0.002                     # physics step
 sensor_noise: true
 world_frame: map
 

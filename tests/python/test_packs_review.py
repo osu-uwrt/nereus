@@ -131,12 +131,12 @@ class PhysicalInvariantTests(ReviewCase):
         self.rejects("robot", "orientation_wxyz: must have unit norm")
 
     def test_sensor_period_shorter_than_timestep(self) -> None:
-        self.edit("robot/robot.yaml", "period_ns: 10000000", "period_ns: 1000000")
-        self.resolve_rejects("period_ns 1000000 is shorter than timestep_ns 2000000")
+        self.edit("robot/robot.yaml", "rate_hz: 100", "rate_hz: 1000")
+        self.resolve_rejects("rate_hz 1000 is faster than the 0.002 s physics step")
 
     def test_timestep_above_native_limit(self) -> None:
-        self.edit("scenario/scenario.yaml", "timestep_ns: 2000000", "timestep_ns: 200000000")
-        self.rejects("scenario", "timestep_ns")
+        self.edit("scenario/scenario.yaml", "timestep_s: 0.002", "timestep_s: 0.2")
+        self.rejects("scenario", "timestep_s")
 
 
 class InactiveMetadataTests(ReviewCase):

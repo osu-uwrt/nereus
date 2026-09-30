@@ -210,6 +210,18 @@ class ResolvedScenario:
         return target
 
 
+def _nanoseconds(seconds: float) -> int:
+    return round(seconds * 1e9)
+
+
+def _add_runtime_times(scenario: dict[str, Any], robot: dict[str, Any]) -> None:
+    """Add the whole-nanosecond times the runtime steps on next to the authored seconds and rates."""
+    scenario["timestep_ns"] = _nanoseconds(scenario["timestep_s"])
+    for sensor in robot["sensors"]:
+        sensor["period_ns"] = _nanoseconds(1 / sensor["rate_hz"])
+        sensor["latency_ns"] = _nanoseconds(sensor.get("latency_s", 0))
+
+
 def resolve_scenario(path: Path, strict: bool = False) -> ResolvedScenario:
     """Load a scenario and every selected pack, validate cross-references, record gaps.
 
@@ -242,6 +254,7 @@ def resolve_scenario(path: Path, strict: bool = False) -> ResolvedScenario:
     tasks_data = tasks_document.plain()
     definitions = [include.plain() for include in tasks_document.includes]
     robot = documents["robot"].plain()
+    _add_runtime_times(data, robot)
     bridge = documents["bridge"].plain() if "bridge" in documents else None
     if bridge is not None:
         problems += _prefixed(documents["bridge"].path, semantics.bridge_binding(bridge, robot))

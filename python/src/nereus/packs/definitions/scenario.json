@@ -31,11 +31,11 @@
       "minimum": 0,
       "maximum": 18446744073709551615
     },
-    "timestep_ns": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 100000000,
-      "description": "Fixed physics step in ns, (0, 100 ms] as the native plant requires; enabled sensor periods must be at least one step (semantic check)."
+    "timestep_s": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 0.1,
+      "description": "Fixed physics step in seconds, at most 100 ms; enabled sensors may not sample faster than one step (semantic check)."
     },
     "sensor_noise": {
       "type": "boolean"
@@ -166,7 +166,7 @@
     "pool",
     "tasks",
     "seed",
-    "timestep_ns",
+    "timestep_s",
     "sensor_noise",
     "world_frame",
     "pool_placement",

@@ -16,6 +16,18 @@ find_package(riptide_msgs2 QUIET)
 find_package(chameleon_tf_msgs QUIET)
 option(NEREUS_ROS_VIEWER_UWRT "Build the UWRT (riptide_msgs2) panel providers" ${riptide_msgs2_FOUND})
 
+find_package(glfw3 3.3 REQUIRED)
+find_package(OpenGL REQUIRED)
+find_package(GLEW REQUIRED)
+
+set(imgui ${PROJECT_SOURCE_DIR}/third_party/imgui)
+add_library(nereus_imgui STATIC ${imgui}/imgui.cpp ${imgui}/imgui_draw.cpp
+  ${imgui}/imgui_tables.cpp ${imgui}/imgui_widgets.cpp
+  ${imgui}/backends/imgui_impl_glfw.cpp ${imgui}/backends/imgui_impl_opengl3.cpp)
+target_include_directories(nereus_imgui SYSTEM PUBLIC ${imgui})
+target_link_libraries(nereus_imgui PRIVATE glfw ${CMAKE_DL_LIBS})
+install(FILES ${imgui}/LICENSE.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/nereus/legal RENAME imgui-MIT.txt)
+
 add_library(nereus_glm INTERFACE)
 target_include_directories(nereus_glm SYSTEM INTERFACE ${PROJECT_SOURCE_DIR}/third_party/glm)
 

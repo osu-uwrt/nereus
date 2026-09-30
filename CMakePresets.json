@@ -33,24 +33,6 @@
       }
     },
     {
-      "name": "scene-viewer",
-      "inherits": "viewer",
-      "binaryDir": "${sourceDir}/build/scene-viewer",
-      "cacheVariables": {
-        "NEREUS_BUILD_SCENE_RENDERER": "ON",
-        "NEREUS_INSTALL_REFERENCE_VISUALS": "ON"
-      }
-    },
-    {
-      "name": "scene-viewer-asan",
-      "inherits": "scene-viewer",
-      "binaryDir": "${sourceDir}/build/scene-viewer-asan",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "NEREUS_ENABLE_SANITIZERS": "ON"
-      }
-    },
-    {
       "name": "rendering",
       "inherits": "assets",
       "binaryDir": "${sourceDir}/build/rendering",
@@ -74,9 +56,7 @@
       "binaryDir": "${sourceDir}/build/assets",
       "cacheVariables": {
         "NEREUS_BUILD_SIMULATION": "OFF",
-        "NEREUS_BUILD_CLI": "OFF",
-        "NEREUS_BUILD_MESH_ASSETS": "ON",
-        "NEREUS_INSTALL_REFERENCE_VISUALS": "ON"
+        "NEREUS_BUILD_MESH_ASSETS": "ON"
       }
     },
     {
@@ -93,69 +73,15 @@
       "inherits": "release",
       "binaryDir": "${sourceDir}/build/plant-only",
       "cacheVariables": {
-        "NEREUS_BUILD_CLI": "OFF",
         "BUILD_TESTING": "OFF"
       }
     },
     {
-      "name": "viewer",
-      "inherits": "release",
-      "binaryDir": "${sourceDir}/build/viewer",
-      "cacheVariables": {
-        "NEREUS_BUILD_SIMULATION": "OFF",
-        "NEREUS_BUILD_CLI": "OFF",
-        "NEREUS_BUILD_VIEWER": "ON"
-      }
-    },
-    {
-      "name": "simulation-view",
-      "inherits": "release",
-      "binaryDir": "${sourceDir}/build/simulation-view",
-      "cacheVariables": {
-        "NEREUS_BUILD_SIMULATION_VIEW": "ON"
-      }
-    },
-    {
-      "name": "simulation-view-asan",
-      "inherits": "simulation-view",
-      "binaryDir": "${sourceDir}/build/simulation-view-asan",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "NEREUS_ENABLE_SANITIZERS": "ON"
-      }
-    },
-    {
-      "name": "simulator-viewer",
-      "inherits": "simulation-view",
-      "binaryDir": "${sourceDir}/build/simulator-viewer",
-      "cacheVariables": {
-        "NEREUS_BUILD_VIEWER": "ON",
-        "NEREUS_BUILD_SIMULATOR_VIEWER": "ON"
-      }
-    },
-    {
-      "name": "simulator-viewer-asan",
-      "inherits": "simulator-viewer",
-      "binaryDir": "${sourceDir}/build/simulator-viewer-asan",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "NEREUS_ENABLE_SANITIZERS": "ON"
-      }
-    },
-    {
-      "name": "viewer-asan",
-      "inherits": "viewer",
-      "binaryDir": "${sourceDir}/build/viewer-asan",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "NEREUS_ENABLE_SANITIZERS": "ON"
-      }
-    },
-    {
       "name": "ros-viewer",
-      "inherits": "scene-viewer",
+      "inherits": "release",
       "binaryDir": "${sourceDir}/build/ros-viewer",
       "cacheVariables": {
+        "NEREUS_BUILD_SCENE_RENDERER": "ON",
         "NEREUS_BUILD_ROS_VIEWER": "ON",
         "NEREUS_BUILD_MESH_ASSETS": "ON",
         "BUILD_TESTING": "ON",
@@ -179,16 +105,6 @@
     }
   ],
   "buildPresets": [
-    {
-      "name": "scene-viewer",
-      "configurePreset": "scene-viewer",
-      "jobs": 2
-    },
-    {
-      "name": "scene-viewer-asan",
-      "configurePreset": "scene-viewer-asan",
-      "jobs": 2
-    },
     {
       "name": "rendering",
       "configurePreset": "rendering",
@@ -230,56 +146,12 @@
       "jobs": 2
     },
     {
-      "name": "viewer",
-      "configurePreset": "viewer",
-      "jobs": 2
-    },
-    {
-      "name": "viewer-asan",
-      "configurePreset": "viewer-asan",
-      "jobs": 2
-    },
-    {
-      "name": "simulation-view",
-      "configurePreset": "simulation-view",
-      "jobs": 2
-    },
-    {
-      "name": "simulator-viewer",
-      "configurePreset": "simulator-viewer",
-      "jobs": 2
-    },
-    {
-      "name": "simulator-viewer-asan",
-      "configurePreset": "simulator-viewer-asan",
-      "jobs": 2
-    },
-    {
-      "name": "simulation-view-asan",
-      "configurePreset": "simulation-view-asan",
-      "jobs": 2
-    },
-    {
       "name": "ros-viewer",
       "configurePreset": "ros-viewer",
       "jobs": 3
     }
   ],
   "testPresets": [
-    {
-      "name": "scene-viewer",
-      "configurePreset": "scene-viewer",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "scene-viewer-asan",
-      "configurePreset": "scene-viewer-asan",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
     {
       "name": "rendering",
       "configurePreset": "rendering",
@@ -325,48 +197,6 @@
     {
       "name": "asan",
       "configurePreset": "asan",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "viewer",
-      "configurePreset": "viewer",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "viewer-asan",
-      "configurePreset": "viewer-asan",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "simulation-view",
-      "configurePreset": "simulation-view",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "simulator-viewer",
-      "configurePreset": "simulator-viewer",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "simulator-viewer-asan",
-      "configurePreset": "simulator-viewer-asan",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "simulation-view-asan",
-      "configurePreset": "simulation-view-asan",
       "output": {
         "outputOnFailure": true
       }

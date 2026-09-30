@@ -654,7 +654,7 @@ void App::buildPanels() {
     if (opt_.showScorecard)
         context.initialWindows.push_back("run");
     // Without panels the composition is empty (no sidebar) but still owns the default toolbar.
-    auto document = haveConfig ? YAML::LoadFile(configured) : YAML::Load("{schema_version: 1, providers: {}}");
+    auto document = haveConfig ? YAML::LoadFile(configured) : YAML::Load("{providers: {}}");
     if (ros_->poseSource() == PoseSource::Estimate)
         dropSimulatorPanels(document); // real robot: no simulator run / rate controls
     composition_ = std::make_unique<panels::Composition>(document, context, registry_);

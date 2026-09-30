@@ -26,7 +26,7 @@ CAMERA = """\
   frame: cam_left
   mount_frame: base_link
   enabled: false
-  period_ns: 66666667
+  rate_hz: 15
   parameters:
     baseline_m: 0.05
     right_frame: cam_right

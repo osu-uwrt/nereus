@@ -42,24 +42,20 @@ def main():
             "libraries/rendering",
             "applications/render_capture",
             "third_party/glm",
-            "content/visuals",
-            "docs",
         ):
             shutil.copytree(ROOT / folder, source / folder)
         for file in ("CMakeLists.txt", "LICENSE", "NOTICE"):
             shutil.copy2(ROOT / file, source / file)
         flags = [
-            "-DRP_BUILD_SIMULATION=OFF",
-            "-DRP_BUILD_CLI=OFF",
-            "-DRP_BUILD_SCENE_RENDERER=ON",
-            "-DRP_BUILD_RENDER_CAPTURE=ON",
-            "-DRP_INSTALL_REFERENCE_VISUALS=ON",
+            "-DNEREUS_BUILD_SIMULATION=OFF",
+            "-DNEREUS_BUILD_SCENE_RENDERER=ON",
+            "-DNEREUS_BUILD_RENDER_CAPTURE=ON",
             "-DBUILD_TESTING=OFF",
             "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
             "-DCMAKE_BUILD_TYPE=Release",
         ]
         if args.preset == "rendering-asan":
-            flags += ["-DCMAKE_BUILD_TYPE=Debug", "-DRP_ENABLE_SANITIZERS=ON"]
+            flags += ["-DCMAKE_BUILD_TYPE=Debug", "-DNEREUS_ENABLE_SANITIZERS=ON"]
         run([cmake, "-S", source, "-B", temp / "build", *flags], env=env)
         run([cmake, "--build", temp / "build", "--parallel", "2"], env=env)
         run([cmake, "--install", temp / "build", "--prefix", temp / "staging"], env=env)
@@ -74,9 +70,7 @@ def main():
                 forbidden += [
                     "glfw",
                     "nereus_simulation",
-                    "nereus_config",
                     "yaml-cpp",
-                    "nereus_visualization",
                     "imgui",
                 ]
             if any(token in text for token in forbidden):
@@ -101,7 +95,7 @@ def main():
         command = [
             installed / "bin/nereus-render-capture",
             data / "shaders",
-            data / "visuals/talos",
+            ROOT / "content/packs/robots/talos/assets/visual",
             capture,
         ]
         info = subprocess.check_output(list(map(str, command)), cwd=temp, env=graphics, text=True)

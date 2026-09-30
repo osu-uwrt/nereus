@@ -55,11 +55,9 @@ void validateSubstitutions(const YAML::Node &node, const Context &ctx) {
 } // namespace
 Composition::Composition(const YAML::Node &config, const Context &ctx, const Registry &registry) {
     keys(config,
-         {"schema_version", "sidebar_width", "sidebar_width_fraction", "sidebar_visible", "providers", "panels",
+         {"sidebar_width", "sidebar_width_fraction", "sidebar_visible", "providers", "panels",
           "toolbar", "overlays", "ownership"},
          "composition");
-    if (config["schema_version"].as<int>(0) != 1)
-        throw std::invalid_argument("composition.schema_version must be 1");
     sidebarShown = config["sidebar_visible"].as<bool>(true);
     if (config["sidebar_width"] && config["sidebar_width_fraction"])
         throw std::invalid_argument("choose sidebar_width or sidebar_width_fraction, not both");

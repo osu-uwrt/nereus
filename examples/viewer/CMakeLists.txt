@@ -1,5 +1,0 @@
-cmake_minimum_required(VERSION 3.22)
-project(ViewerExtension LANGUAGES CXX)
-find_package(Nereus REQUIRED CONFIG)
-add_executable(viewer_extension main.cpp)
-target_link_libraries(viewer_extension PRIVATE Nereus::viewer_io)

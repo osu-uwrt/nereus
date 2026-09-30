@@ -96,8 +96,9 @@ safety:
 
 ## Sensors
 
-Every sensor has `id`, `type`, `frame` (where the measurement is expressed), `mount_frame`, `period_ns` (a
-multiple of the scenario timestep, 2 ms by default), optional `latency_ns`, and `parameters`.
+Every sensor has `id`, `type`, `frame` (where the measurement is expressed), `mount_frame`, `rate_hz`,
+optional `latency_s`, and `parameters`. Sample times land on the scenario's physics step (2 ms by default), so a
+rate that doesn't divide it evenly samples on the nearest steps.
 
 | Type | Measures | Key parameters |
 | --- | --- | --- |
@@ -114,7 +115,7 @@ multiple of the scenario timestep, 2 ms by default), optional `latency_ns`, and 
   type: stereo_camera
   frame: ffc_left_optical
   mount_frame: ffc_mount
-  period_ns: 66666667                       # 15 Hz
+  rate_hz: 15
   parameters:
     baseline_m: 0.05
     right_frame: ffc_right_optical

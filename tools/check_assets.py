@@ -25,22 +25,19 @@ def main():
             "cmake",
             "libraries/spatial",
             "libraries/rendering",
-            "content/visuals",
         ):
             shutil.copytree(ROOT / folder, source / folder)
         for file in ("CMakeLists.txt", "LICENSE", "NOTICE"):
             shutil.copy2(ROOT / file, source / file)
         flags = [
-            "-DRP_BUILD_SIMULATION=OFF",
-            "-DRP_BUILD_CLI=OFF",
-            "-DRP_BUILD_MESH_ASSETS=ON",
-            "-DRP_INSTALL_REFERENCE_VISUALS=ON",
+            "-DNEREUS_BUILD_SIMULATION=OFF",
+            "-DNEREUS_BUILD_MESH_ASSETS=ON",
             "-DBUILD_TESTING=OFF",
             "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
             "-DCMAKE_BUILD_TYPE=Release",
         ]
         if args.preset == "assets-asan":
-            flags += ["-DCMAKE_BUILD_TYPE=Debug", "-DRP_ENABLE_SANITIZERS=ON"]
+            flags += ["-DCMAKE_BUILD_TYPE=Debug", "-DNEREUS_ENABLE_SANITIZERS=ON"]
         run([cmake, "-S", source, "-B", temp / "build", *flags], env=env)
         run([cmake, "--build", temp / "build", "--parallel", "2"], env=env)
         run([cmake, "--install", temp / "build", "--prefix", temp / "staging"], env=env)
@@ -72,7 +69,7 @@ def main():
         run(
             [
                 temp / "consumer-build/mesh_asset_demo",
-                installed / "share/nereus/visuals/talos",
+                ROOT / "content/packs/robots/talos/assets/visual",
             ],
             cwd=temp,
             env=env,

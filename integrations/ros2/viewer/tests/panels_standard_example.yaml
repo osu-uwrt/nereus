@@ -1,5 +1,4 @@
 # Example only: the robot must implement these standard ROS interfaces.
-schema_version: 1
 providers:
   vehicle:
     type: ros.pose

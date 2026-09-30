@@ -187,12 +187,13 @@
         "mount_frame": {
           "$ref": "common.schema.json#/$defs/name"
         },
-        "period_ns": {
-          "type": "integer",
-          "minimum": 1
+        "rate_hz": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Sample rate; the resolver rounds the period to whole nanoseconds."
         },
-        "latency_ns": {
-          "type": "integer",
+        "latency_s": {
+          "type": "number",
           "minimum": 0
         },
         "capacity": {
@@ -214,7 +215,7 @@
         "type",
         "frame",
         "mount_frame",
-        "period_ns",
+        "rate_hz",
         "parameters"
       ],
       "additionalProperties": false,

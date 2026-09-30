@@ -22,7 +22,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sanitizers", action="store_true")
     parser.add_argument("--tidy", action="store_true")
-    parser.add_argument("--reference-runner", type=Path)
     args = parser.parse_args()
     interpreter = Path(sys.executable).absolute()
     env = {
@@ -32,7 +31,7 @@ def main() -> None:
         "LC_ALL": "C.UTF-8",
         "PIP_DISABLE_PIP_VERSION_CHECK": "1",
     }
-    paths = ["python", "examples/python", "tests/python", "tools/check_python.py"]
+    paths = ["python", "tests/python", "tools/check_python.py"]
     run([interpreter, "-m", "ruff", "check", *paths], cwd=ROOT, env=env)
     run([interpreter, "-m", "ruff", "format", "--check", *paths], cwd=ROOT, env=env)
     run(
@@ -41,7 +40,6 @@ def main() -> None:
             "-m",
             "mypy",
             "python/src",
-            "examples/python",
             "tests/python",
             "tools/check_python.py",
         ],
@@ -60,10 +58,6 @@ def main() -> None:
         # This archive was just built from this checkout, not supplied by a third party.
         shutil.unpack_archive(archive, temp / "source")
         (source,) = (temp / "source").iterdir()
-        if (source / "content/visuals").exists():
-            raise RuntimeError(
-                "Optional reference visuals must not enter the Python source archive"
-            )
         build = temp / "native-build"
         settings = [f"-Cbuild-dir={build}", "-Ccmake.define.CMAKE_EXPORT_COMPILE_COMMANDS=ON"]
         if args.sanitizers:
@@ -89,7 +83,6 @@ def main() -> None:
             for path in sorted((source / "bindings/python").glob("*.cpp")):
                 run([tidy, path, "-p", build], cwd=source, env=env)
         shutil.copytree(source / "tests/python", temp / "tests")
-        shutil.copy2(source / "examples/python/run_profile.py", temp / "example.py")
         # Runtime must not depend on the source copy or build outputs.
         shutil.rmtree(source)
         shutil.rmtree(build)
@@ -98,8 +91,6 @@ def main() -> None:
         (wheel,) = artifacts.glob("*.whl")
         run([python, "-m", "pip", "install", wheel], cwd=temp, env=env)
         runtime_env = dict(env)
-        if args.reference_runner:
-            runtime_env["NEREUS_REFERENCE_RUNNER"] = str(args.reference_runner.resolve(strict=True))
         if args.sanitizers:
             # CPython isn't an ASan executable. Preload the sanitizer and C++ runtime
             # before importing the extension so exception interception is available.
@@ -122,7 +113,6 @@ def main() -> None:
             cwd=temp,
             env=runtime_env,
         )
-        run([python, "-I", temp / "example.py"], cwd=temp, env=runtime_env)
     print("Python wheel, installed API, and requested checks passed.")
 
 

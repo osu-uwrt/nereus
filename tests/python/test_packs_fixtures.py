@@ -44,7 +44,7 @@ sensors:
   type: ahrs
   frame: imu_mount
   mount_frame: imu_mount
-  period_ns: 10000000
+  rate_hz: 100
   parameters:
     inertial: {acceleration_noise: {white_stddev: [0.01, 0.01, 0.01]}}
     attitude: {angle_stddev_rad: 0.001}
@@ -52,7 +52,7 @@ sensors:
   type: reference_altitude
   frame: world
   mount_frame: base_link
-  period_ns: 50000000
+  rate_hz: 20
   parameters: {target_position_body_m: [0, 0, -0.05], noise: {white_stddev: 0.01}, reported_variance: 0.0001}
 mechanisms:
 - id: marker
@@ -142,7 +142,7 @@ pool: ../pool
 tasks: ../tasks
 bridge: ../bridge
 seed: 3
-timestep_ns: 2000000
+timestep_s: 0.002
 sensor_noise: false
 world_frame: map
 pool_placement: {position_m: [0, 0, 0], yaw_deg: 0}

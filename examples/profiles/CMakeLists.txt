@@ -1,5 +1,0 @@
-cmake_minimum_required(VERSION 3.22)
-project(NativeProfileConsumer LANGUAGES CXX)
-find_package(Nereus 0.1 REQUIRED CONFIG)
-add_executable(profile_demo main.cpp)
-target_link_libraries(profile_demo PRIVATE Nereus::config)
