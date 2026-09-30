@@ -12,7 +12,7 @@ frames:
 - {id: pill, position_m: [-0.082859, 0.192053, 0.05], orientation_wxyz: [0, 0, 0, 1]}   # yaw 180 deg
 - {id: bandage, position_m: [-0.068547, -0.133469, 0.03], orientation_wxyz: [0, 0, 0, 1]}   # yaw 180 deg
 - {id: nut_and_bolt, position_m: [0.15, 0.15, 0.05], orientation_wxyz: [1, 0, 0, 0]}
-- {id: plug, position_m: [0.25, -0.25, 0.03], orientation_wxyz: [1, 0, 0, 0]}
+- {id: plug, position_m: [0.21, -0.21, 0.03], orientation_wxyz: [1, 0, 0, 0]}   # clear of the corner bracket
 
 props:
 - id: table_structure
