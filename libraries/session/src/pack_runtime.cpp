@@ -1,13 +1,13 @@
 // Physics and sensors built from resolved packs.
-#include <robotics/sensors/models.hpp>
-#include <robotics/session/session.hpp>
+#include <nereus/sensors/models.hpp>
+#include <nereus/session/session.hpp>
 
 #include "json_util.hpp"
 
 #include <cmath>
 #include <set>
 
-namespace robotics::session {
+namespace nereus::session {
 namespace {
 using namespace detail;
 using simulation::BoxProxy;
@@ -373,4 +373,4 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
     result.initial = initial;
     return result;
 }
-} // namespace robotics::session
+} // namespace nereus::session

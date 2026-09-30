@@ -1,11 +1,11 @@
-#include "robotics/simulation/payload.hpp"
+#include "nereus/simulation/payload.hpp"
 
 #include <Eigen/SVD>
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
-namespace robotics::simulation {
+namespace nereus::simulation {
 namespace {
 constexpr double gravity = 9.80665;
 using IntegratedState = Eigen::Matrix<double, 18, 1>;
@@ -173,4 +173,4 @@ PayloadState PayloadDynamics::advance(const PayloadState &input, const PayloadEn
         throw std::overflow_error("payload integration overflow");
     return output;
 }
-} // namespace robotics::simulation
+} // namespace nereus::simulation

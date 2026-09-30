@@ -15,8 +15,8 @@
 
 #include <gtest/gtest.h>
 
-using namespace robotics;
-using namespace robotics::ros_bridge;
+using namespace nereus;
+using namespace nereus::ros_bridge;
 
 namespace {
 session::ResolvedScenario withoutCameras(session::ResolvedScenario resolved) {

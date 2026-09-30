@@ -1,5 +1,5 @@
-#include "robotics/ros_viewer/panels/composition.hpp"
-#include "robotics/ros_viewer/panels/ros_providers.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panels/ros_providers.hpp"
 #include <cassert>
 #include <chameleon_tf_msgs/action/model_frame.hpp>
 #include <functional>
@@ -19,7 +19,7 @@
 #include <thread>
 #include <unistd.h>
 #include <visualization_msgs/msg/marker_array.hpp>
-using namespace robotics::ros_viewer::panels;
+using namespace nereus::ros_viewer::panels;
 using namespace std::chrono_literals;
 using Cal = chameleon_tf_msgs::action::ModelFrame;
 using Goal = rclcpp_action::ServerGoalHandle<Cal>;

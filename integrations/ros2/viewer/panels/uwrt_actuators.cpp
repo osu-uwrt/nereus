@@ -5,7 +5,7 @@
 #include <std_msgs/msg/empty.hpp>
 #include <std_msgs/msg/float32.hpp>
 
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 class UwrtActuators final : public Actuators {
     struct Command {
@@ -130,4 +130,4 @@ void registerUwrtActuators(Registry &registry, const RuntimeFactory &runtime) {
                             return std::make_shared<UwrtActuators>(runtime(ctx), cfg, ctx);
                         }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

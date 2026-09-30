@@ -11,7 +11,7 @@
 #include <vector>
 #include <yaml-cpp/yaml.h>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 struct MappingMarker {
     std::string name, mesh, frame;
     std::filesystem::path path; // resolved model.dae
@@ -58,4 +58,4 @@ loadMappingMarkers(const std::filesystem::path &file,
     }
     return out;
 }
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

@@ -1,7 +1,7 @@
 #include "overlay_draw.hpp"
 #include <imgui_internal.h>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 bool projectToScreen(const glm::mat4 &vp, const ScreenRect &rect, const glm::vec4 &world, ImVec2 &pixel) {
     const auto clip = vp * world;
     if (clip.w <= 0 || clip.z < -clip.w || clip.z > clip.w)
@@ -229,4 +229,4 @@ void drawTfTree(TfTree &tree, const std::string &root) {
     }
     ImGui::EndChild();
 }
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

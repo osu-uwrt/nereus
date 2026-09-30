@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 // Transport-independent display state. ROS message translation stays in the node.
 enum class LightMode { Solid, SlowFlash, FastFlash, Breath, Flash };
 
@@ -123,4 +123,4 @@ struct StatusLights {
                 light.state.command(rgb, mode, now, flashDuration);
     }
 };
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

@@ -2,7 +2,7 @@
 
 #include <fstream>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 namespace {
 Json pick(const Json &object, const std::vector<std::string> &keys) {
     Json out = Json::object();
@@ -108,4 +108,4 @@ Json summaryRecord(BridgeCore &core, const std::string &reason, const CameraSink
                 {"camera_stats", cameras == nullptr ? Json::object() : cameras->stats()},
                 {"stream_stats", stats}};
 }
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

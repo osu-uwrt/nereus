@@ -1,5 +1,5 @@
 #pragma once
-#include "robotics/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
 #include <glm/gtc/quaternion.hpp>
 #include <mutex>
 #include <rclcpp/rclcpp.hpp>
@@ -8,7 +8,7 @@
 #include <tf2_ros/transform_listener.h>
 #include <thread>
 
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 using Steady = std::chrono::steady_clock;
 struct RosRuntime {
     explicit RosRuntime(const Context &ctx);
@@ -71,4 +71,4 @@ class RosMotion : public Motion {
     Steady::time_point lastUi = Steady::now(), lastPose{}, pendingSince{}, competitor{}, observedSince{};
     rclcpp::TimerBase::SharedPtr timer;
 };
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

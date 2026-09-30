@@ -3,11 +3,11 @@
 // advance(), every mutating call is recorded.
 #include "core.hpp"
 
-#include <robotics/session/scenario.hpp>
+#include <nereus/session/scenario.hpp>
 
 namespace bridge_test {
-using namespace robotics;
-using namespace robotics::ros_bridge;
+using namespace nereus;
+using namespace nereus::ros_bridge;
 
 constexpr std::int64_t kEpochNs = 1'700'000'000'123'456'789;
 constexpr std::int64_t kStepNs = 2'000'000;

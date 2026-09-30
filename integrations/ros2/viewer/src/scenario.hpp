@@ -6,13 +6,13 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <nereus/rendering/scene.hpp>
+#include <nereus/session/scenario.hpp>
 #include <optional>
-#include <robotics/rendering/scene.hpp>
-#include <robotics/session/scenario.hpp>
 #include <string>
 #include <vector>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 struct SensorCamera {
     std::string id, mountFrame, opticalFrame, rosOpticalFrame, title, model;
     Intrinsics k;
@@ -81,4 +81,4 @@ struct Scenario {
 // `config`: the host viewer document (fallback ui, camera display names). `packDirHint` locates the
 // pack folder for documents without asset_paths (local previews); empty searches NEREUS_PACK_CONTENT.
 Scenario parseScenario(const std::string &json, const YAML::Node &config, const std::filesystem::path &packDirHint);
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

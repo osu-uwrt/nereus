@@ -1,9 +1,9 @@
-#include "robotics/ros_viewer/panel_layout.hpp"
-#include "robotics/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panel_layout.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
 #include <algorithm>
 #include <cmath>
 #include <imgui.h>
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 class SimulationPanel final : public Panel {
     std::shared_ptr<Simulation> simulation;
@@ -13,8 +13,8 @@ class SimulationPanel final : public Panel {
   public:
     explicit SimulationPanel(const Binding &b) : simulation(std::dynamic_pointer_cast<Simulation>(b.provider)) {}
     void toolbar() override {
-        robotics::ros_viewer::sameLineIfFits(ImGui::CalcTextSize("Simulation settings").x +
-                                             2 * ImGui::GetStyle().FramePadding.x);
+        nereus::ros_viewer::sameLineIfFits(ImGui::CalcTextSize("Simulation settings").x +
+                                           2 * ImGui::GetStyle().FramePadding.x);
         if (ImGui::Button("Simulation settings"))
             ImGui::OpenPopup("simulation_settings");
         // A known width and anchor prevent wrapped text from causing a first-frame
@@ -99,4 +99,4 @@ void registerSimulationPanel(Registry &registry) {
         "simulation", ViewFactory<Panel>{Kind::Simulation, [](const YAML::Node &n) { keys(n, {}, "simulation tool"); },
                                          [](const Binding &b) { return std::make_unique<SimulationPanel>(b); }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

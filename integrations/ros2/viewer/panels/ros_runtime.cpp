@@ -1,8 +1,8 @@
 #include "ros_runtime.hpp"
-#include "robotics/ros_viewer/panels/ros_providers.hpp"
+#include "nereus/ros_viewer/panels/ros_providers.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 RosRuntime::RosRuntime(const Context &ctx)
     : node(std::make_shared<rclcpp::Node>("viewer_panels", "/" + ctx.robotNamespace,
                                           rclcpp::NodeOptions().use_global_arguments(false).parameter_overrides(
@@ -235,4 +235,4 @@ void RosMotion::tick() {
     if (session)
         report();
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

@@ -2,7 +2,7 @@
 #include <gtest/gtest.h>
 #include <limits>
 
-using namespace robotics::ros_viewer::host;
+using namespace nereus::ros_viewer::host;
 namespace {
 bool near(double a, double b) {
     return std::abs(a - b) < 1e-6;

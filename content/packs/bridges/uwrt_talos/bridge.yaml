@@ -1,7 +1,7 @@
 # ROS 2 bridge between the Talos robot pack and the UWRT stack. Field maps accept only {from},
 # {constant} or {from, enum_map}; filters only field equality. Destination keys are ROS field paths
 # on publish and simulator argument names on subscribe; [i] indexes arrays. The simulator side uses
-# robot-pack ids and the reading fields in libraries/sensors/include/robotics/sensors/readings.hpp.
+# robot-pack ids and the reading fields in libraries/sensors/include/nereus/sensors/readings.hpp.
 kind: bridge
 id: uwrt_talos
 description: Talos <-> UWRT robot stack (controller, EKF, acoustics, perception, autonomy).

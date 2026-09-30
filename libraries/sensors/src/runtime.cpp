@@ -1,6 +1,6 @@
-#include "robotics/sensors/runtime.hpp"
+#include "nereus/sensors/runtime.hpp"
 
-namespace robotics::sensors {
+namespace nereus::sensors {
 Runtime::Runtime(const simulation::PlantParameters &parameters, const simulation::BodyState &initial,
                  std::uint64_t seed)
     : plant_(parameters, initial), timestep_(parameters.timestep), seed_(seed) {}
@@ -90,4 +90,4 @@ simulation::Snapshot Runtime::reset(const simulation::BodyState &initial, std::u
     }
     return snapshot;
 }
-} // namespace robotics::sensors
+} // namespace nereus::sensors

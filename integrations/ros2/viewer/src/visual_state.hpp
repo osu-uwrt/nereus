@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 // A marker-driven mesh (task prop, projectile) or emissive box (magnet light) at a world pose.
 struct MarkerDraw {
     std::filesystem::path mesh; // empty: unit box
@@ -32,4 +32,4 @@ struct VisualState {
     bool showBoard = true, showWalls = true, showFloor = true; // walls include the deck and coping
     bool showCourse = true; // the pack's task visuals (false: the course comes from mapping markers)
 };
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

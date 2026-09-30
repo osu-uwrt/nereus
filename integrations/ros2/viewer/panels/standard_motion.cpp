@@ -3,7 +3,7 @@
 #include <std_msgs/msg/bool.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 class StandardMotion final : public RosMotion {
   public:
@@ -130,4 +130,4 @@ void registerStandardMotion(Registry &registry, const RuntimeFactory &runtime) {
                             return std::make_shared<StandardMotion>(runtime(ctx), cfg, ctx);
                         }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

@@ -1,13 +1,13 @@
 // The single owner that advances the plant,
 // sensors, mechanisms, payloads, prop worlds and task observers.
-#include <robotics/session/session.hpp>
+#include <nereus/session/session.hpp>
 
 #include "json_util.hpp"
 #include "run_score.hpp"
 
 #include <cmath>
 
-namespace robotics::session {
+namespace nereus::session {
 namespace {
 using namespace detail;
 // Several contact worlds: resolved in order within one plant step.
@@ -561,4 +561,4 @@ std::map<std::string, std::map<std::string, PropState>> Session::props() const {
 Json Session::indicators() const {
     return impl_->tasks ? impl_->tasks->indicators() : Json::array();
 }
-} // namespace robotics::session
+} // namespace nereus::session

@@ -2,7 +2,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <gtest/gtest.h>
 #include <limits>
-using namespace robotics::ros_viewer::host;
+using namespace nereus::ros_viewer::host;
 #include <glm/gtc/matrix_transform.hpp>
 #include <limits>
 

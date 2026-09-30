@@ -1,4 +1,4 @@
-#include <robotics/session_cameras/session_cameras.hpp>
+#include <nereus/session_cameras/session_cameras.hpp>
 
 #include <gtest/gtest.h>
 
@@ -7,9 +7,9 @@
 #include <cmath>
 #include <iostream>
 
-namespace sc = robotics::session_cameras;
-namespace rs = robotics::session;
-namespace sp = robotics::spatial;
+namespace sc = nereus::session_cameras;
+namespace rs = nereus::session;
+namespace sp = nereus::spatial;
 using namespace std::chrono_literals;
 
 namespace {

@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 #include <limits>
-#include <robotics/spatial/frames.hpp>
+#include <nereus/spatial/frames.hpp>
 
-using namespace robotics::spatial;
+using namespace nereus::spatial;
 TEST(FixedFrames, ResolvesUnorderedMountsAndRelativeRotatedFrames) {
     const Pose tool{{.4, -.2, .1}, Eigen::Quaterniond(Eigen::AngleAxisd(.7, Eigen::Vector3d::UnitZ()))};
     const Pose sensor{{.2, 0, -.1}, Eigen::Quaterniond(Eigen::AngleAxisd(-.4, Eigen::Vector3d::UnitY()))};

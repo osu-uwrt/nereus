@@ -7,7 +7,7 @@
 #include <mutex>
 #include <new>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 namespace {
 std::string threePart(const std::string &name, const char *kind) {
     std::vector<std::string> parts;
@@ -283,4 +283,4 @@ Json messageToJson(const introspection::MessageMembers *members, const void *mes
     }
     return out;
 }
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <jpeglib.h>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 namespace {
 struct ErrorManager {
     jpeg_error_mgr base;
@@ -119,4 +119,4 @@ void AsyncJpegDecoder::run() {
         haveResult_ = true;
     }
 }
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

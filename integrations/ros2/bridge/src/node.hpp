@@ -13,7 +13,7 @@
 #include <mutex>
 #include <thread>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 
 class BridgeNode {
   public:
@@ -75,4 +75,4 @@ class BridgeNode {
     Performance performance_;
 };
 
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

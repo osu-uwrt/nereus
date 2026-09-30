@@ -3,7 +3,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
-namespace robotics::simulation::detail {
+namespace nereus::simulation::detail {
 void ThrusterDynamics::configure(const std::vector<ThrusterParameters> &p, double timeout) {
     if (p.size() > static_cast<std::size_t>(std::numeric_limits<Eigen::Index>::max()) || !std::isfinite(timeout) ||
         timeout < 0)
@@ -98,4 +98,4 @@ void ThrusterDynamics::advance(double dt) {
     }
     time_ = end;
 }
-} // namespace robotics::simulation::detail
+} // namespace nereus::simulation::detail

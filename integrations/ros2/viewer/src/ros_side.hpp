@@ -35,7 +35,7 @@
 #include <thread>
 #include <visualization_msgs/msg/marker_array.hpp>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 using Clock = std::chrono::steady_clock;
 using MarkerKey = std::pair<std::string, int>;
 // Where the robot model, camera poses, follow/focus and the course map take the vehicle pose from.
@@ -257,4 +257,4 @@ class RosSide {
 };
 
 std::filesystem::path resolveMeshResource(const std::string &uri);
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

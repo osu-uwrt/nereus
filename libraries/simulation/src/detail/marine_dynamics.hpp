@@ -3,7 +3,7 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
-namespace robotics::simulation::detail {
+namespace nereus::simulation::detail {
 using Vector6d = Eigen::Matrix<double, 6, 1>;
 using Matrix6d = Eigen::Matrix<double, 6, 6>;
 using State13d = Eigen::Matrix<double, 13, 1>;
@@ -63,4 +63,4 @@ class MarineDynamics {
     Eigen::Vector3d cob_ = Eigen::Vector3d::Zero(), radii_{.175, .415, .275};
     double vehicle_mass_ = 1., density_ = 998.2, volume_ = 0., gravity_ = 9.80665, water_level_ = 0.;
 };
-} // namespace robotics::simulation::detail
+} // namespace nereus::simulation::detail

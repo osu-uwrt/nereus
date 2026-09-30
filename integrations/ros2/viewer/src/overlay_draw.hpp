@@ -3,7 +3,7 @@
 #include "ros_side.hpp"
 #include <imgui.h>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 struct ScreenRect {
     ImVec2 position{0, 0};
     float width = 1, height = 1;
@@ -25,4 +25,4 @@ struct TfOverlay {
 void drawTfAxes(const TfOverlay &, const glm::mat4 &viewProjection, const ScreenRect &);
 // Frame tree table with tri-state branch selection; `root` is the fixed frame (opened by default).
 void drawTfTree(TfTree &, const std::string &root);
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

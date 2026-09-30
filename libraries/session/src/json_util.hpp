@@ -1,8 +1,8 @@
 #pragma once
 // Private helpers shared by pack_runtime.cpp, mechanisms.cpp and session.cpp: strict JSON
 // accessors (a missing key or wrong shape throws).
-#include <robotics/session/scenario.hpp>
-#include <robotics/spatial/frames.hpp>
+#include <nereus/session/scenario.hpp>
+#include <nereus/spatial/frames.hpp>
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -12,7 +12,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace robotics::session::detail {
+namespace nereus::session::detail {
 constexpr double kPi = 3.14159265358979323846;
 // CPython math.radians: x * (pi / 180).
 inline double radians(double degrees) {
@@ -72,4 +72,4 @@ inline Eigen::Vector3d rotate(const Eigen::Quaterniond &q, const Eigen::Vector3d
 inline std::string repr(const std::string &s) {
     return "'" + s + "'";
 }
-} // namespace robotics::session::detail
+} // namespace nereus::session::detail

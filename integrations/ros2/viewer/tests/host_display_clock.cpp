@@ -2,7 +2,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 #include <random>
-using namespace robotics::ros_viewer::host;
+using namespace nereus::ros_viewer::host;
 
 namespace {
 // Poses stamped every 10 ms arrive with wall-clock jitter; a 60 Hz renderer samples the display clock.

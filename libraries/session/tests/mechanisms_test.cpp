@@ -3,12 +3,12 @@
 // command result, released-body state and mechanism snapshot is compared (kTrajectoryTolerance).
 #include "session_test_util.hpp"
 
-#include <robotics/session/mechanisms.hpp>
+#include <nereus/session/mechanisms.hpp>
 
 #include <gtest/gtest.h>
 
-using namespace robotics::session;
-using namespace robotics::session::testing;
+using namespace nereus::session;
+using namespace nereus::session::testing;
 
 TEST(Mechanisms, ReplaysTheRecordedScript) {
     const auto fixture = loadFixture("mechanisms_reference.json");

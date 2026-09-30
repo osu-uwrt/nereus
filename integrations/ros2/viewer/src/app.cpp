@@ -1,10 +1,10 @@
 #include "app.hpp"
 #include "frame_profiler.hpp"
 #include "mapping_markers.hpp"
+#include "nereus/ros_viewer/panel_layout.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panels/ros_providers.hpp"
 #include "overlay_draw.hpp"
-#include "robotics/ros_viewer/panel_layout.hpp"
-#include "robotics/ros_viewer/panels/composition.hpp"
-#include "robotics/ros_viewer/panels/ros_providers.hpp"
 #include "ros_side.hpp"
 #include "scene_model.hpp"
 #include "viewer_input.hpp"
@@ -19,15 +19,15 @@
 #include <imgui_internal.h>
 #include <iomanip>
 #include <iostream>
-#include <robotics/rendering/renderer.hpp>
+#include <nereus/rendering/renderer.hpp>
 #include <set>
 #include <sstream>
 #include <thread>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 namespace {
 namespace fs = std::filesystem;
-namespace panels = robotics::ros_viewer::panels;
+namespace panels = nereus::ros_viewer::panels;
 
 const ImVec4 cyan(.32f, .86f, .82f, 1), muted(.47f, .57f, .64f, 1), white(.87f, .92f, .95f, 1);
 ImU32 color(ImVec4 c) {
@@ -2184,4 +2184,4 @@ int run(const Options &options, int argc, char **argv) {
     App app(options, argc, argv);
     return app.loop();
 }
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

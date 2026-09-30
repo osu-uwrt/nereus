@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 // Selection belongs to frame IDs, so it survives reparenting and temporary
 // disappearance. Parent relationships come from TF, not slash-separated names.
 class TfTree {
@@ -95,4 +95,4 @@ class TfTree {
   private:
     bool defaultEnabled = true;
 };
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

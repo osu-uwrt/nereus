@@ -2,7 +2,7 @@
 #pragma once
 #include "math.hpp"
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 struct Intrinsics {
     int width = 1920, height = 1200;
     double fx = 0, fy = 0, cx = 0, cy = 0;
@@ -39,4 +39,4 @@ inline SensorView sensorView(const glm::mat4 &opticalWorld, const Intrinsics &k)
 inline float linearDepth(float z, float nearPlane = 0.05f, float farPlane = 100.f) {
     return 2 * nearPlane * farPlane / (farPlane + nearPlane - (2 * z - 1) * (farPlane - nearPlane));
 }
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

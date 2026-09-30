@@ -12,7 +12,7 @@
 #include <map>
 
 namespace {
-using robotics::session::Json;
+using nereus::session::Json;
 
 std::string firstDifference(const Json &a, const Json &b, const std::string &path) {
     if (a.is_number() && b.is_number()) {
@@ -55,8 +55,8 @@ Json loadCalls() {
     return Json::parse(file).at("calls");
 }
 
-std::unique_ptr<robotics::session::Rules> rules() {
-    auto registry = robotics::rules::standardRules();
+std::unique_ptr<nereus::session::Rules> rules() {
+    auto registry = nereus::rules::standardRules();
     return registry.at("robosub_2026")();
 }
 
@@ -72,11 +72,11 @@ TEST(Robosub2026Rules, MatchesEveryRecordedCall) {
         bool threw = false;
         try {
             if (name == "evaluate")
-                out = impl->evaluate(in[0], in[1].get<robotics::session::Events>(), in[2]);
+                out = impl->evaluate(in[0], in[1].get<nereus::session::Events>(), in[2]);
             else if (name == "describe")
                 out = impl->describe(in[0], in[1]);
             else
-                out = impl->feed(in[0], in[1].get<robotics::session::Events>(), in[2], in[3]);
+                out = impl->feed(in[0], in[1].get<nereus::session::Events>(), in[2], in[3]);
         } catch (const std::exception &) {
             threw = true;
         }

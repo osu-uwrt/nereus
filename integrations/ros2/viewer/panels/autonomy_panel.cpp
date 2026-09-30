@@ -1,8 +1,8 @@
-#include "robotics/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
 #include <cfloat>
 #include <filesystem>
 #include <imgui.h>
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 class AutonomyPanel final : public Panel {
     std::shared_ptr<Autonomy> mission;
@@ -83,4 +83,4 @@ void registerAutonomyPanel(Registry &r) {
                      ViewFactory<Panel>{Kind::Autonomy, [](const YAML::Node &n) { keys(n, {}, "autonomy panel"); },
                                         [](const Binding &b) { return std::make_unique<AutonomyPanel>(b); }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

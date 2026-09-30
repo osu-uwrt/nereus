@@ -1,9 +1,9 @@
-#include "robotics/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
 #include <cassert>
 #include <functional>
 #include <imgui.h>
 #include <iostream>
-using namespace robotics::ros_viewer::panels;
+using namespace nereus::ros_viewer::panels;
 struct FakeMotion : Motion {
     MotionState s;
     MotionState state() override {

@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 enum class Phase { Spin, Scene, Main, Cards, Ui, Swap, Sleep, Count };
 inline const char *phaseName(Phase p) {
     static const char *names[] = {"spin", "scene", "main", "cards", "ui", "swap", "sleep"};
@@ -171,4 +171,4 @@ inline std::string profileReport(const std::vector<FrameSample> &s, double secon
     }
     return out;
 }
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

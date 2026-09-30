@@ -1,16 +1,16 @@
 #include <array>
-#include <robotics/pack_scene/pack_scene.hpp>
+#include <nereus/pack_scene/pack_scene.hpp>
 
-#include <robotics/rendering/assets.hpp>
+#include <nereus/rendering/assets.hpp>
 
 #include <cmath>
 #include <iostream>
 #include <set>
 #include <stdexcept>
 
-namespace robotics::pack_scene {
+namespace nereus::pack_scene {
 namespace {
-namespace r = robotics::rendering;
+namespace r = nereus::rendering;
 using session::Json;
 constexpr double kPanelToleranceM = 5e-4; // declared panel faces are sub-millimetre data
 
@@ -347,4 +347,4 @@ Json PackScene::describe() const {
             {"indicator_visuals", indicators_.size()},
             {"warnings", warnings_}};
 }
-} // namespace robotics::pack_scene
+} // namespace nereus::pack_scene

@@ -1,11 +1,11 @@
-#include "robotics/rendering/scene.hpp"
+#include "nereus/rendering/scene.hpp"
 #include <Eigen/LU>
 #include <cmath>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <stdexcept>
 
-namespace robotics::rendering {
+namespace nereus::rendering {
 namespace {
 Eigen::Matrix4f eigen(const glm::mat4 &m) {
     return Eigen::Map<const Eigen::Matrix4f>(glm::value_ptr(m));
@@ -97,4 +97,4 @@ Scene makePoolScene(const PoolGeometry &p) {
     scene.lighting_center = (p.local_to_world * Eigen::Vector4f(length / 2, width / 2, p.water_level, 1)).head<3>();
     return scene;
 }
-} // namespace robotics::rendering
+} // namespace nereus::rendering

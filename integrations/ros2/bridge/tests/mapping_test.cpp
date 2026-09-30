@@ -12,7 +12,7 @@
 
 #include <gtest/gtest.h>
 
-using namespace robotics::ros_bridge;
+using namespace nereus::ros_bridge;
 
 namespace {
 std::shared_ptr<const MessageType> type(const char *name) {

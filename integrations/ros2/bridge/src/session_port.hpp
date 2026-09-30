@@ -1,11 +1,11 @@
 #pragma once
-// The slice of robotics::session::Session the bridge core drives (see session.hpp), as a virtual
+// The slice of nereus::session::Session the bridge core drives (see session.hpp), as a virtual
 // port so the core is testable against a deterministic fake without the whole runtime.
 // SessionAdapter (session_adapter.cpp) implements it over the real Session.
 #include "native.hpp"
 
-#include <robotics/sensors/types.hpp>
-#include <robotics/session/session.hpp>
+#include <nereus/sensors/types.hpp>
+#include <nereus/session/session.hpp>
 
 #include <map>
 #include <memory>
@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 
 struct SensorSample {
     std::string sensor;
@@ -87,4 +87,4 @@ class SessionPort {
     virtual std::vector<PropVisual> propVisuals() const = 0;
     virtual std::vector<PayloadVisual> payloadVisuals() const = 0;
 };
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

@@ -6,7 +6,7 @@
 #include <set>
 #include <sstream>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 namespace {
 namespace fs = std::filesystem;
 
@@ -310,4 +310,4 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
     }
     return s;
 }
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

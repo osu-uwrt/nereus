@@ -1,4 +1,4 @@
-#include <robotics/session_cameras/session_cameras.hpp>
+#include <nereus/session_cameras/session_cameras.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -6,7 +6,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace robotics::session_cameras {
+namespace nereus::session_cameras {
 namespace {
 using Json = session::Json;
 constexpr double kNearPlaneM = 0.05; // camera clipping planes
@@ -588,4 +588,4 @@ void SessionCameras::run(Camera &c) {
         condition_.notify_all();
     }
 }
-} // namespace robotics::session_cameras
+} // namespace nereus::session_cameras

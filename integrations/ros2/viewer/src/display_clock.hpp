@@ -20,7 +20,7 @@
 #include <mutex>
 #include <utility>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 class DisplayClock {
   public:
     // A stamp (seconds) arrived at `wall` (monotonic seconds).
@@ -138,4 +138,4 @@ class DisplayClock {
     double latest_ = -std::numeric_limits<double>::infinity(), lastWall_ = 0, rateWall_ = 0, rateStamp_ = 0;
     double out_ = 0, outWall_ = 0;
 };
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

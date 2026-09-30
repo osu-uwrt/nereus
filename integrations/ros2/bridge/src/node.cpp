@@ -15,7 +15,7 @@
 
 #include <chrono>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 namespace {
 using Clock = std::chrono::steady_clock;
 using Post = std::function<void(std::function<void()>)>;
@@ -444,4 +444,4 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
     return ticks;
 }
 
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

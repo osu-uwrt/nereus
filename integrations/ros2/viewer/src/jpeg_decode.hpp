@@ -7,7 +7,7 @@
 #include <thread>
 #include <vector>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 struct DecodedImage {
     int width = 0, height = 0;
     std::vector<std::uint8_t> rgb; // tightly packed RGB8, top row first
@@ -42,4 +42,4 @@ class AsyncJpegDecoder {
     std::uint64_t decoded_ = 0, dropped_ = 0, failed_ = 0;
     std::thread worker_; // last: starts after every other member exists
 };
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

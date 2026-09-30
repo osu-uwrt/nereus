@@ -2,7 +2,7 @@
 #include <Eigen/Dense>
 #include <deque>
 #include <vector>
-namespace robotics::simulation::detail {
+namespace nereus::simulation::detail {
 struct ThrusterParameters {
     double delay = .1, rise = .08, fall = .06, slew = 300, deadband = 0;
     double forwardLimit = 28, reverseLimit = 28, forwardScale = 1, reverseScale = 1, efficiency = 1;
@@ -35,4 +35,4 @@ class ThrusterDynamics {
     double time_ = 0, timeout_ = .5, lastCommand_ = -1e9;
     void evolve(Eigen::Index i, double dt);
 };
-} // namespace robotics::simulation::detail
+} // namespace nereus::simulation::detail

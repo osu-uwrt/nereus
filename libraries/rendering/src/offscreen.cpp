@@ -1,11 +1,11 @@
-#include "robotics/rendering/offscreen.hpp"
+#include "nereus/rendering/offscreen.hpp"
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GL/glew.h>
 #include <mutex>
 #include <stdexcept>
 
-namespace robotics::rendering {
+namespace nereus::rendering {
 namespace {
 // GLEW has process-global function pointers. Serialize initialization and all capture
 // hosts as well as context migration; the renderer itself remains caller-context-owned.
@@ -157,4 +157,4 @@ ImageCapture OffscreenRenderer::capture(const Scene &scene, const View &view, co
 const std::string &OffscreenRenderer::device() const {
     return impl_->device;
 }
-} // namespace robotics::rendering
+} // namespace nereus::rendering

@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-using robotics::ros_viewer::host::convertPointCloud;
+using nereus::ros_viewer::host::convertPointCloud;
 using Field = sensor_msgs::msg::PointField;
 
 namespace {

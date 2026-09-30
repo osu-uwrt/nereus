@@ -5,7 +5,7 @@
 #include <set>
 #include <string>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 class FrameGraph {
   public:
     void add(const std::string &parent, const std::string &child, const glm::mat4 &childInParent) {
@@ -50,4 +50,4 @@ class FrameGraph {
     std::map<std::string, Edge> parents_;
     std::set<std::string> known_;
 };
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

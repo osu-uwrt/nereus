@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 struct ThrusterRotor {
     std::string id, asset, frame;
     size_t inputIndex = 0;
@@ -148,4 +148,4 @@ struct ThrusterVisuals {
     double receivedAt = std::numeric_limits<double>::quiet_NaN();
     double lastStep = std::numeric_limits<double>::quiet_NaN();
 };
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

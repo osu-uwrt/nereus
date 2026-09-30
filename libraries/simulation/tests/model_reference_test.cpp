@@ -2,9 +2,9 @@
 
 #include "detail/marine_dynamics.hpp"
 
-using robotics::simulation::detail::MarineDynamics;
-using robotics::simulation::detail::Matrix6d;
-using robotics::simulation::detail::Vector6d;
+using nereus::simulation::detail::MarineDynamics;
+using nereus::simulation::detail::Matrix6d;
+using nereus::simulation::detail::Vector6d;
 
 TEST(MarineDynamics, CoriolisIsSkewSymmetric) {
     Matrix6d mass = Matrix6d::Random();
@@ -44,9 +44,9 @@ TEST(MarineDynamics, RejectsNonPhysicalMass) {
 
 #include "detail/thruster_dynamics.hpp"
 #include <limits>
-using robotics::simulation::detail::State13d;
-using robotics::simulation::detail::ThrusterDynamics;
-using robotics::simulation::detail::ThrusterParameters;
+using nereus::simulation::detail::State13d;
+using nereus::simulation::detail::ThrusterDynamics;
+using nereus::simulation::detail::ThrusterParameters;
 
 namespace {
 State13d restingState() {

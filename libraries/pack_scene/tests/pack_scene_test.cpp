@@ -1,12 +1,12 @@
-#include <robotics/pack_scene/pack_scene.hpp>
+#include <nereus/pack_scene/pack_scene.hpp>
 
 #include <gtest/gtest.h>
 
 #include <set>
 
-namespace ps = robotics::pack_scene;
-namespace rs = robotics::session;
-namespace r = robotics::rendering;
+namespace ps = nereus::pack_scene;
+namespace rs = nereus::session;
+namespace r = nereus::rendering;
 
 namespace {
 const rs::ResolvedScenario &talos() {

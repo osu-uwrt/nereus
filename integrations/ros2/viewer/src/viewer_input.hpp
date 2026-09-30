@@ -1,7 +1,7 @@
 #pragma once
 #include <cmath>
 #include <glm/glm.hpp>
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 // Camera-plane grab pan: a scene point at the focal depth follows the cursor.
 inline glm::vec3 orbitPan(const glm::mat4 &view, const glm::mat4 &projection, float distance, float height,
                           glm::vec2 delta) {
@@ -95,4 +95,4 @@ class OverlayFocusPicker {
         return found;
     }
 };
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

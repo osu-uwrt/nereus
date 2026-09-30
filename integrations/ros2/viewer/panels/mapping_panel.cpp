@@ -1,7 +1,7 @@
-#include "robotics/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
 #include <cstdio>
 #include <imgui.h>
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 class MappingPanel final : public Panel {
     std::shared_ptr<Mapping> mapping;
@@ -80,4 +80,4 @@ void registerMappingPanel(Registry &r) {
                                                    },
                                                    [](const Binding &b) { return std::make_unique<MappingPanel>(b); }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

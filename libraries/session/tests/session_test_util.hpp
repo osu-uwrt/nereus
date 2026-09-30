@@ -1,14 +1,14 @@
 #pragma once
 // Shared helpers for the reference tests: recorded fixtures are compared through the same JSON
 // layout.
-#include <robotics/sensors/models.hpp>
-#include <robotics/session/session.hpp>
+#include <nereus/sensors/models.hpp>
+#include <nereus/session/session.hpp>
 
 #include <cmath>
 #include <fstream>
 #include <sstream>
 
-namespace robotics::session::testing {
+namespace nereus::session::testing {
 inline Json loadFixture(const std::string &name) {
     std::ifstream stream(std::string(NEREUS_SESSION_FIXTURES) + "/" + name);
     if (!stream)
@@ -161,4 +161,4 @@ inline std::vector<std::string> sensorNames(const ResolvedScenario &scenario) {
             ids.push_back(s.at("id"));
     return ids;
 }
-} // namespace robotics::session::testing
+} // namespace nereus::session::testing

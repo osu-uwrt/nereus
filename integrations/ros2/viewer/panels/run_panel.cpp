@@ -1,10 +1,10 @@
-#include "robotics/ros_viewer/panel_layout.hpp"
-#include "robotics/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panel_layout.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <imgui.h>
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 class RunPanel final : public Panel {
     std::shared_ptr<Run> run;
@@ -30,7 +30,7 @@ class RunPanel final : public Panel {
     }
     void toolbar() override {
         const float width = ImGui::CalcTextSize("Run tracking").x + 2 * ImGui::GetStyle().FramePadding.x;
-        robotics::ros_viewer::sameLineIfFits(width);
+        nereus::ros_viewer::sameLineIfFits(width);
         if (ImGui::Button("Run tracking")) {
             details = !details;
             focusDetails = details;
@@ -252,4 +252,4 @@ void registerRunPanel(Registry &r) {
                      ViewFactory<Panel>{Kind::Run, [](const YAML::Node &n) { keys(n, {"profile"}, "run panel"); },
                                         [](const Binding &b) { return std::make_unique<RunPanel>(b); }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

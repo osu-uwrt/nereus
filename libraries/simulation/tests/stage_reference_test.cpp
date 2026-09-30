@@ -2,10 +2,10 @@
 #include <fstream>
 #include <gtest/gtest.h>
 #include <limits>
-#include <robotics/simulation/plant.hpp>
+#include <nereus/simulation/plant.hpp>
 #include <sstream>
 
-using namespace robotics::simulation;
+using namespace nereus::simulation;
 namespace {
 PlantParameters parameters() {
     PlantParameters p;

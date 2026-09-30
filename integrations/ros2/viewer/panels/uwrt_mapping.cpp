@@ -7,7 +7,7 @@
 #include <riptide_msgs2/srv/mapping_target.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
 using Cal = chameleon_tf_msgs::action::ModelFrame;
@@ -236,4 +236,4 @@ void registerUwrtMapping(Registry &registry, const RuntimeFactory &runtime) {
                             return std::make_shared<UwrtMapping>(runtime(ctx), cfg, ctx);
                         }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

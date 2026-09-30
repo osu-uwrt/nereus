@@ -1,12 +1,12 @@
-#include "robotics/ros_viewer/panel_layout.hpp"
-#include "robotics/ros_viewer/panels/composition.hpp"
-#include "robotics/ros_viewer/panels/pose_math.hpp"
+#include "nereus/ros_viewer/panel_layout.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panels/pose_math.hpp"
 #include <cmath>
 #include <cstdio>
 #include <imgui.h>
 #include <imgui_internal.h>
 
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 // Numeric displays align to the right edge of their column. Editable values use
 // normal text editing while active and the same right alignment at rest.
@@ -82,7 +82,7 @@ class MotionPanel final : public Panel {
         ImGui::EndDisabled();
     }
     void toolbar() override {
-        robotics::ros_viewer::sameLineIfFits(90);
+        nereus::ros_viewer::sameLineIfFits(90);
         enableKillButton({90, ImGui::GetFrameHeight()});
     }
     void pinned() override {
@@ -194,7 +194,7 @@ class MotionPanel final : public Panel {
         const bool finite = std::isfinite(position.x + position.y + position.z + degrees.x + degrees.y + degrees.z);
         ImGui::BeginDisabled(!finite);
         if (ImGui::Button("Command", actionSize("Command"))) {
-            motion->activate(selected, robotics::ros_viewer::rpyPose(position, glm::radians(degrees)));
+            motion->activate(selected, nereus::ros_viewer::rpyPose(position, glm::radians(degrees)));
             dirty = false;
         }
         ImGui::EndDisabled();
@@ -205,7 +205,7 @@ class MotionPanel final : public Panel {
             position.z = diveZ;
             degrees.x = degrees.y = 0;
             selected = Mode::Position;
-            motion->activate(selected, robotics::ros_viewer::rpyPose(position, glm::radians(degrees)));
+            motion->activate(selected, nereus::ros_viewer::rpyPose(position, glm::radians(degrees)));
             dirty = false;
         }
         ImGui::EndDisabled();
@@ -228,4 +228,4 @@ void registerMotionPanel(Registry &r) {
                                                   },
                                                   [](const Binding &b) { return std::make_unique<MotionPanel>(b); }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

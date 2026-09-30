@@ -80,7 +80,7 @@ Each stream is one topic.
 | `command:runs.command`, `command:tasks.reset` | subscribe | run control from the viewer |
 | `estimate:latest` | subscribe | the stack's state estimate (for "sync sim to estimate") |
 
-Reading fields per sensor type are in `libraries/sensors/include/robotics/sensors/readings.hpp` (for example
+Reading fields per sensor type are in `libraries/sensors/include/nereus/sensors/readings.hpp` (for example
 `reading.inertial.angular_velocity`, `reading.attitude.orientation_wxyz`, `reading.target_world_z`).
 
 ## TF

@@ -4,8 +4,8 @@
 // publishes whatever encoded images the sink hands back, from any thread.
 #include "ros_types.hpp"
 
-#include <robotics/session/scenario.hpp>
-#include <robotics/simulation/plant.hpp>
+#include <nereus/session/scenario.hpp>
+#include <nereus/simulation/plant.hpp>
 
 #include <cstdint>
 #include <functional>
@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 
 struct EncodedImage {
     std::string stream;               // bridge stream id (image or camera_info)
@@ -52,4 +52,4 @@ std::unique_ptr<CameraSink> createCameraSink(const session::ResolvedScenario &sc
                                              const std::vector<std::string> &camera_ids, SessionPort &session,
                                              const CameraSinkOptions &options);
 
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

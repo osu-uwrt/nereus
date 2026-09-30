@@ -1,8 +1,8 @@
-#include "robotics/ros_viewer/panels/composition.hpp"
-#include "robotics/ros_viewer/panels/pose_math.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panels/pose_math.hpp"
 #include <glm/gtc/constants.hpp>
 #include <imgui.h>
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 class PoseGizmo final : public Overlay {
     std::shared_ptr<Motion> control;
@@ -86,8 +86,8 @@ class PoseGizmo final : public Overlay {
         ImVec2 center;
         const bool centerVisible = project(p, center);
         for (int axis = 0; axis < 3; ++axis) {
-            const auto normal = robotics::ros_viewer::rpyAxis(angles, axis);
-            const auto a = robotics::ros_viewer::rpyReference(angles, axis) * length * 1.15f;
+            const auto normal = nereus::ros_viewer::rpyAxis(angles, axis);
+            const auto a = nereus::ros_viewer::rpyReference(angles, axis) * length * 1.15f;
             const auto b = glm::cross(normal, a);
             for (int step = 0; step < 96; ++step) {
                 const float start = step * glm::two_pi<float>() / 96.f, end = (step + 1) * glm::two_pi<float>() / 96.f;
@@ -115,8 +115,8 @@ class PoseGizmo final : public Overlay {
         // Every visible ring segment and arrow shaft is a handle. No grip dots.
         for (const auto &segment : rings) {
             float fraction;
-            const auto distance = robotics::ros_viewer::segmentDistance(mouse, {segment.first.x, segment.first.y},
-                                                                        {segment.second.x, segment.second.y}, fraction);
+            const auto distance = nereus::ros_viewer::segmentDistance(mouse, {segment.first.x, segment.first.y},
+                                                                      {segment.second.x, segment.second.y}, fraction);
             if (distance < best) {
                 best = distance;
                 hit = segment.handle;
@@ -125,8 +125,8 @@ class PoseGizmo final : public Overlay {
         }
         for (const auto &segment : arrows) {
             float fraction;
-            const auto distance = robotics::ros_viewer::segmentDistance(mouse, {segment.first.x, segment.first.y},
-                                                                        {segment.second.x, segment.second.y}, fraction);
+            const auto distance = nereus::ros_viewer::segmentDistance(mouse, {segment.first.x, segment.first.y},
+                                                                      {segment.second.x, segment.second.y}, fraction);
             // Arrows take priority at crossings, matching their draw order.
             if (distance <= best + 1.f) {
                 best = distance;
@@ -180,22 +180,22 @@ class PoseGizmo final : public Overlay {
         }
         // Keep cursor-to-world conversion stable while the Follow camera moves.
         const auto ray = targetDrag >= 0
-                             ? robotics::ros_viewer::screenRay(dragProjectionView, mouse - dragOrigin, dragSize)
-                             : robotics::ros_viewer::screenRay(vp, mouse - view.origin, view.size);
+                             ? nereus::ros_viewer::screenRay(dragProjectionView, mouse - dragOrigin, dragSize)
+                             : nereus::ros_viewer::screenRay(vp, mouse - view.origin, view.size);
         bool consumed = targetDrag >= 0;
         if (targetDrag < 0 && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             if (hit >= 0) {
                 consumed = true;
                 bool valid = false;
                 if (hit >= 4) {
-                    dragNormal = robotics::ros_viewer::rpyAxis(angles, hit - 4);
+                    dragNormal = nereus::ros_viewer::rpyAxis(angles, hit - 4);
                     dragRpy = angles;
                     dragAngle = 0;
                     // Use the cursor angle in the ring plane when it is visible.
                     // Freeze this choice for the gesture, as with its projection.
                     glm::vec3 point;
                     dragInPlane = std::abs(glm::dot(ray.direction, dragNormal)) >= .15f &&
-                                  robotics::ros_viewer::planeHit(ray, p, dragNormal, point);
+                                  nereus::ros_viewer::planeHit(ray, p, dragNormal, point);
                     if (dragInPlane) {
                         dragRadial = point - p;
                         valid = glm::length(dragRadial) > sizeMetres * .1f;
@@ -214,10 +214,10 @@ class PoseGizmo final : public Overlay {
                     }
                 } else if (hit == 0) {
                     dragNormal = axes[2];
-                    valid = robotics::ros_viewer::planeHit(ray, p, dragNormal, dragPoint);
+                    valid = nereus::ros_viewer::planeHit(ray, p, dragNormal, dragPoint);
                 } else {
                     dragDirection = axes[hit - 1];
-                    valid = robotics::ros_viewer::axisHit(ray, p, dragDirection, dragAxis);
+                    valid = nereus::ros_viewer::axisHit(ray, p, dragDirection, dragAxis);
                 }
                 if (valid) {
                     targetDrag = hit;
@@ -245,7 +245,7 @@ class PoseGizmo final : public Overlay {
                     const bool moved = glm::length(glm::vec2(io.MouseDelta.x, io.MouseDelta.y)) > 0;
                     bool changed = false;
                     if (dragInPlane) {
-                        if (robotics::ros_viewer::planeHit(ray, glm::vec3(dragStart[3]), dragNormal, point) &&
+                        if (nereus::ros_viewer::planeHit(ray, glm::vec3(dragStart[3]), dragNormal, point) &&
                             glm::length(point - glm::vec3(dragStart[3])) > sizeMetres * .1f) {
                             const auto radial = glm::normalize(point - glm::vec3(dragStart[3]));
                             if (dragRadialValid && moved) {
@@ -269,15 +269,15 @@ class PoseGizmo final : public Overlay {
                     if (changed) {
                         auto nextAngles = dragRpy;
                         nextAngles[targetDrag - 4] += dragAngle;
-                        send(robotics::ros_viewer::rpyPose(glm::vec3(dragStart[3]), nextAngles));
+                        send(nereus::ros_viewer::rpyPose(glm::vec3(dragStart[3]), nextAngles));
                     }
                 } else if (targetDrag == 0 &&
-                           robotics::ros_viewer::planeHit(ray, glm::vec3(dragStart[3]), dragNormal, point)) {
+                           nereus::ros_viewer::planeHit(ray, glm::vec3(dragStart[3]), dragNormal, point)) {
                     next[3] += glm::vec4(point - dragPoint, 0);
                     if (glm::length(glm::vec2(io.MouseDelta.x, io.MouseDelta.y)) > 0)
                         send(next);
                 } else if (targetDrag > 0 && targetDrag < 4 &&
-                           robotics::ros_viewer::axisHit(ray, glm::vec3(dragStart[3]), dragDirection, along)) {
+                           nereus::ros_viewer::axisHit(ray, glm::vec3(dragStart[3]), dragDirection, along)) {
                     next[3] += glm::vec4(dragDirection * (along - dragAxis), 0);
                     if (glm::length(glm::vec2(io.MouseDelta.x, io.MouseDelta.y)) > 0)
                         send(next);
@@ -298,4 +298,4 @@ void registerPoseGizmo(Registry &r) {
                                             },
                                             [](const Binding &b) { return std::make_unique<PoseGizmo>(b); }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

@@ -4,10 +4,10 @@
 #include <cmath>
 #include <fstream>
 #include <gtest/gtest.h>
-#include <robotics/simulation/plant.hpp>
+#include <nereus/simulation/plant.hpp>
 #include <sstream>
 
-using namespace robotics::simulation::detail;
+using namespace nereus::simulation::detail;
 namespace {
 struct Case {
     std::vector<BoxProxy> body, world;
@@ -105,21 +105,21 @@ TEST(BoxContacts, PlantMatchesOriginalPreAndPostIntegrationContactSequence) {
     }
     for (int scenario = 0; scenario < 11; ++scenario) {
         const auto input = contactCase(scenario);
-        robotics::simulation::PlantParameters p;
+        nereus::simulation::PlantParameters p;
         p.body.inertia = Eigen::Vector3d(.3, .4, .5).asDiagonal();
         p.body.added_mass = Matrix6d::Identity();
         p.body.added_mass(0, 4) = p.body.added_mass(4, 0) = .2;
         p.body.displaced_volume = 0;
         p.pool.water_density = 998.2;
-        p.contacts.model = robotics::simulation::ContactModel::BoxScene;
+        p.contacts.model = nereus::simulation::ContactModel::BoxScene;
         p.contacts.body_boxes = input.body;
         p.contacts.world_boxes = input.world;
-        robotics::simulation::BodyState initial;
+        nereus::simulation::BodyState initial;
         initial.position = input.state.head<3>();
         initial.orientation = Eigen::Quaterniond(input.state[3], input.state[4], input.state[5], input.state[6]);
         initial.linear_velocity = input.state.segment<3>(7);
         initial.angular_velocity = input.state.tail<3>();
-        robotics::simulation::Plant plant(p, initial);
+        nereus::simulation::Plant plant(p, initial);
         for (int tick = 1; tick <= 50; ++tick) {
             SCOPED_TRACE("case=" + std::to_string(scenario) + " tick=" + std::to_string(tick));
             const auto result = plant.advance();

@@ -1,9 +1,9 @@
 #pragma once
 // RoboSub 2026 competition rules (tasks pack robosub_2026, `rules: robosub_2026`).
-#include <robotics/session/tasks.hpp>
+#include <nereus/session/tasks.hpp>
 
 #include <memory>
 
-namespace robotics::rules {
+namespace nereus::rules {
 std::unique_ptr<session::Rules> makeRobosub2026();
-} // namespace robotics::rules
+} // namespace nereus::rules

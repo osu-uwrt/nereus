@@ -7,7 +7,7 @@
 //                derived events), scores and describe().
 // Comparison: discrete fields (strings, booleans, integers, keys, counts) exactly; floating
 // point values within 1e-9 absolute + 1e-9 relative.
-#include <robotics/session/tasks.hpp>
+#include <nereus/session/tasks.hpp>
 
 #include <rules/registry.hpp>
 
@@ -16,7 +16,7 @@
 #include <cmath>
 #include <fstream>
 
-using namespace robotics::session;
+using namespace nereus::session;
 
 namespace {
 Json readJson(const std::string &path) {
@@ -61,8 +61,8 @@ Json readJson(const std::string &path) {
     return ::testing::AssertionSuccess();
 }
 
-robotics::spatial::Pose poseOf(const Json &op) {
-    robotics::spatial::Pose pose;
+nereus::spatial::Pose poseOf(const Json &op) {
+    nereus::spatial::Pose pose;
     pose.translation = Eigen::Vector3d(op["position"][0], op["position"][1], op["position"][2]);
     pose.rotation = Eigen::Quaterniond(op["wxyz"][0], op["wxyz"][1], op["wxyz"][2], op["wxyz"][3]);
     return pose;
@@ -174,7 +174,7 @@ TEST(TaskRuntimeEquivalence, Robosub2026RulesMatchReference) {
     ASSERT_EQ(fixture["rules_cases"].size(), 7u);
     for (const auto &captured : fixture["rules_cases"]) {
         SCOPED_TRACE(captured["name"].get<std::string>());
-        replay(captured, robotics::rules::standardRules(), true);
+        replay(captured, nereus::rules::standardRules(), true);
     }
 }
 
@@ -210,14 +210,14 @@ RulesRegistry scripted(std::function<std::unique_ptr<Rules>()> factory) {
     return {{"robosub_2026", factory}};
 }
 
-robotics::spatial::Pose gatePose(double x_local) {
+nereus::spatial::Pose gatePose(double x_local) {
     // Gate task frame at the placement in the Talos scenario.
     const Json &placement = scenario().scenario["task_placements"][0];
     const double yaw = placement["yaw_deg"].get<double>() * 3.14159265358979323846 / 180 / 2;
-    robotics::spatial::Pose base{
+    nereus::spatial::Pose base{
         Eigen::Vector3d(placement["position_m"][0], placement["position_m"][1], placement["position_m"][2]),
         Eigen::Quaterniond(std::cos(yaw), 0, 0, std::sin(yaw))};
-    return robotics::spatial::compose(base, {Eigen::Vector3d(x_local, -0.75, -0.2), Eigen::Quaterniond::Identity()});
+    return nereus::spatial::compose(base, {Eigen::Vector3d(x_local, -0.75, -0.2), Eigen::Quaterniond::Identity()});
 }
 } // namespace
 

@@ -6,7 +6,7 @@
 #include <set>
 #include <stdexcept>
 
-namespace robotics::simulation::detail {
+namespace nereus::simulation::detail {
 namespace {
 void validate(const std::vector<BoxProxy> &proxies) {
     std::set<std::string> ids;
@@ -157,4 +157,4 @@ State13d BoxContacts::resolve(State13d state, const Matrix6d &inverse_mass) cons
     }
     return state;
 }
-} // namespace robotics::simulation::detail
+} // namespace nereus::simulation::detail

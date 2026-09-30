@@ -3,12 +3,12 @@
 #include <cmath>
 #include <cstring>
 #include <memory>
+#include <nereus/rendering/scene.hpp>
 #include <optional>
-#include <robotics/rendering/scene.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/msg/point_field.hpp>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 // Reads float32 x/y/z and, when present, a packed float32/uint32 `rgb` or `rgba` field (bytes B, G, R as the
 // ZED driver, PCL and the simulator bridge publish). Without a colour field every point gets `fallback`.
 // Non-finite points are skipped; at most `maxPoints` are kept (uniform decimation). Returns null for layouts
@@ -60,4 +60,4 @@ inline std::shared_ptr<rendering::PointData> convertPointCloud(const sensor_msgs
     }
     return out;
 }
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

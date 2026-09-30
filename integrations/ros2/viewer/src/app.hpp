@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 struct Options {
     std::string scenarioFile;  // resolved.json instead of the latched scenario topic
     std::string packDir;       // pack folder for documents without asset_paths
@@ -44,4 +44,4 @@ struct Options {
     std::vector<std::string> rosArgs;
 };
 int run(const Options &, int argc, char **argv);
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 namespace introspection = rosidl_typesupport_introspection_cpp;
 using Json = nlohmann::json;
 
@@ -120,4 +120,4 @@ Json messageToJson(const introspection::MessageMembers *members, const void *mes
 
 // Primitive access by introspection type id.
 bool isNumericId(std::uint8_t id);
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

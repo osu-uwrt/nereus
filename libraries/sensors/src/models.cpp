@@ -1,11 +1,11 @@
-#include "robotics/sensors/models.hpp"
+#include "nereus/sensors/models.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 #include <utility>
 
-namespace robotics::sensors {
+namespace nereus::sensors {
 namespace {
 void normalizeMount(Mount &mount) {
     if (!mount.position_body.allFinite() || !mount.sensor_to_body.coeffs().allFinite() ||
@@ -460,4 +460,4 @@ Measurement<Pressure::Reading> Pressure::sample(const simulation::MotionSample &
     }
     return {reading, {}};
 }
-} // namespace robotics::sensors
+} // namespace nereus::sensors

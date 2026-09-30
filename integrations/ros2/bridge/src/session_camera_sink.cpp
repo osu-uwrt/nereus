@@ -1,4 +1,4 @@
-// CameraSink over robotics::session_cameras::SessionCameras (built when NEREUS_BUILD_SESSION_CAMERAS
+// CameraSink over nereus::session_cameras::SessionCameras (built when NEREUS_BUILD_SESSION_CAMERAS
 // is on): compiles the camera streams and formats their messages; the scheduling, bounded workers, stale discard and
 // seed reset live in SessionCameras.
 #ifdef NEREUS_BRIDGE_CAMERAS
@@ -6,7 +6,7 @@
 #include "mapping.hpp"
 #include "session_port.hpp"
 
-#include <robotics/session_cameras/session_cameras.hpp>
+#include <nereus/session_cameras/session_cameras.hpp>
 
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
@@ -17,8 +17,8 @@
 #include <cstring>
 #include <set>
 
-namespace robotics::ros_bridge {
-namespace sc = robotics::session_cameras;
+namespace nereus::ros_bridge {
+namespace sc = nereus::session_cameras;
 namespace {
 struct CameraStream {
     std::string id, camera, output;
@@ -480,5 +480,5 @@ std::unique_ptr<CameraSink> createCameraSink(const session::ResolvedScenario &sc
     sink->setAlways(options.always);
     return sink;
 }
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge
 #endif

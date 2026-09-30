@@ -17,8 +17,8 @@
 #include <sstream>
 
 namespace fs = std::filesystem;
-using namespace robotics;
-using namespace robotics::ros_bridge;
+using namespace nereus;
+using namespace nereus::ros_bridge;
 
 namespace {
 struct Arguments {
@@ -226,7 +226,7 @@ int main(int argc, char **argv) {
                 {"real_time_factor", perf.realTimeFactor()},
                 {"max_behind_ms", perf.max_behind_ns / 1e6},
                 {"catchup_bursts", perf.catchup_bursts}};
-            const auto phase = [&](const robotics::ros_bridge::BridgeNode::Phase &item) {
+            const auto phase = [&](const nereus::ros_bridge::BridgeNode::Phase &item) {
                 return Json{{"mean_us", item.total_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
                             {"max_ms", item.max_ns / 1e6},
                             {"over_1ms", item.over_1ms},

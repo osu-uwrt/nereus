@@ -5,12 +5,12 @@
 #include "ros_types.hpp"
 #include "session_port.hpp"
 
-#include <robotics/session/scenario.hpp>
+#include <nereus/session/scenario.hpp>
 
 #include <functional>
 #include <optional>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 
 struct VisualContext {
     SessionPort &session;
@@ -38,4 +38,4 @@ std::optional<EndpointKind> formatEndpoint(const std::string &endpoint);
 FormatStream compileFormat(VisualContext &context, const Json &stream, const std::shared_ptr<const MessageType> &type,
                            const std::string &where);
 
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

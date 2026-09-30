@@ -8,7 +8,7 @@
 #include <tf2_ros/buffer.h>
 #include <visualization_msgs/msg/marker.hpp>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 inline glm::mat4 opticalToLink() {
     glm::mat4 m(0);
     m[0] = {0, -1, 0, 0};
@@ -151,4 +151,4 @@ inline bool truthAcquisitionPose(tf2_ros::Buffer &tf, const std::string &fixedFr
         return false;
     }
 }
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

@@ -1,4 +1,4 @@
-#include "robotics/simulation/payload.hpp"
+#include "nereus/simulation/payload.hpp"
 
 #include <cmath>
 #include <fstream>
@@ -9,7 +9,7 @@
 #include <vector>
 
 namespace {
-using namespace robotics::simulation;
+using namespace nereus::simulation;
 std::vector<std::string> split(const std::string &line) {
     std::istringstream stream(line);
     std::vector<std::string> fields;

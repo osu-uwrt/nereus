@@ -1,7 +1,7 @@
 // Prop contact world on Bullet's C++ API. Props are base-only btMultiBody bodies in a
 // btMultiBodyDynamicsWorld (the layout the reference recordings were made with) rather than
 // btRigidBody, which keeps the integration, damping, contact and constraint code paths identical.
-#include <robotics/session/prop_world.hpp>
+#include <nereus/session/prop_world.hpp>
 
 #include "obj_mesh.hpp"
 
@@ -21,7 +21,7 @@
 #include <set>
 #include <stdexcept>
 
-namespace robotics::session {
+namespace nereus::session {
 namespace {
 using Matrix4 = Eigen::Matrix4d;
 using Vec3 = Eigen::Vector3d;
@@ -1244,4 +1244,4 @@ Events PropWorld::step(double dt_s, std::int64_t time_ns, const spatial::Pose &r
     events.swap(s.pending);
     return events;
 }
-} // namespace robotics::session
+} // namespace nereus::session

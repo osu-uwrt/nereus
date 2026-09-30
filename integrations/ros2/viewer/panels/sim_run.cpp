@@ -5,7 +5,7 @@
 #include <std_msgs/msg/string.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 class SimRun final : public Run {
   public:
@@ -197,4 +197,4 @@ void registerSimRun(Registry &registry, const RuntimeFactory &runtime) {
                                        return std::make_shared<SimRun>(runtime(ctx), cfg, ctx);
                                    }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

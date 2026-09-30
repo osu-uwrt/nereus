@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <set>
 
-namespace robotics::session {
+namespace nereus::session {
 Json buildRunSnapshot(const Json &task_pack, const Json &snapshot, Json extra, std::int64_t now_ns, double adjustment,
                       const std::string &message) {
     const Json &run = snapshot.at("run");
@@ -57,4 +57,4 @@ Json buildRunSnapshot(const Json &task_pack, const Json &snapshot, Json extra, s
     out["config_id"] = task_pack.at("id");
     return out;
 }
-} // namespace robotics::session
+} // namespace nereus::session

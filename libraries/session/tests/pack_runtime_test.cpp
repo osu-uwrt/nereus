@@ -4,11 +4,11 @@
 
 #include <gtest/gtest.h>
 
-using namespace robotics::session;
-using namespace robotics::session::testing;
+using namespace nereus::session;
+using namespace nereus::session::testing;
 
 namespace {
-Json boxJson(const robotics::simulation::BoxProxy &b) {
+Json boxJson(const nereus::simulation::BoxProxy &b) {
     return {{"id", b.id}, {"size", flat(b.size)}, {"center", flat(b.center)}, {"orientation", quat(b.orientation)}};
 }
 } // namespace

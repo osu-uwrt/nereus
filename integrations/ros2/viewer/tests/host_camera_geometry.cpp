@@ -2,7 +2,7 @@
 #include "frame_graph.hpp"
 #include <gtest/gtest.h>
 
-using namespace robotics::ros_viewer::host;
+using namespace nereus::ros_viewer::host;
 
 TEST(HostCameraGeometry, ProjectionRegistrationAndAxialDepth) {
     Intrinsics k;

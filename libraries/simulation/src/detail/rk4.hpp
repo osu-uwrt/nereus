@@ -3,7 +3,7 @@
 #include <cmath>
 #include <stdexcept>
 
-namespace robotics::simulation::detail {
+namespace nereus::simulation::detail {
 // Evaluate all state/time-dependent forces at each stage. Actuator midpoint
 // values may be held by the caller, while geometry/environment remain stage-local.
 template <class Derivative> State13d integrateBodyRk4(const State13d &state, double dt, Derivative derivative) {
@@ -19,4 +19,4 @@ template <class Derivative> State13d integrateBodyRk4(const State13d &state, dou
     // contact solver consumes the raw RK4 endpoint before state commit.
     return next;
 }
-} // namespace robotics::simulation::detail
+} // namespace nereus::simulation::detail

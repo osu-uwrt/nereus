@@ -2,7 +2,7 @@
 #include "scenario.hpp"
 #include <gtest/gtest.h>
 
-using namespace robotics::ros_viewer::host;
+using namespace nereus::ros_viewer::host;
 namespace {
 const char *kDocument = R"json({
  "scenario": {"id": "s1", "robot": "../r", "pool": "../p", "tasks": "../t", "bridge": "../b", "world_frame": "map",

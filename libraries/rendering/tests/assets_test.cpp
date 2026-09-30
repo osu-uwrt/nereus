@@ -1,11 +1,11 @@
-#include "robotics/rendering/assets.hpp"
+#include "nereus/rendering/assets.hpp"
 #include <fstream>
 #include <functional>
 #include <gtest/gtest.h>
 #include <limits>
 #include <sstream>
 
-using namespace robotics::rendering;
+using namespace nereus::rendering;
 TEST(MeshAssets, OriginalTalosBodyAndRotorsKeepTriangleCountsAndTransparency) {
     const std::filesystem::path root = std::filesystem::path(NEREUS_PACK_CONTENT) / "robots/talos/assets/visual";
     const auto body = loadMesh(root / "Talos3_body.glb");

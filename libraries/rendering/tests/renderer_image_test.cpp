@@ -5,8 +5,8 @@
 #include <GLFW/glfw3.h>
 #include <gtest/gtest.h>
 
+#include <nereus/rendering/renderer.hpp>
 #include <png.h>
-#include <robotics/rendering/renderer.hpp>
 
 #include <cmath>
 #include <cstdio>
@@ -18,7 +18,7 @@
 #include <unistd.h>
 #include <vector>
 
-namespace r = robotics::rendering;
+namespace r = nereus::rendering;
 namespace fs = std::filesystem;
 
 namespace {

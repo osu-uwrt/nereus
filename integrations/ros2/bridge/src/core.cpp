@@ -11,7 +11,7 @@
 #include <regex>
 #include <set>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 namespace {
 using session::CommandResult;
 
@@ -1139,4 +1139,4 @@ std::optional<Alignment> BridgeCore::pendingAlignment() {
     return alignment;
 }
 
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

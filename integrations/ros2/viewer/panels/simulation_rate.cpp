@@ -4,7 +4,7 @@
 #include <rcl_interfaces/srv/set_parameters.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 using Get = rcl_interfaces::srv::GetParameters;
 using Set = rcl_interfaces::srv::SetParameters;
@@ -209,4 +209,4 @@ void registerSimulationRate(Registry &registry, const RuntimeFactory &runtime) {
                             return std::make_shared<SimulationRate>(runtime(ctx), cfg, ctx);
                         }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

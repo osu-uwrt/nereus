@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace robotics::session {
+namespace nereus::session {
 struct ObjMesh {
     std::vector<Eigen::Vector3d> vertices;     // every `v` line, in file order
     std::vector<std::array<int, 3>> triangles; // indices into `vertices`
@@ -63,4 +63,4 @@ inline ObjMesh loadObj(const std::filesystem::path &path) {
         throw std::runtime_error("mesh has no vertices: " + path.string());
     return mesh;
 }
-} // namespace robotics::session
+} // namespace nereus::session

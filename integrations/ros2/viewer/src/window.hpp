@@ -6,7 +6,7 @@
 #include <vector>
 
 struct GLFWwindow;
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 class Window {
   public:
     Window(int width, int height, const std::string &title, bool hidden, bool vsync = true);
@@ -29,4 +29,4 @@ class Window {
 };
 // Writes RGB8 rows (top row first) as a PNG; throws on failure.
 void writePng(const std::filesystem::path &, int width, int height, const std::vector<unsigned char> &rgb);
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

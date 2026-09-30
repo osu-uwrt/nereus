@@ -10,7 +10,7 @@ target_link_libraries(nereus_mesh_assets PUBLIC Eigen3::Eigen PRIVATE assimp::as
 nereus_project_options(nereus_mesh_assets)
 install(TARGETS nereus_mesh_assets EXPORT NereusTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-install(FILES include/robotics/rendering/assets.hpp DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/robotics/rendering)
+install(FILES include/nereus/rendering/assets.hpp DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nereus/rendering)
 if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
@@ -35,8 +35,8 @@ if(NEREUS_BUILD_SCENE_RENDERER)
   nereus_project_options(nereus_scene_rendering)
   install(TARGETS nereus_scene_rendering EXPORT NereusTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-  install(FILES include/robotics/rendering/scene.hpp include/robotics/rendering/renderer.hpp
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/robotics/rendering)
+  install(FILES include/nereus/rendering/scene.hpp include/nereus/rendering/renderer.hpp
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nereus/rendering)
   install(DIRECTORY shaders/ DESTINATION ${CMAKE_INSTALL_DATADIR}/nereus/shaders)
   install(FILES ${PROJECT_SOURCE_DIR}/third_party/glm/glm/copying.txt
     DESTINATION ${CMAKE_INSTALL_DATADIR}/nereus/legal RENAME glm-license.txt)
@@ -51,8 +51,8 @@ if(NEREUS_BUILD_SCENE_RENDERER)
     nereus_project_options(nereus_offscreen_rendering)
     install(TARGETS nereus_offscreen_rendering EXPORT NereusTargets
       ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-    install(FILES include/robotics/rendering/offscreen.hpp
-      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/robotics/rendering)
+    install(FILES include/nereus/rendering/offscreen.hpp
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nereus/rendering)
     if(BUILD_TESTING)
       add_executable(offscreen_tests tests/offscreen_test.cpp)
       target_link_libraries(offscreen_tests PRIVATE nereus_offscreen_rendering GTest::gtest_main

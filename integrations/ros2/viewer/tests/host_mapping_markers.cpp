@@ -4,7 +4,7 @@
 
 #include <fstream>
 
-using robotics::ros_viewer::host::loadMappingMarkers;
+using nereus::ros_viewer::host::loadMappingMarkers;
 
 namespace {
 std::filesystem::path write(const std::string &text) {

@@ -1,5 +1,5 @@
 #pragma once
-#include "robotics/cameras/camera.hpp"
-namespace robotics::cameras::detail {
+#include "nereus/cameras/camera.hpp"
+namespace nereus::cameras::detail {
 void applyNoise(const DepthNoise &, std::vector<float> &, int width, int height, std::mt19937 &);
 }

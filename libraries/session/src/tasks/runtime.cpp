@@ -1,14 +1,14 @@
 // TaskRuntime (see tasks.hpp for the contract).
 #include "tasks/trackers.hpp"
 
-#include <robotics/session/tasks.hpp>
+#include <nereus/session/tasks.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <set>
 #include <stdexcept>
 
-namespace robotics::session {
+namespace nereus::session {
 using namespace tasks;
 
 namespace {
@@ -755,4 +755,4 @@ ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const E
         result.velocity_world = current;
     return result;
 }
-} // namespace robotics::session
+} // namespace nereus::session

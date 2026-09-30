@@ -6,7 +6,7 @@
 #include <std_srvs/srv/set_bool.hpp>
 #include <unistd.h>
 
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 using Command = riptide_msgs2::msg::ControllerCommand;
 using Kill = riptide_msgs2::msg::KillSwitchReport;
@@ -151,4 +151,4 @@ void registerUwrtMotion(Registry &registry, const RuntimeFactory &runtime) {
                             return std::make_shared<UwrtMotion>(runtime(ctx), cfg, ctx);
                         }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

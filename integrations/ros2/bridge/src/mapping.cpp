@@ -11,7 +11,7 @@
 #include <set>
 #include <sstream>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 namespace {
 constexpr const char *kQuaternion = "geometry_msgs/Quaternion";
 constexpr const char *kTime = "builtin_interfaces/Time";
@@ -485,4 +485,4 @@ Value Reader::operator()(const void *message) const {
     return Value::map(std::move(out));
 }
 
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

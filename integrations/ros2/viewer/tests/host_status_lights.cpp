@@ -2,7 +2,7 @@
 #include <gtest/gtest.h>
 #include <limits>
 
-using namespace robotics::ros_viewer::host;
+using namespace nereus::ros_viewer::host;
 namespace {
 bool equal(glm::vec3 a, glm::vec3 b) {
     return glm::length(a - b) < 1e-5f;

@@ -5,12 +5,12 @@
 #include <cmath>
 #include <fstream>
 #include <gtest/gtest.h>
-#include <robotics/sensors/models.hpp>
-#include <robotics/session/session.hpp>
+#include <nereus/sensors/models.hpp>
+#include <nereus/session/session.hpp>
 #include <sstream>
 
 TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
-    auto pack = robotics::session::createRuntime(robotics::session::loadResolvedScenario(NEREUS_RESOLVED_TALOS));
+    auto pack = nereus::session::createRuntime(nereus::session::loadResolvedScenario(NEREUS_RESOLVED_TALOS));
     // The recordings placed the pool corner with a 1e-15 m residual; initial wall contact is
     // sensitive to last-bit point ordering, so use the identical input.
     pack.parameters.pool.origin_xy_world.x() = -1.1948633889920896e-15;
@@ -46,7 +46,7 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
             initial.position = {11.43, -5.4864, -1.8836};
             initial.linear_velocity = {.2, .1, -.8};
         }
-        robotics::simulation::Plant plant(pack.parameters, initial);
+        nereus::simulation::Plant plant(pack.parameters, initial);
         std::size_t next_command = 0;
         for (std::uint64_t tick = 0; tick <= ticks; ++tick) {
             {
@@ -97,8 +97,8 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
 }
 
 TEST(TalosReference, OriginalNoiseDisabledSensorFormulas) {
-    namespace sensors = robotics::sensors;
-    const auto pack = robotics::session::createRuntime(robotics::session::loadResolvedScenario(NEREUS_RESOLVED_TALOS));
+    namespace sensors = nereus::sensors;
+    const auto pack = nereus::session::createRuntime(nereus::session::loadResolvedScenario(NEREUS_RESOLVED_TALOS));
     const auto &frames = *pack.frames;
     const auto mount = [&frames](const char *frame) {
         const auto &pose = frames.fromRoot(frame);
@@ -137,7 +137,7 @@ TEST(TalosReference, OriginalNoiseDisabledSensorFormulas) {
         EXPECT_FALSE(std::getline(fields, value, ','));
         ASSERT_TRUE(values.allFinite());
         EXPECT_EQ(values[0], count++);
-        robotics::simulation::MotionSample input;
+        nereus::simulation::MotionSample input;
         auto &body = input.state.body;
         body.position = values.segment<3>(1);
         body.orientation = Eigen::Quaterniond(values[4], values[5], values[6], values[7]);

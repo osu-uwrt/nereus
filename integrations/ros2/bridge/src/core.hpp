@@ -8,14 +8,14 @@
 #include "mapping.hpp"
 #include "session_port.hpp"
 
-#include <robotics/session/scenario.hpp>
+#include <nereus/session/scenario.hpp>
 
 #include <atomic>
 #include <functional>
 #include <memory>
 #include <optional>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 
 struct VisualContext;
 
@@ -253,4 +253,4 @@ class BridgeCore {
 // Typed native reading tree of one robot sensor (mapping of core.reading_spec).
 SpecTree readingSpec(const Json &sensor);
 
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

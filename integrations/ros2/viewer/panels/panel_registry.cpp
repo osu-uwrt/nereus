@@ -1,5 +1,5 @@
-#include "robotics/ros_viewer/panels/composition.hpp"
-namespace robotics::ros_viewer::panels {
+#include "nereus/ros_viewer/panels/composition.hpp"
+namespace nereus::ros_viewer::panels {
 void registerMotionPanel(Registry &);
 void registerAutonomyPanel(Registry &);
 void registerPoseGizmo(Registry &);
@@ -32,4 +32,4 @@ void registerPanels(Registry &registry) {
     registerAutonomyPanel(registry);
     registerPoseGizmo(registry);
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

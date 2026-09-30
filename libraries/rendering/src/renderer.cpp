@@ -1,4 +1,4 @@
-#include "robotics/rendering/renderer.hpp"
+#include "nereus/rendering/renderer.hpp"
 #include <Eigen/LU>
 #include <GL/glew.h>
 #include <algorithm>
@@ -16,7 +16,7 @@
 #include <system_error>
 #include <utility>
 
-namespace robotics::rendering {
+namespace nereus::rendering {
 namespace {
 glm::mat4 matrix(const Eigen::Matrix4f &m) {
     return glm::make_mat4(m.data());
@@ -1132,4 +1132,4 @@ ImageCapture Renderer::captureImage(bool color, bool depth) const {
     checkGl("image capture");
     return result;
 }
-} // namespace robotics::rendering
+} // namespace nereus::rendering

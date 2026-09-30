@@ -1,8 +1,8 @@
 #include "session_adapter.hpp"
 
-#include <robotics/sensors/readings.hpp>
+#include <nereus/sensors/readings.hpp>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 namespace {
 Value vec3(const Eigen::Vector3d &v) {
     return Value::array({v.x(), v.y(), v.z()});
@@ -294,4 +294,4 @@ std::vector<PayloadVisual> SessionAdapter::payloadVisuals() const {
     }
     return out;
 }
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

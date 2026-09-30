@@ -50,7 +50,7 @@ void usage() {
 } // namespace
 
 int main(int argc, char **argv) {
-    robotics::ros_viewer::host::Options options;
+    nereus::ros_viewer::host::Options options;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         const auto value = [&]() -> std::string {
@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
         }
     }
     try {
-        return robotics::ros_viewer::host::run(options, argc, argv);
+        return nereus::ros_viewer::host::run(options, argc, argv);
     } catch (const std::exception &error) {
         std::cerr << "nereus-viewer: " << error.what() << '\n';
         return 1;

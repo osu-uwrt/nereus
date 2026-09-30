@@ -4,7 +4,7 @@
 #include <cmath>
 #include <stdexcept>
 
-namespace robotics::simulation::detail {
+namespace nereus::simulation::detail {
 namespace {
 template <typename Matrix> void positiveSemidefinite(const Matrix &m, const char *name) {
     if (!m.allFinite() || !m.isApprox(m.transpose(), 1e-10))
@@ -154,4 +154,4 @@ State13d MarineDynamics::step(const State13d &x, const Vector6d &tau, double dt,
     next.segment<4>(3).normalize();
     return next;
 }
-} // namespace robotics::simulation::detail
+} // namespace nereus::simulation::detail

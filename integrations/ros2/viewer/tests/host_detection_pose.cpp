@@ -1,7 +1,7 @@
 #include "detection_pose.hpp"
 #include <gtest/gtest.h>
 #include <iostream>
-using namespace robotics::ros_viewer::host;
+using namespace nereus::ros_viewer::host;
 #include <iostream>
 
 TEST(HostDetectionPose, AcquisitionTimeAndImmutablePlacement) {

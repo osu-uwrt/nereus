@@ -1,5 +1,5 @@
-#include "robotics/ros_viewer/panels/composition.hpp"
-#include "robotics/ros_viewer/panel_layout.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panel_layout.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -7,7 +7,7 @@
 #include <set>
 #include <stdexcept>
 
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 void keys(const YAML::Node &node, std::initializer_list<const char *> allowed, const std::string &where) {
     if (!node || !node.IsMap())
         throw std::invalid_argument(where + ": expected a mapping");
@@ -225,7 +225,7 @@ void Composition::touch() {
     syncOwnership();
 }
 void Composition::drawPanelMenu() {
-    robotics::ros_viewer::sameLineIfFits(88);
+    nereus::ros_viewer::sameLineIfFits(88);
     if (ImGui::Button("Panels", {88, 30}))
         ImGui::OpenPopup("panel_menu");
     if (ImGui::BeginPopup("panel_menu")) {
@@ -321,7 +321,7 @@ void Composition::drawSidebar(float height) {
             if (!first)
                 ImGui::Spacing();
             first = false;
-            item.open = robotics::ros_viewer::disclosureHeader(item.title.c_str(), item.open);
+            item.open = nereus::ros_viewer::disclosureHeader(item.title.c_str(), item.open);
             if (item.open)
                 item.panel->draw();
         }
@@ -369,4 +369,4 @@ void Composition::drawOverlays(const Viewport &view) {
         if (overlay.visible)
             overlay.overlay->draw(view);
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

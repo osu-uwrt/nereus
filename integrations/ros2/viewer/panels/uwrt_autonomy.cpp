@@ -6,7 +6,7 @@
 #include <riptide_msgs2/msg/tree_stack.hpp>
 #include <riptide_msgs2/srv/list_trees.hpp>
 
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 using Execute = riptide_msgs2::action::ExecuteTree;
 using Goal = rclcpp_action::ClientGoalHandle<Execute>;
@@ -230,4 +230,4 @@ void registerUwrtAutonomy(Registry &registry, const RuntimeFactory &runtime) {
                             return std::make_shared<UwrtAutonomy>(runtime(ctx), cfg, ctx);
                         }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

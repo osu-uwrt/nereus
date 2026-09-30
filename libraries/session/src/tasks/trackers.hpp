@@ -2,8 +2,8 @@
 // Generic sampled task-geometry judges (ports of python/.../task_regions.py, task_projectiles.py
 // and task_zones.py). Pure geometry: no clock ownership, ledger or competition rule. Times are
 // nonnegative integer nanoseconds that never decrease until reset.
-#include <robotics/session/scenario.hpp>
-#include <robotics/spatial/frames.hpp>
+#include <nereus/session/scenario.hpp>
+#include <nereus/spatial/frames.hpp>
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace robotics::session::tasks {
+namespace nereus::session::tasks {
 using Vec3 = Eigen::Vector3d;
 using Mat3 = Eigen::Matrix3d;
 using spatial::Pose;
@@ -205,4 +205,4 @@ class TurnTracker {
     double yaw_{0}, settle_yaw_{0}, start_{0}, peak_{0};
     std::int64_t dwell_{0};
 };
-} // namespace robotics::session::tasks
+} // namespace nereus::session::tasks

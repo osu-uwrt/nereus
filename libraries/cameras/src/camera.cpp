@@ -1,4 +1,4 @@
-#include "robotics/cameras/camera.hpp"
+#include "nereus/cameras/camera.hpp"
 #include "depth_noise.hpp"
 #include <algorithm>
 #include <cmath>
@@ -7,7 +7,7 @@
 #include <opencv2/imgproc.hpp>
 #include <stdexcept>
 
-namespace robotics::cameras {
+namespace nereus::cameras {
 void Intrinsics::validate() const {
     if (width < 1 || height < 1 || width > 4096 || height > 4096 || !std::isfinite(fx) || !std::isfinite(fy) ||
         fx <= 0 || fy <= 0 || !std::isfinite(cx) || !std::isfinite(cy) || !std::isfinite(near_plane) ||
@@ -88,4 +88,4 @@ Frame Processor::process(const Intrinsics &calibration, const DepthNoise &noise,
     random_ = candidate;
     return result;
 }
-} // namespace robotics::cameras
+} // namespace nereus::cameras

@@ -1,12 +1,12 @@
 #pragma once
-// SessionPort over the real robotics::session::Session (the production wiring).
+// SessionPort over the real nereus::session::Session (the production wiring).
 #include "session_port.hpp"
 
-#include <robotics/session/session.hpp>
+#include <nereus/session/session.hpp>
 
 #include <functional>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 
 class SessionAdapter final : public SessionPort {
   public:
@@ -57,4 +57,4 @@ class SessionAdapter final : public SessionPort {
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

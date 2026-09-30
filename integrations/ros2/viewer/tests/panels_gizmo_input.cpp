@@ -1,8 +1,8 @@
-#include "robotics/ros_viewer/panels/composition.hpp"
-#include "robotics/ros_viewer/panels/pose_math.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panels/pose_math.hpp"
 #include <cassert>
 #include <imgui.h>
-using namespace robotics::ros_viewer::panels;
+using namespace nereus::ros_viewer::panels;
 namespace {
 struct MotionProbe : Motion {
     MotionState s;
@@ -29,7 +29,7 @@ glm::vec3 dragAxis(Registry &registry, int axis, bool cameraMoves, const glm::ma
     auto motion = std::make_shared<MotionProbe>();
     motion->s.enabled = motion->s.fresh = motion->s.hasCommand = true;
     motion->s.mode = Mode::Position;
-    const auto initial = robotics::ros_viewer::rpyPose({0, 0, 0}, glm::radians(glm::vec3(15, 30, 90)));
+    const auto initial = nereus::ros_viewer::rpyPose({0, 0, 0}, glm::radians(glm::vec3(15, 30, 90)));
     motion->s.commanded = initial;
     const glm::vec3 direction(initial[axis]);
     auto overlay = registry.overlays.at("pose_gizmo").create({motion, YAML::Node(), {}, {}});
@@ -84,10 +84,10 @@ void rotateRing(Registry &registry, int axis, float direction, bool cameraMoves)
     motion->s.enabled = motion->s.fresh = motion->s.hasCommand = true;
     motion->s.mode = Mode::Position;
     const auto angles = glm::radians(glm::vec3(15, 20, 25));
-    const auto initial = robotics::ros_viewer::rpyPose({0, 0, 0}, angles);
+    const auto initial = nereus::ros_viewer::rpyPose({0, 0, 0}, angles);
     motion->s.commanded = initial;
-    const auto normal = robotics::ros_viewer::rpyAxis(angles, axis);
-    const auto reference = robotics::ros_viewer::rpyReference(angles, axis);
+    const auto normal = nereus::ros_viewer::rpyAxis(angles, axis);
+    const auto reference = nereus::ros_viewer::rpyReference(angles, axis);
     const auto side = glm::cross(normal, reference);
     auto overlay = registry.overlays.at("pose_gizmo").create({motion, YAML::Node(), {}, {}});
     Viewport view;

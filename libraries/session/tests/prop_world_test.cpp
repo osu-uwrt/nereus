@@ -2,7 +2,7 @@
 // carry, basket, release, drop, reset); this test drives the prop world with the identical per-tick
 // inputs and compares the ordered events exactly and the
 // prop states every 50 ticks within a tolerance.
-#include <robotics/session/prop_world.hpp>
+#include <nereus/session/prop_world.hpp>
 
 #include <gtest/gtest.h>
 
@@ -10,7 +10,7 @@
 #include <fstream>
 #include <iostream>
 
-using namespace robotics::session;
+using namespace nereus::session;
 using Matrix4 = Eigen::Matrix4d;
 
 namespace {
@@ -120,7 +120,7 @@ Replay replay(const ResolvedScenario &scenario, const Json &data, double dt, int
                 time_ns += tick_ns;
                 mount.block<3, 1>(0, 3) += velocity * dt;
                 const Matrix4 body = mount * inverse_mount;
-                robotics::spatial::Pose pose;
+                nereus::spatial::Pose pose;
                 pose.translation = body.block<3, 1>(0, 3);
                 pose.rotation = Eigen::Quaterniond(Eigen::Matrix3d(body.block<3, 3>(0, 0)));
                 const double j = joints.at(static_cast<std::size_t>(run.ticks));
@@ -200,8 +200,8 @@ TEST(PropWorld, FinalStatesAndQueriesMatch) {
 }
 
 namespace {
-using State = robotics::simulation::ContactResolver::State;
-using Matrix6 = robotics::simulation::ContactResolver::Matrix6;
+using State = nereus::simulation::ContactResolver::State;
+using Matrix6 = nereus::simulation::ContactResolver::Matrix6;
 // Robot COM state whose claw mount is at `mount` (world), moving with world velocity `velocity`.
 State stateAt(const Matrix4 &mount, const Matrix4 &mount_local, const Eigen::Vector3d &velocity) {
     const Matrix4 body = mount * mount_local.inverse();
@@ -214,7 +214,7 @@ Eigen::Vector3d worldVelocity(const State &x) {
     return Eigen::Quaterniond(x[3], x[4], x[5], x[6]).normalized() * Eigen::Vector3d(x.segment<3>(7));
 }
 // Mount height at which lowering the robot in 1 mm steps first meets robot-side contact.
-double contactHeight(robotics::simulation::ContactResolver &contacts, Matrix4 mount, const Matrix4 &mount_local,
+double contactHeight(nereus::simulation::ContactResolver &contacts, Matrix4 mount, const Matrix4 &mount_local,
                      const Matrix6 &inverse_mass) {
     for (int i = 0; i < 600; ++i, mount(2, 3) -= 1e-3) {
         const State x = stateAt(mount, mount_local, Eigen::Vector3d::Zero());
@@ -287,7 +287,7 @@ TEST(PropWorld, HeldPropIsPartOfTheRobotAgainstScenery) {
             if (robot_contacts)
                 x = contacts->resolve(x, kInverseMass);
             lowest = std::min(lowest, x[2]);
-            robotics::spatial::Pose pose;
+            nereus::spatial::Pose pose;
             pose.translation = x.head<3>();
             pose.rotation = Eigen::Quaterniond(x[3], x[4], x[5], x[6]).normalized();
             time_ns += std::llround(dt * 1e9);
@@ -312,7 +312,7 @@ TEST(PropWorld, RejectsInvalidInputsAndMissingAssets) {
     PropWorld world(scenario, "table");
     EXPECT_EQ(world.task(), "table");
     EXPECT_EQ(world.mechanismId(), "claw");
-    const robotics::spatial::Pose pose;
+    const nereus::spatial::Pose pose;
     const Eigen::Vector3d zero = Eigen::Vector3d::Zero();
     EXPECT_THROW(world.step(0.0, 0, pose, zero, zero, {0, 0}, Water{}, true), std::invalid_argument);
     EXPECT_THROW(world.step(0.004, 0, pose, {0, std::nan(""), 0}, zero, {0, 0}, Water{}, true), std::invalid_argument);

@@ -1,8 +1,8 @@
-#include "robotics/simulation/plant.hpp"
+#include "nereus/simulation/plant.hpp"
 #include <gtest/gtest.h>
 #include <limits>
 
-using namespace robotics::simulation;
+using namespace nereus::simulation;
 namespace {
 BodyState initial() {
     BodyState s;

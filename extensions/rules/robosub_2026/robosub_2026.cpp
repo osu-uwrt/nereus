@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace robotics::rules {
+namespace nereus::rules {
 namespace {
 using session::Event;
 using session::Events;
@@ -618,4 +618,4 @@ class Robosub2026 final : public session::Rules {
 std::unique_ptr<session::Rules> makeRobosub2026() {
     return std::make_unique<Robosub2026>();
 }
-} // namespace robotics::rules
+} // namespace nereus::rules

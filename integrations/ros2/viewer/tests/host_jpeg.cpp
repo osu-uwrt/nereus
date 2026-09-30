@@ -5,7 +5,7 @@
 #include <jpeglib.h>
 #include <thread>
 
-using namespace robotics::ros_viewer::host;
+using namespace nereus::ros_viewer::host;
 namespace {
 std::vector<std::uint8_t> encode(int w, int h, const std::vector<std::uint8_t> &rgb) {
     jpeg_compress_struct info;

@@ -1,4 +1,4 @@
-#include <robotics/session/mechanisms.hpp>
+#include <nereus/session/mechanisms.hpp>
 
 #include "json_util.hpp"
 
@@ -6,7 +6,7 @@
 #include <limits>
 #include <set>
 
-namespace robotics::session {
+namespace nereus::session {
 namespace {
 using namespace detail;
 constexpr std::int64_t kMaxNs = std::numeric_limits<std::int64_t>::max();
@@ -365,4 +365,4 @@ const std::string &Mechanisms::type(const std::string &id) const {
 std::vector<std::string> Mechanisms::ids() const {
     return impl_->order;
 }
-} // namespace robotics::session
+} // namespace nereus::session

@@ -7,7 +7,7 @@
 #include <cmath>
 #include <set>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 namespace {
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
@@ -352,4 +352,4 @@ FormatStream compileFormat(VisualContext &context, const Json &stream, const std
     return result;
 }
 
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

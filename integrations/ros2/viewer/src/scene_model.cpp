@@ -1,12 +1,12 @@
 #include "scene_model.hpp"
 #include <algorithm>
 #include <iostream>
-#include <robotics/rendering/assets.hpp>
+#include <nereus/rendering/assets.hpp>
 #include <set>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 namespace {
-namespace r = robotics::rendering;
+namespace r = nereus::rendering;
 } // namespace
 
 void SceneModel::warn(const std::string &text) const {
@@ -225,4 +225,4 @@ r::Scene SceneModel::build(const VisualState &state) const {
             scene.instances[i].visible = false;
     return scene;
 }
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

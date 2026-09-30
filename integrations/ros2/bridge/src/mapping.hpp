@@ -10,7 +10,7 @@
 #include <functional>
 #include <optional>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 
 class Writer {
   public:
@@ -61,4 +61,4 @@ Reader compileReader(const introspection::MessageMembers *type, const Json &fiel
 // Quoted repr of a JSON scalar ('text', 1.5, True), used in messages.
 std::string pyRepr(const Json &value);
 
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

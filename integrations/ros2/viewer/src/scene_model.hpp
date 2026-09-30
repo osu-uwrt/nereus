@@ -9,10 +9,10 @@
 #include "visual_state.hpp"
 #include <map>
 #include <memory>
-#include <robotics/pack_scene/pack_scene.hpp>
-#include <robotics/rendering/scene.hpp>
+#include <nereus/pack_scene/pack_scene.hpp>
+#include <nereus/rendering/scene.hpp>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 struct ExtraVisual {
     std::string id, asset, frame;
     glm::mat4 local{1};
@@ -69,4 +69,4 @@ class SceneModel {
     mutable std::vector<std::string> warnings_;
     void warn(const std::string &) const;
 };
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

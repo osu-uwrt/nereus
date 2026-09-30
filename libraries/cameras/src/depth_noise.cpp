@@ -6,7 +6,7 @@
 #include <opencv2/imgproc.hpp>
 #include <stdexcept>
 
-namespace robotics::cameras {
+namespace nereus::cameras {
 void DepthNoise::validate() const {
     for (double value : {base_sigma, range_sigma, exponent, min_range, max_range, bias, dropout, range_dropout,
                          edge_dropout, outliers, correlation})
@@ -99,4 +99,4 @@ void applyNoise(const DepthNoise &p, std::vector<float> &values, int width, int 
     }
 }
 } // namespace detail
-} // namespace robotics::cameras
+} // namespace nereus::cameras

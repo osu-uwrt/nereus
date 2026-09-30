@@ -1,11 +1,11 @@
-#include "robotics/cameras/camera.hpp"
+#include "nereus/cameras/camera.hpp"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <limits>
 #include <opencv2/imgcodecs.hpp>
 
-using namespace robotics::cameras;
-namespace spatial = robotics::spatial;
+using namespace nereus::cameras;
+namespace spatial = nereus::spatial;
 namespace {
 float bufferDepth(double metres, const Intrinsics &k) {
     return static_cast<float>((k.far_plane + k.near_plane - 2 * k.near_plane * k.far_plane / metres) /

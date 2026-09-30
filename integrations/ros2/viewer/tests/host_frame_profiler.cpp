@@ -1,6 +1,6 @@
 #include "frame_profiler.hpp"
 #include <gtest/gtest.h>
-using namespace robotics::ros_viewer::host;
+using namespace nereus::ros_viewer::host;
 using Clock = std::chrono::steady_clock;
 
 TEST(HostFrameProfiler, PercentilesAndSpikes) {

@@ -2,9 +2,9 @@
 #include <EGL/eglext.h>
 #include <future>
 #include <gtest/gtest.h>
-#include <robotics/rendering/offscreen.hpp>
+#include <nereus/rendering/offscreen.hpp>
 
-namespace r = robotics::rendering;
+namespace r = nereus::rendering;
 namespace {
 r::Scene scene() {
     r::Scene result;

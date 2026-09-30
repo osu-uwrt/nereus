@@ -1,11 +1,11 @@
 #pragma once
 #include "marine_dynamics.hpp"
 #include <memory>
-#include <robotics/simulation/contacts.hpp>
+#include <nereus/simulation/contacts.hpp>
 #include <string>
 #include <vector>
 
-namespace robotics::simulation::detail {
+namespace nereus::simulation::detail {
 // Value geometry. Body proxies are COM-local; static proxies use world coordinates.
 // Sequence order is preserved because the original sequential impulse solve depends on it.
 using simulation::BoxProxy;
@@ -21,4 +21,4 @@ class BoxContacts {
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
-} // namespace robotics::simulation::detail
+} // namespace nereus::simulation::detail

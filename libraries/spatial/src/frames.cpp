@@ -1,10 +1,10 @@
 #include <cmath>
-#include <robotics/spatial/frames.hpp>
+#include <nereus/spatial/frames.hpp>
 #include <set>
 #include <stdexcept>
 #include <utility>
 
-namespace robotics::spatial {
+namespace nereus::spatial {
 void validate(const Pose &pose) {
     if (!pose.translation.allFinite() || pose.translation.cwiseAbs().maxCoeff() > 1e12 ||
         !pose.rotation.coeffs().allFinite() || std::abs(pose.rotation.norm() - 1.0) > 1e-8)
@@ -71,4 +71,4 @@ const Pose &FixedFrames::fromRoot(const std::string &frame) const {
 Pose FixedFrames::lookup(const std::string &target, const std::string &from) const {
     return compose(inverse(fromRoot(target)), fromRoot(from));
 }
-} // namespace robotics::spatial
+} // namespace nereus::spatial

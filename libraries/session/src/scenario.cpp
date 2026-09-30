@@ -1,9 +1,9 @@
-#include <robotics/session/scenario.hpp>
+#include <nereus/session/scenario.hpp>
 
 #include <fstream>
 #include <stdexcept>
 
-namespace robotics::session {
+namespace nereus::session {
 namespace {
 const Json &member(const Json &document, const char *key) {
     const auto found = document.find(key);
@@ -71,4 +71,4 @@ ResolvedScenario loadResolvedScenario(const std::filesystem::path &resolved_json
         throw std::runtime_error(resolved_json.string() + ": " + error.what());
     }
 }
-} // namespace robotics::session
+} // namespace nereus::session

@@ -10,7 +10,7 @@
 #include <png.h>
 #include <stdexcept>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 namespace {
 const ImVec4 cyan(.32f, .86f, .82f, 1), muted(.47f, .57f, .64f, 1), white(.87f, .92f, .95f, 1);
 } // namespace
@@ -152,4 +152,4 @@ void writePng(const std::filesystem::path &path, int width, int height, const st
     png_destroy_write_struct(&png, &info);
     std::fclose(file);
 }
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

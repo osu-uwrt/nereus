@@ -54,7 +54,7 @@ def main():
         relative = path.relative_to(ROOT).as_posix()
         if relative.startswith(("libraries/spatial/", "libraries/rendering/")):
             for line in path.read_text().splitlines():
-                if line.startswith("#include") and any(token in line for token in ("robotics/simulation", "robotics/sensors", "pybind11")):
+                if line.startswith("#include") and any(token in line for token in ("nereus/simulation", "nereus/sensors", "pybind11")):
                     raise RuntimeError(f"Rendering depends on simulation: {path}: {line}")
         if relative.startswith("libraries/spatial/"):
             for line in path.read_text().splitlines():

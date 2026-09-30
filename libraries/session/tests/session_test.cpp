@@ -10,10 +10,10 @@
 #include <chrono>
 #include <optional>
 
-using namespace robotics::session;
-using namespace robotics::session::testing;
+using namespace nereus::session;
+using namespace nereus::session::testing;
 
-namespace robotics::session { // private to nereus_session (src/run_score.cpp)
+namespace nereus::session { // private to nereus_session (src/run_score.cpp)
 Json buildRunSnapshot(const Json &, const Json &, Json, std::int64_t, double, const std::string &);
 }
 
@@ -60,7 +60,7 @@ void replay(const std::string &fixture_name, bool tasks) {
     // (operator "start").
     auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     scenario.scenario["run"]["auto_start"] = true;
-    const RulesRegistry rules = robotics::rules::standardRules();
+    const RulesRegistry rules = nereus::rules::standardRules();
     const auto sensors = sensorNames(scenario);
     std::vector<std::string> task_ids;
     if (fixture.contains("task_ids"))
@@ -115,12 +115,12 @@ void replay(const std::string &fixture_name, bool tasks) {
         } else if (name == "reload") {
             actual["result"] = resultJson(s.reloadAll());
         } else if (name == "place") {
-            robotics::simulation::BodyState state;
+            nereus::simulation::BodyState state;
             state.position = Eigen::Vector3d(op[1][0], op[1][1], op[1][2]);
             state.orientation = Eigen::Quaterniond(op[2][0], op[2][1], op[2][2], op[2][3]);
             actual["body"] = bodyJson(s.place(state, op[3]).body);
         } else if (name == "place_moving") {
-            robotics::simulation::BodyState state;
+            nereus::simulation::BodyState state;
             state.position = Eigen::Vector3d(op[1][0], op[1][1], op[1][2]);
             state.orientation = Eigen::Quaterniond(op[2][0], op[2][1], op[2][2], op[2][3]);
             state.linear_velocity = Eigen::Vector3d(op[3][0], op[3][1], op[3][2]);
@@ -179,7 +179,7 @@ TEST(Session, RunSnapshotDocumentMatchesReference) {
 namespace {
 void throughput(bool tasks, const char *label, std::vector<std::string> task_ids = {"gate", "torpedo", "slalom"}) {
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
-    const RulesRegistry rules = robotics::rules::standardRules();
+    const RulesRegistry rules = nereus::rules::standardRules();
     const auto sensors = sensorNames(scenario);
     Session s(scenario, createRuntime(scenario, &sensors), rules, SessionOptions{tasks ? &task_ids : nullptr, tasks});
     s.setKilled(false);
@@ -223,7 +223,7 @@ TEST(Session, GraspedPropStaysInTheClawWhileCarried) {
     const Json fixture = Json::parse(stream);
     const Json &data = fixture.at("cases").at("release_elsewhere");
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
-    const RulesRegistry rules = robotics::rules::standardRules();
+    const RulesRegistry rules = nereus::rules::standardRules();
     const auto sensors = sensorNames(scenario);
     const std::vector<std::string> task_ids{"table"};
     Eigen::Matrix4d mount_local;
@@ -255,7 +255,7 @@ TEST(Session, GraspedPropStaysInTheClawWhileCarried) {
             for (int i = 0; i < n; ++i, ++tick) {
                 mount.block<3, 1>(0, 3) = from + (to - from) * (i + 1.0) / n;
                 const Eigen::Matrix4d body = mount * mount_local.inverse();
-                robotics::simulation::BodyState b;
+                nereus::simulation::BodyState b;
                 b.position = body.block<3, 1>(0, 3);
                 b.orientation = Eigen::Quaterniond(Eigen::Matrix3d(body.block<3, 3>(0, 0)));
                 b.linear_velocity = b.orientation.conjugate() * v;

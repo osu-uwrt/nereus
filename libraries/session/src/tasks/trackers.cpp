@@ -6,7 +6,7 @@
 #include <set>
 #include <stdexcept>
 
-namespace robotics::session::tasks {
+namespace nereus::session::tasks {
 namespace {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDegToRad = kPi / 180.0; // math.radians(x) == x * (pi / 180)
@@ -784,4 +784,4 @@ std::vector<Fact> TurnTracker::observe(std::int64_t time_ns, const Pose &world_r
     previous_yaw_ = yaw;
     return facts;
 }
-} // namespace robotics::session::tasks
+} // namespace nereus::session::tasks

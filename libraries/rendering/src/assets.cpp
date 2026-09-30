@@ -1,4 +1,4 @@
-#include "robotics/rendering/assets.hpp"
+#include "nereus/rendering/assets.hpp"
 #include <Eigen/LU>
 #include <algorithm>
 #include <assimp/DefaultIOSystem.h>
@@ -13,7 +13,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace robotics::rendering {
+namespace nereus::rendering {
 namespace {
 class DependencyIO final : public Assimp::DefaultIOSystem {
   public:
@@ -258,4 +258,4 @@ PerforatedMesh perforatePanel(const MeshAsset &mesh, const PanelCutouts &panel) 
     }
     return result;
 }
-} // namespace robotics::rendering
+} // namespace nereus::rendering

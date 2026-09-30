@@ -1,8 +1,8 @@
-#include <robotics/session/scenario.hpp>
+#include <nereus/session/scenario.hpp>
 
 #include <gtest/gtest.h>
 
-using robotics::session::loadResolvedScenario;
+using nereus::session::loadResolvedScenario;
 
 TEST(ResolvedScenario, LoadsTheTalosDocumentWithAbsoluteAssets) {
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
@@ -14,6 +14,6 @@ TEST(ResolvedScenario, LoadsTheTalosDocumentWithAbsoluteAssets) {
 }
 
 TEST(ResolvedScenario, RejectsOtherDocuments) {
-    EXPECT_THROW(robotics::session::parseResolvedScenario({{"format", "other"}}), std::runtime_error);
+    EXPECT_THROW(nereus::session::parseResolvedScenario({{"format", "other"}}), std::runtime_error);
     EXPECT_THROW(loadResolvedScenario("/nonexistent.json"), std::runtime_error);
 }

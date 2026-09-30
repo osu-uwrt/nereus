@@ -8,7 +8,7 @@
 #include <riptide_msgs2/msg/led_command.hpp>
 #endif
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 namespace {
 constexpr int kPreviewWidth = 480;
 
@@ -772,4 +772,4 @@ void RosSide::captureTf(bool wanted, TfTree &tree, TfSnapshot &out) {
         out.difference = "Waiting for matching ROS / simulator poses";
     }
 }
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

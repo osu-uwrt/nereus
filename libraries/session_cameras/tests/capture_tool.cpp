@@ -2,14 +2,14 @@
 // (tests/compare_pack_cameras.py). Usage:
 //   session_cameras_capture RESOLVED.json SENSOR X Y Z QW QX QY QZ TIME_S OUT_PREFIX [REPEAT]
 // Outputs OUT_PREFIX.rgb (uint8, top-down, h*w*3), .depth (float32 h*w), .json (size, timings).
-#include <robotics/session_cameras/session_cameras.hpp>
+#include <nereus/session_cameras/session_cameras.hpp>
 
 #include <chrono>
 #include <fstream>
 #include <iostream>
 #include <mutex>
 
-namespace sc = robotics::session_cameras;
+namespace sc = nereus::session_cameras;
 
 int main(int argc, char **argv) {
     if (argc < 12) {
@@ -17,12 +17,12 @@ int main(int argc, char **argv) {
         return 2;
     }
     try {
-        const auto resolved = robotics::session::loadResolvedScenario(argv[1]);
+        const auto resolved = nereus::session::loadResolvedScenario(argv[1]);
         sc::Options options;
         options.always = true;
         options.sensor_ids = {argv[2]};
         sc::SessionCameras cameras(resolved, options);
-        robotics::spatial::Pose pose;
+        nereus::spatial::Pose pose;
         pose.translation = {std::stod(argv[3]), std::stod(argv[4]), std::stod(argv[5])};
         pose.rotation =
             Eigen::Quaterniond(std::stod(argv[6]), std::stod(argv[7]), std::stod(argv[8]), std::stod(argv[9]));

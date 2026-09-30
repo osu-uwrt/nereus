@@ -1,6 +1,6 @@
-#include "robotics/ros_viewer/panels/composition.hpp"
-#include "robotics/ros_viewer/panels/pose_math.hpp"
-#include "robotics/ros_viewer/panels/ros_providers.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panels/pose_math.hpp"
+#include "nereus/ros_viewer/panels/ros_providers.hpp"
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -14,7 +14,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 #include <thread>
-using namespace robotics::ros_viewer::panels;
+using namespace nereus::ros_viewer::panels;
 #include <cassert>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
     assert(std::abs(lin.back().setpoint_vect.y - 1) < 1e-4);
     assert(std::abs(ang.back().setpoint_quat.z - std::sqrt(.5)) < 1e-4);
     const auto targetAngles = glm::radians(glm::vec3(20, -15, 30));
-    auto target = robotics::ros_viewer::rpyPose({4, 5, -2}, targetAngles);
+    auto target = nereus::ros_viewer::rpyPose({4, 5, -2}, targetAngles);
     control->drag(target);
     spin(.1);
     assert(std::abs(lin.back().setpoint_vect.x - 5) < 1e-4);
@@ -151,7 +151,7 @@ int main(int argc, char **argv) {
         auto edited = targetAngles;
         edited[i] += .2f;
         const auto actual = glm::mat4_cast(glm::quat(edited));
-        const auto expected = glm::rotate(glm::mat4(1), .2f, robotics::ros_viewer::rpyAxis(targetAngles, i)) *
+        const auto expected = glm::rotate(glm::mat4(1), .2f, nereus::ros_viewer::rpyAxis(targetAngles, i)) *
                               glm::mat4_cast(glm::quat(targetAngles));
         for (int c = 0; c < 4; ++c)
             assert(glm::length(actual[c] - expected[c]) < 1e-5);
@@ -333,7 +333,7 @@ int main(int argc, char **argv) {
     generic->enable();
     waitStandard(.3);
     assert(generic->state().enabled && !generic->state().supportsFeedforward);
-    generic->activate(Mode::Position, robotics::ros_viewer::rpyPose({2, 3, -1}, {.2, -.1, .5}));
+    generic->activate(Mode::Position, nereus::ros_viewer::rpyPose({2, 3, -1}, {.2, -.1, .5}));
     waitStandard(.3);
     assert(!poses.empty() && poses.back().header.frame_id == "map" &&
            std::abs(poses.back().pose.position.x - 2) < 1e-4);
@@ -351,19 +351,19 @@ int main(int argc, char **argv) {
         auto clip = projection * view * glm::vec4(p, 1);
         return glm::vec2((clip.x / clip.w + 1) * 400, (1 - clip.y / clip.w) * 400);
     };
-    auto ray = robotics::ros_viewer::screenRay(projection * view, pixel({1, 2, 0}), {800, 800});
+    auto ray = nereus::ros_viewer::screenRay(projection * view, pixel({1, 2, 0}), {800, 800});
     glm::vec3 point;
-    assert(robotics::ros_viewer::planeHit(ray, {0, 0, 0}, {0, 0, 1}, point));
+    assert(nereus::ros_viewer::planeHit(ray, {0, 0, 0}, {0, 0, 1}, point));
     assert(glm::length(point - glm::vec3(1, 2, 0)) < 1e-4);
     for (const auto axis : {glm::vec3(1, 0, 0), glm::vec3(0, 1, 0), glm::vec3(0, 0, 1)}) {
-        ray = robotics::ros_viewer::screenRay(projection * view, pixel(axis * 1.3f), {800, 800});
+        ray = nereus::ros_viewer::screenRay(projection * view, pixel(axis * 1.3f), {800, 800});
         float along;
-        assert(robotics::ros_viewer::axisHit(ray, {0, 0, 0}, axis, along));
+        assert(nereus::ros_viewer::axisHit(ray, {0, 0, 0}, axis, along));
         assert(std::abs(along - 1.3f) < 1e-4);
     }
     float along;
-    assert(!robotics::ros_viewer::axisHit({{0, 0, 0}, {0, 0, 1}}, {0, 0, 0}, {0, 0, 1}, along));
-    assert(!robotics::ros_viewer::planeHit({{0, 0, 1}, {1, 0, 0}}, {0, 0, 0}, {0, 0, 1}, point));
+    assert(!nereus::ros_viewer::axisHit({{0, 0, 0}, {0, 0, 1}}, {0, 0, 0}, {0, 0, 1}, along));
+    assert(!nereus::ros_viewer::planeHit({{0, 0, 1}, {1, 0, 0}}, {0, 0, 0}, {0, 0, 1}, point));
     std::cout << "PASS: operator commands, frames, watchdogs, ownership, async cancellation, shutdown and dragging\n";
     rclcpp::shutdown();
 }

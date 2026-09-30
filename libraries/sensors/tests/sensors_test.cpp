@@ -1,13 +1,13 @@
-#include "robotics/sensors/models.hpp"
-#include "robotics/sensors/runtime.hpp"
+#include "nereus/sensors/models.hpp"
+#include "nereus/sensors/runtime.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <gtest/gtest.h>
 #include <limits>
 
-using namespace robotics::sensors;
-namespace sim = robotics::simulation;
+using namespace nereus::sensors;
+namespace sim = nereus::simulation;
 using namespace std::chrono_literals;
 namespace {
 sim::BodyState initial() {

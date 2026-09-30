@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 using Json = nlohmann::json;
 
 // A declared field map cannot be applied to the declared ROS or native types.
@@ -109,4 +109,4 @@ class SourceRef {
 
 bool compatible(const Spec &expected, const Spec &actual);
 
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

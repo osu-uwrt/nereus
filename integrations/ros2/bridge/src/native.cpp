@@ -2,7 +2,7 @@
 
 #include <cctype>
 
-namespace robotics::ros_bridge {
+namespace nereus::ros_bridge {
 
 std::string repr(const std::string &text) {
     return "'" + text + "'";
@@ -233,4 +233,4 @@ bool compatible(const Spec &expected, const Spec &actual) {
     return true;
 }
 
-} // namespace robotics::ros_bridge
+} // namespace nereus::ros_bridge

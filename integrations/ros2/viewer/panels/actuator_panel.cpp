@@ -1,6 +1,6 @@
-#include "robotics/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/panels/composition.hpp"
 #include <imgui.h>
-namespace robotics::ros_viewer::panels {
+namespace nereus::ros_viewer::panels {
 namespace {
 class ActuatorPanel final : public Panel {
     std::shared_ptr<Actuators> actuators;
@@ -30,4 +30,4 @@ void registerActuatorPanel(Registry &r) {
                      ViewFactory<Panel>{Kind::Actuators, [](const YAML::Node &n) { keys(n, {}, "actuators panel"); },
                                         [](const Binding &b) { return std::make_unique<ActuatorPanel>(b); }});
 }
-} // namespace robotics::ros_viewer::panels
+} // namespace nereus::ros_viewer::panels

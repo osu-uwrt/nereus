@@ -12,7 +12,7 @@
 #include <string>
 #include <yaml-cpp/yaml.h>
 
-namespace robotics::ros_viewer::host {
+namespace nereus::ros_viewer::host {
 // Translation then roll/pitch/yaw about X, Y, Z (yaw applied last).
 inline glm::mat4 pose(const glm::vec3 &p, const glm::vec3 &rpy = {}) {
     return glm::translate(glm::mat4(1), p) * glm::rotate(glm::mat4(1), rpy.z, glm::vec3(0, 0, 1)) *
@@ -74,4 +74,4 @@ inline bool finite(const glm::mat4 &m) {
                 return false;
     return true;
 }
-} // namespace robotics::ros_viewer::host
+} // namespace nereus::ros_viewer::host

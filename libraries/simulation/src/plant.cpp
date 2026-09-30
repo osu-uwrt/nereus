@@ -1,4 +1,4 @@
-#include "robotics/simulation/plant.hpp"
+#include "nereus/simulation/plant.hpp"
 #include "detail/box_contacts.hpp"
 #include "detail/marine_dynamics.hpp"
 #include "detail/rk4.hpp"
@@ -10,7 +10,7 @@
 #include <set>
 #include <stdexcept>
 
-namespace robotics::simulation {
+namespace nereus::simulation {
 namespace {
 void require(bool condition, const std::string &message) {
     if (!condition) {
@@ -354,4 +354,4 @@ Snapshot Plant::reset(const BodyState &initial) {
     impl_->faulted = false;
     return observe();
 }
-} // namespace robotics::simulation
+} // namespace nereus::simulation
