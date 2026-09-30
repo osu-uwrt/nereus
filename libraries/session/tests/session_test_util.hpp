@@ -33,10 +33,11 @@ inline Json bodyJson(const simulation::BodyState &b) {
             {"angular_velocity", flat(b.angular_velocity)}};
 }
 
-// Long-horizon trajectories: Release builds reproduce the recordings to ~1e-12; Debug builds
-// differ in floating-point contraction and chaotic amplification (observed up to ~5e-4 absolute after 1-2 s of
-// contact-rich motion; only Release is a tight check).
-#ifdef NDEBUG
+// Long-horizon trajectories: Release builds on aarch64 (where the recordings were made) reproduce them to
+// ~1e-12. Debug builds and other ISAs differ in floating-point contraction and vectorization, which contact
+// onset amplifies (observed up to ~5e-4 absolute after 1-2 s of contact-rich motion), so only aarch64 Release
+// is a tight check.
+#if defined(NDEBUG) && defined(__aarch64__)
 constexpr double kTrajectoryTolerance = 1e-9;
 #else
 constexpr double kTrajectoryTolerance = 5e-3;

@@ -67,7 +67,7 @@ void applyNoise(const DepthNoise &p, std::vector<float> &values, int width, int 
             if (!p.enabled)
                 continue;
             bool edge = false;
-            for (const cv::Point offset : {cv::Point(-1, 0), cv::Point(1, 0), cv::Point(0, -1), cv::Point(0, 1)}) {
+            for (const cv::Point &offset : {cv::Point(-1, 0), cv::Point(1, 0), cv::Point(0, -1), cv::Point(0, 1)}) {
                 const int u = x + offset.x, v = y + offset.y;
                 if (u < 0 || v < 0 || u >= width || v >= height)
                     continue;

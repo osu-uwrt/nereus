@@ -6,6 +6,7 @@ jobs:
   standalone:
     runs-on: ubuntu-22.04
     strategy:
+      fail-fast: false
       matrix:
         preset: [release, asan]
     steps:
