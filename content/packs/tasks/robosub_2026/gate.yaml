@@ -1,7 +1,6 @@
 # Task include file (kind task), referenced from tasks.yaml; scoring is not yet executed.
 # Task-local frame: origin at the gate centre line, +X toward the approach (start) side, +Z up.
 # The scenario places it. Geometry: collision_files/objects/gate.urdf; judge: scoring.py CourseJudge.
-schema_version: 1
 kind: task
 id: gate
 description: Start gate with role halves; forward pass and reverse (return-home) pass.

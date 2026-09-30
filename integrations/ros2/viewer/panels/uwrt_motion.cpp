@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer uwrt_motion.cpp; see docs/PROVENANCE.md.
 #include "ros_runtime.hpp"
 #include <riptide_msgs2/msg/controller_command.hpp>
 #include <riptide_msgs2/msg/kill_switch_report.hpp>

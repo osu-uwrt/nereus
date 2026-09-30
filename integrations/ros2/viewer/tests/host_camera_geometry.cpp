@@ -1,5 +1,3 @@
-// Ported from riptide_simulator camera_faker/test/camera_geometry.cpp (projection, depth, DFC orientation)
-// plus the frame-graph composition that replaced the vehicle-yaml lever arms; see docs/PROVENANCE.md.
 #include "camera_geometry.hpp"
 #include "frame_graph.hpp"
 #include <gtest/gtest.h>

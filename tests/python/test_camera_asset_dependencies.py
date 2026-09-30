@@ -27,13 +27,9 @@ class CameraAssetDependencyTests(unittest.TestCase):
         material = mesh.parent / reference
         material.write_text("newmtl custom\nKd 1 0 0\n", encoding="utf-8")
         robot = self.root / "robot/robot.yaml"
-        text = robot.read_text().replace(hashlib.sha256(old).hexdigest(),
-                                        hashlib.sha256(new).hexdigest())
+        text = robot.read_text()
         if declared:
-            entry = ("- {id: hull_material, path: assets/hull.mtl, source: modelled for tests, "
-                     "required_from_step: 3, status: present, sha256: "
-                     + hashlib.sha256(material.read_bytes()).hexdigest() + "}\n")
-            text = text.replace("assets:\n", "assets:\n" + entry)
+            text = text.replace("assets:\n", "assets:\n- {id: hull_material, path: assets/hull.mtl}\n")
         robot.write_text(text, encoding="utf-8")
         return resolve_scenario(scenario), mesh, material
 
@@ -68,7 +64,7 @@ class CameraAssetDependencyTests(unittest.TestCase):
     def test_changed_material_is_rejected_after_resolution(self):
         resolved, _, material = self.material_pack()
         material.write_text("newmtl custom\nKd 0 0 1\n", encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "importer_dependency .* sha256 mismatch"):
+        with self.assertRaisesRegex(ValueError, "changed since resolution"):
             pc.PackCameras(resolved)
 
     def test_escaping_material_is_rejected(self):

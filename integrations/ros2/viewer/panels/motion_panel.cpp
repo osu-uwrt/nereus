@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer motion_panel.cpp; see docs/PROVENANCE.md.
 #include "robotics/ros_viewer/panels/composition.hpp"
 #include "robotics/ros_viewer/panel_layout.hpp"
 #include "robotics/ros_viewer/panels/pose_math.hpp"

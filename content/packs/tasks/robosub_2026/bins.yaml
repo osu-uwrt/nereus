@@ -3,7 +3,6 @@
 # +Z up. Crates are drop_into volumes fed by dropper payloads (walls/rims/floor apply to every
 # payload kind, trap T15; only dropper landings score in the hook). Magnet lights are latched
 # proximity targets for the robot's magnet tip. Judge: node.py payload/crate step + MagnetLights.
-schema_version: 1
 kind: task
 id: bins
 description: Four vinyl-marked crates for dropper payloads and two magnet light targets.

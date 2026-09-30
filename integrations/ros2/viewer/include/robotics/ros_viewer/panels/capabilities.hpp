@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer (panels/capabilities.hpp); see docs/PROVENANCE.md.
 #pragma once
 #include <glm/glm.hpp>
 #include <yaml-cpp/yaml.h>

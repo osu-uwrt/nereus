@@ -1,4 +1,4 @@
-// Static-box SAT/contact response adapted from OSU UWRT; see docs/PROVENANCE.md.
+// Static-box SAT contact response.
 #include "detail/box_contacts.hpp"
 #include <algorithm>
 #include <cmath>

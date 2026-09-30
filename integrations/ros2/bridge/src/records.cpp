@@ -70,8 +70,7 @@ Json executionRecord(const session::ResolvedScenario &resolved, const BridgeCore
         {"not_executed_config",
          {{"scenario.run.options", "defaults passed to task hooks; simulator/run_command start overrides "
                                    "them per run"},
-          {"tf.lookup", "external owners; uses latest live TF, not stamp-matched transforms"},
-          {"services[].required_from_step", "planning metadata; never an execution switch"}}},
+          {"tf.lookup", "external owners; uses latest live TF, not stamp-matched transforms"}}},
     };
 }
 

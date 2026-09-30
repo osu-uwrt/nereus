@@ -1,4 +1,3 @@
-# Generated from pinned original content; see docs/PROVENANCE.md.
 # AHRS, FOG, reference-velocity DVL and original depth reporting; cameras/mechanisms remain open.
 schema_version: 1
 kind: robot

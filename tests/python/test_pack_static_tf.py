@@ -47,8 +47,8 @@ class PackStaticTfTests(unittest.TestCase):
         doc = load_pack(self.path)
         original = copy.deepcopy(doc.data["tf"])
         cases = [
-            {"lookup": [{"parent": "foreign", "child": "auv/sensor", "owner": "external"}]},
-            {"lookup": [{"parent": "auv/sensor", "child": "auv/body", "owner": "external"}]},
+            {"lookup": [{"parent": "foreign", "child": "auv/sensor"}]},
+            {"lookup": [{"parent": "auv/sensor", "child": "auv/body"}]},
             {"never_publish": ["auv/*"]},
         ]
         for changes in cases:

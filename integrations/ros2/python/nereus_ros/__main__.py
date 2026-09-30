@@ -73,7 +73,6 @@ def execution_record(resolved: Any, core: BridgeCore, sensors: list[str],
             "scenario.run.options": "defaults passed to task hooks; simulator/run_command start "
                                     "overrides them per run",
             "tf.lookup": "external owners; uses latest live TF, not stamp-matched transforms",
-            "services[].required_from_step": "planning metadata; never an execution switch",
         },
     }
 

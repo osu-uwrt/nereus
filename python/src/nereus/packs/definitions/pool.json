@@ -4,9 +4,6 @@
   "description": "Authoritative loader definition: published JSON Schemas and the type registry are generated from this corpus. Pool-local geometry and water only: no robot, task or course layout.",
   "type": "object",
   "properties": {
-    "schema_version": {
-      "const": 1
-    },
     "kind": {
       "const": "pool"
     },
@@ -15,9 +12,6 @@
     },
     "description": {
       "type": "string"
-    },
-    "provenance": {
-      "$ref": "common.schema.json#/$defs/provenance"
     },
     "assets": {
       "type": "array",
@@ -39,19 +33,14 @@
     "lighting": {
       "$ref": "types.schema.json#/$defs/lighting"
     },
-    "pending": {
-      "$ref": "common.schema.json#/$defs/pending"
-    },
     "metadata": {
       "type": "object",
       "description": "Free non-executable annotations preserved verbatim by load/save; never interpreted."
     }
   },
   "required": [
-    "schema_version",
     "kind",
     "id",
-    "assets",
     "type",
     "parameters",
     "collision_boxes"

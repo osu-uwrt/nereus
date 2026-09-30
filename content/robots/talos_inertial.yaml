@@ -1,4 +1,3 @@
-# Generated from pinned original content; see docs/PROVENANCE.md.
 # Dynamics/mounts plus IMU and FOG; other devices and mechanisms remain open.
 schema_version: 1
 kind: robot

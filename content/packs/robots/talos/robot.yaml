@@ -1,57 +1,28 @@
-# Robot pack for native navigation and offscreen cameras; mechanism assets remain unresolved (step 4).
-# Values are copied from the verified native assembly content/robots/talos_navigation.yaml
-# (sha256 14ce5067...d746) unless a field says otherwise. Units: SI; frames: ROS ENU/FLU.
-schema_version: 1
+# UWRT Talos. Units: SI; frames: ROS ENU/FLU.
 kind: robot
 id: talos
 description: UWRT Talos AUV, physical plant + navigation sensors + cameras + mechanisms.
-# hash_basis git_revision: the value recorded from the pinned Git object by the offline importer
-# (original offline importer). worktree: this file's working-tree content only; its
-# relation to the pinned revision is unverified (riptide_core worktree is dirty elsewhere).
-provenance:
-  revisions:
-    riptide_simulator: 07647eebe706f96ea7b76db3cc9802735a146698
-    riptide_core: 7f37bdd62ab90113844137a23806c89b23a8ab9b
-  worktree_checked: '2026-09-29'
-  sources:
-  - {path: riptide_core/riptide_descriptions/config/talos.yaml, sha256: 7f0c5a703e3974401a23ce316dbedde1327e974b16105d39a97c7a64837bd664, hash_basis: git_revision}
-  - {path: riptide_core/riptide_descriptions/config/simulator.yaml, sha256: 34468cba811abc743c2ecb3aeb2b90c5d3acb548769d384aa6b0bfda24bde45b, hash_basis: git_revision}
-  - {path: riptide_simulator/c_simulator/robots/talos/config/hydrodynamics.yaml, sha256: bf80b5d6215a7d81fe1017b52bed31befb1749a7bec2feeceaa977909a9f0c88, hash_basis: git_revision}
-  - {path: riptide_simulator/c_simulator/robots/talos/config/sensors.yaml, sha256: aa86fa92f929f1489c7db4732434f2083d7f507b7306874a30b71235d1490fdd, hash_basis: git_revision}
-  - {path: riptide_simulator/c_simulator/collision_files/robots/talos.urdf, sha256: b9135ec508b505ca100145eaeb1c2a0659c736abff4eed9172ccf2f252117c8c, hash_basis: git_revision}
-  - {path: riptide_simulator/c_simulator/config/talos_tasks.yaml, sha256: 680ab208daa545ee869224639ec0e9d07b2c5d75a67ac66fdde54093bb833d6a, hash_basis: worktree}   # launcher/dropper/claw/magnet
-  - {path: riptide_core/riptide_hardware/cfg/ffc_config.yaml, sha256: 74d3a4b6f771c5b05bbd674f58747cd59d0cfe8dd0085428881c7c72e31576a0, hash_basis: worktree}
-  - {path: riptide_core/riptide_hardware/cfg/dfc_config.yaml, sha256: 2b682c2cf1834a6b3c780655ff3bc90a806790f72aa90cb2956c2376e7334c13, hash_basis: worktree}
-  - {path: riptide_core/riptide_hardware/cfg/tirpak_ffc_charuco_3.yaml, sha256: 67c275c59ac199020cbbb557add549e4921e1cdd0b2d9982544068ab3f043b8b, hash_basis: worktree}
-  - {path: riptide_core/riptide_hardware/cfg/dfc_charuco_test.yaml, sha256: 448d6ae82e90f1b0fc912b7f271cae5734805ecfbd8b9a8b2a041f43d22282a3, hash_basis: worktree}
-  - {path: riptide_simulator/camera_faker/config/cameras.yaml, sha256: 5d2ae15a2e41b3f640c704c8b5799f21200eb4534091152bdc63f7f128a521e4, hash_basis: worktree}
-  derived_from:
-  - {path: content/robots/talos_navigation.yaml, sha256: 14ce5067fc0f890ef78f9f3e13b8158bb44aa0536ade236f79843e783963d746}
-  parameter_status: unvalidated_prior   # hydrodynamics/actuators/payloads; not hardware identification
-
-# Pack-relative assets; unresolved mechanism assets remain listed for step 4.
-# Milestone numbers describe the plan and never select runtime behavior.
 assets:
-# Visual assets copied byte-for-byte (cp); sha256 verified by the loader. Placement is the `visuals` list below.
-- {id: body_mesh, path: assets/visual/Talos3_body.glb, required_from_step: 3, status: present, sha256: 5827668235d30dcde556d2cd1cf2c3352bf71adaeeaa1bc9840925d9eaa2460d, source: "nereus content/visuals/talos/Talos3_body.glb (orig camera_faker/models/talos3/Talos3_body.glb @07647eeb)"}
-- {id: rotor_VUS, path: assets/visual/rotors/VUS.glb, required_from_step: 3, status: present, sha256: bcefa0cd37a3c3166cee03e33dcf3fa55342f239aba5b5a28e0c82fb64631f4d, source: "nereus content/visuals/talos/rotors/VUS.glb"}
-- {id: rotor_VUP, path: assets/visual/rotors/VUP.glb, required_from_step: 3, status: present, sha256: 7b34f2f1be6b251fc94b00b46de65bb5071014b4eb355cc0ff6b32d3b0c76be3, source: "nereus content/visuals/talos/rotors/VUP.glb"}
-- {id: rotor_HUS, path: assets/visual/rotors/HUS.glb, required_from_step: 3, status: present, sha256: d11d3770a54ea4feb67b85cfd008f48c58c76703132305010d1e68ddf276651e, source: "nereus content/visuals/talos/rotors/HUS.glb"}
-- {id: rotor_HUP, path: assets/visual/rotors/HUP.glb, required_from_step: 3, status: present, sha256: 75f47aa49472d9399f466a44a03f6a9fdc7b91a4e170ea171d591b7d622c4f7b, source: "nereus content/visuals/talos/rotors/HUP.glb"}
-- {id: rotor_HLS, path: assets/visual/rotors/HLS.glb, required_from_step: 3, status: present, sha256: 4382429ecd19663cf270bd50eabe8db373ed52e022700da559b6bd004358804b, source: "nereus content/visuals/talos/rotors/HLS.glb"}
-- {id: rotor_HLP, path: assets/visual/rotors/HLP.glb, required_from_step: 3, status: present, sha256: 6c07417e1a4c56b1939c733af482689cd7f04faf82a52503436600d51d13d9f9, source: "nereus content/visuals/talos/rotors/HLP.glb"}
-- {id: rotor_VLS, path: assets/visual/rotors/VLS.glb, required_from_step: 3, status: present, sha256: a1ea85ced8ca686c06d5a272cfb1ac9fd9ec5d40a1f746ef56364c7bf7869ba8, source: "nereus content/visuals/talos/rotors/VLS.glb"}
-- {id: rotor_VLP, path: assets/visual/rotors/VLP.glb, required_from_step: 3, status: present, sha256: e9abcc47da85069b25cbdc780f1a9f75ab56317b523297626970246be7bf98ca, source: "nereus content/visuals/talos/rotors/VLP.glb"}
-- {id: claw_static_mesh, path: assets/visual/claw/assembly_static.glb, required_from_step: 3, status: present, sha256: 3a8761e95d245ea160bac7da3bcac257331a16048958fdd046670246fda1eaed, source: "riptide_simulator camera_faker/models/claw/assembly_static.glb @07647eeb"}   # DFC view? (O7)
-- {id: claw_left_mesh, path: assets/visual/claw/assembly_left.glb, required_from_step: 3, status: present, sha256: 60ff5d30068cd11e8b0fd61a986335385f4816a65534902cbfd0c878b6313e70, source: "riptide_simulator camera_faker/models/claw/assembly_left.glb @07647eeb"}
-- {id: claw_right_mesh, path: assets/visual/claw/assembly_right.glb, required_from_step: 3, status: present, sha256: e9e644e9a62afac91e719d05d0775c9d2cc7a3ff82c77631921915d9bcd3aeba, source: "riptide_simulator camera_faker/models/claw/assembly_right.glb @07647eeb"}
-- {id: claw_left_pad_mesh, path: assets/visual/claw/gripper.glb, required_from_step: 3, status: present, sha256: fd7ce8d8334a92da3060b74c0f4b85d45ed35a2bb937eb7e4b8f09302fd3405c, source: "riptide_simulator camera_faker/models/claw/gripper.glb @07647eeb"}   # left pad (renderer.cpp:491 loads clawAsset)
-- {id: claw_right_pad_mesh, path: assets/visual/claw/gripper_right.glb, required_from_step: 3, status: present, sha256: f3267ef51e31de7942ab96561efa01931c838bd099ed8b13833aa06a1411e936, source: "riptide_simulator camera_faker/models/claw/gripper_right.glb @07647eeb"}   # right pad (renderer.cpp:492-493)
-- {id: launcher_mesh, path: assets/visual/payloads/launcher.glb, required_from_step: 4, status: present, sha256: 249910560aebb27b753466e6b27fd0f3d6331ad361712d966cf439bd66f98d07, source: "riptide_simulator camera_faker/models/payloads/launcher.glb @07647eeb"}
-- {id: projectile_mesh, path: assets/visual/payloads/projectile.glb, required_from_step: 4, status: present, sha256: 67b854b4cdd1e4ec96e499f78bcd49509b16679796cb0b253cf7b9c3f67f6923, source: "riptide_simulator camera_faker/models/payloads/projectile.glb @07647eeb"}
-- {id: claw_pad_left, path: assets/collision/claw_pad.obj, required_from_step: 4, status: present, sha256: 506d0735f076ac74aa67b8fd9192576d0bd8bc5a07f0ca9e951311ad7fd46512, source: "riptide_simulator c_simulator/collision_files/tasks/claw_pad.obj @07647eeb"}
-- {id: claw_pad_right, path: assets/collision/claw_pad_right.obj, required_from_step: 4, status: present, sha256: f34963988eca6f6ac1ea47524d979724292b4831eb02b231d7e49cf6f7c3cfca, source: "riptide_simulator c_simulator/collision_files/tasks/claw_pad_right.obj @07647eeb"}
-- {id: robot_magnet_mesh, path: assets/visual/magnet/robot_magnet.glb, required_from_step: 4, status: present, sha256: a95c37ae9be406f172ca5c3a972cf8018a9d46043e44979047c46f19c185b3c4, source: "riptide_simulator camera_faker/models/magnet_lights/robot_magnet.glb @bf8b50a"}
+# Visual meshes; placement is the `visuals` list below.
+- {id: body_mesh, path: assets/visual/Talos3_body.glb}
+- {id: rotor_VUS, path: assets/visual/rotors/VUS.glb}
+- {id: rotor_VUP, path: assets/visual/rotors/VUP.glb}
+- {id: rotor_HUS, path: assets/visual/rotors/HUS.glb}
+- {id: rotor_HUP, path: assets/visual/rotors/HUP.glb}
+- {id: rotor_HLS, path: assets/visual/rotors/HLS.glb}
+- {id: rotor_HLP, path: assets/visual/rotors/HLP.glb}
+- {id: rotor_VLS, path: assets/visual/rotors/VLS.glb}
+- {id: rotor_VLP, path: assets/visual/rotors/VLP.glb}
+- {id: claw_static_mesh, path: assets/visual/claw/assembly_static.glb}   # DFC view? (O7)
+- {id: claw_left_mesh, path: assets/visual/claw/assembly_left.glb}
+- {id: claw_right_mesh, path: assets/visual/claw/assembly_right.glb}
+- {id: claw_left_pad_mesh, path: assets/visual/claw/gripper.glb}   # left pad (renderer.cpp:491 loads clawAsset)
+- {id: claw_right_pad_mesh, path: assets/visual/claw/gripper_right.glb}   # right pad (renderer.cpp:492-493)
+- {id: launcher_mesh, path: assets/visual/payloads/launcher.glb}
+- {id: projectile_mesh, path: assets/visual/payloads/projectile.glb}
+- {id: claw_pad_left, path: assets/collision/claw_pad.obj}
+- {id: claw_pad_right, path: assets/collision/claw_pad_right.obj}
+- {id: robot_magnet_mesh, path: assets/visual/magnet/robot_magnet.glb}
 
 body:
   type: marine_6dof
@@ -253,7 +224,6 @@ sensors:
     resolution_px: [1920, 1200]      # HD1200 grab_resolution
     intrinsics_left: {fx: 1863.9341697853888, fy: 1863.9341697853888, cx: 955.8471374511719, cy: 584.7962646484375}
     intrinsics_right: {fx: 1863.9341697853888, fy: 1863.9341697853888, cx: 955.8471374511719, cy: 584.7962646484375}
-    distortion_left_plumb_bob: [0.2678975458895328, 0.060526966446929266, 0.0, 0.0, -1.0363393179270073]   # raw calibration metadata only; rectified outputs publish zero D (O5)
     outputs: [rgb_left, depth_left, camera_info, point_cloud]
     depth:
       min_range_m: 0.15
@@ -283,7 +253,6 @@ sensors:
     resolution_px: [1920, 1200]
     intrinsics_left: {fx: 1857.5388723099845, fy: 1857.5388723099845, cx: 974.8830642700195, cy: 604.2220611572266}
     intrinsics_right: {fx: 1857.5388723099845, fy: 1857.5388723099845, cx: 974.8830642700195, cy: 604.2220611572266}
-    distortion_left_plumb_bob: [0.23711268288264142, -0.14781371703855056, -0.0006042261836638719, 0.0013987545571711227, 0.0]   # raw calibration metadata only
     outputs: [rgb_left, depth_left, camera_info, point_cloud]
     depth:
       min_range_m: 0.15
@@ -376,20 +345,3 @@ scoring_envelope:
   collision_boxes: [hull_0, hull_1]
   points:
   - {id: magnet_tip, frame: magnet_mount, position_m: [0, 0, 0.05]}
-
-# Inactive, not instantiated. Recorded so later steps do not re-derive source facts.
-pending:
-- id: pinger
-  category: sensor
-  proposed_type: acoustic_amplitude
-  required_from_step: 4
-  blocker: >-
-    No original amplitude model, stream rate or acoustic source positions exist (O3). RandomPingerTree
-    needs /talos/ivc/pinger/selected_freq_amp_stream (std_msgs/Float32) whose two 10 s window averages
-    decide the task order. Blocks the random_pinger subtree only.
-  known:
-    frame: hydrophone_port                 # hydrophone frames are already active frames above
-    other_frames: [hydrophone_starboard]
-    default_frequency_khz: 30              # pinger_broker.cpp; frequency input ivc/pinger/set_freq_khz Int32
-    speed_of_sound_m_s: 1500               # talos.yaml acoustics
-    consumer: riptide_acoustics Acoustics.cpp (avg mode)

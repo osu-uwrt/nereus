@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer (thruster_visuals.hpp); see docs/PROVENANCE.md.
 // Rotor animation driven by realized thruster forces. Rotor pivots/axes and the force-to-RPM fit come
 // from a viewer YAML document; the force-array order comes from the bridge document (thrusters.order).
 #pragma once

@@ -1,4 +1,3 @@
-// Reference tests adapted from OSU UWRT. See docs/PROVENANCE.md.
 #include <gtest/gtest.h>
 
 #include "detail/marine_dynamics.hpp"

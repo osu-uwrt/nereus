@@ -48,9 +48,9 @@ inline Json defaultBridge() {
     Json bridge = {
         {"namespace", "/demo"},
         {"clock", {{"topic", "/clock"}, {"epoch", "system_time_at_start"}, {"rate_hz", 500},
-                   {"reset_policy", "preserve_ros_epoch_and_time"}, {"publish_before_data", true},
+                   {"reset_policy", "preserve_ros_epoch_and_time"},
                    {"real_time_factor", 1.0}, {"qos", qos()}}},
-        {"thrusters", {{"order", {"c", "a", "b"}}, {"input_unit", "N"}, {"input_scales", {2.0, 1.0, -1.0}},
+        {"thrusters", {{"order", {"c", "a", "b"}}, {"input_scales", {2.0, 1.0, -1.0}},
                        {"reject", {"wrong_length", "nonfinite"}}}},
         {"frame_names", {{"world", kWorld}}},
     };

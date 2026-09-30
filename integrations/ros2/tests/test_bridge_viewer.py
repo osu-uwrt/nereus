@@ -317,7 +317,7 @@ class ScenarioAndRateTest(unittest.TestCase):
         self.assertEqual(set(document["asset_paths"]), {"robot", "pool", "tasks"})
         self.assertGreater(len(document["asset_paths"]["robot"]), 15)
         for role, assets in document["asset_paths"].items():
-            declared = {a["id"] for a in document[role].get("assets", []) if a["status"] == "present"}
+            declared = {a["id"] for a in document[role].get("assets", [])}
             self.assertEqual(set(assets), declared)
             for path in assets.values():
                 self.assertTrue(Path(path).is_absolute() and Path(path).is_file(), path)

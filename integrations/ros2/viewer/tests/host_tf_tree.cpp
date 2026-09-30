@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker/test/tf_tree.cpp; see docs/PROVENANCE.md.
 #include <gtest/gtest.h>
 #include "tf_tree.hpp"
 using namespace robotics::ros_viewer::host;

@@ -1,4 +1,3 @@
-# Generated from pinned original content; see docs/PROVENANCE.md.
 # Physics/mount slice; sensors and visual mechanisms are not yet instantiated.
 schema_version: 1
 kind: robot

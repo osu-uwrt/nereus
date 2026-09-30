@@ -1,9 +1,6 @@
 Nereus
 Copyright 2026 OSU Underwater Robotics Team (UWRT)
 
-This product includes software developed by the OSU Underwater Robotics Team, including code, meshes and data
-ported from its riptide_simulator, riptide_meshes and riptide_core repositories (see docs/PROVENANCE.md).
-
 This product bundles third-party software under its own license:
   Dear ImGui (third_party/imgui)   MIT License, see third_party/imgui/LICENSE.txt
   OpenGL Mathematics (third_party/glm)   MIT License / Happy Bunny License, see third_party/glm/glm/copying.txt

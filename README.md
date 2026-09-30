@@ -95,9 +95,6 @@ ctest --test-dir build/ros-viewer -LE live -j2          # C++ (run a subset with
 cd tests/python && PYTHONPATH=../../python/src python3 -m pytest -q
 ```
 
-Source and license records for content copied from the original UWRT simulator are in
-[docs/PROVENANCE.md](docs/PROVENANCE.md).
-
 ## License
 
 Apache License 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE). Bundled Dear ImGui and GLM keep their MIT

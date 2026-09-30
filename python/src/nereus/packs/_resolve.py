@@ -64,11 +64,7 @@ def _check(document: PackDocument, hashes: dict[Path, str]) -> list[str]:
         return _prefixed(document.path, problems)
     kind = document.kind
     if kind not in ("task", "scenario"):
-        asset_problems, gaps = semantics.assets(data, document.root, kind, hashes)
-        problems += asset_problems
-        document.unresolved += gaps
-    if kind != "task":
-        document.unresolved += semantics.pending(data, kind)
+        problems += semantics.assets(data, document.root, hashes)
     if kind == "robot":
         problems += semantics.robot(data)
     elif kind == "pool":
@@ -81,11 +77,6 @@ def _check(document: PackDocument, hashes: dict[Path, str]) -> list[str]:
         problems += semantics.task(data, None)
     elif kind == "bridge":
         problems += semantics.bridge(data)
-        document.unresolved += [
-            {"kind": "bridge_service", "pack": "bridge", "id": item["id"],
-             "required_from_step": item["required_from_step"]}
-            for item in data.get("services", []) if "required_from_step" in item
-        ]
     problems = _prefixed(document.path, problems)
     if kind == "tasks" and not problems:
         problems += _includes(document, data, hashes)
@@ -112,8 +103,7 @@ def _open(path: Path, hashes: dict[Path, str]) -> PackDocument:
 
 def _strict(path: Path, unresolved: list[dict[str, Any]]) -> None:
     if unresolved:
-        raise PackError([f"{path}: unresolved {item['kind']} '{item['id']}' "
-                         f"(pack {item['pack']}, step {item['required_from_step']})"
+        raise PackError([f"{path}: unresolved {item['kind']} '{item['id']}' (pack {item['pack']})"
                          for item in unresolved])
 
 
@@ -171,7 +161,6 @@ class ResolvedScenario:
             result[role] = {
                 item["id"]: str((root / item["path"]).resolve())
                 for item in document.get("assets", [])
-                if item["status"] == "present"
             }
         return result
 

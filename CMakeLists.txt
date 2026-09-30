@@ -135,7 +135,7 @@ if(NEREUS_BUILD_PYTHON)
   install(DIRECTORY python/src/nereus/ DESTINATION nereus
     COMPONENT python PATTERN "__pycache__" EXCLUDE)
   install(DIRECTORY content/ DESTINATION nereus/content COMPONENT python PATTERN "visuals" EXCLUDE)
-  install(FILES LICENSE NOTICE docs/PROVENANCE.md DESTINATION nereus/legal COMPONENT python)
+  install(FILES LICENSE NOTICE DESTINATION nereus/legal COMPONENT python)
 endif()
 
 install(TARGETS nereus_simulation nereus_sensors EXPORT NereusTargets
@@ -162,7 +162,7 @@ if(NEREUS_BUILD_CAMERA_PYTHON)
     install(DIRECTORY python/src/nereus/ DESTINATION nereus
       COMPONENT python PATTERN "__pycache__" EXCLUDE)
     install(DIRECTORY content/ DESTINATION nereus/content COMPONENT python PATTERN "visuals" EXCLUDE)
-    install(FILES LICENSE NOTICE docs/PROVENANCE.md DESTINATION nereus/legal COMPONENT python)
+    install(FILES LICENSE NOTICE DESTINATION nereus/legal COMPONENT python)
   endif()
 endif()
 if(NEREUS_BUILD_RENDER_CAPTURE)
@@ -232,7 +232,7 @@ if(NEREUS_BUILD_ROS_VIEWER)
   add_subdirectory(integrations/ros2/viewer)
 endif()
 
-install(FILES LICENSE NOTICE docs/PROVENANCE.md DESTINATION ${CMAKE_INSTALL_DATADIR}/nereus/legal)
+install(FILES LICENSE NOTICE DESTINATION ${CMAKE_INSTALL_DATADIR}/nereus/legal)
 install(EXPORT NereusTargets NAMESPACE Nereus::
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Nereus)
 configure_package_config_file(cmake/NereusConfig.cmake.in

@@ -24,7 +24,7 @@ DIRECTION_TOLERANCE = 1e-9
 SYMMETRY_TOLERANCE = 1e-10
 SEMIDEFINITE_TOLERANCE = 1e-10
 TRIANGLE_TOLERANCE = 1e-9
-INACTIVE_KEYS = frozenset({"pending", "provenance", "metadata", "scoring_hooks"})
+INACTIVE_KEYS = frozenset({"metadata", "scoring_hooks"})
 
 
 def duplicates(values: Iterable[str], what: str, problems: list[str]) -> None:
@@ -40,7 +40,7 @@ def _unit(vector: list[float], where: str, problems: list[str], tolerance: float
 
 
 def _quaternions(node: Any, where: str, problems: list[str]) -> None:
-    """Check every active orientation_wxyz; inactive metadata/pending/hook data is skipped."""
+    """Check every active orientation_wxyz; metadata and hook data are skipped."""
     if isinstance(node, dict):
         for key, value in node.items():
             if where == "" and key in INACTIVE_KEYS:
@@ -82,15 +82,12 @@ def inside(root: Path, relative: str) -> Path | None:
     return target if target == base or base in target.parents else None
 
 
-def assets(
-    data: dict[str, Any], root: Path, owner: str, present: dict[Path, str] | None = None
-) -> tuple[list[str], list[dict[str, Any]]]:
-    """Check declared assets; return (problems, unresolved missing assets).
+def assets(data: dict[str, Any], root: Path, present: dict[Path, str] | None = None) -> list[str]:
+    """Check that every declared asset is a file inside the pack.
 
-    Verified present assets are recorded in ``present`` with the digest actually checked.
+    Checked assets are recorded in ``present`` with their digest.
     """
     problems: list[str] = []
-    unresolved: list[dict[str, Any]] = []
     declared = data.get("assets", [])
     duplicates((item["id"] for item in declared), "asset", problems)
     for item in declared:
@@ -99,30 +96,11 @@ def assets(
         if target is None:
             problems.append(f"{where}: path '{item['path']}' escapes the pack")
             continue
-        if item["status"] == "missing":
-            if target.exists():
-                problems.append(f"{where}: marked missing but {item['path']} exists")
-            unresolved.append({
-                "kind": "asset", "pack": owner, "id": item["id"], "path": item["path"],
-                "required_from_step": item["required_from_step"],
-            })
-        elif not target.is_file():
-            problems.append(f"{where}: marked present but {item['path']} is not a file")
-        else:
-            digest = sha256(target)
-            if digest != item["sha256"]:
-                problems.append(f"{where}: sha256 mismatch for {item['path']}")
-            elif present is not None:
-                present[target] = digest
-    return problems, unresolved
-
-
-def pending(data: dict[str, Any], owner: str) -> list[dict[str, Any]]:
-    return [
-        {"kind": f"pending_{item['category']}", "pack": owner, "id": item["id"],
-         "required_from_step": item["required_from_step"], "blocker": item["blocker"]}
-        for item in data.get("pending", [])
-    ]
+        if not target.is_file():
+            problems.append(f"{where}: {item['path']} is not a file")
+        elif present is not None:
+            present[target] = sha256(target)
+    return problems
 
 
 # ------------------------------------------------------------------ robot
@@ -303,7 +281,7 @@ def tasks(data: dict[str, Any], root: Path) -> tuple[list[str], list[dict[str, A
         elif not target.is_file():
             unresolved.append({
                 "kind": "hook_module", "pack": "tasks", "id": f"{hook['module']}:{hook['function']}",
-                "path": target.relative_to(root.resolve()).as_posix(), "required_from_step": None,
+                "path": target.relative_to(root.resolve()).as_posix(),
             })
     return problems, unresolved
 

@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker/test/status_lights.cpp; see docs/PROVENANCE.md.
 #include "status_lights.hpp"
 #include <gtest/gtest.h>
 #include <limits>

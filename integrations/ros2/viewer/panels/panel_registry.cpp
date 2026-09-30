@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer panel_registry.cpp; see docs/PROVENANCE.md.
 #include "robotics/ros_viewer/panels/composition.hpp"
 namespace robotics::ros_viewer::panels {
 void registerMotionPanel(Registry &);

@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer uwrt_autonomy.cpp; see docs/PROVENANCE.md.
 #include "ros_runtime.hpp"
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <riptide_msgs2/action/execute_tree.hpp>

@@ -40,7 +40,7 @@ class StandaloneTasksTests(ReviewCase):
     def test_tasks_pack_validates_includes_without_scenario(self) -> None:
         document = load_pack(self.root / "tasks")
         self.assertEqual([item.kind for item in document.includes], ["task"])
-        self.assertEqual([item["id"] for item in document.unresolved], ["hoop_mesh"])
+        self.assertEqual(document.unresolved, [])
 
     def test_missing_include_file(self) -> None:
         self.edit("tasks/tasks.yaml", "tasks: [hoop.yaml]", "tasks: [hoop.yaml, gone.yaml]")
@@ -51,13 +51,14 @@ class StandaloneTasksTests(ReviewCase):
         self.rejects("tasks", "unknown asset 'nothing'")
 
     def test_strict_applies_to_every_pack_kind(self) -> None:
+        self.edit("tasks/tasks.yaml", "scoring_hooks: []", "scoring_hooks: [{module: 'x', function: f, parameters: {}}]")
         with self.assertRaises(PackError):
             load_pack(self.root / "tasks", strict=True)
         load_pack(self.root / "robot", strict=True)
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             self.assertEqual(main(["validate", str(self.root / "tasks"), "--strict"]), 1)
-        self.assertIn("hoop_mesh", err.getvalue())
+        self.assertIn("x:f", err.getvalue())
 
 
 class FidelityTests(ReviewCase):
@@ -142,11 +143,7 @@ class InactiveMetadataTests(ReviewCase):
     def test_pose_like_inactive_data_is_not_a_runtime_pose(self) -> None:
         self.edit("robot/robot.yaml", "metadata: {author: tests,",
                   "metadata: {orientation_wxyz: [9, 9, 9, 9], author: tests,")
-        self.edit("robot/robot.yaml", "  points: []\n",
-                  "  points: []\npending:\n- {id: later, category: sensor, required_from_step: "
-                  "4, blocker: future, known: {orientation_wxyz: [2, 0, 0, 0]}}\n")
-        document = load_pack(self.root / "robot")
-        self.assertEqual([item["id"] for item in document.unresolved], ["later"])
+        load_pack(self.root / "robot")
 
 
 if __name__ == "__main__":

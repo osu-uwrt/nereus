@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer (status_lights.hpp); see docs/PROVENANCE.md.
 // Geometry and input topic come from a viewer YAML document (content/viewer/*_status_lights.yaml),
 // never from code. Emitter poses are given in a named robot-pack frame.
 #pragma once

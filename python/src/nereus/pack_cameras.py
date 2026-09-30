@@ -465,14 +465,10 @@ class PackCameras:
                          if (root / item["path"]).resolve() == target), None)
         if declared is None:
             raise ValueError(f"{what} is not a declared pack asset")
-        if declared["status"] != "present":
-            raise ValueError(f"{what} is declared {declared['status']}")
         try:
             digest = hashlib.sha256(target.read_bytes()).hexdigest()
         except OSError as error:
             raise ValueError(f"{what} is unreadable: {error}") from error
-        if digest != declared["sha256"]:
-            raise ValueError(f"{what} sha256 mismatch")
         record = self._files.setdefault((role, declared["id"]), {
             "pack": role, "id": declared["id"], "kind": kind, "path": declared["path"],
             "sha256": digest, "used_by": []})

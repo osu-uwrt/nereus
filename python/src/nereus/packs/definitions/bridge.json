@@ -4,9 +4,6 @@
   "description": "Authoritative loader definition: published JSON Schemas and the type registry are generated from this corpus. Generic YAML ROS 2 bridge binding a robot pack to an external stack. No user code: field maps accept only {from}, {constant} or {from, enum_map}; filters are field equality only. Semantic checks (not JSON Schema): thrusters.order and input_scales have equal length; stream/service ids referenced by kill, reset, placement and reply_stream exist; native endpoints resolve against the robot pack; frame_names keys are robot-pack frame ids; converter names refer to entries in converters.",
   "type": "object",
   "properties": {
-    "schema_version": {
-      "const": 1
-    },
     "kind": {
       "const": "bridge"
     },
@@ -15,15 +12,6 @@
     },
     "description": {
       "type": "string"
-    },
-    "provenance": {
-      "$ref": "common.schema.json#/$defs/provenance"
-    },
-    "assets": {
-      "type": "array",
-      "items": {
-        "$ref": "common.schema.json#/$defs/asset"
-      }
     },
     "requires_robot": {
       "$ref": "common.schema.json#/$defs/name"
@@ -78,9 +66,6 @@
         "$ref": "#/$defs/converter"
       }
     },
-    "pending": {
-      "$ref": "common.schema.json#/$defs/pending"
-    },
     "metadata": {
       "type": "object",
       "description": "Free non-executable annotations preserved verbatim by load/save; never interpreted."
@@ -91,10 +76,8 @@
     }
   },
   "required": [
-    "schema_version",
     "kind",
     "id",
-    "assets",
     "namespace",
     "clock",
     "streams"
@@ -248,9 +231,6 @@
             "restart_from_epoch"
           ]
         },
-        "publish_before_data": {
-          "const": true
-        },
         "real_time_factor": {
           "type": "number",
           "exclusiveMinimum": 0
@@ -264,7 +244,6 @@
         "epoch",
         "rate_hz",
         "reset_policy",
-        "publish_before_data",
         "real_time_factor",
         "qos"
       ],
@@ -280,9 +259,6 @@
           },
           "minItems": 1,
           "uniqueItems": true
-        },
-        "input_unit": {
-          "const": "N"
         },
         "input_scales": {
           "type": "array",
@@ -303,7 +279,6 @@
       },
       "required": [
         "order",
-        "input_unit",
         "input_scales",
         "reject"
       ],
@@ -351,16 +326,11 @@
               },
               "child": {
                 "$ref": "#/$defs/ros_frame"
-              },
-              "owner": {
-                "type": "string",
-                "minLength": 1
               }
             },
             "required": [
               "parent",
-              "child",
-              "owner"
+              "child"
             ],
             "additionalProperties": false
           }
@@ -805,10 +775,6 @@
             "align_estimator"
           ],
           "additionalProperties": false
-        },
-        "required_from_step": {
-          "$ref": "common.schema.json#/$defs/step",
-          "description": "Declared contract whose native action arrives in a later step."
         },
         "converter": {
           "$ref": "common.schema.json#/$defs/name"

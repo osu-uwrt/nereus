@@ -1,10 +1,9 @@
-"""Generic synthetic pack set shared by the pack tests (no Talos, year or provenance data)."""
+"""Generic synthetic pack set shared by the pack tests (no Talos or year data)."""
 
 from pathlib import Path
 
 ROBOT = """\
 # Synthetic four-thruster robot; comments and key order must survive load/save.
-schema_version: 1
 kind: robot
 id: synth
 metadata: {author: tests, note: free non-executable annotation}
@@ -73,10 +72,8 @@ scoring_envelope:
 """
 
 POOL = """\
-schema_version: 1
 kind: pool
 id: tank
-assets: []
 type: rectangular_pool
 parameters: {length_m: 10, width_m: 5, depth_m: 3, deck_height_m: 0.3, water_level_m: 0, water_density_kg_m3: 1000, surface_pressure_pa: 101325, current_m_s: [0, 0, 0], current_oscillation_amplitude_m_s: [0, 0, 0], current_oscillation_frequency_hz: 0}
 collision_boxes:
@@ -84,11 +81,10 @@ collision_boxes:
 """
 
 TASKS = """\
-schema_version: 1
 kind: tasks
 id: practice
 assets:
-- {id: hoop_mesh, path: assets/hoop.dae, source: modelled for tests, required_from_step: 3, status: missing}
+- {id: hoop_mesh, path: assets/hoop.dae}
 tasks: [hoop.yaml]
 requires:
 - {task: hoop, mechanism_type: dropper, min_count: 1}
@@ -98,7 +94,6 @@ scoring_hooks: []
 """
 
 HOOP = """\
-schema_version: 1
 kind: task
 id: hoop
 frames:
@@ -123,12 +118,10 @@ scoring:
 
 BRIDGE = """\
 # Sensor-only bridge: no thrusters, TF, kill, reset or placement blocks.
-schema_version: 1
 kind: bridge
 id: synth_sensors
-assets: []
 namespace: /synth
-clock: {topic: /clock, epoch: zero, rate_hz: 100, reset_policy: restart_from_epoch, publish_before_data: true, real_time_factor: 1.0, qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}}
+clock: {topic: /clock, epoch: zero, rate_hz: 100, reset_policy: restart_from_epoch, real_time_factor: 1.0, qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}}
 streams:
 - id: altitude
   direction: publish
@@ -142,7 +135,6 @@ streams:
 """
 
 SCENARIO = """\
-schema_version: 1
 kind: scenario
 id: practice_run
 robot: ../robot
@@ -177,4 +169,6 @@ def write_generic_packs(root: Path, bridge: bool = True) -> Path:
         target = root / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
+    (root / "tasks" / "assets").mkdir(exist_ok=True)
+    (root / "tasks" / "assets" / "hoop.dae").write_bytes(b"mesh")
     return root / "scenario"

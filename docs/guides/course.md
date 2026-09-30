@@ -7,11 +7,9 @@ everything. To lay out a different competition course you usually only edit the 
 ## Pool
 
 ```yaml
-schema_version: 1
 kind: pool
 id: my_pool
 description: 25 m practice pool.
-assets: []
 type: rectangular_pool
 parameters:
   length_m: 25.0
@@ -24,13 +22,11 @@ parameters:
   current_m_s: [0, 0, 0]
   current_oscillation_amplitude_m_s: [0, 0, 0]
   current_oscillation_frequency_hz: 0.1
-  speed_of_sound_m_s: 1500
 collision_boxes:                # pool-local: origin at a floor-plan corner on the surface, +x along length
 - {id: floor, size_m: [25, 12, 1], center_m: [12.5, 6, -2.5], orientation_wxyz: [1, 0, 0, 0]}
 - {id: wall_x0, size_m: [1, 12, 4], center_m: [-0.5, 6, -1], orientation_wxyz: [1, 0, 0, 0]}
 # ...one box per wall
 water_optics:                   # what the cameras and viewer see
-  required_from_step: 3
   tint_rgb: [0.025, 0.22, 0.29]
   absorption_per_m_rgb: [0.648, 0.145, 0.025]
   scattering: 0.458
@@ -38,7 +34,6 @@ water_optics:                   # what the cameras and viewer see
   distance_power: 0.4
   clear_distance_m: 0.0
 lighting:
-  required_from_step: 3
   profile: outdoor              # or indoor
   direct_light: 1.0
   ambient_light: 0.8
@@ -52,7 +47,6 @@ The robot collides with `collision_boxes`; the viewer draws the floor, walls, de
 ## Scenario
 
 ```yaml
-schema_version: 1
 kind: scenario
 id: my_practice
 description: My AUV in the practice pool.

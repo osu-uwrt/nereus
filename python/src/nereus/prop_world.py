@@ -41,7 +41,6 @@ the surface in ``props()``); pool walls/floor are the pool pack's boxes, not a p
 
 from __future__ import annotations
 
-import hashlib
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -161,12 +160,9 @@ def _finite(values: Any, count: int, name: str) -> Matrix:
 
 def _verified(root: Path, assets: Mapping[str, Mapping[str, Any]], identifier: str) -> Path:
     item = assets.get(identifier)
-    if item is None or item["status"] != "present":
+    if item is None:
         raise ValueError(f"asset '{identifier}' is not present in its pack")
-    path = (root / item["path"]).resolve()
-    if hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]:
-        raise ValueError(f"asset '{identifier}' does not match its declared sha256")
-    return Path(path)
+    return (root / item["path"]).resolve()
 
 
 def _root(resolved: ResolvedScenario, key: str) -> Path:

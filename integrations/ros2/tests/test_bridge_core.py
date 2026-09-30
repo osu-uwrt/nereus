@@ -61,9 +61,9 @@ def _subscribe(name: str, message_type: str, native_id: str, fields: dict[str, A
 BRIDGE: dict[str, Any] = {
     "namespace": "/demo",
     "clock": {"topic": "/clock", "epoch": "system_time_at_start", "rate_hz": 500,
-              "reset_policy": "preserve_ros_epoch_and_time", "publish_before_data": True,
+              "reset_policy": "preserve_ros_epoch_and_time",
               "real_time_factor": 1.0, "qos": QOS},
-    "thrusters": {"order": ["c", "a", "b"], "input_unit": "N", "input_scales": [2.0, 1.0, -1.0],
+    "thrusters": {"order": ["c", "a", "b"], "input_scales": [2.0, 1.0, -1.0],
                   "reject": ["wrong_length", "nonfinite"]},
     "frame_names": {"world": WORLD},
     "streams": [

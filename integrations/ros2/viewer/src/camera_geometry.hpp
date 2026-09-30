@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer (camera.hpp, Intrinsics/cameraView); see docs/PROVENANCE.md.
 // Pinhole projection of a rectified sensor and the render view for its optical frame.
 #pragma once
 #include "math.hpp"

@@ -3,26 +3,9 @@
 # {from, enum_map}; filters only field equality. Destination keys are ROS field paths on publish and
 # native argument names on subscribe; [i] indexes arrays. Native side: robot-pack ids and the native
 # reading fields of libraries/sensors/include/robotics/sensors/readings.hpp.
-schema_version: 1
 kind: bridge
 id: uwrt_talos
 description: Talos <-> UWRT robot stack (controller, EKF, acoustics, perception, autonomy).
-provenance:
-  revisions:
-    riptide_simulator: 07647eebe706f96ea7b76db3cc9802735a146698
-    riptide_core: 7f37bdd62ab90113844137a23806c89b23a8ab9b
-  worktree_checked: '2026-09-29'
-  sources:
-  - {path: riptide_simulator/c_simulator/src/physics_simulator.cpp, sha256: d4b05d378425bfdb59773ba6b20f0db44f14469c2be4eb0ccdfb69824ff05e14, hash_basis: git_revision}
-  - {path: riptide_simulator/c_simulator/robots/talos/behavior/mechanisms.py, sha256: 914111762daf4858934b02244ba2b85a6b4f038f6b0871e7a6d53195c43f7115, hash_basis: worktree}
-  - {path: riptide_simulator/c_simulator/tasks/2026/behavior/node.py, sha256: 2fc689ecf44746487047879c711f429bde15d5572fbf137de8f4a11176f3aa73, hash_basis: worktree}
-  - {path: riptide_simulator/camera_faker/src/pool_viewer/main.cpp, sha256: 853c88210565b3f79917e649ff1938ce7ca0f5686a95e3a4e60d36ba5f96fe8a, hash_basis: worktree}
-  - {path: riptide_core/riptide_hardware/cfg/talos_ekf.yaml, sha256: 063ae128b7ca66bc90740de7a0bfa11ba356c3443c606aa14f673dfbbdb441d8, hash_basis: worktree}
-  - {path: riptide_control/riptide_controllers/src/riptide_controllers/controller_overseer.py, sha256: 8582a893195760c92bace6ddf0f59488ca5b37a6a2fe1c730696ea5b1474b1fc, hash_basis: worktree}
-  - {path: controller_models/complete_controller/src/complete_controller.cpp, sha256: f6bf6263f0b12341955109605058eb682f6a6c0ae714c57df57442e1d1a3db6c, hash_basis: worktree}
-  - {path: riptide_core/riptide_acoustics/src/Acoustics.cpp, sha256: 9e5e6cda12f8fae42ad3f34fd0c148d6625a4b992506586699640db490aa3be8, hash_basis: worktree}
-  - {path: riptide_perception/tensor_detector/src/yolo_orientation.py, sha256: 753d23f2eba372bb59c516d9a54b318e65abb045f398be4b601e8da9b5aca52b, hash_basis: worktree}
-assets: []
 requires_robot: talos      # data binding to robot-pack ids; no robot-name code switch
 
 namespace: /talos          # relative names resolve here (controller topics are hardcoded /talos: T18)
@@ -46,13 +29,11 @@ clock:
   epoch: system_time_at_start            # original simNs starts at system time; avoids ROS time 0
   rate_hz: 500                           # clock_publish_rate: every 2 ms physics step
   reset_policy: preserve_ros_epoch_and_time   # ROS time never rewinds across resets (T12)
-  publish_before_data: true
   real_time_factor: 1.0
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
 
 thrusters:
   order: [VUS, VUP, HUS, HUP, HLS, HLP, VLS, VLP]   # talos.yaml thruster index 0..7 (controller wrench matrix)
-  input_unit: N
   input_scales: [1, 1, 1, 1, 1, 1, 1, 1]
   reject: [wrong_length, nonfinite]                 # whole message ignored (forceCallback)
 
@@ -75,8 +56,8 @@ tf:
   - {parent: simulator/talos/dfc_camera_link, child: simulator/talos/dfc_left_camera_optical_frame, from_frame: dfc_mount, to_frame: dfc_left_optical, truth: true}
   # Transforms the bridge only reads live. Owners are external; the bridge never republishes them.
   lookup:
-  - {parent: world, child: map, owner: 'riptide_mapping2 mapping.launch.py chameleon_tf world_to_map (identity start; XY/yaw free)'}
-  - {parent: world, child: odom, owner: 'riptide_hardware2 navigation.launch.py static world->odom'}
+  - {parent: world, child: map}    # riptide_mapping2 world_to_map (identity start; XY/yaw free)
+  - {parent: world, child: odom}   # riptide_hardware2 navigation.launch.py static world->odom
   never_publish: [talos/base_link, talos/imu_link, talos/fog_link, talos/dvl_link,
                   talos/ffc_camera_link, talos/dfc_camera_link, world, odom, map]
 

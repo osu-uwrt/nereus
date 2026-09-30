@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer test/operator_panels.cpp; see docs/PROVENANCE.md.
 #include "robotics/ros_viewer/panels/composition.hpp"
 #include "robotics/ros_viewer/panels/ros_providers.hpp"
 #include <chameleon_tf_msgs/action/model_frame.hpp>

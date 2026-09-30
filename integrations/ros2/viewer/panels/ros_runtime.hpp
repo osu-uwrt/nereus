@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer ros_runtime.hpp; see docs/PROVENANCE.md.
 #pragma once
 #include "robotics/ros_viewer/panels/composition.hpp"
 #include <rclcpp/rclcpp.hpp>

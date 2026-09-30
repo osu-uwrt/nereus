@@ -193,8 +193,8 @@ class TalosPackCameraTests(unittest.TestCase):
         torpedo = next(item for item in record["scene"]["files"]
                        if item["id"] == "torpedo_texture")
         self.assertEqual(torpedo["used_by"], ["torpedo_mesh"])
-        declared = {item["id"]: item["sha256"] for item in self.resolved.tasks["assets"]}
-        self.assertEqual(torpedo["sha256"], declared["torpedo_texture"])
+        texture = Path(self.resolved.asset_paths()["tasks"]["torpedo_texture"])
+        self.assertEqual(torpedo["sha256"], hashlib.sha256(texture.read_bytes()).hexdigest())
         # Detached: editing the returned record changes nothing inside the capture object.
         record["scene"]["cutouts"][0]["face_triangles"].append(99)
         record["scene"]["files"][0]["used_by"].append("x")
@@ -360,13 +360,8 @@ class TalosPackCameraTests(unittest.TestCase):
             np.testing.assert_allclose(matrix[:3, 3], position, atol=1e-12)
             np.testing.assert_allclose(matrix[:3, :3], np.eye(3), atol=1e-12)
 
-    def test_texture_dependencies_are_declared_present_and_unchanged(self):
+    def test_texture_dependencies_are_declared(self):
         cases = {
-            "sha256 mismatch": lambda assets: next(
-                item for item in assets if item["id"] == "torpedo_texture").update(sha256="0" * 64),
-            "is declared missing": lambda assets: next(
-                item for item in assets if item["id"] == "torpedo_texture").update(
-                    status="missing"),
             "is not a declared pack asset": lambda assets: assets.remove(next(
                 item for item in assets if item["id"] == "torpedo_texture")),
         }
@@ -391,19 +386,10 @@ class TalosPackCameraTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             cameras.capture("ffc", [10, 10], IDENTITY, 0.0)
 
-    def test_referenced_assets_are_verified_before_rendering(self):
-        cases = {
-            "declared missing": lambda asset: asset.update(status="missing"),
-            "sha256 mismatch": lambda asset: asset.update(sha256="0" * 64),
-        }
-        for message, change in cases.items():
-            robot = copy.deepcopy(self.resolved.robot)
-            for sensor in robot["sensors"]:
-                sensor["enabled"] = sensor["type"] == "stereo_camera" or sensor.get("enabled", True)
-            change(next(item for item in robot["assets"] if item["id"] == "claw_static_mesh"))
-            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
-                pc.PackCameras(with_changes(self.resolved, robot))
-        robot = copy.deepcopy(robot)
+    def test_referenced_assets_must_be_declared(self):
+        robot = copy.deepcopy(self.resolved.robot)
+        for sensor in robot["sensors"]:
+            sensor["enabled"] = sensor["type"] == "stereo_camera" or sensor.get("enabled", True)
         robot["assets"] = [item for item in robot["assets"] if item["id"] != "claw_static_mesh"]
         with self.assertRaisesRegex(ValueError, "unknown asset 'claw_static_mesh'"):
             pc.PackCameras(with_changes(self.resolved, robot))
@@ -442,7 +428,6 @@ PANEL_DAE = """<?xml version="1.0" encoding="utf-8"?>
 </COLLADA>
 """
 PANEL_TASK = """\
-schema_version: 1
 kind: task
 id: hoop
 frames: []
@@ -488,7 +473,7 @@ def generic_packs(root, texture="panel.png", declare_texture=True, image=PRINT):
     scenario = write_generic_packs(root)
     (root / "robot" / "assets").mkdir()
     (root / "robot" / "assets" / "hull.obj").write_bytes(MESH)
-    (root / "tasks" / "assets").mkdir()
+    (root / "tasks" / "assets").mkdir(exist_ok=True)
     model = PANEL_DAE.format(texture=texture).encode()
     (root / "tasks" / "assets" / "panel.dae").write_bytes(model)
     (root / "tasks" / "assets" / "panel.png").write_bytes(image)
@@ -498,19 +483,15 @@ def generic_packs(root, texture="panel.png", declare_texture=True, image=PRINT):
         path = root / relative
         path.write_text(mutate(path.read_text("utf-8"), old, new), encoding="utf-8")
 
-    edit("robot/robot.yaml", "assets: []\n", ASSET.format(digest=hashlib.sha256(MESH).hexdigest()))
+    edit("robot/robot.yaml", "assets: []\n", ASSET)
     edit("robot/robot.yaml", "collision_boxes:\n", CAMERA_FRAMES)
     edit("robot/robot.yaml", "mechanisms:\n", CAMERA.replace("enabled: false", "enabled: true"))
     edit("pool/pool.yaml", "collision_boxes:\n", APPEARANCE.replace("outdoor", "indoor")
          .replace("ambient_light: 0.8", "ambient_light: 0.6") + "collision_boxes:\n")
-    declared = (f"path: assets/panel.dae, source: modelled for tests, required_from_step: 3, "
-                f"status: present, sha256: {hashlib.sha256(model).hexdigest()}}}")
+    declared = "path: assets/panel.dae}"
     if declare_texture:
-        declared += ("\n- {id: panel_print, path: assets/panel.png, source: modelled for tests, "
-                     f"required_from_step: 3, status: present, "
-                     f"sha256: {hashlib.sha256(image).hexdigest()}}}")
-    edit("tasks/tasks.yaml", "path: assets/hoop.dae, source: modelled for tests, "
-         "required_from_step: 3, status: missing}", declared)
+        declared += "\n- {id: panel_print, path: assets/panel.png}"
+    edit("tasks/tasks.yaml", "path: assets/hoop.dae}", declared)
     (root / "tasks" / "hoop.yaml").write_text(PANEL_TASK, encoding="utf-8")
     return scenario / "scenario.yaml"
 
@@ -562,12 +543,12 @@ class GenericPackCameraTests(unittest.TestCase):
 
     def test_texture_dependencies_are_checked_before_rendering(self):
         cases = (
-            ({"declare_texture": False}, None, "is not a declared pack asset"),
-            ({"texture": "../../outside.png"}, None, "escapes the pack"),
+            ({"declare_texture": False}, None, "texture .* is not a declared pack asset"),
+            ({"texture": "../../outside.png"}, None, "texture .* escapes the pack"),
             ({}, lambda root: (root / "tasks" / "assets" / "panel.png").write_bytes(
-                png(4, 4, (1, 2, 3, 255))), "sha256 mismatch"),
+                png(4, 4, (1, 2, 3, 255))), "changed since resolution"),
             ({}, lambda root: (root / "tasks" / "assets" / "panel.png").unlink(),
-             "is unreadable"),
+             "texture .* is unreadable"),
         )
         for options, after_resolve, message in cases:
             with self.subTest(message=message):
@@ -575,7 +556,7 @@ class GenericPackCameraTests(unittest.TestCase):
                 resolved = resolve_scenario(generic_packs(root, **options))
                 if after_resolve is not None:
                     after_resolve(root)
-                with self.assertRaisesRegex(ValueError, f"texture .* {message}"):
+                with self.assertRaisesRegex(ValueError, message):
                     pc.PackCameras(resolved)
 
 

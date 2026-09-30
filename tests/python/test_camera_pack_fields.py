@@ -1,6 +1,5 @@
 """Offscreen-camera pack fields: robot visuals, stereo right eye, pool water tint and lighting."""
 
-import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,8 +12,7 @@ IDENTITY = [1, 0, 0, 0]
 ORIGIN = [0, 0, 0]
 MESH = b"o hull\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
 
-ASSET = ("assets:\n- {{id: hull_mesh, path: assets/hull.obj, source: modelled for tests, "
-         "required_from_step: 3, status: present, sha256: {digest}}}\n")
+ASSET = "assets:\n- {id: hull_mesh, path: assets/hull.obj}\n"
 CAMERA_FRAMES = """\
   - {parent: base_link, child: cam_left, position_m: [0.2, 0, 0], orientation_wxyz: [0.5, -0.5, 0.5, -0.5]}
   - {parent: cam_left, child: cam_right, position_m: [0.05, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
@@ -35,7 +33,6 @@ CAMERA = """\
     resolution_px: [64, 48]
     intrinsics_left: {fx: 50.0, fy: 50.0, cx: 31.5, cy: 23.5}
     intrinsics_right: {fx: 50.0, fy: 50.0, cx: 31.5, cy: 23.5}
-    distortion_left_plumb_bob: [0, 0, 0, 0, 0]
     outputs: [rgb_left, depth_left, camera_info, rgb_right, camera_info_right]
     depth:
       min_range_m: 0.15
@@ -45,7 +42,6 @@ mechanisms:
 """
 APPEARANCE = """\
 water_optics:
-  required_from_step: 3
   tint_rgb: [0.025, 0.22, 0.29]
   distance_scale: 1.88
   distance_power: 0.40
@@ -53,7 +49,6 @@ water_optics:
   scattering: 0.458
   absorption_per_m_rgb: [0.648, 0.145, 0.025]
 lighting:
-  required_from_step: 3
   profile: outdoor
   direct_light: 1.0
   ambient_light: 0.8
@@ -77,7 +72,7 @@ class TalosCameraFieldTests(unittest.TestCase):
         cls.pool = load_pack(CONTENT / "pools" / "robosub_2026").plain()
 
     def test_visuals_use_present_assets_at_their_initial_configuration(self) -> None:
-        present = {item["id"] for item in self.robot["assets"] if item["status"] == "present"}
+        present = {item["id"] for item in self.robot["assets"]}
         placed: dict[str, list[str]] = {}
         for visual in self.robot["visuals"]:
             self.assertIn(visual["asset"], present)
@@ -119,7 +114,7 @@ class TalosCameraFieldTests(unittest.TestCase):
         self.assertEqual(optics["tint_rgb"], [0.025, 0.22, 0.29])
         self.assertEqual(optics["absorption_per_m_rgb"], [0.648, 0.145, 0.025])
         self.assertEqual(
-            {key: value for key, value in self.pool["lighting"].items() if key != "required_from_step"},
+            self.pool["lighting"],
             {"profile": "outdoor", "direct_light": 1.0, "ambient_light": 0.8,
              "sun_azimuth_deg": 225.0, "sun_elevation_deg": 55.0, "glare": 0.5})
 
@@ -141,8 +136,7 @@ class GenericCameraFieldTests(unittest.TestCase):
         self.scenario = write_generic_packs(self.root)
         (self.root / "robot" / "assets").mkdir()
         (self.root / "robot" / "assets" / "hull.obj").write_bytes(MESH)
-        digest = hashlib.sha256(MESH).hexdigest()
-        self.edit("robot", "assets: []\n", ASSET.format(digest=digest))
+        self.edit("robot", "assets: []\n", ASSET)
         self.edit("robot", "collision_boxes:\n", CAMERA_FRAMES)
         self.edit("robot", "mechanisms:\n", CAMERA)
         pool = self.root / "pool" / "pool.yaml"
@@ -228,8 +222,8 @@ class GenericCameraFieldTests(unittest.TestCase):
             ("max_range_m: 4.0", "max_range_m: 0.1", "min_range_m must be < max_range_m"),
             ("range_exponent: 2.0", "range_exponent: 4.5", "range_exponent"),
             ("patch_size_px: 8", "patch_size_px: 65", "patch_size_px"),
-            ("fx: 50.0, fy: 50.0, cx: 31.5, cy: 23.5}\n    distortion",
-             "fx: 0.0, fy: 50.0, cx: 31.5, cy: 23.5}\n    distortion", "fx"),
+            ("fx: 50.0, fy: 50.0, cx: 31.5, cy: 23.5}\n    outputs",
+             "fx: 0.0, fy: 50.0, cx: 31.5, cy: 23.5}\n    outputs", "fx"),
         ]
         for old, new, fragment in cases:
             with self.subTest(case=new):

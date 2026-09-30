@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer standard_motion.cpp; see docs/PROVENANCE.md.
 #include "ros_runtime.hpp"
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <std_msgs/msg/bool.hpp>

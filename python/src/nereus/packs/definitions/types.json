@@ -347,11 +347,6 @@
           "exclusiveMinimum": 0,
           "description": "Deck height above the water surface in m; sets pool wall box height (depth + deck + 1)."
         },
-        "speed_of_sound_m_s": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "description": "Speed of sound in the water in m/s (environment value)."
-        },
         "water_level_m": {
           "type": "number"
         },
@@ -393,9 +388,6 @@
     "water_optics": {
       "type": "object",
       "properties": {
-        "required_from_step": {
-          "$ref": "common.schema.json#/$defs/step"
-        },
         "tint_rgb": {
           "type": "array",
           "items": {
@@ -438,7 +430,6 @@
         }
       },
       "required": [
-        "required_from_step",
         "distance_scale",
         "distance_power",
         "clear_distance_m",
@@ -451,9 +442,6 @@
     "lighting": {
       "type": "object",
       "properties": {
-        "required_from_step": {
-          "$ref": "common.schema.json#/$defs/step"
-        },
         "profile": {
           "enum": [
             "indoor",
@@ -482,7 +470,6 @@
         }
       },
       "required": [
-        "required_from_step",
         "profile",
         "direct_light",
         "ambient_light",
@@ -548,14 +535,6 @@
         },
         "intrinsics_right": {
           "$ref": "#/$defs/pinhole_intrinsics"
-        },
-        "distortion_left_plumb_bob": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 5,
-          "maxItems": 5
         },
         "outputs": {
           "type": "array",
@@ -664,7 +643,6 @@
         "resolution_px",
         "intrinsics_left",
         "intrinsics_right",
-        "distortion_left_plumb_bob",
         "outputs",
         "depth"
       ],
@@ -990,7 +968,12 @@
           "$ref": "common.schema.json#/$defs/name"
         },
         "material": {
-          "enum": ["asset", "liner", "clear", "emissive"],
+          "enum": [
+            "asset",
+            "liner",
+            "clear",
+            "emissive"
+          ],
           "description": "Renderer surface class for this placement: asset (default: the mesh's own materials), liner (corrugated liner shading), clear (blended translucent cover) or emissive (self-lit, HDR glow; radiance and the tint apply)."
         },
         "radiance": {
@@ -1012,7 +995,10 @@
               "minProperties": 1
             }
           },
-          "required": ["region", "color_rgb"],
+          "required": [
+            "region",
+            "color_rgb"
+          ],
           "additionalProperties": false,
           "description": "Task visuals only: the placement's tint follows the indicator of the named region of the same task (regions with an indicator block). color_rgb maps every indicator color name to the linear RGB tint shown while that color is current."
         }

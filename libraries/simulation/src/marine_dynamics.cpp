@@ -1,4 +1,3 @@
-// Adapted from OSU UWRT riptide_simulator. See docs/PROVENANCE.md.
 #include "detail/marine_dynamics.hpp"
 #include "detail/rk4.hpp"
 #include <algorithm>

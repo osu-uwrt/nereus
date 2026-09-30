@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer ros_runtime.cpp; see docs/PROVENANCE.md.
 #include "ros_runtime.hpp"
 #include "robotics/ros_viewer/panels/ros_providers.hpp"
 #include <glm/gtc/matrix_transform.hpp>

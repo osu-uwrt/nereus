@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer (detection_pose.hpp); see docs/PROVENANCE.md.
 #pragma once
 
 #include <glm/gtc/matrix_transform.hpp>

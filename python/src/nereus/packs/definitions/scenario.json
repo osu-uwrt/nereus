@@ -4,9 +4,6 @@
   "description": "Authoritative loader definition: published JSON Schemas and the type registry are generated from this corpus. Selects sibling robot/pool/tasks/bridge pack folders and owns world frame, placements, initial state, seed and run options. Task ids, run option keys/values and world-frame use are semantic checks against the selected packs.",
   "type": "object",
   "properties": {
-    "schema_version": {
-      "const": 1
-    },
     "kind": {
       "const": "scenario"
     },
@@ -15,15 +12,6 @@
     },
     "description": {
       "type": "string"
-    },
-    "provenance": {
-      "$ref": "common.schema.json#/$defs/provenance"
-    },
-    "assets": {
-      "type": "array",
-      "items": {
-        "$ref": "common.schema.json#/$defs/asset"
-      }
     },
     "robot": {
       "$ref": "common.schema.json#/$defs/pack_path"
@@ -166,16 +154,12 @@
       ],
       "additionalProperties": false
     },
-    "pending": {
-      "$ref": "common.schema.json#/$defs/pending"
-    },
     "metadata": {
       "type": "object",
       "description": "Free non-executable annotations preserved verbatim by load/save; never interpreted."
     }
   },
   "required": [
-    "schema_version",
     "kind",
     "id",
     "robot",

@@ -1,26 +1,8 @@
 # Task pack = task include files + run rules + assets; runtime scoring is executed by nereus.task_runtime + hooks/rules_2026.py.
 # No course layout (scenario-owned) and no robot names (capabilities by mechanism type only).
-schema_version: 1
 kind: tasks
 id: robosub_2026
 description: RoboSub 2026 course tasks and scoring (Survey & Repair / Search & Rescue roles).
-provenance:
-  revisions:
-    riptide_simulator: 07647eebe706f96ea7b76db3cc9802735a146698
-    riptide_gui: 907c9ded53b0cd6fe7461d8d80c40a4fa9fbc4fc      # riptide_meshes (VISUAL_CONTENT_CONVERSION.md)
-  worktree_checked: '2026-09-29'
-  sources:
-  - {path: riptide_simulator/c_simulator/tasks/2026/competition.yaml, sha256: 196552bfa71f40d6c5db5b62ae70b52a8d653c645a8ac03366aaec4e9ac2c21b, hash_basis: worktree}
-  - {path: riptide_simulator/c_simulator/tasks/2026/config/scoring.yaml, sha256: b4b88bdf5c84c1b69aa1c8b27b4b386320d6973a7feecf17139de01fb5736e20, hash_basis: worktree}
-  - {path: riptide_simulator/c_simulator/tasks/2026/config/tasks.yaml, sha256: 8dacc0a834e5f1b118e4d4a50c40a20d0fc730c4c896a3e6a6d741d88350ccfe, hash_basis: worktree}
-  - {path: riptide_simulator/c_simulator/config/talos_tasks.yaml, sha256: 680ab208daa545ee869224639ec0e9d07b2c5d75a67ac66fdde54093bb833d6a, hash_basis: worktree}
-  - {path: riptide_simulator/c_simulator/tasks/2026/behavior/scoring.py, sha256: 60f6450c64830f6390d0a9eb272e87f543e4cc740dfcf41952e76a8ece177d19, hash_basis: worktree}
-  - {path: riptide_simulator/c_simulator/tasks/2026/behavior/node.py, sha256: 2fc689ecf44746487047879c711f429bde15d5572fbf137de8f4a11176f3aa73, hash_basis: worktree}
-  - {path: riptide_simulator/c_simulator/scripts/payload_model.py, sha256: 467aebd5a2277cf20a9ba45bca7385149e34c93127bc9aee8a25cb91cfad62c9, hash_basis: worktree}
-  - {path: riptide_simulator/c_simulator/collision_files/objects/gate.urdf, sha256: ca26a4807559555fed72eca688f4b16bff9e6a3305bd71738a3f3c895935b847, hash_basis: worktree}
-  - {path: riptide_simulator/c_simulator/collision_files/objects/torpedo.urdf, sha256: ed100751619615eb7e9f83c229c04ef65f3074897b3022352a83e6d69dcf016f, hash_basis: worktree}
-  - {path: riptide_simulator/c_simulator/tasks/2026/config/markers.yaml, sha256: 40e09e9f3cd9c756e97be01d1808519d097debf3e34d77890b2e7145727b86d5, hash_basis: worktree}
-
 # Step-3 camera assets for defined tasks; copied byte-for-byte (cp) from riptide_gui riptide_meshes/meshes/.
 # Verified at copy time (2026-09-29): riptide_gui HEAD == 907c9ded53b0cd6fe7461d8d80c40a4fa9fbc4fc and
 # `git status --porcelain` clean for meshes/{gate,gate_repair,gate_rescue,torpedo}. Step-4 additions
@@ -29,64 +11,63 @@ provenance:
 # basenames resolve next to each model.dae (gate has no textures). Import rules to keep:
 # Assimp Collada IGNORE_UP_DIRECTION=true, node hierarchy, white texture tint, pack-relative textures.
 assets:
-- {id: gate_mesh, path: assets/gate/model.dae, required_from_step: 3, status: present, sha256: 32c407fcb9fcd9c6aff01273de63219b41d79a2565715c85eeaa49071b60ede5, source: "riptide_gui riptide_meshes/meshes/gate/model.dae @907c9ded"}
-- {id: gate_repair_mesh, path: assets/gate_repair/model.dae, required_from_step: 3, status: present, sha256: 14133dacc620198f7ae3ac7f98301237177f2c3498d5da76cc2bab2ee59e9953, source: "riptide_gui riptide_meshes/meshes/gate_repair/model.dae @907c9ded"}
-- {id: gate_repair_texture, path: assets/gate_repair/Task1_SurveyRepair_Fixed.png, required_from_step: 3, status: present, sha256: 5066157d498876da3b0366d0a1872684b1f7bc38884f80a929917716ef7a1928, source: "riptide_gui riptide_meshes/meshes/gate_repair/Task1_SurveyRepair_Fixed.png @907c9ded"}
-- {id: gate_rescue_mesh, path: assets/gate_rescue/model.dae, required_from_step: 3, status: present, sha256: 1c3b5f5d13539ab5c3540136c0c42e861d52a78a805365ba5db00516c65315a8, source: "riptide_gui riptide_meshes/meshes/gate_rescue/model.dae @907c9ded"}
-- {id: gate_rescue_texture, path: assets/gate_rescue/Task1_SearchRescue_Fixed.png, required_from_step: 3, status: present, sha256: b672a1d01c0468532a2cb87d5a466f6406db494f48daf09b738d4528cbb218a0, source: "riptide_gui riptide_meshes/meshes/gate_rescue/Task1_SearchRescue_Fixed.png @907c9ded"}
-- {id: torpedo_mesh, path: assets/torpedo/model.dae, required_from_step: 3, status: present, sha256: 0d45476fb0c24d9acf508b5cad95060a51b85373ed5c131813541ca685ed754e, source: "riptide_gui riptide_meshes/meshes/torpedo/model.dae @907c9ded"}
-- {id: torpedo_texture, path: assets/torpedo/Task4_ver1_Fixed.png, required_from_step: 3, status: present, sha256: b6a5a8bc9ef0cde09a055296f9746b61be9b8d6961fe5504b46350649dbf4336, source: "riptide_gui riptide_meshes/meshes/torpedo/Task4_ver1_Fixed.png @907c9ded"}
+- {id: gate_mesh, path: assets/gate/model.dae}
+- {id: gate_repair_mesh, path: assets/gate_repair/model.dae}
+- {id: gate_repair_texture, path: assets/gate_repair/Task1_SurveyRepair_Fixed.png}
+- {id: gate_rescue_mesh, path: assets/gate_rescue/model.dae}
+- {id: gate_rescue_texture, path: assets/gate_rescue/Task1_SearchRescue_Fixed.png}
+- {id: torpedo_mesh, path: assets/torpedo/model.dae}
+- {id: torpedo_texture, path: assets/torpedo/Task4_ver1_Fixed.png}
 # Step-4 table collision meshes (PyBullet CPU prop world); copied byte-for-byte with cp.
-- {id: table_mesh, path: assets/table/table.obj, required_from_step: 4, status: present, sha256: 5a1d74b0c4c8691c673776ba284f9b2ba5e069d77f19bfafe464d9fed8dedd2e, source: "riptide_simulator c_simulator/collision_files/tasks/table.obj @07647eeb"}
-- {id: basket_helmet_mesh, path: assets/table/table_basket_helmet.obj, required_from_step: 4, status: present, sha256: ede76ab0c280dd38277301411fbebf5195575da788f49956d38ecd6abda95f3f, source: "riptide_simulator c_simulator/collision_files/tasks/table_basket_helmet.obj @07647eeb"}
-- {id: basket_warning_mesh, path: assets/table/table_basket_warning.obj, required_from_step: 4, status: present, sha256: ede76ab0c280dd38277301411fbebf5195575da788f49956d38ecd6abda95f3f, source: "riptide_simulator c_simulator/collision_files/tasks/table_basket_warning.obj @07647eeb"}
-- {id: pill_mesh, path: assets/table/table_pill.obj, required_from_step: 4, status: present, sha256: 534baeeccd98b78fd41ae145f0334a5e24f2515a467a84594d4ce95f6591a656, source: "riptide_simulator c_simulator/collision_files/tasks/table_pill.obj @07647eeb"}
-- {id: bandage_mesh, path: assets/table/table_bandage.obj, required_from_step: 4, status: present, sha256: 0fb179d57b4c7ba6d6941355e3274deb294bfdeb1a8c08f3a2e2598dc7eebc15, source: "riptide_simulator c_simulator/collision_files/tasks/table_bandage.obj @07647eeb"}
-- {id: nut_and_bolt_mesh, path: assets/table/table_nut_and_bolt.obj, required_from_step: 4, status: present, sha256: 534baeeccd98b78fd41ae145f0334a5e24f2515a467a84594d4ce95f6591a656, source: "riptide_simulator c_simulator/collision_files/tasks/table_nut_and_bolt.obj @07647eeb"}
-- {id: plug_mesh, path: assets/table/table_plug.obj, required_from_step: 4, status: present, sha256: 0fb179d57b4c7ba6d6941355e3274deb294bfdeb1a8c08f3a2e2598dc7eebc15, source: "riptide_simulator c_simulator/collision_files/tasks/table_plug.obj @07647eeb"}
+- {id: table_mesh, path: assets/table/table.obj}
+- {id: basket_helmet_mesh, path: assets/table/table_basket_helmet.obj}
+- {id: basket_warning_mesh, path: assets/table/table_basket_warning.obj}
+- {id: pill_mesh, path: assets/table/table_pill.obj}
+- {id: bandage_mesh, path: assets/table/table_bandage.obj}
+- {id: nut_and_bolt_mesh, path: assets/table/table_nut_and_bolt.obj}
+- {id: plug_mesh, path: assets/table/table_plug.obj}
 
-- {id: slalom_mesh, path: assets/slalom/model.dae, required_from_step: 3, status: present, sha256: ab2a771f16f9f0546362a986608eeb3af18a16e9d7e2b772c9b05c7178cf25bf, source: "riptide_gui riptide_meshes/meshes/slalom/model.dae @907c9ded"}
-- {id: bin_mesh, path: assets/bin/model.dae, required_from_step: 3, status: present, sha256: 3c99920f0cd42830336356365a4f0df2ac7504a22e7fdf136efde33265f509a9, source: "riptide_gui riptide_meshes/meshes/bin/model.dae @907c9ded"}
-- {id: bin_magnet_mesh, path: assets/bin_magnet/model.dae, required_from_step: 3, status: present, sha256: 3ee920af938c676da72ae13e6abda913c2039030abcf88dc334fe9b8a309de16, source: "riptide_gui riptide_meshes/meshes/bin_magnet/model.dae @907c9ded"}
-- {id: bin_vinyl_mesh, path: assets/bin_vinyl/model.dae, required_from_step: 3, status: present, sha256: fbb82e0c293401193fb2b1dab5052e1d1cdbf713544d9a520ca1168324ff5021, source: "riptide_gui riptide_meshes/meshes/bin_vinyl/model.dae @907c9ded"}
-- {id: bin_vinyl_blood_texture, path: assets/bin_vinyl/Task3_Blood_Fixed.png, required_from_step: 3, status: present, sha256: 0647f0001d15dfe8c8d28415028c8e93f5ece93d28c4521a4819c5991b99d59e, source: "riptide_gui riptide_meshes/meshes/bin_vinyl/Task3_Blood_Fixed.png @907c9ded"}
-- {id: bin_vinyl_fire_texture, path: assets/bin_vinyl/Task3_Fire_Fixed.png, required_from_step: 3, status: present, sha256: 36e2602834f76a1005c38561105ef89810cd37c446fa647657695be7af3a6e93, source: "riptide_gui riptide_meshes/meshes/bin_vinyl/Task3_Fire_Fixed.png @907c9ded"}
-- {id: octagon_buoy_mesh, path: assets/octagon_buoy/model.dae, required_from_step: 3, status: present, sha256: 7493cea169edd2ff215f79edb2eedc3b3f053767ef077faac0d40af6b55e619a, source: "riptide_gui riptide_meshes/meshes/octagon_buoy/model.dae @907c9ded"}
-- {id: octagon_buoy_texture, path: assets/octagon_buoy/Task5_Search_Fixed.png, required_from_step: 3, status: present, sha256: 4c1a4f7ac07b05a51e0408a69bd99f987c1c4e5b9da7b19a51dcf71a9da9ea84, source: "riptide_gui riptide_meshes/meshes/octagon_buoy/Task5_Search_Fixed.png @907c9ded"}
-- {id: octagon_compass_mesh, path: assets/octagon_compass/model.dae, required_from_step: 3, status: present, sha256: f7fbf799513fd2e1aa9727272bf4987e07017cc4ec56bb59692f90b16216eeee, source: "riptide_gui riptide_meshes/meshes/octagon_compass/model.dae @907c9ded"}
-- {id: octagon_compass_texture, path: assets/octagon_compass/Task5_Survey_Fixed.png, required_from_step: 3, status: present, sha256: fddafbc59bcf393c51a9d7531de69dca938e5231258c54fbba39362619cdb7c0, source: "riptide_gui riptide_meshes/meshes/octagon_compass/Task5_Survey_Fixed.png @907c9ded"}
-- {id: octagon_hammer_and_wrench_mesh, path: assets/octagon_hammer_and_wrench/model.dae, required_from_step: 3, status: present, sha256: 64b1c6185fa9f93e190a30b0a3bdde1c8fc3c283fa57ae805fff5fef9ad02b38, source: "riptide_gui riptide_meshes/meshes/octagon_hammer_and_wrench/model.dae @907c9ded"}
-- {id: octagon_hammer_and_wrench_texture, path: assets/octagon_hammer_and_wrench/Task5_Repair_Fixed.png, required_from_step: 3, status: present, sha256: bda8e8c2982b1d51b01c165c7f21fbf67cda5725f4c9e4c22c7c2431a13680c7, source: "riptide_gui riptide_meshes/meshes/octagon_hammer_and_wrench/Task5_Repair_Fixed.png @907c9ded"}
-- {id: octagon_sos_mesh, path: assets/octagon_sos/model.dae, required_from_step: 3, status: present, sha256: 889932acae53c335bb0b526453d1d36398b3eefaa6c9b0f4ca8b232a76482a1b, source: "riptide_gui riptide_meshes/meshes/octagon_sos/model.dae @907c9ded"}
-- {id: octagon_sos_texture, path: assets/octagon_sos/Task5_Rescue_Fixed.png, required_from_step: 3, status: present, sha256: 58dd02090cc7fec1daeebf1ea63f4fdf64c59dcf072fb864c791d8fff9d2d579, source: "riptide_gui riptide_meshes/meshes/octagon_sos/Task5_Rescue_Fixed.png @907c9ded"}
+- {id: slalom_mesh, path: assets/slalom/model.dae}
+- {id: bin_mesh, path: assets/bin/model.dae}
+- {id: bin_magnet_mesh, path: assets/bin_magnet/model.dae}
+- {id: bin_vinyl_mesh, path: assets/bin_vinyl/model.dae}
+- {id: bin_vinyl_blood_texture, path: assets/bin_vinyl/Task3_Blood_Fixed.png}
+- {id: bin_vinyl_fire_texture, path: assets/bin_vinyl/Task3_Fire_Fixed.png}
+- {id: octagon_buoy_mesh, path: assets/octagon_buoy/model.dae}
+- {id: octagon_buoy_texture, path: assets/octagon_buoy/Task5_Search_Fixed.png}
+- {id: octagon_compass_mesh, path: assets/octagon_compass/model.dae}
+- {id: octagon_compass_texture, path: assets/octagon_compass/Task5_Survey_Fixed.png}
+- {id: octagon_hammer_and_wrench_mesh, path: assets/octagon_hammer_and_wrench/model.dae}
+- {id: octagon_hammer_and_wrench_texture, path: assets/octagon_hammer_and_wrench/Task5_Repair_Fixed.png}
+- {id: octagon_sos_mesh, path: assets/octagon_sos/model.dae}
+- {id: octagon_sos_texture, path: assets/octagon_sos/Task5_Rescue_Fixed.png}
 
-# Table display meshes (viewer, cameras); copied byte-for-byte (cp) from riptide_gui riptide_meshes/meshes/.
-# Same checkout as the assets above (gate/bin sha256 re-verified equal 2026-09-29). DAE texture <init_from>
+# Table display meshes (viewer, cameras) from riptide_gui riptide_meshes/meshes/. DAE texture <init_from>
 # basenames resolve next to each model.dae. Origins match the .obj collision assets of the same name.
-- {id: table_visual, path: assets/visual/table/model.dae, required_from_step: 4, status: present, sha256: 0671bea1d57426c23a000ea1a27e7d30c3d64d244dada3de85f4116b9fe8d78c, source: "riptide_gui riptide_meshes/meshes/table/model.dae @907c9ded"}
-- {id: basket_helmet_visual_task5_redcross_fixed, path: assets/visual/table_basket_helmet/Task5_RedCross_Fixed.png, required_from_step: 4, status: present, sha256: 1b6b33cd19bd0f63ca640262d3f76dabb847e5531032e8fc4e15673e43af0607, source: "riptide_gui riptide_meshes/meshes/table_basket_helmet/Task5_RedCross_Fixed.png @907c9ded"}
-- {id: basket_helmet_visual, path: assets/visual/table_basket_helmet/model.dae, required_from_step: 4, status: present, sha256: a7c114784418914efc3bb4b5f94728827f20454d54cdfc7720e7dd7072dc30f8, source: "riptide_gui riptide_meshes/meshes/table_basket_helmet/model.dae @907c9ded"}
-- {id: basket_warning_visual_task5_warning_fixed, path: assets/visual/table_basket_warning/Task5_Warning_Fixed.png, required_from_step: 4, status: present, sha256: 12080a50fdcc92cbbf7b0216ce29498fbd3290500f272aa8377b8687a8de5141, source: "riptide_gui riptide_meshes/meshes/table_basket_warning/Task5_Warning_Fixed.png @907c9ded"}
-- {id: basket_warning_visual, path: assets/visual/table_basket_warning/model.dae, required_from_step: 4, status: present, sha256: 0d1bba8cf3a8b2469f7a9b9798924d5b12eba404a068a38bf286d2ab20c37b81, source: "riptide_gui riptide_meshes/meshes/table_basket_warning/model.dae @907c9ded"}
-- {id: pill_visual_task5_pill_fixed, path: assets/visual/table_pill/Task5_Pill_Fixed.png, required_from_step: 4, status: present, sha256: c4b51b42759f55d38c5c68602302a24a0235ce6c8a26930e33abc9fe3dedc80a, source: "riptide_gui riptide_meshes/meshes/table_pill/Task5_Pill_Fixed.png @907c9ded"}
+- {id: table_visual, path: assets/visual/table/model.dae}
+- {id: basket_helmet_visual_task5_redcross_fixed, path: assets/visual/table_basket_helmet/Task5_RedCross_Fixed.png}
+- {id: basket_helmet_visual, path: assets/visual/table_basket_helmet/model.dae}
+- {id: basket_warning_visual_task5_warning_fixed, path: assets/visual/table_basket_warning/Task5_Warning_Fixed.png}
+- {id: basket_warning_visual, path: assets/visual/table_basket_warning/model.dae}
+- {id: pill_visual_task5_pill_fixed, path: assets/visual/table_pill/Task5_Pill_Fixed.png}
 # pill/nut_and_bolt: the upstream exports assigned every triangle to the vinyl material, the body faces at UV (0,0)
 # (a transparent texel). Repaired copies: those 260 triangles moved to the file's own dark-plastic Material.006.
-- {id: pill_visual, path: assets/visual/table_pill/model.dae, required_from_step: 4, status: present, sha256: 89a1568f6318a0752f8517dcb7d9767775c1ec701b5a46f632a4094d8de25be7, source: "riptide_gui riptide_meshes/meshes/table_pill/model.dae @907c9ded, body faces reassigned to Material.006"}
-- {id: bandage_visual_task5_bandaid_fixed, path: assets/visual/table_bandage/Task5_BandAid_Fixed.png, required_from_step: 4, status: present, sha256: 6e94ab1a131c683c5732674432b9e124996f38095061193b7d6e9a14fdee035c, source: "riptide_gui riptide_meshes/meshes/table_bandage/Task5_BandAid_Fixed.png @907c9ded"}
-- {id: bandage_visual, path: assets/visual/table_bandage/model.dae, required_from_step: 4, status: present, sha256: 95057a57e7efdb47bb3be29b3edf629b13b89afb4a7d626e4a0b85a4868ae8fa, source: "riptide_gui riptide_meshes/meshes/table_bandage/model.dae @907c9ded"}
-- {id: nut_and_bolt_visual_task5_nutbolt_fixed, path: assets/visual/table_nut_and_bolt/Task5_NutBolt_Fixed.png, required_from_step: 4, status: present, sha256: 9294e4812c4a7519b589c7c873e8cab9802f20157caf9361a70de8f797b6badf, source: "riptide_gui riptide_meshes/meshes/table_nut_and_bolt/Task5_NutBolt_Fixed.png @907c9ded"}
-- {id: nut_and_bolt_visual, path: assets/visual/table_nut_and_bolt/model.dae, required_from_step: 4, status: present, sha256: d484ef3540c63b57a2ec3ff6c98c76fa6c0d400273517354ed2a070f2ce04ab9, source: "riptide_gui riptide_meshes/meshes/table_nut_and_bolt/model.dae @907c9ded, body faces reassigned to Material.006"}
-- {id: plug_visual_task5_electric_fixed, path: assets/visual/table_plug/Task5_Electric_Fixed.png, required_from_step: 4, status: present, sha256: 17ae6152f92af33f5429a1078aad8de1c167185ec440f6b16d7ae7937d3d9d6b, source: "riptide_gui riptide_meshes/meshes/table_plug/Task5_Electric_Fixed.png @907c9ded"}
-- {id: plug_visual, path: assets/visual/table_plug/model.dae, required_from_step: 4, status: present, sha256: c221f5ec0fae0b134ec196da54f23ef8fb7a512d0a9e174babb5165e9899d47f, source: "riptide_gui riptide_meshes/meshes/table_plug/model.dae @907c9ded"}
+- {id: pill_visual, path: assets/visual/table_pill/model.dae}
+- {id: bandage_visual_task5_bandaid_fixed, path: assets/visual/table_bandage/Task5_BandAid_Fixed.png}
+- {id: bandage_visual, path: assets/visual/table_bandage/model.dae}
+- {id: nut_and_bolt_visual_task5_nutbolt_fixed, path: assets/visual/table_nut_and_bolt/Task5_NutBolt_Fixed.png}
+- {id: nut_and_bolt_visual, path: assets/visual/table_nut_and_bolt/model.dae}
+- {id: plug_visual_task5_electric_fixed, path: assets/visual/table_plug/Task5_Electric_Fixed.png}
+- {id: plug_visual, path: assets/visual/table_plug/model.dae}
 
 # Procedural course geometry of the original renderer (crate lattice/liner, octagon PVC + hangers) as GLB, plus the
-# magnet-light housing parts copied byte-for-byte (cp) from riptide_simulator camera_faker/models/magnet_lights/ @bf8b50a.
-- {id: crate_lattice_mesh, path: assets/course/crate_lattice.glb, required_from_step: 4, status: present, sha256: df83a3e1152ed401cd863a5197012c7ee26419a184af77a3ba7542fc34dc6b2d, source: "generated by tools/generate_course_geometry.py from the task pack dimensions"}
-- {id: crate_liner_mesh, path: assets/course/crate_liner.glb, required_from_step: 4, status: present, sha256: 7860f269cf505ae5be28b704dfc024c986006a5a7ace0d3bffb4d0502e835d1b, source: "generated by tools/generate_course_geometry.py from the task pack dimensions"}
-- {id: octagon_ring_mesh, path: assets/course/octagon_ring.glb, required_from_step: 4, status: present, sha256: 990a8cb14714a71f2441a3c87ddb3845ad3afdb964cad01b64c275e53e4f30e5, source: "generated by tools/generate_course_geometry.py from the task pack dimensions"}
-- {id: magnet_housing_mesh, path: assets/course/magnet_lights/housing.glb, required_from_step: 4, status: present, sha256: a44eb36aa35aeb0afaa9d111e3b9c516acca3d30344981c803a081a1a60ccc91, source: "riptide_simulator camera_faker/models/magnet_lights/housing.glb @bf8b50a"}
-- {id: magnet_cover_mesh, path: assets/course/magnet_lights/cover.glb, required_from_step: 4, status: present, sha256: 983f6a4a38b8cf5fd0bad2ded5ac5259c6eae37c603c4dbcc2b696e5bc77af32, source: "riptide_simulator camera_faker/models/magnet_lights/cover.glb @bf8b50a"}
-- {id: magnet_leds_mesh, path: assets/course/magnet_lights/leds.glb, required_from_step: 4, status: present, sha256: 5059dc4c68f70e02fb5ee860a58c11907d33a2f10f458330143a167668dc5c33, source: "riptide_simulator camera_faker/models/magnet_lights/leds.glb @bf8b50a"}
+# magnet-light housing parts copied byte-for-byte (cp) from riptide_simulator camera_faker/models/magnet_lights/.
+- {id: crate_lattice_mesh, path: assets/course/crate_lattice.glb}
+- {id: crate_liner_mesh, path: assets/course/crate_liner.glb}
+- {id: octagon_ring_mesh, path: assets/course/octagon_ring.glb}
+- {id: magnet_housing_mesh, path: assets/course/magnet_lights/housing.glb}
+- {id: magnet_cover_mesh, path: assets/course/magnet_lights/cover.glb}
+- {id: magnet_leds_mesh, path: assets/course/magnet_lights/leds.glb}
 
 tasks: [gate.yaml, torpedo.yaml, table.yaml, slalom.yaml, bins.yaml, surface.yaml]   # pack-relative task include files (kind task)
 
@@ -236,21 +217,3 @@ ui:
   - {key: heading_bonus, label: Heading coin bonus}
   - {key: role_bonus, label: Role coin bonus (gate side = coin-flip role)}
   actions: []
-
-# Inactive: remaining RepairCompTree subtrees, recorded so the step-4 schema does not churn.
-pending:
-- id: random_pinger
-  category: task
-  required_from_step: 4
-  blocker: no acoustic source placement or amplitude model exists (robot pending pinger, O3/O4)
-  known: {subtree: RandomPingerTree, hook: pinger_first/pinger_second tied to first scored deploy/restore row}
-- id: return_home
-  category: task
-  required_from_step: 4
-  blocker: only needs hook logic; geometry is gate.reverse_pass
-  known: {subtree: ReturnHomeTree, hook: home 300 when eligible and envelope top below surface}
-- id: prep_and_dive
-  category: task
-  required_from_step: 2
-  blocker: bridge wiring only; no scoring
-  known: {subtrees: [PrepForRun, WaitForKillSwitch, Dive], bridge: [software_kill, firmware_kill, reload, arm]}

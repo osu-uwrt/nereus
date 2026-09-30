@@ -1,5 +1,4 @@
 # Talos rotor animation for the ROS pool viewer, driven by realized thruster forces (newtons).
-# Ported from riptide_simulator camera_faker/models/talos3/thrusters.yaml (docs/PROVENANCE.md).
 # Pivots/axes are in the CAD origin frame (the robot pack `cad` frame) where each rotor asset is authored;
 # `thruster` names a robot-pack thruster id (force-array index comes from the bridge thrusters.order),
 # `asset` a robot-pack asset id (rotor meshes are already listed in the pack visuals).

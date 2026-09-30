@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer sim_run.cpp; see docs/PROVENANCE.md.
 #include "ros_runtime.hpp"
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/empty.hpp>

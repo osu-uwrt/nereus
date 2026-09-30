@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker/test/viewer_input.cpp; see docs/PROVENANCE.md.
 #include <gtest/gtest.h>
 #include "viewer_input.hpp"
 #include <glm/gtc/matrix_transform.hpp>

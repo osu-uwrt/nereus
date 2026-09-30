@@ -2,8 +2,6 @@
 """Verify a relocated CPU asset install with no graphics, simulation or original workspace."""
 
 import argparse
-import hashlib
-import json
 import shutil
 import sys
 import tempfile
@@ -16,10 +14,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--preset", choices=("assets", "assets-asan"), default="assets")
     args = parser.parse_args()
-    manifest = json.loads((ROOT / "content/visuals/talos/provenance/manifest.json").read_text())
-    for name, expected in manifest["outputs_sha256"].items():
-        if hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != expected:
-            raise ValueError(f"visual resource hash mismatch: {name}")
     run([sys.executable, ROOT / "tools/check.py", "--preset", args.preset])
     cmake = shutil.which("cmake")
     env = clean_environment()
@@ -32,7 +26,6 @@ def main():
             "libraries/spatial",
             "libraries/rendering",
             "content/visuals",
-            "docs",
         ):
             shutil.copytree(ROOT / folder, source / folder)
         for file in ("CMakeLists.txt", "LICENSE", "NOTICE"):
@@ -84,7 +77,7 @@ def main():
             cwd=temp,
             env=env,
         )
-    print("Pinned resources and relocated CPU asset consumer passed.")
+    print("Relocated CPU asset consumer passed.")
 
 
 if __name__ == "__main__":

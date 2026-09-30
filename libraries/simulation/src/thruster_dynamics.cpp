@@ -1,4 +1,3 @@
-// Adapted from OSU UWRT riptide_simulator. See docs/PROVENANCE.md.
 #include "detail/thruster_dynamics.hpp"
 #include <algorithm>
 #include <cmath>

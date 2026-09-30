@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer test/gizmo_input.cpp; see docs/PROVENANCE.md.
 #include "robotics/ros_viewer/panels/composition.hpp"
 #include "robotics/ros_viewer/panels/pose_math.hpp"
 #include <imgui.h>

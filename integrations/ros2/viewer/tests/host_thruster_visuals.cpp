@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker/test/thruster_visuals.cpp; see docs/PROVENANCE.md.
 #include "thruster_visuals.hpp"
 #include <gtest/gtest.h>
 #include <limits>

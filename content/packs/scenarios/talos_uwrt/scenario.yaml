@@ -1,20 +1,8 @@
 # Selects sibling packs (paths relative to THIS folder)
 # and owns everything run-specific: world frame, placements, initial state, seed, run options.
-schema_version: 1
 kind: scenario
 id: talos_uwrt_repair_2026
 description: Talos + unchanged UWRT stack on the original 2026 layout, RepairCompTree role.
-provenance:
-  revisions:
-    riptide_simulator: 07647eebe706f96ea7b76db3cc9802735a146698
-  worktree_checked: '2026-09-29'
-  sources:
-  - {path: riptide_simulator/c_simulator/tasks/2026/config/mapping.yaml, sha256: 7799e049ca39c967914244fcdb9095a3f76e0c76f9a48dabcf26183d8672fa15, hash_basis: git_revision}
-  - {path: riptide_simulator/c_simulator/src/physics_simulator.cpp, sha256: d4b05d378425bfdb59773ba6b20f0db44f14469c2be4eb0ccdfb69824ff05e14, hash_basis: git_revision}
-  - {path: riptide_simulator/c_simulator/tasks/2026/competition.yaml, sha256: 196552bfa71f40d6c5db5b62ae70b52a8d653c645a8ac03366aaec4e9ac2c21b, hash_basis: worktree}
-  derived_from:
-  - {path: content/examples/talos_navigation_pool.yaml, sha256: 6a133fc381570167baaeba7d4fbcdc2ab24a0746a2ae6e2b70608cdc44d0121f}
-assets: []
 
 robot: ../../robots/talos
 pool: ../../pools/robosub_2026

@@ -2,7 +2,6 @@
 # Task-local frame = slalom_front (the original slalom_parent with the front row at identity, +X toward
 # the approach side, +Z up). Rows are the original slalom_front/middle/back mapping frames; the scenario
 # places the task. Judge: scoring.py CourseJudge.update slalom loop; rows scored by the pack hook.
-schema_version: 1
 kind: task
 id: slalom
 description: Three slalom rows crossed on the reference origin; side and depth are scored by the hook.

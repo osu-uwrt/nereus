@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker/test/detection_pose.cpp; see docs/PROVENANCE.md.
 #include <gtest/gtest.h>
 #include "detection_pose.hpp"
 #include <iostream>

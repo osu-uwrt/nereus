@@ -2,8 +2,6 @@
 # Everything the bridge does not describe in the scenario document lives here: window branding,
 # camera card names, focus presets, landmark map, viewer-only robot visuals, topic names of the
 # visual-state streams, and the fallback task `ui` block (used until the task pack carries one).
-# Nothing here names a file of the old simulator; hardcoded names of the old pool_viewer became data
-# (docs/PROVENANCE.md).
 schema_version: 1
 
 # Latched std_msgs/String scenario document published by the bridge (transient_local, reliable, depth 1).

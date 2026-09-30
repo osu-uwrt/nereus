@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer (panel_layout.hpp); see docs/PROVENANCE.md.
 #pragma once
 #include <imgui.h>
 #include <algorithm>

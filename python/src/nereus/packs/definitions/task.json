@@ -4,9 +4,6 @@
   "description": "Authoritative loader definition: published JSON Schemas and the type registry are generated from this corpus. One task definition in its own task-local frame, composed from generic built-in props, regions, events and declarative scoring. No task, robot or year specific types. Id references (region, prop, asset, frame) are semantic checks.",
   "type": "object",
   "properties": {
-    "schema_version": {
-      "const": 1
-    },
     "kind": {
       "const": "task"
     },
@@ -65,7 +62,6 @@
     }
   },
   "required": [
-    "schema_version",
     "kind",
     "id",
     "frames",

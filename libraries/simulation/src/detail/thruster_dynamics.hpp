@@ -1,4 +1,3 @@
-// Adapted from OSU UWRT riptide_simulator. See docs/PROVENANCE.md.
 #pragma once
 #include <Eigen/Dense>
 #include <deque>

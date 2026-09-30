@@ -10,10 +10,8 @@ sourced workspace works; fields are set by name through ROS introspection.
 ## Top level
 
 ```yaml
-schema_version: 1
 kind: bridge
 id: my_stack
-assets: []
 requires_robot: my_auv           # refuses to run with a different robot pack
 namespace: /my_auv               # prefix for every relative topic and service
 node_name: physics_simulator
@@ -26,12 +24,10 @@ clock:                           # /clock for use_sim_time stacks
   epoch: system_time_at_start
   rate_hz: 500
   reset_policy: preserve_ros_epoch_and_time
-  publish_before_data: true
   real_time_factor: 1.0
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
 thrusters:                       # your controller's force array -> the robot pack's thruster order
   order: [VUS, VUP, HUS, HUP, HLS, HLP, VLS, VLP]
-  input_unit: N
   input_scales: [1, 1, 1, 1, 1, 1, 1, 1]
   reject: [wrong_length, nonfinite]
 kill: {command_stream: software_kill, state_stream: firmware_kill}   # stream ids below
@@ -96,7 +92,7 @@ tf:
   static:                                  # fixed frames from the robot pack
   - {parent: my_auv/ffc_camera_link, child: my_auv/ffc_left_camera_optical_frame, from_frame: ffc_mount, to_frame: ffc_left_optical}
   lookup:                                  # frames your stack owns; the bridge reads them
-  - {parent: world, child: map, owner: "mapping node"}
+  - {parent: world, child: map}   # published by the mapping node
   never_publish: [my_auv/base_link, map]   # guard against publishing over your stack
 ```
 

@@ -27,4 +27,4 @@ re-record them with the capture scripts in `libraries/session/tests/fixtures/` a
 ## Commits
 
 One coherent change per commit, with its tests and docs. The message says what changed and why, and how it was
-checked. Content copied from other projects gets a line in `docs/PROVENANCE.md`.
+checked.

@@ -77,17 +77,14 @@ class ScenarioTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.directory.cleanup()
 
-    def test_generic_provenance_free_sensor_only_scenario(self) -> None:
+    def test_generic_sensor_only_scenario(self) -> None:
         resolved = resolve_scenario(write_generic_packs(self.root))
         self.assertEqual(resolved.robot["id"], "synth")
-        self.assertNotIn("provenance", resolved.robot)
         assert resolved.bridge is not None
         self.assertNotIn("thrusters", resolved.bridge)
         self.assertEqual([item["id"] for item in resolved.task_definitions], ["hoop"])
         self.assertEqual(resolved.run_options, {"timed": False})
-        self.assertEqual([item["id"] for item in resolved.unresolved], ["hoop_mesh"])
-        self.assertEqual(resolved.unresolved[0]["required_from_step"], 3)
-        self.assertFalse(hasattr(resolved, "unresolved_through"))  # diagnostics, not dispatch
+        self.assertEqual(resolved.unresolved, [])
         self.assertTrue(all(source.is_file() for source in resolved.sources))
 
     def test_bridge_is_optional(self) -> None:
@@ -109,7 +106,7 @@ class ScenarioTests(unittest.TestCase):
         for source in manifest["sources"]:
             path = (self.root / "a" / "scenario" / source["path"]).resolve()
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), source["sha256"])
-        self.assertEqual(manifest["unresolved"][0]["id"], "hoop_mesh")
+        self.assertEqual(manifest["unresolved"], [])
 
     def test_any_source_change_changes_manifest_identity(self) -> None:
         scenario = write_generic_packs(self.root)
@@ -120,13 +117,9 @@ class ScenarioTests(unittest.TestCase):
         self.assertNotEqual(after["content_sha256"], before)
 
     def test_talos_packs_resolve_strictly_and_round_trip(self) -> None:
-        resolved = resolve_scenario(TALOS / "scenarios" / "talos_uwrt")
-        # Every asset and hook is present; only declared-pending sensors/tasks remain unresolved.
-        kinds = {item["kind"] for item in resolved.unresolved}
-        self.assertLessEqual(kinds, {"pending_sensor", "pending_task"})
+        resolved = resolve_scenario(TALOS / "scenarios" / "talos_uwrt", strict=True)
+        self.assertEqual(resolved.unresolved, [])
         self.assertEqual(resolved.run_options["role"], "repair")
-        with self.assertRaises(PackError):
-            resolve_scenario(TALOS / "scenarios" / "talos_uwrt", strict=True)
         for path in sorted(TALOS.rglob("*.yaml")):
             if path.name != "exceptions.yaml":
                 self.assertEqual(load_pack(path).dumps(), path.read_text(), path.name)
@@ -193,10 +186,11 @@ class CommandLineTests(unittest.TestCase):
             dump = Path(directory) / "resolved.json"
             code, out, _ = self.run_cli("validate", str(scenario), "--dump", str(dump))
             self.assertEqual(code, 0)
-            self.assertIn("unresolved asset tasks:hoop_mesh (step 3)", out)
+            self.assertIn("OK scenario", out)
             self.assertEqual(json.loads(dump.read_text())["format"],
                              "nereus.resolved_scenario")
-            code, _, err = self.run_cli("validate", str(scenario), "--strict")
+            (Path(directory) / "tasks" / "assets" / "hoop.dae").unlink()
+            code, _, err = self.run_cli("validate", str(scenario))
             self.assertEqual(code, 1)
             self.assertIn("hoop_mesh", err)
         code, out, _ = self.run_cli("schema", "robot")

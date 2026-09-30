@@ -31,9 +31,7 @@ def _validate(arguments: argparse.Namespace) -> int:
         return 1
     print(f"OK {kind} {path}")
     for item in gaps:
-        step = item["required_from_step"]
-        print(f"  unresolved {item['kind']} {item['pack']}:{item['id']}"
-              + (f" (step {step})" if step is not None else ""))
+        print(f"  unresolved {item['kind']} {item['pack']}:{item['id']}")
     return 0
 
 

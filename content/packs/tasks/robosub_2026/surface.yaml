@@ -2,7 +2,6 @@
 # Task-local frame = the original octagon frame (centre of the octagon, +Z up). The scenario places it
 # at its world pose (derived from the table placement, mapping.yaml octagon under table).
 # Judge: scoring.py CourseJudge.update surface/facing/turn logic; rows scored by the pack hook.
-schema_version: 1
 kind: task
 id: surface
 description: Octagon surfacing, facing-image dwell and the basket-count turn judge.

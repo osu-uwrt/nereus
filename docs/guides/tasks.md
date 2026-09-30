@@ -13,7 +13,6 @@ Everything in a task file is in the task's **local frame**; the [scenario](cours
 pool with `task_placements`.
 
 ```yaml
-schema_version: 1
 kind: task
 id: gate
 description: Start gate with two role halves.
@@ -66,11 +65,10 @@ scoring: []
 ## tasks.yaml
 
 ```yaml
-schema_version: 1
 kind: tasks
 id: robosub_2026
 assets:                               # every mesh/texture the task files use
-- {id: gate_mesh, path: assets/gate/model.dae, source: "riptide_meshes", required_from_step: 4, status: present}
+- {id: gate_mesh, path: assets/gate/model.dae}
 tasks: [gate.yaml, torpedo.yaml, table.yaml]
 requires:                             # the robot must have these mechanisms
 - {task: table, mechanism_type: claw, min_count: 1}

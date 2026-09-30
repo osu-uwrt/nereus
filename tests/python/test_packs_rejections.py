@@ -8,8 +8,7 @@ from pathlib import Path
 from nereus.packs import PackError, load_pack, resolve_scenario
 from test_packs_fixtures import BRIDGE, HOOP, POOL, ROBOT, SCENARIO, TASKS, write_generic_packs
 
-HOOP_ASSET = "path: assets/hoop.dae, source: modelled for tests, required_from_step: 3"
-THRUSTERS = "thrusters: {{order: {order}, input_unit: N, input_scales: {scales}, reject: []}}\n"
+THRUSTERS = "thrusters: {{order: {order}, input_scales: {scales}, reject: []}}\n"
 SENSOR_LINE = "  fields: {data: {from: reading.target_world_z}}\n"
 
 
@@ -131,7 +130,7 @@ class AssetRejectionTests(PackRejectionCase):
     def test_asset_path_escaping_pack_through_symlink(self) -> None:
         outside = Path(self._temporary.name) / "outside"
         outside.mkdir()
-        (self.root / "tasks" / "assets").mkdir()
+        (self.root / "tasks" / "assets").mkdir(exist_ok=True)
         try:
             (self.root / "tasks" / "assets" / "link").symlink_to(outside, target_is_directory=True)
         except (OSError, NotImplementedError) as error:
@@ -139,28 +138,9 @@ class AssetRejectionTests(PackRejectionCase):
         self.edit("tasks/tasks.yaml", "path: assets/hoop.dae", "path: assets/link/x.dae")
         self.assert_load_rejects("tasks", "escapes the pack")
 
-    def test_present_asset_with_wrong_sha256(self) -> None:
-        (self.root / "tasks" / "assets").mkdir()
-        (self.root / "tasks" / "assets" / "hoop.dae").write_bytes(b"mesh")
-        self.edit(
-            "tasks/tasks.yaml",
-            f"{HOOP_ASSET}, status: missing",
-            f"{HOOP_ASSET}, status: present, sha256: '{'0' * 64}'",
-        )
-        self.assert_load_rejects("tasks", "sha256 mismatch")
-
-    def test_present_asset_without_file(self) -> None:
-        self.edit(
-            "tasks/tasks.yaml",
-            f"{HOOP_ASSET}, status: missing",
-            f"{HOOP_ASSET}, status: present, sha256: '{'0' * 64}'",
-        )
+    def test_asset_without_file(self) -> None:
+        (self.root / "tasks" / "assets" / "hoop.dae").unlink()
         self.assert_load_rejects("tasks", "is not a file")
-
-    def test_missing_asset_whose_file_exists(self) -> None:
-        (self.root / "tasks" / "assets").mkdir()
-        (self.root / "tasks" / "assets" / "hoop.dae").write_bytes(b"mesh")
-        self.assert_load_rejects("tasks", "marked missing but")
 
 
 class HookRejectionTests(PackRejectionCase):
@@ -173,7 +153,6 @@ class HookRejectionTests(PackRejectionCase):
         hooks = [item for item in resolved.unresolved if item["kind"] == "hook_module"]
         self.assertEqual(len(hooks), 1)
         self.assertEqual(hooks[0]["id"], "x:f")
-        self.assertIsNone(hooks[0]["required_from_step"])
         with self.assertRaises(PackError) as caught:
             resolve_scenario(self.scenario, strict=True)
         self.assertIn("hook_module 'x:f'", str(caught.exception))
@@ -377,19 +356,8 @@ class FolderRejectionTests(PackRejectionCase):
 
 
 class StrictCompletenessTests(PackRejectionCase):
-    def test_valid_set_has_exactly_one_unresolved_asset(self) -> None:
-        resolved = resolve_scenario(self.scenario)
-        self.assertEqual(len(resolved.unresolved), 1)
-        item = resolved.unresolved[0]
-        self.assertEqual(item["kind"], "asset")
-        self.assertEqual(item["id"], "hoop_mesh")
-        self.assertEqual(item["required_from_step"], 3)
-
-    def test_strict_rejects_unresolved_asset(self) -> None:
-        with self.assertRaises(PackError) as caught:
-            resolve_scenario(self.scenario, strict=True)
-        self.assertIn("hoop_mesh", str(caught.exception))
-        self.assertIn("step 3", str(caught.exception))
+    def test_valid_set_resolves_strictly(self) -> None:
+        self.assertEqual(resolve_scenario(self.scenario, strict=True).unresolved, [])
 
     def test_fixture_texts_match_written_files(self) -> None:
         self.assertEqual((self.root / "tasks/tasks.yaml").read_text(encoding="utf-8"), TASKS)

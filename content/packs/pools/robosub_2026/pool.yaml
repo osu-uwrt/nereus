@@ -3,29 +3,10 @@
 # +Y along width, +Z up; water surface z = water_level_m. No robot, task or course layout here:
 # the scenario places this pool in its world frame (original map_origin_pool).
 # Current vectors keep world axes after placement (native world_placement semantics).
-schema_version: 1
 kind: pool
 id: robosub_2026
 description: Finite competition pool used by the original 2026 course (original id competition_pool).
-provenance:
-  revisions:
-    riptide_simulator: 07647eebe706f96ea7b76db3cc9802735a146698
-    riptide_core: 7f37bdd62ab90113844137a23806c89b23a8ab9b
-  worktree_checked: '2026-09-29'
-  sources:
-  - {path: riptide_simulator/c_simulator/worlds/competition_pool.yaml, sha256: 5c4e741d4ca0b763357c16a0f2e39fc3373f60d54d6e997bdf5811aa399858ae, hash_basis: git_revision}
-  - {path: riptide_simulator/c_simulator/src/physics_simulator.cpp, sha256: d4b05d378425bfdb59773ba6b20f0db44f14469c2be4eb0ccdfb69824ff05e14, hash_basis: git_revision}   # pool boxes
-  - {path: riptide_core/riptide_descriptions/config/talos.yaml, sha256: 7f0c5a703e3974401a23ce316dbedde1327e974b16105d39a97c7a64837bd664, hash_basis: git_revision}   # speed_of_sound
-  - {path: riptide_simulator/camera_faker/config/cameras.yaml, sha256: 5d2ae15a2e41b3f640c704c8b5799f21200eb4534091152bdc63f7f128a521e4, hash_basis: worktree}   # water optics
-  - {path: riptide_simulator/camera_faker/include/pool_viewer/renderer.hpp, sha256: 6029b5e2e2c6f7c4702cc3ba067d09169b37c45725d22948f66ff169c5cfed3b, hash_basis: git_revision}   # water tint
-  - {path: riptide_simulator/camera_faker/src/pool_viewer/main.cpp, sha256: 853c88210565b3f79917e649ff1938ce7ca0f5686a95e3a4e60d36ba5f96fe8a, hash_basis: git_revision}   # lighting parameters
-  - {path: riptide_simulator/camera_faker/launch/pool_viewer.launch.py, sha256: d0182e697a8bc82584726dad7a05fcf1dd4bfa2357012e46d3feb2857876563a, hash_basis: git_revision}   # lighting profile
-  - {path: riptide_simulator/camera_faker/launch/zedfaker.launch.py, sha256: ee1289eb98b8aaad50e50bd60e50d5213d31cf6d654c9e19e1020dacc4488621, hash_basis: git_revision}   # no lighting override
-  derived_from:
-  - {path: content/worlds/competition_pool.yaml, sha256: 4d1c73dd17b2c474ad825104da2f3d0dcfdb72dc1c8153ac1ad777a12178cd48}
-
 # Floor/wall/deck/lane appearance is generated geometry in the original renderer; no files.
-assets: []
 
 type: rectangular_pool
 parameters:
@@ -39,7 +20,6 @@ parameters:
   current_m_s: [0.0, 0.0, 0.0]
   current_oscillation_amplitude_m_s: [0.0, 0.0, 0.0]
   current_oscillation_frequency_hz: 0.1
-  speed_of_sound_m_s: 1500        # environment value; original source is the robot file talos.yaml
 
 # Static contact boxes in pool-local coordinates (same as native competition_pool.yaml).
 collision_boxes:
@@ -52,7 +32,6 @@ collision_boxes:
 # Sensor-affecting water appearance for offscreen cameras (step-3 exception). Not viewer UI.
 # cameras.yaml water.* values; tint is the Look default (renderer.hpp:70), not overridden by cameras.yaml.
 water_optics:
-  required_from_step: 3
   tint_rgb: [0.025, 0.22, 0.29]
   distance_scale: 1.88
   distance_power: 0.40
@@ -65,7 +44,6 @@ water_optics:
 # zedfaker.launch.py does not override it, so the node default indoor (main.cpp:394) is not what ran.
 # Other values: main.cpp:398-402 parameter defaults, not overridden by cameras.yaml or the launch files.
 lighting:
-  required_from_step: 3
   profile: outdoor
   direct_light: 1.0
   ambient_light: 0.8

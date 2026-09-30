@@ -1,5 +1,4 @@
 # Talos status LED bars for the ROS pool viewer (three emitters under the clear top of the port hull).
-# Ported from riptide_simulator c_simulator/robots/talos/config/status_lights.yaml (docs/PROVENANCE.md).
 # Poses are xyz + roll/pitch/yaw (radians) in the named robot-pack frame (the CAD origin frame `cad`),
 # metres; visual estimate from the supplied Talos photograph and CAD hull bounds.
 schema_version: 1

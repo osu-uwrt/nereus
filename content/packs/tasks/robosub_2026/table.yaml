@@ -3,7 +3,6 @@
 # rigid bodies, opposing-jaw finite-force grasp) per claw_world.py; source config:
 # talos_tasks.yaml claw.props / table_collision and mapping.yaml table children.
 # Events emitted by the prop world (task id table); scoring is stateful and stays with the pack hook.
-schema_version: 1
 kind: task
 id: table
 description: Table with four grabbable props and two baskets (helmet, warning); grasp, carry and drop.

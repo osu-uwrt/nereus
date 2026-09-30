@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer (panels/composition.hpp); see docs/PROVENANCE.md.
 #pragma once
 #include "robotics/ros_viewer/panels/capabilities.hpp"
 #include <yaml-cpp/yaml.h>

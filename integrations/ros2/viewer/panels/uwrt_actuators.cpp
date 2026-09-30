@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer uwrt_actuators.cpp; see docs/PROVENANCE.md.
 #include "ros_runtime.hpp"
 #include <riptide_msgs2/msg/actuator_status.hpp>
 #include <std_msgs/msg/bool.hpp>

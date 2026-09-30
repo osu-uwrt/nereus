@@ -10,14 +10,13 @@ follow ROS (x forward, y left, z up).
 ## Skeleton
 
 ```yaml
-schema_version: 1
 kind: robot
 id: my_auv
 description: My AUV.
 reference_frame: base_link      # the frame reported as "the robot pose" (TF, tasks, placement)
 
 assets:                         # every file the pack uses
-- {id: body_mesh, path: assets/body.glb, source: "CAD export 2026-09", required_from_step: 3, status: present}
+- {id: body_mesh, path: assets/body.glb}
 
 body: {...}                     # mass, inertia, hydrodynamics
 frames: {...}                   # rigid frame tree rooted at the centre of mass

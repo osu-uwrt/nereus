@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer test/panel_composition.cpp; see docs/PROVENANCE.md.
 #include "robotics/ros_viewer/panels/composition.hpp"
 #include <imgui.h>
 #include <cassert>

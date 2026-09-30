@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer simulation_rate.cpp; see docs/PROVENANCE.md.
 #include "ros_runtime.hpp"
 #include <rcl_interfaces/srv/get_parameters.hpp>
 #include <rcl_interfaces/srv/set_parameters.hpp>

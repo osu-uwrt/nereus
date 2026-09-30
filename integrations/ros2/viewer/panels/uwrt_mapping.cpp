@@ -1,4 +1,3 @@
-// Ported from riptide_simulator camera_faker pool_viewer uwrt_mapping.cpp; see docs/PROVENANCE.md.
 #include "ros_runtime.hpp"
 #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
 #include <chameleon_tf_msgs/action/model_frame.hpp>

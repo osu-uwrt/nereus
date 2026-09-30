@@ -4,9 +4,6 @@
   "description": "Authoritative loader definition: published JSON Schemas and the type registry are generated from this corpus. Robot data only: no ROS names, tasks or code. Frame/asset/mechanism id references and thruster/scale lengths are semantic checks.",
   "type": "object",
   "properties": {
-    "schema_version": {
-      "const": 1
-    },
     "kind": {
       "const": "robot"
     },
@@ -15,9 +12,6 @@
     },
     "description": {
       "type": "string"
-    },
-    "provenance": {
-      "$ref": "common.schema.json#/$defs/provenance"
     },
     "assets": {
       "type": "array",
@@ -81,19 +75,14 @@
     "scoring_envelope": {
       "$ref": "#/$defs/scoring_envelope"
     },
-    "pending": {
-      "$ref": "common.schema.json#/$defs/pending"
-    },
     "metadata": {
       "type": "object",
       "description": "Free non-executable annotations preserved verbatim by load/save; never interpreted."
     }
   },
   "required": [
-    "schema_version",
     "kind",
     "id",
-    "assets",
     "reference_frame",
     "body",
     "frames",
