@@ -17,3 +17,5 @@ First version for the team.
 - Pool packs describe their own lane lines and finish (`markings`, `surface`): floor and wall stripes
   at any position, angle, width and colour, with optional T ends and an evenly spaced `lane_grid`
   shorthand. The renderer no longer assumes the RoboSub layout, and the course map draws the lines.
+- `rpac_divewell` pool pack: Ohio State's RPAC dive well (25 m x 56 ft, 17 ft deep), with its eight
+  lap lines, staggered cross lines, diving lines and end-wall targets.
