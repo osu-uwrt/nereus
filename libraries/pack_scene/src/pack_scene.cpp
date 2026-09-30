@@ -155,7 +155,7 @@ void PackScene::buildPool() {
     const auto &at = placementJson.at("position_m");
     r::PoolGeometry geometry;
     geometry.dimensions = {p.at("length_m").get<float>(), p.at("width_m").get<float>(), p.at("depth_m").get<float>()};
-    // Placement height raises the water level (pack_runtime).
+    // Placement height raises the water level.
     geometry.water_level = static_cast<float>(p.at("water_level_m").get<double>() + at.at(2).get<double>());
     geometry.deck_height = p.at("deck_height_m").get<float>();
     const double yaw = placementJson.at("yaw_deg").get<double>();

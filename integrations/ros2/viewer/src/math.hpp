@@ -13,7 +13,7 @@
 #include <string>
 
 namespace robotics::ros_viewer::host {
-// Translation then roll/pitch/yaw about X, Y, Z (yaw applied last, like the original viewer).
+// Translation then roll/pitch/yaw about X, Y, Z (yaw applied last).
 inline glm::mat4 pose(const glm::vec3 &p, const glm::vec3 &rpy = {}) {
     return glm::translate(glm::mat4(1), p) * glm::rotate(glm::mat4(1), rpy.z, glm::vec3(0, 0, 1)) *
            glm::rotate(glm::mat4(1), rpy.y, glm::vec3(0, 1, 0)) * glm::rotate(glm::mat4(1), rpy.x, glm::vec3(1, 0, 0));

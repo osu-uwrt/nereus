@@ -1,6 +1,5 @@
 #pragma once
-// Deterministic recording SessionPort for core tests (the generic non-Talos layout of the Python
-// bridge tests): time advances one fixed step per advance(), every mutating call is recorded.
+// Deterministic recording SessionPort for core tests (a generic non-Talos layout): time advances one fixed step per advance(), every mutating call is recorded.
 #include "core.hpp"
 
 #include <robotics/session/scenario.hpp>

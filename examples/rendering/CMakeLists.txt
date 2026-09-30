@@ -1,5 +1,0 @@
-cmake_minimum_required(VERSION 3.22)
-project(SceneConsumer LANGUAGES CXX)
-find_package(Nereus REQUIRED CONFIG)
-add_executable(scene_demo main.cpp)
-target_link_libraries(scene_demo PRIVATE Nereus::scene_rendering)

@@ -1,4 +1,4 @@
-// Session equivalence with python session.Session (tasks disabled): scripted commands are replayed
+// Session (tasks disabled) against a recorded reference: scripted commands are replayed
 // and body state / payloads / mechanisms / sensors are compared every 50 ticks, plus results, feed,
 // counters and the run_score document builder. Reports ticks/s of the C++ session.
 #include "session_test_util.hpp"
@@ -46,8 +46,8 @@ Json checkpoint(Session &s, bool tasks) {
 
 void replay(const std::string &fixture_name, bool tasks) {
     const auto fixture = loadFixture(fixture_name);
-    // The Python reference scripts were captured with the run started at boot; the pack default
-    // (operator "start") is covered by the Python run-control tests.
+    // The reference scripts were recorded with the run started at boot, not the pack default
+    // (operator "start").
     auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     scenario.scenario["run"]["auto_start"] = true;
     const RulesRegistry rules = robotics::rules::standardRules();
@@ -144,15 +144,15 @@ void replay(const std::string &fixture_name, bool tasks) {
 
 } // namespace
 
-TEST(Session, ReplaysThePythonScriptWithTasksDisabled) {
+TEST(Session, ReplaysTheRecordedScriptWithTasksDisabled) {
     replay("session_reference.json", false);
 }
 
-TEST(Session, ReplaysThePythonScriptWithTasksAndRunControl) {
+TEST(Session, ReplaysTheRecordedScriptWithTasksAndRunControl) {
     replay("session_tasks_reference.json", true);
 }
 
-TEST(Session, RunSnapshotDocumentMatchesPython) {
+TEST(Session, RunSnapshotDocumentMatchesReference) {
     const auto fixture = loadFixture("session_reference.json");
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     for (const auto &c : fixture.at("run_snapshot_cases")) {

@@ -9,7 +9,7 @@
 namespace robotics::session_cameras {
 namespace {
 using Json = session::Json;
-constexpr double kNearPlaneM = 0.05; // original camera_faker clipping planes
+constexpr double kNearPlaneM = 0.05; // camera clipping planes
 constexpr double kFarPlaneM = 100.0;
 constexpr int kDefaultJpegQuality = 93;
 const char *const kEyes[2] = {"left", "right"};

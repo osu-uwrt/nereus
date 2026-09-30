@@ -1,6 +1,6 @@
 // nereus-sim <resolved.json> --output <run dir> [--sensors a,b] [--duration s]
 //                  [--no-cameras] [--always-cameras] [--validate-only]
-// The C++ simulator bridge (port of python -m nereus_ros): validates the bridge pack
+// The simulator bridge: validates the bridge pack
 // against the installed ROS types before the first step, then runs the session in real time and
 // writes resolved.json, execution.json, and on exit tasks.json and summary.json.
 #include "camera_sink.hpp"
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
     try {
         arguments = parse(argc, argv);
     } catch (const std::exception &error) {
-        std::cerr << "nereus_ros: " << error.what() << "\n";
+        std::cerr << "nereus-sim: " << error.what() << "\n";
         return 2;
     }
 
@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
         writeJson(arguments.output / "execution.json",
                   executionRecord(*resolved, *core, sensors, deferred, duration_ns, cameras.get()));
     } catch (const std::exception &error) {
-        std::cerr << "nereus_ros: " << error.what() << "\n";
+        std::cerr << "nereus-sim: " << error.what() << "\n";
         return 1;
     }
     if (arguments.validate_only) {
@@ -198,7 +198,7 @@ int main(int argc, char **argv) {
             reason = "interrupted";
     } catch (const std::exception &error) {
         reason = std::string("failed: ") + error.what();
-        std::cerr << "nereus_ros: " << reason << "\n";
+        std::cerr << "nereus-sim: " << reason << "\n";
         status = 1;
     }
     std::signal(SIGINT, SIG_IGN); // a repeated Ctrl-C must not cut the records
@@ -231,7 +231,7 @@ int main(int argc, char **argv) {
         }
         writeJson(arguments.output / "summary.json", summary);
     } catch (const std::exception &error) {
-        std::cerr << "nereus_ros: " << error.what() << "\n";
+        std::cerr << "nereus-sim: " << error.what() << "\n";
         status = 1;
     }
     node.reset();

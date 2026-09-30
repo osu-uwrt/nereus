@@ -1,4 +1,4 @@
-// Port of python/src/nereus/session.py: the single owner that advances the plant,
+// The single owner that advances the plant,
 // sensors, mechanisms, payloads, prop worlds and task observers.
 #include <robotics/session/session.hpp>
 

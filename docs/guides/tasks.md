@@ -75,9 +75,8 @@ requires:                             # the robot must have these mechanisms
 run_options:                          # chosen in the viewer before "Start run"
 - {key: role, type: choice, choices: [repair, rescue], default: repair}
 - {key: heading_coin, type: bool, default: true}
-scoring_hooks:
-- {module: hooks.rules_2026, function: evaluate, rules: robosub_2026, status_function: describe,
-   feed_function: feed, parameters: {...points and thresholds...}}
+scoring_rules:
+- {name: robosub_2026, parameters: {...points and thresholds...}}
 score_rows:                           # scorecard rows, in order
 - {key: gate, label: Gate passage / heading / role / style}
 outcome_counters: [success, wrong_target, blocked, miss]
@@ -95,11 +94,10 @@ ui:                                   # how the viewer presents the run
 
 ## Scoring rules
 
-`scoring_hooks[].rules` names a rules class compiled into the simulator (`extensions/rules/`, registered in
+`scoring_rules[].name` names a rules class compiled into the simulator (`extensions/rules/`, registered in
 `extensions/rules/registry.cpp`). A rules class gets the run state and the ordered events and returns score
 rows; `describe()` fills the scorecard's status fields and `feed()` the event list. `parameters` is passed through
 unchanged, so point values and thresholds stay in YAML.
 
 To score a new competition, add a class next to `robosub_2026/`, register it under a new name and point
-`rules:` at it. `module`/`function` name the matching Python hook used by the Python reference runtime; Python
-rules for the C++ simulator are planned.
+`name:` at it.

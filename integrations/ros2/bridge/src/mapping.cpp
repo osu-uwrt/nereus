@@ -250,7 +250,7 @@ Writer compileWriter(const introspection::MessageMembers *type, const Json &fiel
             const Spec spec = constantSpec(constant, at);
             const Setter set = makeSetter(ros, spec, at);
             const Value fixed = constantValue(constant);
-            // Range-check integer constants now, like the Python converter does at compile time.
+            // Range-check integer constants when the map is compiled.
             if (isIntBase(ros.type.base) && !ros.type.isArray())
                 checkRange(ros.type.base, fixed.asInt(), at);
             else if (isIntBase(ros.type.base) && ros.type.isArray())

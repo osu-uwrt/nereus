@@ -2,7 +2,7 @@
 # Task frame = the front row (+X toward the approach side, +Z up); the middle and back rows are frames below.
 kind: task
 id: slalom
-description: Three slalom rows crossed on the reference origin; side and depth are scored by the hook.
+description: Three slalom rows crossed on the reference origin; side and depth are scored by the rules.
 
 frames:
 - {id: slalom_front, position_m: [0.0, 0.0, 0.0], orientation_wxyz: [1, 0, 0, 0]}
@@ -74,4 +74,4 @@ events:
   type: pass_through
   parameters: {region: slalom_back, from_side: positive, to_side: negative, emits: [crossing_point_local, depth_overlap]}
 
-scoring: []   # same-side/other-side and depth points depend on the gate side: scored by the hook
+scoring: []   # same-side/other-side and depth points depend on the gate side: scored by the rules

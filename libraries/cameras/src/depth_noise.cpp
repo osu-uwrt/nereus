@@ -1,5 +1,4 @@
-// Empirical model ported from riptide_simulator 07647eebe706f96ea7b76db3cc9802735a146698,
-// camera_faker/include/pool_viewer/depth_noise.hpp. Parameters and pixels are caller-owned.
+// Empirical stereo depth noise model. Parameters and pixels are caller-owned.
 #include "depth_noise.hpp"
 #include <algorithm>
 #include <cmath>

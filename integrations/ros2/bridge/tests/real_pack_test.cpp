@@ -1,6 +1,5 @@
-// The bridge core over the real Session with the Talos/UWRT packs (port of test_bridge_mechanisms.py
-// and the placement/reset parts of test_bridge_review.py). Camera streams are removed like
-// --no-cameras; no middleware.
+// The bridge core over the real Session with the Talos/UWRT packs: mechanisms, placement and resets.
+// Camera streams are removed like --no-cameras; no middleware.
 #include "session_adapter.hpp"
 
 #include "core.hpp"

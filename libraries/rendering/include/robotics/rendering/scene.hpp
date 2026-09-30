@@ -64,7 +64,7 @@ struct Appearance {
     // the main view), reuses the shadow map of the last full draw when one exists, and skips the surface
     // reflection and bloom passes. Default false keeps every existing draw bit-identical.
     bool preview = false;
-    // Observer-only orbit focus marker (original viewer): a shaded, depth-tested yellow disc at this world
+    // Observer-only orbit focus marker: a shaded, depth-tested yellow disc at this world
     // point, sized to the camera distance. Unset (default) keeps every draw bit-identical; never set it
     // for sensor renders.
     std::optional<Eigen::Vector3f> focus;

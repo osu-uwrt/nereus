@@ -1,5 +1,5 @@
 #pragma once
-// Robot mechanisms compiled from robot-pack data (port of python/.../mechanisms.py).
+// Robot mechanisms compiled from robot-pack data:
 // launcher / dropper (slot release with shared cooldown groups, spring launch), claw (timed jaw
 // travel), magnet (passive). Arming guards and kill semantics come from robot.safety.
 // Released bodies belong to the caller; reload and reset never touch them.

@@ -90,7 +90,7 @@ requires:
 - {task: hoop, mechanism_type: dropper, min_count: 1}
 run_options:
 - {key: timed, type: bool, default: false}
-scoring_hooks: []
+scoring_rules: []
 """
 
 HOOP = """\

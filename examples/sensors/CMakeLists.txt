@@ -1,5 +1,0 @@
-cmake_minimum_required(VERSION 3.22)
-project(StandaloneSensors LANGUAGES CXX)
-find_package(Nereus 0.1 REQUIRED CONFIG)
-add_executable(sensor_demo main.cpp)
-target_link_libraries(sensor_demo PRIVATE Nereus::sensors)

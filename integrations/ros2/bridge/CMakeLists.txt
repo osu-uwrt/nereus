@@ -1,5 +1,4 @@
-# rclcpp simulator bridge (nereus-sim) over nereus_session; see integrations/ros2/python for the
-# reference Python bridge. nereus_bridge_core is middleware free (rosidl introspection only) and is
+# rclcpp simulator bridge (nereus-sim) over nereus_session. nereus_bridge_core is middleware free (rosidl introspection only) and is
 # tested against a fake session; the executable adds rclcpp, TF and the real Session adapter.
 find_package(rclcpp REQUIRED)
 find_package(rcpputils REQUIRED)
@@ -52,14 +51,4 @@ if(BUILD_TESTING)
     gtest_discover_tests(bridge_${test_name} DISCOVERY_MODE PRE_TEST
       PROPERTIES FIXTURES_REQUIRED session_resolved)
   endforeach()
-  # Live FastDDS comparison with the Python bridge; needs a sourced ROS 2 and the Python packages.
-  find_program(NEREUS_BRIDGE_ROS_PYTHON python3 PATHS /usr/bin NO_DEFAULT_PATH)
-  if(NEREUS_BRIDGE_ROS_PYTHON)
-    add_test(NAME bridge_live_smoke
-      COMMAND ${NEREUS_BRIDGE_ROS_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/live_smoke.py
-              $<TARGET_FILE:nereus-sim> ${nereus_resolved_talos}
-              ${PROJECT_SOURCE_DIR}/content/packs/scenarios/talos_uwrt)
-    set_tests_properties(bridge_live_smoke PROPERTIES FIXTURES_REQUIRED session_resolved TIMEOUT 300
-      RUN_SERIAL TRUE LABELS live)
-  endif()
 endif()

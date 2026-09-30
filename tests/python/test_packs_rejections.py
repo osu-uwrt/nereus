@@ -1,6 +1,5 @@
 """Negative tests for the pack loader: one textual mutation of a valid set per test."""
 
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -143,63 +142,15 @@ class AssetRejectionTests(PackRejectionCase):
         self.assert_load_rejects("tasks", "is not a file")
 
 
-class HookRejectionTests(PackRejectionCase):
-    HOOKS = "scoring_hooks: [{module: 'x', function: f, parameters: {}}]"
+class ScoringRulesRejectionTests(PackRejectionCase):
+    def test_rules_entry_needs_a_name(self) -> None:
+        self.edit("tasks/tasks.yaml", "scoring_rules: []", "scoring_rules: [{parameters: {}}]")
+        self.assert_load_rejects("tasks", "'name' is a required property")
 
-    def test_absent_hook_module_is_unresolved_not_an_error(self) -> None:
-        self.edit("tasks/tasks.yaml", "scoring_hooks: []", self.HOOKS)
-        load_pack(self.root / "tasks")
-        resolved = resolve_scenario(self.scenario)
-        hooks = [item for item in resolved.unresolved if item["kind"] == "hook_module"]
-        self.assertEqual(len(hooks), 1)
-        self.assertEqual(hooks[0]["id"], "x:f")
-        with self.assertRaises(PackError) as caught:
-            resolve_scenario(self.scenario, strict=True)
-        self.assertIn("hook_module 'x:f'", str(caught.exception))
-
-    def test_hook_file_is_never_imported(self) -> None:
-        self.edit(
-            "tasks/tasks.yaml",
-            "scoring_hooks: []",
-            "scoring_hooks: [{module: 'never_imported_hook', function: f, parameters: {}}]",
-        )
-        marker = self.root / "tasks" / "imported.marker"
-        (self.root / "tasks" / "never_imported_hook.py").write_text(
-            f"from pathlib import Path\nPath({str(marker)!r}).write_text('x')\n"
-            "raise SystemExit('hook imported')\n",
-            encoding="utf-8",
-        )
-        load_pack(self.root / "tasks")
-        resolved = resolve_scenario(self.scenario)
-        self.assertFalse(marker.exists())
-        self.assertNotIn("never_imported_hook", sys.modules)
-        self.assertFalse([item for item in resolved.unresolved if item["kind"] == "hook_module"])
-        self.assertIn(
-            (self.root / "tasks" / "never_imported_hook.py").resolve(), resolved.sources
-        )
-
-    def test_hook_module_escaping_pack(self) -> None:
-        self.edit(
-            "tasks/tasks.yaml",
-            "scoring_hooks: []",
-            "scoring_hooks: [{module: '..outside', function: f, parameters: {}}]",
-        )
-        self.assert_load_rejects("tasks", "/scoring_hooks/0/module")
-
-    def test_hook_module_resolving_through_symlink_out_of_pack(self) -> None:
-        outside = Path(self._temporary.name) / "outside"
-        outside.mkdir()
-        (outside / "hook.py").write_text("raise SystemExit('imported')\n", encoding="utf-8")
-        try:
-            (self.root / "tasks" / "linked").symlink_to(outside, target_is_directory=True)
-        except (OSError, NotImplementedError) as error:
-            self.skipTest(f"symlinks unavailable: {error}")
-        self.edit(
-            "tasks/tasks.yaml",
-            "scoring_hooks: []",
-            "scoring_hooks: [{module: 'linked.hook', function: f, parameters: {}}]",
-        )
-        self.assert_load_rejects("tasks", "escapes the pack")
+    def test_rules_entry_rejects_python_hook_fields(self) -> None:
+        self.edit("tasks/tasks.yaml", "scoring_rules: []",
+                  "scoring_rules: [{name: practice, module: rules, parameters: {}}]")
+        self.assert_load_rejects("tasks", "'module' was unexpected")
 
 
 class ScenarioRejectionTests(PackRejectionCase):
@@ -355,9 +306,9 @@ class FolderRejectionTests(PackRejectionCase):
         self.assert_resolve_rejects("selects a 'pool' pack")
 
 
-class StrictCompletenessTests(PackRejectionCase):
-    def test_valid_set_resolves_strictly(self) -> None:
-        self.assertEqual(resolve_scenario(self.scenario, strict=True).unresolved, [])
+class FixtureTests(PackRejectionCase):
+    def test_valid_set_resolves(self) -> None:
+        self.assertEqual(resolve_scenario(self.scenario).robot["id"], "synth")
 
     def test_fixture_texts_match_written_files(self) -> None:
         self.assertEqual((self.root / "tasks/tasks.yaml").read_text(encoding="utf-8"), TASKS)

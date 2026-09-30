@@ -1,6 +1,6 @@
 #pragma once
 // Bridge semantics without middleware: one owner steps the session and maps data both ways
-// (port of core.py). Everything here is deterministic in integer simulation ticks and fully
+// Everything here is deterministic in integer simulation ticks and fully
 // validated against the ROS types and native endpoints before the first step. Unknown
 // endpoints and unsupported actions fail at construction. Not thread safe except for
 // realTimeFactor(): the node serializes every other call on its stepping thread.

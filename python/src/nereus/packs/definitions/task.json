@@ -54,7 +54,7 @@
         "additionalProperties": false,
         "x-typed": "scoring"
       },
-      "description": "Declarative points; stateful rules belong to the pack scoring hook."
+      "description": "Declarative points; stateful scoring belongs to the pack's scoring rules."
     },
     "metadata": {
       "type": "object",

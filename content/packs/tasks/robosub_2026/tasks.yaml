@@ -1,4 +1,4 @@
-# RoboSub 2026 tasks: task files, assets, run options and scoring (hooks/rules_2026.py).
+# RoboSub 2026 tasks: task files, assets, run options and scoring rules.
 # The scenario places the tasks; robot requirements are by mechanism type, never robot id.
 kind: tasks
 id: robosub_2026
@@ -78,14 +78,10 @@ run_options:
 - {key: pinger_task, type: choice, choices: [none, deploy, restore], default: none}
 - {key: pinger_random, type: bool, default: false}
 
-# Scoring rules: a pure function of (run state, events since the last call) -> (score row changes,
-# new events). Validation never imports it.
-scoring_hooks:
-- module: hooks.rules_2026   # hooks/rules_2026.py
-  function: evaluate
-  rules: robosub_2026   # compiled C++ rules name (the Python runtime uses module/function)
-  status_function: describe   # extra run-status fields (role, gate_passed, basket_count, ...)
-  feed_function: feed   # operator event feed
+# Scoring: compiled rules (extensions/rules/robosub_2026) and their parameters. The rules turn
+# (run state, events since the last call) into score row changes, run-status fields and the event feed.
+scoring_rules:
+- name: robosub_2026
   parameters:
     roles:
       repair: {target_class: fire, facing_icons: [compass, hammer_and_wrench]}
@@ -141,7 +137,7 @@ scoring_hooks:
     bins: {mechanism_type: dropper}   # only dropper landings inside a crate score
     table: {baskets: [helmet_basket, warning_basket]}   # box region ids
     # Breach margin and surface/facing/turn dwells belong to the surface regions in surface.yaml;
-    # the hook only sees their events.
+    # the rules only see their events.
 
 # Scorecard rows, in order.
 score_rows:

@@ -1,5 +1,5 @@
-// Mechanisms equivalence with python mechanisms.Mechanisms on the Talos robot pack: the scripted
-// op list (arm/kill/fire/claw/reload/reset/advance) captured from Python is replayed here and every
+// Mechanisms on the Talos robot pack against a recorded reference: the scripted op list
+// (arm/kill/fire/claw/reload/reset/advance) in the fixture is replayed here and every
 // command result, released-body state and mechanism snapshot is compared (kTrajectoryTolerance).
 #include "session_test_util.hpp"
 
@@ -10,7 +10,7 @@
 using namespace robotics::session;
 using namespace robotics::session::testing;
 
-TEST(Mechanisms, ReplaysThePythonScript) {
+TEST(Mechanisms, ReplaysTheRecordedScript) {
     const auto fixture = loadFixture("mechanisms_reference.json");
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     Mechanisms m(scenario.robot);

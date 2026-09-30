@@ -1,6 +1,5 @@
 #pragma once
-// Operator scorecard document (session.py run_snapshot), split out so it can be tested against
-// the Python reference without a TaskRuntime.
+// Operator scorecard document, split out so it can be tested without a TaskRuntime.
 #include <robotics/session/scenario.hpp>
 
 #include <cstdint>

@@ -1218,7 +1218,7 @@
               },
               "size": {
                 "$ref": "common.schema.json#/$defs/name",
-                "description": "Size label emitted with the hit (e.g. large/small); scoring meaning is hook-owned."
+                "description": "Size label emitted with the hit (e.g. large/small); the scoring rules give it meaning."
               },
               "uv": {
                 "type": "array",
@@ -1391,7 +1391,7 @@
         },
         "class": {
           "$ref": "common.schema.json#/$defs/name",
-          "description": "Class label emitted with landings (scoring meaning is hook-owned)."
+          "description": "Class label emitted with landings (the scoring rules give it meaning)."
         },
         "outer_width_m": {
           "type": "number",

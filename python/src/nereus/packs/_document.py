@@ -154,15 +154,13 @@ class PackDocument:
     An unedited document saves its original bytes (including line endings). After edits the
     round-trip emitter keeps values, comments, key order, quoting and metadata; line endings,
     wrapping of multi-line flow collections and float spelling (same binary value) may be
-    normalized. ``unresolved`` lists declared-but-absent dependencies (diagnostic only);
-    ``includes`` holds a tasks pack's validated task documents.
+    normalized. ``includes`` holds a tasks pack's validated task documents.
     """
 
     path: Path
     kind: str
     data: CommentedMap
     source: Source | None = field(default=None, repr=False, compare=False)
-    unresolved: list[dict[str, Any]] = field(default_factory=list, repr=False, compare=False)
     includes: list[PackDocument] = field(default_factory=list, repr=False, compare=False)
     _baseline: str | None = field(default=None, repr=False, compare=False)
 

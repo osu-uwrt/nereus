@@ -205,7 +205,7 @@ bool decodePng(png_structp png, png_infop info, int maximum_side, PngOutput *out
     out->height = static_cast<int>(height);
     out->rgba.resize(std::size_t{width} * height * 4);
     out->rows.resize(height);
-    for (png_uint_32 y = 0; y < height; ++y) // Flip: the original viewer's cv::flip(.., 0).
+    for (png_uint_32 y = 0; y < height; ++y) // Flip rows (OpenGL's origin is bottom-left).
         out->rows[y] = out->rgba.data() + std::size_t{height - 1 - y} * width * 4;
     png_read_image(png, out->rows.data());
     png_read_end(png, nullptr);

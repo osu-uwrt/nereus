@@ -1,6 +1,6 @@
 #pragma once
-// Typed native values and value specifications shared by the field-map compiler and the core
-// (port of the Spec/SpecTree machinery in mapping.py). No ROS dependency.
+// Typed native values and value specifications shared by the field-map compiler and the core.
+// No ROS dependency.
 #include <nlohmann/json.hpp>
 
 #include <cstdint>
@@ -26,7 +26,7 @@ class BridgeError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
-std::string repr(const std::string &text); // Python-style quoted string, for identical messages
+std::string repr(const std::string &text); // single-quoted string, for error messages
 
 enum class Dtype { Float, Int, Bool, String, Time };
 

@@ -1,8 +1,8 @@
 """Data packs: strict YAML loading, lossless saving and scenario resolution.
 
-Robot, pool, tasks, bridge and scenario packs are data only. Validation never imports task
-hooks and never constructs a runtime or ROS interface; ``resolve_scenario`` produces the
-reproducible manifest a runtime factory consumes.
+Robot, pool, tasks, bridge and scenario packs are data only. Validation never constructs a
+runtime or ROS interface; ``resolve_scenario`` produces the reproducible document the simulator
+runs.
 """
 
 from ._definitions import registry, schema, type_catalog

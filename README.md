@@ -72,7 +72,7 @@ nereus-sim resolved.json  ◄── ROS 2 ──►  your robot stack   ◄─�
 | `integrations/ros2/` | Simulator bridge and pool viewer |
 | `integrations/uwrt/` | UWRT launch files and acceptance scripts |
 | `extensions/rules/` | Competition scoring rules (C++) |
-| `python/` | Pack tools and the Python reference runtime |
+| `python/` | Pack tools: validate and resolve packs |
 
 ## Guides
 
@@ -87,6 +87,14 @@ Check a pack after editing:
 ```sh
 PYTHONPATH=python/src python3 -m nereus.packs validate content/packs/scenarios/talos_uwrt
 ```
+
+## Known limitations
+
+- Acoustics aren't simulated: there is no pinger, so the random-pinger tasks can't score.
+- The coin flips and the manual score adjustment are set by the operator in the Run panel; there
+  is no session countdown or automatic time bonus.
+- The plant is a model of Talos. Controller gains tuned in the simulator don't carry over to the
+  real robot; tune those in the pool.
 
 ## Tests
 

@@ -1,8 +1,6 @@
 #pragma once
-// Scheduled, on-demand acquisition of the robot pack's stereo cameras for a running session.
-// Ports python/src/nereus/pack_cameras.py (capture/processing) and the worker half of
-// integrations/ros2/python/nereus_ros/camera_bridge.py (scheduling, bounded queues,
-// stale discard, seed reset). No ROS: products are plain buffers and numbers for a bridge to publish.
+// Scheduled, on-demand acquisition of the robot pack's stereo cameras for a running session:
+// capture, processing, scheduling, bounded queues, stale discard and seed reset. No ROS: products are plain buffers and numbers for a bridge to publish.
 //
 // Threading: request()/setDemand()/invalidate() are called by the session owner and never wait for
 // rendering or delivery (invalidate/reset wait only for an in-flight delivery callback). One worker per

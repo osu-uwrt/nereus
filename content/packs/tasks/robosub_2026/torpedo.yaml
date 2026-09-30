@@ -27,7 +27,7 @@ regions:
     # Centre (y, z) = (uv - 0.5) * 2 * half_size; radius = radius_uv * 2 * half_size.
     # u -> +Y (right when viewed from +X), v -> +Z. Inner ring edges of Task4_ver1_Fixed.png.
     holes:
-    # class and size are read by the scoring hook
+    # class and size are read by the scoring rules
     - {id: fire_large, class: fire, size: large, uv: [0.16142625, 0.58890478], radius_uv: 0.10469}
     - {id: fire_small, class: fire, size: small, uv: [0.51378955, 0.81221886], radius_uv: 0.08365}
     - {id: blood_large, class: blood, size: large, uv: [0.85499477, 0.14589262], radius_uv: 0.10469}
@@ -48,6 +48,6 @@ events:
   type: contact
   parameters: {prop: board, with: robot}
 
-# Per-shot, distance, sequence and role/class points: scored by the hook, which takes the release
+# Per-shot, distance, sequence and role/class points: scored by the rules, which take the release
 # distance from the launcher's fired event (|local X of the projectile tip|).
 scoring: []

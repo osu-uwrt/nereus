@@ -1,4 +1,4 @@
-// Port of python/src/nereus/pack_runtime.py: physics and sensors from resolved packs.
+// Physics and sensors built from resolved packs.
 #include <robotics/sensors/models.hpp>
 #include <robotics/session/session.hpp>
 

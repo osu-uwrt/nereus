@@ -1,6 +1,5 @@
 #pragma once
-// Viewer-facing state endpoints and the named encoders that turn them into messages (port of
-// visual.py). Streams declare `native: state:<name>` and `format: json | marker_array` plus
+// Viewer-facing state endpoints and the named encoders that turn them into messages. Streams declare `native: state:<name>` and `format: json | marker_array` plus
 // `options`; everything is driven by pack data (frames, assets, mechanism types, indicator
 // colors), never by robot, task or year names.
 #include "ros_types.hpp"

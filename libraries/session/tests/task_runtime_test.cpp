@@ -1,9 +1,8 @@
-// TaskRuntime equivalence with the Python reference. task_runtime_capture.json (written by
-// fixtures/capture_tasks.py) holds scripted inputs and the Python results for every task type
-// the robosub_2026 pack uses (gate, slalom, torpedo, bins, surface + turn zone, table record()).
-//   cases        Python TaskRuntime with scoring hooks removed: events, projectile steps,
+// TaskRuntime against a recorded reference. task_runtime_capture.json holds scripted inputs and
+// the expected results for every task type the robosub_2026 pack uses (gate, slalom, torpedo, bins, surface + turn zone, table record()).
+//   cases        TaskRuntime with scoring rules removed: events, projectile steps,
 //                snapshots and indicators compared with a no-op Rules.
-//   rules_cases  the real hook vs the compiled robosub_2026 Rules: full event streams (including
+//   rules_cases  the compiled robosub_2026 Rules: full event streams (including
 //                derived events), scores and describe().
 // Comparison: discrete fields (strings, booleans, integers, keys, counts) exactly; floating
 // point values within 1e-9 absolute + 1e-9 relative.
@@ -78,8 +77,7 @@ class NoRules : public Rules {
 RulesRegistry noRules() { return {{"robosub_2026", [] { return std::make_unique<NoRules>(); }}}; }
 
 const ResolvedScenario &scenario() {
-    // Captured Python cases start scoring at boot; the pack default (operator "start") is covered by
-    // the Python run-control tests.
+    // The recorded cases start scoring at boot, not at the pack default (operator "start").
     static const ResolvedScenario s = [] {
         auto loaded = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
         loaded.scenario["run"]["auto_start"] = true;
@@ -88,7 +86,7 @@ const ResolvedScenario &scenario() {
     return s;
 }
 
-// Replays one captured case; returns the Python-vs-C++ comparison of every op result.
+// Replays one recorded case and compares every op result.
 void replay(const Json &captured, const RulesRegistry &rules, bool with_derived) {
     const std::string name = captured["name"];
     std::vector<std::string> task_ids = captured["task_ids"].get<std::vector<std::string>>();
@@ -147,7 +145,7 @@ void replay(const Json &captured, const RulesRegistry &rules, bool with_derived)
 }
 } // namespace
 
-TEST(TaskRuntimeEquivalence, GeometryCasesMatchPython) {
+TEST(TaskRuntimeEquivalence, GeometryCasesMatchReference) {
     const Json fixture = readJson(std::string(NEREUS_SESSION_FIXTURES) + "/task_runtime_capture.json");
     ASSERT_EQ(fixture["cases"].size(), 7u);
     for (const auto &captured : fixture["cases"]) {
@@ -156,7 +154,7 @@ TEST(TaskRuntimeEquivalence, GeometryCasesMatchPython) {
     }
 }
 
-TEST(TaskRuntimeEquivalence, Robosub2026RulesMatchPythonHook) {
+TEST(TaskRuntimeEquivalence, Robosub2026RulesMatchReference) {
     const Json fixture = readJson(std::string(NEREUS_SESSION_FIXTURES) + "/task_runtime_capture.json");
     ASSERT_EQ(fixture["rules_cases"].size(), 7u);
     for (const auto &captured : fixture["rules_cases"]) {

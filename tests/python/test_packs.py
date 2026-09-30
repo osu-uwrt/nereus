@@ -84,7 +84,6 @@ class ScenarioTests(unittest.TestCase):
         self.assertNotIn("thrusters", resolved.bridge)
         self.assertEqual([item["id"] for item in resolved.task_definitions], ["hoop"])
         self.assertEqual(resolved.run_options, {"timed": False})
-        self.assertEqual(resolved.unresolved, [])
         self.assertTrue(all(source.is_file() for source in resolved.sources))
 
     def test_bridge_is_optional(self) -> None:
@@ -106,7 +105,6 @@ class ScenarioTests(unittest.TestCase):
         for source in manifest["sources"]:
             path = (self.root / "a" / "scenario" / source["path"]).resolve()
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), source["sha256"])
-        self.assertEqual(manifest["unresolved"], [])
 
     def test_any_source_change_changes_manifest_identity(self) -> None:
         scenario = write_generic_packs(self.root)
@@ -116,9 +114,8 @@ class ScenarioTests(unittest.TestCase):
         after = resolve_scenario(scenario).manifest()
         self.assertNotEqual(after["content_sha256"], before)
 
-    def test_talos_packs_resolve_strictly_and_round_trip(self) -> None:
-        resolved = resolve_scenario(TALOS / "scenarios" / "talos_uwrt", strict=True)
-        self.assertEqual(resolved.unresolved, [])
+    def test_talos_packs_resolve_and_round_trip(self) -> None:
+        resolved = resolve_scenario(TALOS / "scenarios" / "talos_uwrt")
         self.assertEqual(resolved.run_options["role"], "repair")
         for path in sorted(TALOS.rglob("*.yaml")):
             if path.name != "exceptions.yaml":

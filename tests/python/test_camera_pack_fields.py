@@ -3,6 +3,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 from nereus.packs import PackError, load_pack, resolve_scenario
 from test_packs_fixtures import write_generic_packs
@@ -64,7 +65,10 @@ def mutate(text: str, old: str, new: str) -> str:
 
 
 class TalosCameraFieldTests(unittest.TestCase):
-    """The imported Talos and 2026 pool data, checked against the original placement evidence."""
+    """The Talos camera and 2026 pool appearance data."""
+
+    robot: dict[str, Any]
+    pool: dict[str, Any]
 
     @classmethod
     def setUpClass(cls) -> None:

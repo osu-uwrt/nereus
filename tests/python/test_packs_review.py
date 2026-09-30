@@ -1,14 +1,11 @@
 """Regressions for the loader review: includes, key/alias/newline fidelity, snapshot
 integrity, native physical invariants and inactive metadata."""
 
-import contextlib
-import io
 import tempfile
 import unittest
 from pathlib import Path
 
 from nereus.packs import PackError, load_pack, resolve_scenario
-from nereus.packs.__main__ import main
 from test_packs_fixtures import write_generic_packs
 
 
@@ -40,7 +37,6 @@ class StandaloneTasksTests(ReviewCase):
     def test_tasks_pack_validates_includes_without_scenario(self) -> None:
         document = load_pack(self.root / "tasks")
         self.assertEqual([item.kind for item in document.includes], ["task"])
-        self.assertEqual(document.unresolved, [])
 
     def test_missing_include_file(self) -> None:
         self.edit("tasks/tasks.yaml", "tasks: [hoop.yaml]", "tasks: [hoop.yaml, gone.yaml]")
@@ -49,16 +45,6 @@ class StandaloneTasksTests(ReviewCase):
     def test_include_problems_and_asset_references(self) -> None:
         self.edit("tasks/hoop.yaml", "asset: hoop_mesh", "asset: nothing")
         self.rejects("tasks", "unknown asset 'nothing'")
-
-    def test_strict_applies_to_every_pack_kind(self) -> None:
-        self.edit("tasks/tasks.yaml", "scoring_hooks: []", "scoring_hooks: [{module: 'x', function: f, parameters: {}}]")
-        with self.assertRaises(PackError):
-            load_pack(self.root / "tasks", strict=True)
-        load_pack(self.root / "robot", strict=True)
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            self.assertEqual(main(["validate", str(self.root / "tasks"), "--strict"]), 1)
-        self.assertIn("x:f", err.getvalue())
 
 
 class FidelityTests(ReviewCase):

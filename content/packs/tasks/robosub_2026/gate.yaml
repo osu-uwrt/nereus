@@ -49,5 +49,5 @@ events:
   type: contact
   parameters: {prop: gate_structure, with: robot}
 
-# Gate and return-home points depend on role, coin flips and style: scored by the hook.
+# Gate and return-home points depend on role, coin flips and style: scored by the rules.
 scoring: []

@@ -1,6 +1,6 @@
-"""Run a UWRT mission tree (default RepairCompTree) against the new simulator end to end.
+"""Run a UWRT mission tree (default RepairCompTree) against the simulator end to end.
 
-Private ROS domain. Starts the bridge and the unchanged stack (mission_stack.launch.py),
+Private ROS domain. Resolves the scenario, starts nereus-sim and the UWRT stack (mission_stack.launch.py),
 releases the kill switch once the tree waits for it, runs the tree through
 /talos/autonomy/run_tree, then stops the bridge so it writes tasks.json (scores + every task
 event). Writes mission.json with the tree result, the visited subtree stack and the scores.
@@ -11,15 +11,30 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-from compare import ROOT, stop
-
 HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[2]
 DEFAULT_TREE = ROOT.parent / "src/riptide_autonomy/trees/RepairCompTree.xml"
+
+
+def stop(process: subprocess.Popen) -> None:
+    if process.poll() is not None:
+        return
+    os.killpg(process.pid, signal.SIGINT)
+    try:
+        process.wait(timeout=12)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGTERM)
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
 
 
 def write(path: Path, value: object) -> None:
@@ -54,7 +69,7 @@ def drive(args: argparse.Namespace, log: list[dict]) -> dict:
         while time.monotonic() - settle < args.settle:
             rclpy.spin_once(node, timeout_sec=0.1)
 
-        # Operator starts the scored run (Run panel "Start run"), as with the original simulator.
+        # Operator starts the scored run (Run panel "Start run").
         for action in ("stop", "start"):  # fresh judge after the killed float-up
             run.publish(String(data=json.dumps({"action": action})))
             for _ in range(5):
@@ -105,7 +120,8 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--scenario", type=Path, default=ROOT / "content/packs/scenarios/talos_uwrt")
     parser.add_argument("--tree", type=Path, default=DEFAULT_TREE)
-    parser.add_argument("--sdk", type=Path, default=ROOT / "python/src")
+    parser.add_argument("--sim", type=Path,
+                        default=ROOT / "build/ros-viewer/integrations/ros2/bridge/nereus-sim")
     parser.add_argument("--domain", type=int, default=221)
     parser.add_argument("--startup", type=float, default=120, help="wall s for the stack")
     parser.add_argument("--settle", type=float, default=15, help="wall s before the goal")
@@ -117,14 +133,14 @@ def main() -> int:
     args.tree = args.tree.resolve()
     env = dict(os.environ, ROS_DOMAIN_ID=str(args.domain), ROS_LOCALHOST_ONLY="1",
                RMW_IMPLEMENTATION="rmw_fastrtps_cpp")
-    env["PYTHONPATH"] = os.pathsep.join(
-        [str(ROOT / "integrations/ros2/python"), str(args.sdk.resolve()),
-         env.get("PYTHONPATH", "")])
+    env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "python/src"), env.get("PYTHONPATH", "")])
     os.environ.update({k: env[k] for k in ("ROS_DOMAIN_ID", "ROS_LOCALHOST_ONLY",
                                            "RMW_IMPLEMENTATION")})
+    resolved = args.output / "resolved.json"
+    subprocess.run([sys.executable, "-m", "nereus.packs", "resolve", str(args.scenario.resolve()),
+                    "-o", str(resolved)], cwd=ROOT, env=env, check=True)
     commands = [
-        [sys.executable, "-m", "nereus_ros", str(args.scenario.resolve()),
-         "--output", str(args.output / "bridge")],
+        [str(args.sim.resolve()), str(resolved), "--output", str(args.output / "bridge")],
         ["ros2", "launch", str(HERE / "mission_stack.launch.py")],
     ]
     write(args.output / "commands.json", commands)

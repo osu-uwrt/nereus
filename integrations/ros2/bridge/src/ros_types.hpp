@@ -1,7 +1,7 @@
 #pragma once
 // Runtime ROS interface access without generated C++ types: message/service type support is
-// loaded by name and every field is reached through rosidl introspection (port of the
-// ros_field/parse_type half of mapping.py). No middleware is created here.
+// loaded by name and every field is reached through rosidl introspection. No middleware is
+// created here.
 #include "native.hpp"
 
 #include <nlohmann/json.hpp>

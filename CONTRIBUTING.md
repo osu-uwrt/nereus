@@ -20,9 +20,9 @@ session, rules or pack formats. Format C++ with the repo's `.clang-format`; the 
 - **Viewer layout and topics**: `content/viewer/*.yaml`.
 - **Libraries** (`libraries/`) stay free of ROS; ROS lives in `integrations/ros2/`.
 
-Tests check behaviour, not structure. Equivalence fixtures compare the C++ runtime with the Python reference;
-re-record them with the capture scripts in `libraries/session/tests/fixtures/` and
-`extensions/rules/robosub_2026/tests/` only when the reference itself changes.
+Tests check behaviour, not structure. The reference fixtures in `libraries/session/tests/fixtures/`,
+`extensions/rules/robosub_2026/tests/` and `tests/fixtures/` are recordings of known-good runs. When you change
+behaviour on purpose, update the affected expected values and say why in the commit.
 
 ## Commits
 

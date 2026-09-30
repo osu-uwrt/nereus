@@ -1,6 +1,6 @@
 #pragma once
-// Shared helpers for the equivalence tests: fixtures written by fixtures/capture_session.py from
-// the Python reference are compared with the C++ port through the same JSON layout.
+// Shared helpers for the reference tests: recorded fixtures are compared through the same JSON
+// layout.
 #include <robotics/sensors/models.hpp>
 #include <robotics/session/session.hpp>
 
@@ -33,7 +33,7 @@ inline Json bodyJson(const simulation::BodyState &b) {
             {"angular_velocity", flat(b.angular_velocity)}};
 }
 
-// Long-horizon trajectories: Release builds reproduce the Python binding to ~1e-12; Debug builds
+// Long-horizon trajectories: Release builds reproduce the recordings to ~1e-12; Debug builds
 // differ in floating-point contraction and chaotic amplification (observed up to ~5e-4 absolute after 1-2 s of contact-rich motion; only Release is a tight check).
 #ifdef NDEBUG
 constexpr double kTrajectoryTolerance = 1e-9;

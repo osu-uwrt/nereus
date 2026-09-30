@@ -1,4 +1,4 @@
-"""Semantic checks JSON Schema cannot express: references, frames, geometry, paths, hooks.
+"""Semantic checks JSON Schema cannot express: references, frames, geometry, paths.
 
 Every function returns problem strings; nothing here imports task code or builds a runtime.
 """
@@ -8,7 +8,6 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import math
-import re
 from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
@@ -24,7 +23,7 @@ DIRECTION_TOLERANCE = 1e-9
 SYMMETRY_TOLERANCE = 1e-10
 SEMIDEFINITE_TOLERANCE = 1e-10
 TRIANGLE_TOLERANCE = 1e-9
-INACTIVE_KEYS = frozenset({"metadata", "scoring_hooks"})
+INACTIVE_KEYS = frozenset({"metadata", "scoring_rules"})
 
 
 def duplicates(values: Iterable[str], what: str, problems: list[str]) -> None:
@@ -40,7 +39,7 @@ def _unit(vector: list[float], where: str, problems: list[str], tolerance: float
 
 
 def _quaternions(node: Any, where: str, problems: list[str]) -> None:
-    """Check every active orientation_wxyz; metadata and hook data are skipped."""
+    """Check every active orientation_wxyz; metadata and scoring-rule parameters are skipped."""
     if isinstance(node, dict):
         for key, value in node.items():
             if where == "" and key in INACTIVE_KEYS:
@@ -248,24 +247,8 @@ def pool(data: dict[str, Any]) -> list[str]:
 
 # ------------------------------------------------------------------ tasks
 
-_MODULE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-
-
-def hook_module(root: Path, module: str) -> Path | None:
-    """Pack-local file a hook module name resolves to (not imported), or None if it escapes."""
-    parts = module.split(".")
-    if not all(_MODULE.match(part) for part in parts):
-        return None
-    candidate = inside(root, "/".join(parts) + ".py")
-    package = inside(root, "/".join(parts) + "/__init__.py")
-    if candidate is None or package is None:
-        return None
-    return package if package.is_file() and not candidate.exists() else candidate
-
-
-def tasks(data: dict[str, Any], root: Path) -> tuple[list[str], list[dict[str, Any]]]:
+def tasks(data: dict[str, Any], root: Path) -> list[str]:
     problems: list[str] = []
-    unresolved: list[dict[str, Any]] = []
     for relative in data["tasks"]:
         if inside(root, relative) is None:
             problems.append(f"/tasks: include '{relative}' escapes the pack")
@@ -274,16 +257,7 @@ def tasks(data: dict[str, Any], root: Path) -> tuple[list[str], list[dict[str, A
     for item in options:
         if item["type"] == "choice" and item["default"] not in item["choices"]:
             problems.append(f"/run_options/{item['key']}: default not among choices")
-    for index, hook in enumerate(data["scoring_hooks"]):
-        target = hook_module(root, hook["module"])
-        if target is None:
-            problems.append(f"/scoring_hooks/{index}: module '{hook['module']}' escapes the pack")
-        elif not target.is_file():
-            unresolved.append({
-                "kind": "hook_module", "pack": "tasks", "id": f"{hook['module']}:{hook['function']}",
-                "path": target.relative_to(root.resolve()).as_posix(),
-            })
-    return problems, unresolved
+    return problems
 
 
 # Event type -> region types it may name (drop_into names several box regions, checked below).

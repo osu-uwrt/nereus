@@ -1,15 +1,17 @@
 #!/bin/bash
 # Live FastDDS smoke test of the viewer/operator interfaces (run manually, never in CI).
 #
-# Starts the Talos bridge without cameras on a private ROS domain, echoes every viewer topic once,
+# Starts nereus-sim on the Talos scenario without cameras on a private ROS domain, echoes every viewer topic once,
 # drives run control over simulator/run_command and simulator/reset_tasks, and pauses/resumes
 # simulation time through the real_time_factor parameter of /talos/physics_simulator.
 # Usage: viewer_interfaces_smoke.sh [ros_domain_id]      (kills everything it starts)
+# Needs a sourced ROS 2 and a built build/ros-viewer.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 export ROS_DOMAIN_ID="${1:-87}"
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-export PYTHONPATH="$ROOT/integrations/ros2/python:$ROOT/python/src:${PYTHONPATH:-}"
+export PYTHONPATH="$ROOT/python/src:${PYTHONPATH:-}"
+SIM="$ROOT/build/ros-viewer/integrations/ros2/bridge/nereus-sim"
 NS=/talos
 OUT="$(mktemp -d)/run"
 failures=0
@@ -33,8 +35,9 @@ cleanup() { [ -n "${BRIDGE:-}" ] && kill "$BRIDGE" 2>/dev/null; wait 2>/dev/null
 trap cleanup EXIT
 
 ros2 daemon stop >/dev/null 2>&1
-python3 -m nereus_ros "$ROOT/content/packs/scenarios/talos_uwrt" --output "$OUT" \
-  --no-cameras --duration 240 >"$OUT.log" 2>&1 &
+mkdir -p "$OUT"
+python3 -m nereus.packs resolve "$ROOT/content/packs/scenarios/talos_uwrt" -o "$OUT.resolved.json" || exit 1
+"$SIM" "$OUT.resolved.json" --output "$OUT" --no-cameras --duration 240 >"$OUT.log" 2>&1 &
 BRIDGE=$!
 for _ in $(seq 60); do
   kill -0 "$BRIDGE" 2>/dev/null || { echo "bridge exited early:"; cat "$OUT.log"; exit 1; }

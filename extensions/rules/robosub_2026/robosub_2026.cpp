@@ -1,7 +1,5 @@
-// Port of content/packs/tasks/robosub_2026/hooks/rules_2026.py (the Python file is the reference;
-// comments here only note where Python's dynamic semantics shape the code). Required JSON keys use
-// .at() so a missing key throws like Python's KeyError; malformed launcher events throw
-// std::invalid_argument like its ValueError.
+// RoboSub 2026 scoring. Required JSON keys use .at() so a missing key throws; malformed launcher
+// events throw std::invalid_argument.
 #include "rules/robosub_2026/robosub_2026.hpp"
 
 #include <algorithm>
@@ -29,7 +27,7 @@ bool truthy(const Json &v) {
     if (v.is_number()) return v.get<double>() != 0.0;
     return !v.empty(); // string, array, object
 }
-std::int64_t integer(const Json &v) { // Python int arithmetic (bool counts as 0/1)
+std::int64_t integer(const Json &v) { // integer arithmetic (bool counts as 0/1)
     if (v.is_boolean()) return v.get<bool>() ? 1 : 0;
     if (v.is_number_integer()) return v.get<std::int64_t>();
     throw std::invalid_argument("expected an integer value");
@@ -43,7 +41,7 @@ bool listed(const Json &value, const Json &list) {
 }
 Json strOf(const Json &v) { return v.is_string() ? v : Json(v.is_null() ? "None" : v.dump()); }
 
-// Insertion-ordered map with Json keys (Python dict).
+// Insertion-ordered map with Json keys.
 template <class V> struct Ordered {
     std::vector<std::pair<Json, V>> items;
     V *find(const Json &key) {

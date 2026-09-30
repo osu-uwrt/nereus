@@ -1,6 +1,6 @@
 #pragma once
 // rclcpp transport around BridgeCore: QoS, generic publishers/subscriptions, services, TF and
-// pacing (port of node.py). One thread (the caller of run()) owns the core and the session;
+// pacing. One thread (the caller of run()) owns the core and the session;
 // an executor thread runs every ROS callback, which only enqueues work that the stepping thread
 // applies between ticks, so the stepping loop never blocks on the middleware. Wall time only
 // paces stepping; every stamp comes from simulation time.

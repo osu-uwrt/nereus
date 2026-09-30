@@ -1,6 +1,5 @@
 #pragma once
-// Declarative field maps between native values and ROS messages, checked before stepping
-// (port of the compile_writer/compile_reader half of mapping.py). A map is
+// Declarative field maps between native values and ROS messages, checked before stepping. A map is
 //   {destination path: {from: path} | {constant: value} | {from: path, enum_map: {...}}}
 // Paths are dotted names with integer indexes; there is no expression language. Every
 // destination is resolved against the ROS type description and every source against a typed
@@ -64,7 +63,7 @@ Reader compileReader(const introspection::MessageMembers *type, const Json &fiel
                      const std::map<std::string, Spec> &arguments, const Json &accept_if,
                      const std::string &where);
 
-// Python repr of a JSON scalar, used in messages.
+// Quoted repr of a JSON scalar ('text', 1.5, True), used in messages.
 std::string pyRepr(const Json &value);
 
 } // namespace robotics::ros_bridge

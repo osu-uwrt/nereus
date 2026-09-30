@@ -32,7 +32,7 @@ def _prefixed(path: Path, problems: list[str]) -> list[str]:
 
 def _includes(document: PackDocument, data: dict[str, Any],
               hashes: dict[Path, str]) -> list[str]:
-    """Load and check every task include of a tasks pack (never imports hooks)."""
+    """Load and check every task include of a tasks pack."""
     problems: list[str] = []
     asset_ids = {item["id"] for item in data.get("assets", [])}
     for relative in data["tasks"]:
@@ -57,7 +57,7 @@ def _includes(document: PackDocument, data: dict[str, Any],
 
 
 def _check(document: PackDocument, hashes: dict[Path, str]) -> list[str]:
-    """Schema and single-pack semantics; fills document.unresolved and verified hashes."""
+    """Schema and single-pack semantics; records verified file hashes."""
     data = document.plain()
     problems = schema_problems(document.kind, data)
     if problems:
@@ -70,9 +70,7 @@ def _check(document: PackDocument, hashes: dict[Path, str]) -> list[str]:
     elif kind == "pool":
         problems += semantics.pool(data)
     elif kind == "tasks":
-        task_problems, hooks = semantics.tasks(data, document.root)
-        problems += task_problems
-        document.unresolved += hooks
+        problems += semantics.tasks(data, document.root)
     elif kind == "task":
         problems += semantics.task(data, None)
     elif kind == "bridge":
@@ -101,32 +99,22 @@ def _open(path: Path, hashes: dict[Path, str]) -> PackDocument:
     return document
 
 
-def _strict(path: Path, unresolved: list[dict[str, Any]]) -> None:
-    if unresolved:
-        raise PackError([f"{path}: unresolved {item['kind']} '{item['id']}' (pack {item['pack']})"
-                         for item in unresolved])
-
-
-def load_pack(path: Path, strict: bool = False) -> PackDocument:
+def load_pack(path: Path) -> PackDocument:
     """Load and validate one pack (folder with canonical <kind>.yaml, or a specific file).
 
     Raises PackError for invalid syntax, duplicate or non-string keys, non-finite numbers,
     unknown active fields, bad references, invalid physics or paths escaping the pack. A tasks
-    pack also validates its task includes. Declared-but-absent dependencies are listed in
-    ``unresolved``; ``strict`` rejects them. Never imports hook code.
+    pack also validates its task includes.
     """
-    document = _open(path, {})
-    if strict:
-        _strict(document.path, document.unresolved)
-    return document
+    return _open(path, {})
 
 
 @dataclass
 class ResolvedScenario:
     """Validated scenario composition. Pack contents are detached plain data.
 
-    ``source_sha256`` holds the digest of the exact bytes each document/asset/hook had when
-    resolved; ``unresolved`` is diagnostic data (never an execution switch).
+    ``source_sha256`` holds the digest of the exact bytes each document and asset had when
+    resolved.
     """
 
     path: Path
@@ -138,7 +126,6 @@ class ResolvedScenario:
     task_definitions: list[dict[str, Any]]
     run_options: dict[str, Any]
     sources: list[Path]
-    unresolved: list[dict[str, Any]] = field(default_factory=list)
     source_sha256: dict[Path, str] = field(default_factory=dict)
 
     def changed_sources(self) -> list[Path]:
@@ -182,7 +169,6 @@ class ResolvedScenario:
                  "sha256": self.source_sha256[source]}
                 for source in self.sources
             ],
-            "unresolved": self.unresolved,
         }
         canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), allow_nan=False)
         body["content_sha256"] = hashlib.sha256(canonical.encode()).hexdigest()
@@ -222,12 +208,8 @@ def _add_runtime_times(scenario: dict[str, Any], robot: dict[str, Any]) -> None:
         sensor["latency_ns"] = _nanoseconds(sensor.get("latency_s", 0))
 
 
-def resolve_scenario(path: Path, strict: bool = False) -> ResolvedScenario:
-    """Load a scenario and every selected pack, validate cross-references, record gaps.
-
-    ``strict`` additionally rejects any unresolved dependency (missing assets, absent hook
-    modules, pending items). Without it gaps are returned explicitly in ``unresolved``.
-    """
+def resolve_scenario(path: Path) -> ResolvedScenario:
+    """Load a scenario and every selected pack and validate their cross-references."""
     hashes: dict[Path, str] = {}
     scenario = _open(path, hashes)
     if scenario.kind != "scenario":
@@ -266,17 +248,8 @@ def resolve_scenario(path: Path, strict: bool = False) -> ResolvedScenario:
     if problems:
         raise PackError(problems)
 
-    for hook in tasks_data["scoring_hooks"]:
-        module = semantics.hook_module(tasks_document.root, hook["module"])
-        if module is not None and module.is_file():
-            hashes[module] = read_source(module).sha256  # bytes only; never imported
-    unresolved = scenario.unresolved + [
-        item for role in documents for item in documents[role].unresolved
-    ]
-    if strict:
-        _strict(scenario.path, unresolved)
     return ResolvedScenario(
         path=scenario.path, scenario=data, robot=robot, pool=documents["pool"].plain(),
         tasks=tasks_data, bridge=bridge, task_definitions=definitions, run_options=options,
-        sources=list(hashes), unresolved=unresolved, source_sha256=hashes,
+        sources=list(hashes), source_sha256=hashes,
     )

@@ -1,8 +1,7 @@
 #pragma once
-// Task observation and scoring (port of python/.../task_runtime.py, task_regions.py,
-// task_projectiles.py, task_zones.py). Generic geometric observers are built from task-pack
+// Task observation and scoring. Generic geometric observers are built from task-pack
 // regions/events by type name; competition logic lives in a Rules implementation selected by
-// name from the task pack. Events are JSON objects with exactly the Python layout:
+// name from the task pack. Events are JSON objects with this layout:
 // {id, type, task, region, time_ns, data}.
 #include <robotics/session/scenario.hpp>
 #include <robotics/spatial/frames.hpp>
@@ -16,7 +15,7 @@ namespace robotics::session {
 using Event = Json;
 using Events = std::vector<Event>;
 
-// Physical correction a task applies to a payload it judged (port of ProjectileStep).
+// Physical correction a task applies to a payload it judged.
 struct ProjectileStep {
     Events events;
     bool stop{false};
@@ -24,9 +23,8 @@ struct ProjectileStep {
 };
 
 // Competition rules: pure function of read-only run state + ordered events -> score rows and
-// derived events (port of the Python hook contract `evaluate(state, events, parameters)`).
-// `describe`/`feed` mirror the hook's optional status/feed functions used for run_score and
-// task_events. Implementations must not keep state outside `state` except caches they can rebuild.
+// derived events. `describe` adds run_score fields and `feed` adds task_events records; both
+// default to nothing. Implementations must not keep state outside `state` except caches they can rebuild.
 class Rules {
   public:
     virtual ~Rules() = default;
@@ -40,8 +38,7 @@ class Rules {
         (void)events, (void)context, (void)parameters;
         return Json::array();
     }
-    // The Python feed hook also receives the frozen run snapshot (`TaskRuntime::snapshot()`);
-    // TaskRuntime calls this overload. The default forwards to the stateless one.
+    // TaskRuntime calls this overload with the frozen run snapshot (`TaskRuntime::snapshot()`). The default forwards to the stateless one.
     virtual Json feed(const Json &state, const Events &events, const Json &context,
                       const Json &parameters) {
         (void)state;
@@ -49,7 +46,7 @@ class Rules {
     }
 };
 // Explicit, constructed registry (no global self-registration). Keys are the task pack's
-// scoring hook `rules` name (e.g. "robosub_2026"); later a "python" entry can wrap user hooks.
+// `scoring_rules[].name` (e.g. "robosub_2026").
 using RulesFactory = std::function<std::unique_ptr<Rules>()>;
 using RulesRegistry = std::map<std::string, RulesFactory>;
 

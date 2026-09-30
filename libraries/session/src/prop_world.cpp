@@ -1,7 +1,6 @@
-// Port of python/src/nereus/prop_world.py: same algorithm, constants and event contract,
-// on Bullet's C++ API. PyBullet wraps btMultiBodyDynamicsWorld with base-only btMultiBody bodies
-// (createMultiBody), so this does the same instead of using btRigidBody: identical integration,
-// damping, contact and constraint code paths. Frame/quaternion helpers mirror the Python ones.
+// Prop contact world on Bullet's C++ API. Props are base-only btMultiBody bodies in a
+// btMultiBodyDynamicsWorld (the layout the reference recordings were made with) rather than
+// btRigidBody, which keeps the integration, damping, contact and constraint code paths identical.
 #include <robotics/session/prop_world.hpp>
 
 #include "obj_mesh.hpp"
@@ -27,10 +26,10 @@ namespace {
 using Matrix4 = Eigen::Matrix4d;
 using Vec3 = Eigen::Vector3d;
 
-// Contact heuristics of the original claw_world.py (Bullet tuning priors, not pack data).
+// Contact tuning for Bullet (not pack data).
 constexpr double kPadSpinningFriction = 0.01;
 constexpr double kPadMarginM = 0.0005;
-constexpr double kUrdfDefaultMarginM = 0.001; // pybullet's importer default collision margin
+constexpr double kUrdfDefaultMarginM = 0.001; // Bullet's URDF importer default collision margin
 constexpr double kStallNormalSpeed = -0.2;
 constexpr double kStallPenetrationM = -0.0008;
 constexpr double kGraspNormalForceN = 0.01;
@@ -113,7 +112,7 @@ struct Contact {
     double distance{0}, force{0};
 };
 
-// Records closest points the way pybullet's getClosestPoints does (normal on B as reported by
+// Records closest points (normal on B as reported by
 // the algorithm), in algorithm order.
 struct ClosestPoints : btManifoldResult {
     std::vector<Contact> points;
@@ -127,7 +126,7 @@ struct ClosestPoints : btManifoldResult {
         btManifoldResult::addContactPoint(normalOnB, point, depth);
     }
 };
-// Pair exclusions (pybullet setCollisionFilterPair). btMultiBodyLinkCollider overrides
+// Pair exclusions. btMultiBodyLinkCollider overrides
 // checkCollideWithOverride without consulting setIgnoreCollisionCheck, so the ignore list alone never
 // stops multibody pairs; this filter keeps excluded pairs out of the broadphase instead.
 struct PairFilter : btOverlapFilterCallback {
@@ -142,7 +141,7 @@ struct PairFilter : btOverlapFilterCallback {
     }
 };
 
-// Robot-side collision world (port of c_simulator task_contacts.cpp). Robot shapes (pads, a held
+// Robot-side collision world. Robot shapes (pads, a held
 // prop) are posed COM-locally and follow the plant state; scenery is fixed in the world; free props
 // sit where the prop world left them. A free prop pushes back only while resting on scenery and
 // only when the robot presses down onto it (side pushes stay in the prop world). Resolution: move
@@ -609,7 +608,7 @@ void PropWorld::Impl::setCollisionPair(int a, int b, bool enabled) {
     const auto key = PairFilter::key(ca, cb);
     if (enabled) {
         // The broadphase only re-reports a pair when a proxy leaves its fattened bounds, so an
-        // overlapping pair is restored here (pybullet contacts resume on the next step).
+        // overlapping pair is restored here so contacts resume on the next step.
         if (pair_filter.excluded.erase(key)) {
             btBroadphaseProxy *pa = ca->getBroadphaseHandle(), *pb = cb->getBroadphaseHandle();
             if (TestAabbAgainstAabb2(pa->m_aabbMin, pa->m_aabbMax, pb->m_aabbMin, pb->m_aabbMax) &&
@@ -708,7 +707,7 @@ void PropWorld::Impl::build() {
         collider.setRestitution(c.at("restitution").get<double>());
         body.body->setLinearDamping(c.at("linear_damping").get<double>());
         body.body->setAngularDamping(c.at("angular_damping").get<double>());
-        raw->setMargin(c.at("collision_margin_m").get<double>()); // no AABB recompute, as pybullet
+        raw->setMargin(c.at("collision_margin_m").get<double>()); // no AABB recompute
         collider.setCcdSweptSphereRadius(c.at("ccd_swept_sphere_radius_m").get<double>());
         collider.setContactProcessingThreshold(c.at("contact_processing_threshold_m").get<double>());
         Prop entry;
@@ -986,7 +985,7 @@ void PropWorld::Impl::tryGrasp(double dt_s, const Matrix4 &mount_pose, std::int6
         if (time < claw.at("grasp_dwell_s").get<double>())
             continue;
         const Matrix4 relative = mount_pose.inverse() * basePose(p.body);
-        // Joint frame in the parent (claw) and in the child (prop, identity), pybullet JOINT_FIXED.
+        // Fixed joint frame in the parent (claw) and in the child (prop, identity).
         const btTransform rel = transformOf(relative);
         constraint = std::make_unique<btMultiBodyFixedConstraint>(
             bodies[static_cast<std::size_t>(claw_body)].body.get(), -1,

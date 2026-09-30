@@ -1,6 +1,6 @@
 # nereus_pack_scene: renderer scene composition from a resolved scenario (pool, task visuals with cutouts
 # and texture overrides, robot visuals, caller-posed dynamic instances). Shared by the ROS viewer
-# and nereus_session_cameras; mirrors python/src/nereus/pack_cameras.py.
+# and nereus_session_cameras.
 add_library(nereus_pack_scene src/pack_scene.cpp)
 add_library(Nereus::pack_scene ALIAS nereus_pack_scene)
 set_target_properties(nereus_pack_scene PROPERTIES EXPORT_NAME pack_scene)

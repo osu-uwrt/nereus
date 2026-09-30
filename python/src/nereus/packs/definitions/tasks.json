@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "tasks pack",
-  "description": "Authoritative loader definition: published JSON Schemas and the type registry are generated from this corpus. Task pack root: task include files, capability requirements, run options and scoring hooks. No layout (scenario-owned) and no robot ids. validate never imports hooks.",
+  "description": "Authoritative loader definition: published JSON Schemas and the type registry are generated from this corpus. Task pack root: task include files, capability requirements, run options and scoring rules. No layout (scenario-owned) and no robot ids.",
   "type": "object",
   "properties": {
     "kind": {
@@ -71,10 +71,10 @@
         "$ref": "#/$defs/run_option"
       }
     },
-    "scoring_hooks": {
+    "scoring_rules": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/scoring_hook"
+        "$ref": "#/$defs/scoring_rule"
       }
     },
     "metadata": {
@@ -88,7 +88,7 @@
     "score_rows": {
       "type": "array",
       "minItems": 1,
-      "description": "Fixed, ordered run scorecard rows: score keys the hook writes, with their operator labels.",
+      "description": "Fixed, ordered run scorecard rows: score keys the scoring rules write, with their operator labels.",
       "items": {
         "type": "object",
         "properties": {
@@ -115,7 +115,7 @@
       "items": {
         "$ref": "common.schema.json#/$defs/name"
       },
-      "description": "Names counted by the task score feed: every hook feed event whose result is listed increments that counter."
+      "description": "Names counted by the task score feed: every scoring feed event whose result is listed increments that counter."
     },
     "run_messages": {
       "type": "object",
@@ -139,7 +139,7 @@
     "tasks",
     "requires",
     "run_options",
-    "scoring_hooks"
+    "scoring_rules"
   ],
   "additionalProperties": false,
   "$defs": {
@@ -211,45 +211,25 @@
       ],
       "description": "Scenario-selectable option; a choice default must be one of choices (semantic check)."
     },
-    "scoring_hook": {
+    "scoring_rule": {
       "type": "object",
       "properties": {
-        "module": {
+        "name": {
           "type": "string",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*$",
-          "description": "Dotted module resolved only inside this task pack."
-        },
-        "function": {
-          "type": "string",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "Compiled rules the simulator runs (registered in extensions/rules/registry.cpp)."
         },
         "parameters": {
           "type": "object",
-          "description": "Hook-declared data passed verbatim; the hook owns its own parameter validation."
-        },
-        "rules": {
-          "type": "string",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-          "description": "Optional name of the compiled C++ Rules implementation (RulesRegistry key) the C++ runtime uses for this hook; the Python runtime ignores it and keeps using module/function."
-        },
-        "status_function": {
-          "type": "string",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-          "description": "Optional pure function (state, parameters) -> dict of extra scalar run-score fields for viewers."
-        },
-        "feed_function": {
-          "type": "string",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-          "description": "Optional pure function (state, events, context, parameters) -> list of operator event-feed dicts for the events just committed; context lists released payloads with mechanism id/type and slot."
+          "description": "Passed to the rules verbatim; the rules validate them."
         }
       },
       "required": [
-        "module",
-        "function",
+        "name",
         "parameters"
       ],
       "additionalProperties": false,
-      "description": "Task-pack-owned Python only: immutable state and newly committed events in, score changes and new events out; no runtime object, stepping or ROS. Robot, pool, sensor and bridge packs cannot declare hooks."
+      "description": "Competition scoring: named compiled rules and their parameters."
     }
   }
 }

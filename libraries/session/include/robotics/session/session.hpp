@@ -1,5 +1,5 @@
 #pragma once
-// One coordinated simulation run (port of python/.../session.py + pack_runtime.py). The only
+// One coordinated simulation run. The only
 // owner that advances the plant, sensors, mechanisms, payloads, prop worlds and task observers,
 // in this fixed order per tick: plant step; mechanism actuation; payload propagation + task
 // judging; prop worlds; robot task observation. No wall time, ROS or rendering here.
@@ -18,7 +18,7 @@
 #include <vector>
 
 namespace robotics::session {
-// Plant + sensors built from pack data (port of pack_runtime.create_runtime).
+// Plant + sensors built from pack data.
 struct PackRuntime {
     std::unique_ptr<sensors::Runtime> runtime;
     simulation::PlantParameters parameters;

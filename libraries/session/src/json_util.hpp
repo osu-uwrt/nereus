@@ -1,6 +1,6 @@
 #pragma once
 // Private helpers shared by pack_runtime.cpp, mechanisms.cpp and session.cpp: strict JSON
-// accessors with the Python reference's failure behaviour (missing key / wrong shape throws).
+// accessors (a missing key or wrong shape throws).
 #include <robotics/session/scenario.hpp>
 #include <robotics/spatial/frames.hpp>
 

@@ -1,13 +1,13 @@
-"""One-command UWRT simulation: new simulator bridge + unchanged robot stack + pool viewer.
+"""One-command UWRT simulation: nereus-sim + the UWRT robot stack + the pool viewer.
 
     ros2 launch integrations/uwrt/launch/sim.launch.py [stack:=false] [viewer:=false]
         [scenario:=<pack folder>] [output:=<run dir>] [rmw:=<rmw implementation>]
-        [bridge:=python|cpp] [cameras:=true|false] [always_cameras:=true|false]
+        [cameras:=true|false] [always_cameras:=true|false]
         [active_control_model:=mpc] [mpc_model:=sim|<name>|<path>] [mpc_odom_topic:=simulator/ground_truth]
         [mpc_state_source:=sensors|odometry]
 
-bridge:=cpp runs the rclcpp simulator (build/ros-viewer/.../nereus-sim) on the pack resolved
-with `python -m nereus.packs resolve`; cameras:=false passes --no-cameras and
+The simulator (build/ros-viewer/.../nereus-sim) runs the scenario resolved with
+`python -m nereus.packs resolve`; cameras:=false passes --no-cameras and
 always_cameras:=true renders every camera output regardless of subscribers.
 
 The controller arguments pass through to riptide_bringup2 (mission_stack.launch.py); empty keeps bringup's
@@ -53,31 +53,20 @@ def _processes(context):
     output = LC("output").perform(context) or f"/tmp/nereus_sim/{time.strftime('%Y%m%d-%H%M%S')}"
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     scenario = LC("scenario").perform(context)
-    if LC("bridge").perform(context) == "cpp":
-        binary = LC("bridge_binary").perform(context)
-        resolved = f"{output}.resolved.json"
-        subprocess.run(
-            [sys.executable, "-m", "nereus.packs", "resolve", scenario, "-o", resolved],
-            check=True, cwd=str(ROOT),
-            env={**os.environ, "PYTHONPATH": os.pathsep.join(
-                [str(ROOT / "python/src"), os.environ.get("PYTHONPATH", "")])})
-        command = [binary, resolved, "--output", output]
-        if LC("cameras").perform(context).lower() in ("false", "0", "no"):
-            command.append("--no-cameras")
-        elif LC("always_cameras").perform(context).lower() in ("true", "1", "yes"):
-            command.append("--always-cameras")
-        actions.append(ExecuteProcess(cmd=command, cwd=str(ROOT), output="screen",
-                                      sigterm_timeout="15", name="simulator"))
-    else:
-        python_path = os.pathsep.join(
-            [str(ROOT / "integrations/ros2/python"), str(ROOT / "python/src"),
-             os.environ.get("PYTHONPATH", "")])
-        cmd = ["python3", "-m", "nereus_ros", scenario, "--output", output]
-        if LC("cameras").perform(context).lower() in ("false", "0", "no"):
-            cmd.append("--no-cameras")
-        actions.append(ExecuteProcess(
-            cmd=cmd, cwd=str(ROOT), additional_env={"PYTHONPATH": python_path}, output="screen",
-            sigterm_timeout="15", name="simulator"))
+    binary = LC("bridge_binary").perform(context)
+    resolved = f"{output}.resolved.json"
+    subprocess.run(
+        [sys.executable, "-m", "nereus.packs", "resolve", scenario, "-o", resolved],
+        check=True, cwd=str(ROOT),
+        env={**os.environ, "PYTHONPATH": os.pathsep.join(
+            [str(ROOT / "python/src"), os.environ.get("PYTHONPATH", "")])})
+    command = [binary, resolved, "--output", output]
+    if LC("cameras").perform(context).lower() in ("false", "0", "no"):
+        command.append("--no-cameras")
+    elif LC("always_cameras").perform(context).lower() in ("true", "1", "yes"):
+        command.append("--always-cameras")
+    actions.append(ExecuteProcess(cmd=command, cwd=str(ROOT), output="screen",
+                                  sigterm_timeout="15", name="simulator"))
     actions.append(IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(STACK)),
         launch_arguments=[(k, LC(k)) for k in CONTROLLER_ARGS],
@@ -94,13 +83,12 @@ def generate_launch_description():
         DeclareLaunchArgument("output", default_value=""),
         DeclareLaunchArgument("stack", default_value="true", description="launch the UWRT stack"),
         DeclareLaunchArgument("viewer", default_value="true", description="launch the pool viewer"),
-        DeclareLaunchArgument("bridge", default_value="cpp", description="simulator bridge: cpp or python (reference)"),
         DeclareLaunchArgument("bridge_binary", default_value=str(
             ROOT / "build/ros-viewer/integrations/ros2/bridge/nereus-sim"),
-            description="nereus-sim executable used by bridge:=cpp"),
+            description="nereus-sim executable"),
         DeclareLaunchArgument("cameras", default_value="true", description="run camera acquisition"),
         DeclareLaunchArgument("always_cameras", default_value="false",
-                              description="cpp bridge: render cameras regardless of subscribers"),
+                              description="render cameras regardless of subscribers"),
         # Default: the shell's RMW (UWRT uses rmw_zenoh_cpp with a running `ros2 run rmw_zenoh_cpp
         # rmw_zenohd`). FastDDS showed 0.4-0.9 s reliable-delivery stalls of the simulator's /tf under
         # full-stack load with camera traffic; Zenoh delivered the same run without stalls.

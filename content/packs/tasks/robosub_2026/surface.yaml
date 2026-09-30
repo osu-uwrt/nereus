@@ -73,5 +73,5 @@ events:
   type: rotation_judged
   parameters: {region: turn_zone}
 
-# Surface, facing, objects_surface and basket_count points depend on role, held props and baskets: scored by the hook.
+# Surface, facing, objects_surface and basket_count points depend on role, held props and baskets: scored by the rules.
 scoring: []

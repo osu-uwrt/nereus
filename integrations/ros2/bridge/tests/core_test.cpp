@@ -1,6 +1,5 @@
-// BridgeCore semantics on a generic (non-Talos) layout with a fake, recording session (port of
-// integrations/ros2/tests/test_bridge_core.py, test_bridge_alignment.py, test_bridge_static_tf.py
-// and the placement/run-command/reset parts of test_bridge_mechanisms.py). No middleware.
+// BridgeCore semantics on a generic (non-Talos) layout with a fake, recording session: mapping,
+// clock, alignment, static TF, placement, run commands and resets. No middleware.
 #include "fake_port.hpp"
 
 #include <geometry_msgs/msg/pose_stamped.hpp>

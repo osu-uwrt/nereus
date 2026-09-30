@@ -157,5 +157,5 @@ events:
   type: activate
   parameters: {region: magnet_target2}
 
-# Drops, classes, unique crates and lights depend on the role: scored by the hook.
+# Drops, classes, unique crates and lights depend on the role: scored by the rules.
 scoring: []

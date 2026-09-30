@@ -4,10 +4,6 @@
 
 namespace robotics::ros_bridge {
 namespace {
-const char *kGapNote =
-    "Mechanisms, payloads and selected task packs run in the session; pending task entries are not "
-    "executed. Selected cameras load their referenced scene assets.";
-
 Json pick(const Json &object, const std::vector<std::string> &keys) {
     Json out = Json::object();
     for (const auto &key : keys)
@@ -48,7 +44,7 @@ Json executionRecord(const session::ResolvedScenario &resolved, const BridgeCore
     for (const auto &service : config.value("services", Json::array()))
         services.push_back(pick(service, {"id", "service", "service_type", "action"}));
     return Json{
-        {"format", "nereus_ros.execution"},
+        {"format", "nereus.execution"},
         {"version", 1},
         {"resolved_content_sha256", resolved.document.value("content_sha256", "")},
         {"timestep_ns", core.timestepNs()},
@@ -66,7 +62,6 @@ Json executionRecord(const session::ResolvedScenario &resolved, const BridgeCore
         {"tf", config.value("tf", Json::object())},
         {"cameras", cameras == nullptr ? Json() : cameras->describe()},
         {"estimator_alignment", config.value("placement", Json::object()).value("estimator_alignment", Json())},
-        {"unresolved", {{"note", kGapNote}, {"items", resolved.document.value("unresolved", Json::array())}}},
         {"not_executed_config",
          {{"scenario.run.options", "defaults passed to task hooks; simulator/run_command start overrides "
                                    "them per run"},
@@ -81,7 +76,7 @@ Json tasksRecord(BridgeCore &core) {
     if (run && run->contains("rows"))
         for (const auto &row : run->at("rows"))
             scores[row.at("key").get<std::string>()] = row.at("points");
-    return Json{{"format", "nereus_ros.tasks"},
+    return Json{{"format", "nereus.tasks"},
                 {"version", 1},
                 {"scores", scores},
                 {"run", run ? *run : Json()},
@@ -96,7 +91,7 @@ Json summaryRecord(BridgeCore &core, const std::string &reason, const CameraSink
         stats[name] = {{"acquired", item.acquired}, {"delivered", item.delivered},
                        {"unavailable", item.unavailable}, {"dropped_pending", item.dropped_pending},
                        {"dropped_delivered", item.dropped_delivered}};
-    return Json{{"format", "nereus_ros.summary"},
+    return Json{{"format", "nereus.summary"},
                 {"version", 1},
                 {"stop", reason},
                 {"ticks", snapshot.tick},

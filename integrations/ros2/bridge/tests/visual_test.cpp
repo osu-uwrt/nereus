@@ -1,4 +1,4 @@
-// Viewer-facing encoders (port of test_bridge_viewer.py): JSON streams and MarkerArray streams
+// Viewer-facing encoders: JSON streams and MarkerArray streams
 // driven by pack data. Uses the fake session; no middleware.
 #include "fake_port.hpp"
 
@@ -125,7 +125,7 @@ TEST(Viewer, HeldPropsAreExpressedInTheHeldFrame) {
     EXPECT_EQ(list[0].header.frame_id, kWorld);
     EXPECT_EQ(list[0].id, 0);
     EXPECT_EQ(list[1].header.frame_id, "robot/base_link");
-    EXPECT_EQ(list[1].id, 2); // index counts the skipped prop like the Python enumerate
+    EXPECT_EQ(list[1].id, 2); // the index counts the skipped prop
     EXPECT_NEAR(list[1].pose.position.x, 0.0, 1e-9);
     EXPECT_NEAR(list[1].pose.position.z, 0.0, 1e-9);
 }

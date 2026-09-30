@@ -1,7 +1,6 @@
-// Equivalence of the C++ PropWorld with the Python/PyBullet reference. fixtures/prop_world.json
-// is written by fixtures/capture_prop_world.py from the scripted cases of
-// tests/python/test_prop_world.py (grasp, carry, basket, release, drop, reset); this test drives
-// the C++ port with the identical per-tick inputs and compares the ordered events exactly and the
+// PropWorld against a recorded reference. fixtures/prop_world.json holds scripted cases (grasp,
+// carry, basket, release, drop, reset); this test drives the prop world with the identical per-tick
+// inputs and compares the ordered events exactly and the
 // prop states every 50 ticks within a tolerance.
 #include <robotics/session/prop_world.hpp>
 
@@ -15,8 +14,8 @@ using namespace robotics::session;
 using Matrix4 = Eigen::Matrix4d;
 
 namespace {
-// Pybullet's bundled Bullet and the system libbullet (3.05, double build) are different
-// revisions and the contact scenes are chaotic at contact onset; the observed agreement is
+// The recordings came from PyBullet's bundled Bullet, a different revision from the system
+// libbullet (3.05, double build), and the contact scenes are chaotic at contact onset; the observed agreement is
 // printed by the test. Poses: metres / radians of rotation angle. Event times: ticks.
 constexpr double kPositionToleranceM = 2e-2;
 constexpr double kRotationToleranceRad = 0.15;
@@ -158,7 +157,7 @@ void compareEvents(const Replay &run, const Json &expected, const std::string &n
 
 class PropWorldEquivalence : public testing::TestWithParam<const char *> {};
 
-TEST_P(PropWorldEquivalence, MatchesPythonReference) {
+TEST_P(PropWorldEquivalence, MatchesRecordedReference) {
     const std::string name = GetParam();
     const Json fixture = readFixture();
     const Json &data = fixture.at("cases").at(name);

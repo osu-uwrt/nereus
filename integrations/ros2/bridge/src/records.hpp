@@ -1,6 +1,5 @@
 #pragma once
-// Run records written next to resolved.json: execution.json, tasks.json, summary.json (same
-// layout as the Python bridge).
+// Run records written next to resolved.json: execution.json, tasks.json, summary.json.
 #include "core.hpp"
 
 #include <filesystem>

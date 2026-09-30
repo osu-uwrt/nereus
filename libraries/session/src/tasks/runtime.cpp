@@ -1,4 +1,4 @@
-// TaskRuntime: port of python/.../task_runtime.py (see tasks.hpp for the contract).
+// TaskRuntime (see tasks.hpp for the contract).
 #include "tasks/trackers.hpp"
 
 #include <robotics/session/tasks.hpp>
@@ -110,11 +110,10 @@ template <class T> struct Keyed {
 } // namespace
 
 struct TaskRuntime::Impl {
-    struct Hook {
-        std::string rules;
+    struct ScoringRules {
+        std::string name;
         RulesFactory factory;
         Json parameters;
-        bool status{false}, feed{false};
     };
 
     std::vector<std::string> order;
@@ -131,7 +130,7 @@ struct TaskRuntime::Impl {
     std::vector<Keyed<SurfaceTracker>> surfaces;
     std::vector<Keyed<TurnTracker>> turns;
     std::vector<std::pair<std::string, Json>> score_rules;
-    std::vector<Hook> hooks;
+    std::vector<ScoringRules> scoring;
     std::vector<std::unique_ptr<Rules>> instances;
 
     Json state; // {run, scores, history, tasks, environment, latched}
@@ -157,9 +156,9 @@ struct TaskRuntime::Impl {
     void reset(std::int64_t time_ns) {
         checkTimeValue(time_ns);
         instances.clear();
-        for (const auto &hook : hooks) {
-            auto rules = hook.factory();
-            if (!rules) invalid("rules factory '" + hook.rules + "' returned nothing");
+        for (const auto &entry : scoring) {
+            auto rules = entry.factory();
+            if (!rules) invalid("rules factory '" + entry.name + "' returned nothing");
             instances.push_back(std::move(rules));
         }
         for (auto &t : portals) t.value.reset();
@@ -196,7 +195,7 @@ struct TaskRuntime::Impl {
             ok = ok && event.at(key).is_string();
         ok = ok && !event.at("id").get<std::string>().empty() && !event.at("type").get<std::string>().empty() &&
              tasks.count(event.at("task").get<std::string>()) > 0 && event.at("data").is_object();
-        if (!ok) invalid("hook emitted a malformed task event");
+        if (!ok) invalid("rules emitted a malformed task event");
         const Json &time = event.at("time_ns");
         if (!time.is_number_integer() || time.get<std::int64_t>() < 0)
             invalid("time_ns must be a nonnegative integer");
@@ -206,7 +205,7 @@ struct TaskRuntime::Impl {
             hi = std::max(hi, item.at("time_ns").get<std::int64_t>());
         }
         if (!(lo <= time.get<std::int64_t>() && time.get<std::int64_t>() <= hi))
-            invalid("hook event time must belong to the input interval");
+            invalid("rules event time must belong to the input interval");
     }
 
     Events evaluate(const Events &events) {
@@ -245,20 +244,20 @@ struct TaskRuntime::Impl {
                 }
             }
             Events emitted;
-            for (std::size_t i = 0; i < hooks.size(); ++i) {
+            for (std::size_t i = 0; i < scoring.size(); ++i) {
                 state["scores"] = scores;
-                Json result = instances[i]->evaluate(state, events, hooks[i].parameters);
-                if (!finiteJson(result)) invalid("hook result contains a non-finite number");
+                Json result = instances[i]->evaluate(state, events, scoring[i].parameters);
+                if (!finiteJson(result)) invalid("rules result contains a non-finite number");
                 if (!result.is_object() || result.size() != 2 || !result.contains("scores") ||
                     !result.contains("events"))
-                    invalid("hook must return scores and events");
+                    invalid("rules must return scores and events");
                 if (!result.at("scores").is_array() || !result.at("events").is_array())
-                    invalid("hook scores and events must be lists");
+                    invalid("rules scores and events must be lists");
                 for (const auto &change : result.at("scores")) {
                     if (!change.is_object() || change.size() != 2 || !change.contains("row") ||
                         !change.contains("points") || !change.at("row").is_string() ||
                         change.at("row").get<std::string>().empty() || !change.at("points").is_number_integer())
-                        invalid("hook score changes require a row and integer points");
+                        invalid("rules score changes require a row and integer points");
                     scores[change.at("row").get<std::string>()] = change.at("points");
                 }
                 for (const auto &event : result.at("events")) {
@@ -404,14 +403,11 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
             m.score_rules.emplace_back(id, rule);
         }
     }
-    for (const auto &hook : scenario.tasks.at("scoring_hooks")) {
-        if (!hook.contains("rules") || !hook.at("rules").is_string())
-            invalid("task pack scoring hook needs a `rules` name for the C++ runtime");
-        const std::string name = hook.at("rules").get<std::string>();
+    for (const auto &entry : scenario.tasks.at("scoring_rules")) {
+        const std::string name = entry.at("name").get<std::string>();
         const auto found = rules.find(name);
         if (found == rules.end()) invalid("unknown rules '" + name + "'");
-        m.hooks.push_back({name, found->second, hook.at("parameters"), hook.contains("status_function"),
-                           hook.contains("feed_function")});
+        m.scoring.push_back({name, found->second, entry.at("parameters")});
     }
     m.reset(0);
 }
@@ -461,9 +457,8 @@ Json TaskRuntime::describe() const {
     Impl &m = *impl_;
     Json fields = Json::object();
     const Json state = snapshot();
-    for (std::size_t i = 0; i < m.hooks.size(); ++i) {
-        if (!m.hooks[i].status) continue;
-        const Json extra = m.instances[i]->describe(state, m.hooks[i].parameters);
+    for (std::size_t i = 0; i < m.scoring.size(); ++i) {
+        const Json extra = m.instances[i]->describe(state, m.scoring[i].parameters);
         if (!finiteJson(extra) || !extra.is_object()) invalid("status function must return a finite object");
         for (auto it = extra.begin(); it != extra.end(); ++it) fields[it.key()] = it.value();
     }
@@ -474,9 +469,8 @@ Json TaskRuntime::feed(const Events &events, const Json &context) const {
     Impl &m = *impl_;
     Json items = Json::array();
     const Json state = snapshot();
-    for (std::size_t i = 0; i < m.hooks.size(); ++i) {
-        if (!m.hooks[i].feed) continue;
-        const Json part = m.instances[i]->feed(state, events, context, m.hooks[i].parameters);
+    for (std::size_t i = 0; i < m.scoring.size(); ++i) {
+        const Json part = m.instances[i]->feed(state, events, context, m.scoring[i].parameters);
         if (!finiteJson(part) || !part.is_array()) invalid("feed function must return a finite list");
         for (const auto &item : part) items.push_back(item);
     }

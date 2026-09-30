@@ -1,11 +1,11 @@
 [build-system]
-requires = ["scikit-build-core>=0.11,<1.1", "pybind11>=2.13,<4"]
-build-backend = "scikit_build_core.build"
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "nereus"
 version = "0.1.0"
-description = "Standalone underwater simulation and typed sensor runtime"
+description = "Nereus pack tools: validate and resolve robot, pool, task, bridge and scenario packs"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
@@ -14,24 +14,17 @@ dependencies = ["numpy>=1.23,<3", "ruamel.yaml>=0.18,<0.20",
                 "jsonschema>=4.21,<5", "referencing>=0.34,<1"]
 
 [project.optional-dependencies]
-props = ["pybullet>=3.2"]   # claw/table rigid-body prop world (prop_world.py)
-dev = ["build>=1.2,<2", "mypy>=1.11,<2", "ruff>=0.9,<1",
-       "scikit-build-core>=0.11,<1.1", "pybind11>=2.13,<4", "ninja>=1.5"]
+dev = ["build>=1.2,<2", "mypy>=1.11,<2", "ruff>=0.9,<1", "pytest>=7"]
 
-[tool.scikit-build]
-minimum-version = "0.11"
-cmake.version = ">=3.22"
-build-dir = "build/python/{wheel_tag}"
-build.tool-args = ["-j2"]
-wheel.packages = []
-install.components = ["python"]
-sdist.include = ["bindings/**", "python/**", "libraries/**", "cmake/**", "third_party/glm/**", "content/packs/**", "tests/**", "examples/**", "tools/**", "docs/**", "/CMakeLists.txt", "/LICENSE", "/NOTICE", "/README.md"]
-sdist.exclude = ["build/**", "install/**", "dist/**", ".cache/**", "**/__pycache__/**"]
+[project.scripts]
+nereus-packs = "nereus.packs.__main__:main"
 
-[tool.scikit-build.cmake.define]
-NEREUS_BUILD_PYTHON = "ON"
-BUILD_TESTING = "OFF"
-BUILD_SHARED_LIBS = "OFF"
+[tool.setuptools.packages.find]
+where = ["python/src"]
+
+[tool.setuptools.package-data]
+nereus = ["py.typed"]
+"nereus.packs" = ["definitions/*.json"]
 
 [tool.ruff]
 target-version = "py310"
@@ -45,5 +38,5 @@ python_version = "3.10"
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["ruamel.*", "jsonschema.*", "pybullet", "pybullet_utils.*"]
+module = ["ruamel.*", "jsonschema.*"]
 ignore_missing_imports = true

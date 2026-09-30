@@ -28,7 +28,7 @@ struct ImageCapture {
 // Draw resets relevant GL state, then leaves state changed and framebuffer zero bound.
 // Meshes must remain immutable while shared. Unused GPU assets are released each full (non-preview) draw.
 // Diffuse textures are 8-bit PNG files (at most 16384 pixels per side and 256 MiB),
-// uploaded like the original viewer: rows flipped, sRGB internal format, trilinear
+// uploaded with rows flipped, sRGB internal format, trilinear
 // mipmaps, repeat wrapping, raw stored values (no gamma chunk conversion), and a
 // textured submesh drawn with an opaque white base color.
 class Renderer {

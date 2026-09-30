@@ -1,5 +1,5 @@
 #pragma once
-// RoboSub 2026 competition rules: port of content/packs/tasks/robosub_2026/hooks/rules_2026.py.
+// RoboSub 2026 competition rules (tasks pack robosub_2026, `rules: robosub_2026`).
 #include <robotics/session/tasks.hpp>
 
 #include <memory>

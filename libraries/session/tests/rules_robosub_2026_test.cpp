@@ -1,6 +1,6 @@
-// Equivalence of the C++ robosub_2026 rules with the Python hook. The fixture
-// (extensions/rules/robosub_2026/tests/rules_calls.json, written by capture_fixture.py) holds every
-// distinct hook call made by the Python reference tests (evaluate/describe/feed inputs and
+// The robosub_2026 rules against recorded calls. The fixture
+// (extensions/rules/robosub_2026/tests/rules_calls.json) holds every distinct rules call of the
+// reference scoring scripts (evaluate/describe/feed inputs and
 // outputs, or the raised error). Every output must be identical JSON: integers, strings, booleans
 // and structure exactly; floating point numbers to 1e-9 relative tolerance.
 #include <gtest/gtest.h>
@@ -51,7 +51,7 @@ std::unique_ptr<robotics::session::Rules> rules() {
     return registry.at("robosub_2026")();
 }
 
-TEST(Robosub2026Rules, MatchesPythonHookOnEveryRecordedCall) {
+TEST(Robosub2026Rules, MatchesEveryRecordedCall) {
     Json calls = loadCalls();
     ASSERT_GT(calls.size(), 100u);
     auto impl = rules();

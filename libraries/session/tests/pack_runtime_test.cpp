@@ -1,4 +1,4 @@
-// createRuntime equivalence with python pack_runtime.create_runtime on the Talos scenario:
+// createRuntime on the Talos scenario against a recorded reference:
 // every derived plant parameter, then 1500 scripted ticks of body and sensor output.
 #include "session_test_util.hpp"
 
@@ -13,7 +13,7 @@ Json boxJson(const robotics::simulation::BoxProxy &b) {
 }
 } // namespace
 
-TEST(PackRuntime, MatchesPythonPlantParametersFramesAndDynamics) {
+TEST(PackRuntime, MatchesReferencePlantParametersFramesAndDynamics) {
     const auto fixture = loadFixture("pack_runtime_reference.json");
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     auto pack = createRuntime(scenario);
@@ -58,8 +58,7 @@ TEST(PackRuntime, MatchesPythonPlantParametersFramesAndDynamics) {
     EXPECT_EQ(Json(pack.sensor_ids), fixture.at("sensor_ids"));
     EXPECT_EQ(Json(pack.deferred_sensor_ids), fixture.at("deferred"));
 
-    // Dynamics + sensors incl. noise seeds: kTrajectoryTolerance (the code is shared with the
-    // Python binding, so this is in practice bit-exact).
+    // Dynamics + sensors incl. noise seeds: kTrajectoryTolerance (in practice bit-exact in Release).
     const auto &forces = fixture.at("forces");
     std::size_t next = 0;
     const auto &checkpoints = fixture.at("checkpoints");

@@ -66,7 +66,7 @@ TEST(SessionCamerasSeeds, Sha256AndDerivation) {
     const auto two = sc::sha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq");
     EXPECT_EQ(two[0], 0x24);
     EXPECT_EQ(two[31], 0xc1); // 248d6a61...19db06c1
-    // Values from python/src/nereus/pack_cameras.py derive_seed.
+    // Recorded reference seeds.
     EXPECT_EQ(sc::deriveSeed(0, "front", "left"), 3562221999u);
     EXPECT_EQ(sc::deriveSeed(12345, "front", "right"), 737816300u);
     EXPECT_EQ(sc::deriveSeed(18446744073709551615ull, "a", "left"), 1862611008u);

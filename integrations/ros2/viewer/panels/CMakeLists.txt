@@ -1,4 +1,4 @@
-# Target nereus_viewer_panels: ported pool_viewer panel composition, providers and panels.
+# Target nereus_viewer_panels: panel composition, providers and panels of the pool viewer.
 # Depends on ROS messages, ImGui, glm and yaml-cpp only; no simulator types.
 set(_panel_sources
   panel_registry.cpp composition.cpp motion_panel.cpp mapping_panel.cpp actuator_panel.cpp

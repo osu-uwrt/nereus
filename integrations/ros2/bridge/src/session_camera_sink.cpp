@@ -1,6 +1,5 @@
 // CameraSink over robotics::session_cameras::SessionCameras (built when NEREUS_BUILD_SESSION_CAMERAS
-// is on). Ports camera_bridge.py's stream compilation and images.py's message formatting; the
-// scheduling, bounded workers, stale discard and seed reset live in SessionCameras.
+// is on): compiles the camera streams and formats their messages; the scheduling, bounded workers, stale discard and seed reset live in SessionCameras.
 #ifdef NEREUS_BRIDGE_CAMERAS
 #include "camera_sink.hpp"
 #include "mapping.hpp"
@@ -29,7 +28,7 @@ struct CameraStream {
     std::vector<sc::Output> demand_outputs;
     int stride{1}, every{1}; // point_cloud: pixel step; publish every Nth capture (stream rate = sensor rate / N)
 };
-// PCL PointXYZRGB layout, as the original simulator and the ZED driver publish (point_step 32).
+// PCL PointXYZRGB layout, as the ZED driver publishes (point_step 32).
 struct CloudPoint {
     float x, y, z, padding;
     std::uint8_t b, g, r, alpha;

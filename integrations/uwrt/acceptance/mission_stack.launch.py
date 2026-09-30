@@ -1,7 +1,6 @@
-"""The unchanged UWRT stack exactly as the original simulator brought it up (hardware:=none).
-
-Same as riptide_bringup2 simulation.launch.py minus the old simulator: every node uses the
-simulation clock; navigation, control, perception, mapping and autonomy come from bringup.
+"""The UWRT stack as riptide_bringup2 simulation.launch.py brings it up (hardware:=none), minus the
+simulator itself: every node uses the simulation clock; navigation, control, perception, mapping
+and autonomy come from bringup.
 
 Controller selection is passed through to bringup / control_system.launch.py / riptide_mpc (empty =
 that launch file's own default):

@@ -1,6 +1,6 @@
 # Table: sort the objects into the baskets with the claw.
 # Task frame: the table top, +Z up. Props are rigid bodies grasped between the claw's jaws; the
-# prop world emits the events and the hook scores them.
+# prop world emits the events and the rules score them.
 kind: task
 id: table
 description: Table with four grabbable props and two baskets (helmet, warning); grasp, carry and drop.
@@ -137,5 +137,5 @@ events:
   type: drop_into
   parameters: {outcome: elsewhere, regions: [helmet_basket, warning_basket], surfaces: {floor: floor, support: table}, emits: [prop_id]}
 
-# Drop 200/object, basket 700 correct / 500 other, basket-count turns: scored by the hook.
+# Drop 200/object, basket 700 correct / 500 other, basket-count turns: scored by the rules.
 scoring: []
