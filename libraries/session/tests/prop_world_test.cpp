@@ -34,7 +34,9 @@ Matrix4 matrixOf(const Json &rows) {
             m(r, c) = rows.at(static_cast<std::size_t>(r)).at(static_cast<std::size_t>(c)).get<double>();
     return m;
 }
-Eigen::Vector3d vec(const Json &v) { return {v.at(0).get<double>(), v.at(1).get<double>(), v.at(2).get<double>()}; }
+Eigen::Vector3d vec(const Json &v) {
+    return {v.at(0).get<double>(), v.at(1).get<double>(), v.at(2).get<double>()};
+}
 Eigen::Quaterniond quat(const Json &v) {
     return {v.at(0).get<double>(), v.at(1).get<double>(), v.at(2).get<double>(), v.at(3).get<double>()};
 }
@@ -73,8 +75,9 @@ struct Replay {
     int ticks{0};
 };
 
-Replay replay(const ResolvedScenario &scenario, const Json &data, double dt, int sample_ticks, PropWorld *shared = nullptr,
-           bool check = true, std::size_t op_limit = SIZE_MAX, Matrix4 *final_mount = nullptr) {
+Replay replay(const ResolvedScenario &scenario, const Json &data, double dt, int sample_ticks,
+              PropWorld *shared = nullptr, bool check = true, std::size_t op_limit = SIZE_MAX,
+              Matrix4 *final_mount = nullptr) {
     std::unique_ptr<PropWorld> owned;
     if (!shared)
         owned = std::make_unique<PropWorld>(scenario, "table");
@@ -86,7 +89,8 @@ Replay replay(const ResolvedScenario &scenario, const Json &data, double dt, int
     Matrix4 mount = Matrix4::Identity();
     for (int r = 0; r < 3; ++r)
         for (int c = 0; c < 3; ++c)
-            mount(r, c) = data.at("mount_rotation").at(static_cast<std::size_t>(r)).at(static_cast<std::size_t>(c)).get<double>();
+            mount(r, c) =
+                data.at("mount_rotation").at(static_cast<std::size_t>(r)).at(static_cast<std::size_t>(c)).get<double>();
     // Expand the run-length encoded claw joints.
     std::vector<double> joints;
     for (const auto &item : data.at("joints_rle"))
@@ -170,8 +174,8 @@ TEST_P(PropWorldEquivalence, MatchesRecordedReference) {
     std::cout << "[observed] " << name << ": max prop position diff " << run.stats.position << " m (";
     for (const auto &[prop, d] : run.stats.position_by_prop)
         std::cout << prop << " " << d << " ";
-    std::cout << "), rotation diff " << run.stats.rotation << " rad, max event tick offset " << worst << ", C++ step " << run.step_us
-              << " us\n";
+    std::cout << "), rotation diff " << run.stats.rotation << " rad, max event tick offset " << worst << ", C++ step "
+              << run.step_us << " us\n";
 }
 
 INSTANTIATE_TEST_SUITE_P(Cases, PropWorldEquivalence,
@@ -221,9 +225,8 @@ double contactHeight(robotics::simulation::ContactResolver &contacts, Matrix4 mo
 }
 // Translation-only robot (these harnesses integrate position only): the contact impulse cannot
 // turn into rotation about the COM, so the contact point velocity is the COM velocity.
-const Matrix6 kInverseMass = (Eigen::Matrix<double, 6, 1>() << 1 / 40., 1 / 45., 1 / 45., 1e-9, 1e-9, 1e-9)
-                                 .finished()
-                                 .asDiagonal();
+const Matrix6 kInverseMass =
+    (Eigen::Matrix<double, 6, 1>() << 1 / 40., 1 / 45., 1 / 45., 1e-9, 1e-9, 1e-9).finished().asDiagonal();
 } // namespace
 
 // Old task_contacts.cpp: the claw pads cannot pass through the table; the robot is pushed out and
@@ -238,7 +241,8 @@ TEST(PropWorld, RobotContactsStopThePadsAtTheTable) {
     Matrix4 mount = Matrix4::Identity();
     for (int r = 0; r < 3; ++r)
         for (int c = 0; c < 3; ++c)
-            mount(r, c) = data.at("mount_rotation").at(static_cast<std::size_t>(r)).at(static_cast<std::size_t>(c)).get<double>();
+            mount(r, c) =
+                data.at("mount_rotation").at(static_cast<std::size_t>(r)).at(static_cast<std::size_t>(c)).get<double>();
     mount.block<3, 1>(0, 3) = vec(data.at("ops").at(0).at("place")) + Eigen::Vector3d(0, 0, .3);
     const double touch = contactHeight(*contacts, mount, mount_local, kInverseMass);
     ASSERT_TRUE(std::isfinite(touch)) << "no robot contact while lowering the claw onto the table";
@@ -287,8 +291,8 @@ TEST(PropWorld, HeldPropIsPartOfTheRobotAgainstScenery) {
             pose.translation = x.head<3>();
             pose.rotation = Eigen::Quaterniond(x[3], x[4], x[5], x[6]).normalized();
             time_ns += std::llround(dt * 1e9);
-            for (const auto &e : world.step(dt, time_ns, pose, worldVelocity(x), Eigen::Vector3d::Zero(),
-                                            {0.0, 0.0}, Water{}, true))
+            for (const auto &e :
+                 world.step(dt, time_ns, pose, worldVelocity(x), Eigen::Vector3d::Zero(), {0.0, 0.0}, Water{}, true))
                 if (e.at("type") == "detach")
                     detached.push_back(e.at("data").at("reason").get<std::string>());
         }

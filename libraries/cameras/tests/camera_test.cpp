@@ -8,10 +8,9 @@ using namespace robotics::cameras;
 namespace spatial = robotics::spatial;
 namespace {
 float bufferDepth(double metres, const Intrinsics &k) {
-    return static_cast<float>(
-        (k.far_plane + k.near_plane - 2 * k.near_plane * k.far_plane / metres) /
-            (k.far_plane - k.near_plane) * .5 +
-        .5);
+    return static_cast<float>((k.far_plane + k.near_plane - 2 * k.near_plane * k.far_plane / metres) /
+                                  (k.far_plane - k.near_plane) * .5 +
+                              .5);
 }
 Intrinsics small(int width = 64, int height = 48) {
     Intrinsics k;
@@ -26,8 +25,7 @@ Intrinsics small(int width = 64, int height = 48) {
 Eigen::Vector2d pixel(const Intrinsics &k, const spatial::Pose &pose, Eigen::Vector3d world) {
     const Eigen::Vector4f point(world.x(), world.y(), world.z(), 1);
     const Eigen::Vector4f clip = k.projection() * opticalView(pose) * point;
-    return {(clip.x() / clip.w() + 1) * k.width / 2 - .5,
-            (1 - clip.y() / clip.w()) * k.height / 2 - .5};
+    return {(clip.x() / clip.w() + 1) * k.width / 2 - .5, (1 - clip.y() / clip.w()) * k.height / 2 - .5};
 }
 void same(const std::vector<float> &a, const std::vector<float> &b) {
     ASSERT_EQ(a.size(), b.size());
@@ -80,8 +78,7 @@ TEST(CameraGeometry, RejectsInvalidCalibrationAndNonrigidPose) {
 TEST(CameraProducts, TopDownColorAndOpticalDepthStayRegistered) {
     const auto k = small(2, 2);
     const std::vector<std::uint8_t> bottom_rgb{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-    const std::vector<float> bottom_depth{bufferDepth(1, k), bufferDepth(2, k), bufferDepth(3, k),
-                                          1};
+    const std::vector<float> bottom_depth{bufferDepth(1, k), bufferDepth(2, k), bufferDepth(3, k), 1};
     DepthNoise noise;
     noise.enabled = false;
     Processor processor;
@@ -100,8 +97,8 @@ TEST(CameraProducts, RangeAndBackgroundRemainInvalidWithNoiseDisabled) {
     DepthNoise noise;
     noise.enabled = false;
     noise.max_range = 4;
-    const auto frame = Processor().process(
-        k, noise, {}, {bufferDepth(.1, k), bufferDepth(5, k), 1, NAN, bufferDepth(2, k)});
+    const auto frame =
+        Processor().process(k, noise, {}, {bufferDepth(.1, k), bufferDepth(5, k), 1, NAN, bufferDepth(2, k)});
     for (int i = 0; i < 4; ++i)
         EXPECT_TRUE(std::isnan(frame.depth[i]));
     EXPECT_NEAR(frame.depth[4], 2, 2e-5);
@@ -168,8 +165,7 @@ TEST(CameraNoise, CompleteDropoutAndInvalidParametersAreExplicit) {
     const auto k = small();
     DepthNoise noise;
     noise.dropout = 1;
-    const auto frame = Processor().process(
-        k, noise, {}, std::vector<float>(k.width * k.height, bufferDepth(2, k)));
+    const auto frame = Processor().process(k, noise, {}, std::vector<float>(k.width * k.height, bufferDepth(2, k)));
     for (const auto value : frame.depth)
         EXPECT_TRUE(std::isnan(value));
     noise.patch_size = 0;

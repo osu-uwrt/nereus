@@ -1,24 +1,24 @@
 #include "robotics/ros_viewer/panels/composition.hpp"
 #include "robotics/ros_viewer/panels/ros_providers.hpp"
+#include <cassert>
 #include <chameleon_tf_msgs/action/model_frame.hpp>
-#include <riptide_msgs2/msg/mapping_target_info.hpp>
-#include <riptide_msgs2/msg/actuator_status.hpp>
-#include <riptide_msgs2/srv/mapping_target.hpp>
-#include <std_srvs/srv/trigger.hpp>
-#include <std_msgs/msg/bool.hpp>
-#include <std_msgs/msg/empty.hpp>
-#include <std_msgs/msg/string.hpp>
-#include <std_msgs/msg/float64_multi_array.hpp>
-#include <visualization_msgs/msg/marker_array.hpp>
-#include <rclcpp_action/rclcpp_action.hpp>
-#include <rclcpp/rclcpp.hpp>
+#include <functional>
 #include <imgui.h>
 #include <imgui_internal.h>
-#include <cassert>
-#include <functional>
+#include <iostream>
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <riptide_msgs2/msg/actuator_status.hpp>
+#include <riptide_msgs2/msg/mapping_target_info.hpp>
+#include <riptide_msgs2/srv/mapping_target.hpp>
+#include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/empty.hpp>
+#include <std_msgs/msg/float64_multi_array.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <std_srvs/srv/trigger.hpp>
 #include <thread>
 #include <unistd.h>
-#include <iostream>
+#include <visualization_msgs/msg/marker_array.hpp>
 using namespace robotics::ros_viewer::panels;
 using namespace std::chrono_literals;
 using Cal = chameleon_tf_msgs::action::ModelFrame;
@@ -52,18 +52,17 @@ int main(int argc, char **argv) {
             const auto type = item["type"].as<std::string>();
             if (registry.panels.count(type))
                 continue;
-            registry.panels.emplace(
-                type, ViewFactory<Panel>{Kind::Motion, [](const YAML::Node &) {},
-                                         [&, type](const Binding &) {
-                                             auto stub = std::make_unique<Stub>();
-                                             if (type == "pool_viewer")
-                                                 stub->bar = [&] {
-                                                     simulationButtonMin = ImGui::GetItemRectMin();
-                                                     simulationButtonMax = ImGui::GetItemRectMax();
-                                                 };
-                                             return std::unique_ptr<Panel>(std::move(stub));
-                                         },
-                                         true, false});
+            registry.panels.emplace(type, ViewFactory<Panel>{Kind::Motion, [](const YAML::Node &) {},
+                                                             [&, type](const Binding &) {
+                                                                 auto stub = std::make_unique<Stub>();
+                                                                 if (type == "pool_viewer")
+                                                                     stub->bar = [&] {
+                                                                         simulationButtonMin = ImGui::GetItemRectMin();
+                                                                         simulationButtonMax = ImGui::GetItemRectMax();
+                                                                     };
+                                                                 return std::unique_ptr<Panel>(std::move(stub));
+                                                             },
+                                                             true, false});
         }
     const auto toolsConfig = YAML::LoadFile(argv[2]);
     for (const auto &entry : toolsConfig["providers"])

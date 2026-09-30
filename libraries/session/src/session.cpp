@@ -139,8 +139,8 @@ struct Session::Impl {
         Json context = {{"payloads", Json::object()}};
         for (std::size_t i = 0; i < payloads.size(); ++i)
             context["payloads"][std::to_string(payloads[i].id)] = {{"mechanism_id", payloads[i].mechanism_id},
-                                                                     {"mechanism_type", payloads[i].mechanism_type},
-                                                                     {"slot", extras[i].slot}};
+                                                                   {"mechanism_type", payloads[i].mechanism_type},
+                                                                   {"slot", extras[i].slot}};
         for (const auto &item : tasks->feed(events, context)) {
             const std::string result = item.at("result").get<std::string>();
             if (counters.contains(result))
@@ -161,7 +161,8 @@ struct Session::Impl {
     Events propagate(std::size_t index, std::int64_t now, const simulation::PayloadEnvironment &water) {
         auto &payload = payloads[index];
         const simulation::PayloadState old = payload.state;
-        const simulation::PayloadState fresh = dynamics.at(payload.mechanism_id).advance(old, water, static_cast<double>(timestep_ns) / 1e9);
+        const simulation::PayloadState fresh =
+            dynamics.at(payload.mechanism_id).advance(old, water, static_cast<double>(timestep_ns) / 1e9);
         payload.state = fresh;
         if (now - payload.released_ns > extras[index].max_age_ns) {
             payload.active = false;
@@ -190,10 +191,9 @@ struct Session::Impl {
         const Eigen::Vector3d omega = rotate(root.rotation, body.angular_velocity);
         const MechanismState state = mechanisms->snapshot(killed);
         const auto &pool = pack.parameters.pool;
-        const Eigen::Vector3d flow =
-            pool.current_velocity +
-            pool.current_oscillation_amplitude *
-                std::sin(2 * kPi * pool.current_oscillation_frequency * static_cast<double>(now) / 1e9);
+        const Eigen::Vector3d flow = pool.current_velocity + pool.current_oscillation_amplitude *
+                                                                 std::sin(2 * kPi * pool.current_oscillation_frequency *
+                                                                          static_cast<double>(now) / 1e9);
         Water water;
         water.velocity_world = flow;
         water.density = pool.water_density;
@@ -211,7 +211,8 @@ struct Session::Impl {
     }
     // Body-axis COM velocities -> velocity at the reference origin in reference axes.
     std::pair<Eigen::Vector3d, Eigen::Vector3d> referenceVelocities(const simulation::BodyState &body) const {
-        const Eigen::Vector3d velocity = body.linear_velocity + body.angular_velocity.cross(root_to_reference.translation);
+        const Eigen::Vector3d velocity =
+            body.linear_velocity + body.angular_velocity.cross(root_to_reference.translation);
         const auto rotation = inverseChecked(root_to_reference).rotation;
         return {rotate(rotation, velocity), rotate(rotation, body.angular_velocity)};
     }
@@ -223,15 +224,15 @@ struct Session::Impl {
     }
 };
 
-Session::Session(const ResolvedScenario &scenario, PackRuntime pack, const RulesRegistry &rules,
-                 SessionOptions options)
+Session::Session(const ResolvedScenario &scenario, PackRuntime pack, const RulesRegistry &rules, SessionOptions options)
     : impl_(std::make_unique<Impl>(scenario, std::move(pack))) {
     auto &s = *impl_;
     s.task_pack = &s.scenario.tasks;
     s.timestep_ns = s.pack.parameters.timestep.count();
     s.reference_frame = s.scenario.robot.at("reference_frame").get<std::string>();
     s.root_to_reference = s.pack.frames->fromRoot(s.reference_frame);
-    const Json &mechanisms = s.scenario.robot.contains("mechanisms") ? s.scenario.robot.at("mechanisms") : Json::array();
+    const Json &mechanisms =
+        s.scenario.robot.contains("mechanisms") ? s.scenario.robot.at("mechanisms") : Json::array();
     if (!mechanisms.empty())
         s.mechanisms = std::make_unique<Mechanisms>(s.scenario.robot);
     for (const auto &item : mechanisms) {
@@ -293,7 +294,8 @@ Step Session::advance() {
         for (std::size_t i = 0; i < s.payloads.size(); ++i)
             if (s.payloads[i].active) {
                 auto produced = s.propagate(i, now, water);
-                events.insert(events.end(), std::make_move_iterator(produced.begin()), std::make_move_iterator(produced.end()));
+                events.insert(events.end(), std::make_move_iterator(produced.begin()),
+                              std::make_move_iterator(produced.end()));
             }
     }
     if (!s.prop_worlds.empty()) {
@@ -373,8 +375,8 @@ CommandResult Session::fire(const std::string &id) {
     const auto [velocity, omega] = s.referenceVelocities(body);
     const std::int64_t now = s.timeNs();
     PayloadRelease release;
-    const auto result = s.mechanisms->fire(id, s.referencePose(body), velocity, omega, s.reference_frame,
-                                           s.density, s.killed, release);
+    const auto result =
+        s.mechanisms->fire(id, s.referencePose(body), velocity, omega, s.reference_frame, s.density, s.killed, release);
     if (!result.accepted)
         return result;
     Payload payload;
@@ -522,8 +524,8 @@ std::optional<Json> Session::runSnapshot() const {
     const auto &s = *impl_;
     if (!s.tasks)
         return std::nullopt;
-    return buildRunSnapshot(*s.task_pack, s.tasks->snapshot(), s.tasks->describe(), s.timeNs(),
-                            s.run_adjustment, s.run_message);
+    return buildRunSnapshot(*s.task_pack, s.tasks->snapshot(), s.tasks->describe(), s.timeNs(), s.run_adjustment,
+                            s.run_message);
 }
 
 Json Session::takeFeed() {

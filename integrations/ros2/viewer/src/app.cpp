@@ -2,24 +2,24 @@
 #include "frame_profiler.hpp"
 #include "mapping_markers.hpp"
 #include "overlay_draw.hpp"
+#include "robotics/ros_viewer/panel_layout.hpp"
+#include "robotics/ros_viewer/panels/composition.hpp"
+#include "robotics/ros_viewer/panels/ros_providers.hpp"
 #include "ros_side.hpp"
 #include "scene_model.hpp"
 #include "viewer_input.hpp"
 #include "window.hpp"
-#include "robotics/ros_viewer/panel_layout.hpp"
-#include "robotics/ros_viewer/panels/composition.hpp"
-#include "robotics/ros_viewer/panels/ros_providers.hpp"
-#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include <robotics/rendering/renderer.hpp>
-#include <imgui_internal.h>
 #include <algorithm>
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cmath>
 #include <deque>
 #include <fstream>
+#include <imgui_internal.h>
 #include <iomanip>
 #include <iostream>
+#include <robotics/rendering/renderer.hpp>
 #include <set>
 #include <sstream>
 #include <thread>
@@ -310,9 +310,9 @@ class App {
     std::deque<glm::vec3> trail_;
     std::string status_ = "WAITING FOR SCENARIO";
     std::vector<CardTexture> cards_;
-    std::vector<double> cardDue_;        // next render time per card
-    std::vector<char> cardVisible_;      // drawn on screen last frame (scrolled-out / hidden cards are skipped)
-    std::size_t nextCardTurn_ = 0;       // round-robin start so cards share the frame budget evenly
+    std::vector<double> cardDue_;   // next render time per card
+    std::vector<char> cardVisible_; // drawn on screen last frame (scrolled-out / hidden cards are skipped)
+    std::size_t nextCardTurn_ = 0;  // round-robin start so cards share the frame budget evenly
     // layout
     float cameraSidebarWidth_ = 0, toolbarHeight_ = 80;
     bool cameraSidebarVisible_ = true, cameraSidebarResized_ = false;
@@ -334,7 +334,8 @@ class App {
 };
 
 App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(argc), argv_(argv) {
-    fs::path configPath = opt_.configPath.empty() ? contentDirectory() / "talos_uwrt_host.yaml" : fs::path(opt_.configPath);
+    fs::path configPath =
+        opt_.configPath.empty() ? contentDirectory() / "talos_uwrt_host.yaml" : fs::path(opt_.configPath);
     config_ = YAML::LoadFile(configPath.string());
     configDir_ = configPath.parent_path();
     demoMode_ = opt_.demo;
@@ -352,12 +353,11 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
         rclcpp::init(argc, argv);
         // Without a simulator (real robot) there is no /clock: default to wall time.
         const bool estimateOnly =
-            (!opt_.poseSource.empty() ? opt_.poseSource : lookup(config_, {"pose", "source"}).as<std::string>("auto")) ==
-            "estimate";
+            (!opt_.poseSource.empty() ? opt_.poseSource
+                                      : lookup(config_, {"pose", "source"}).as<std::string>("auto")) == "estimate";
         const bool simTime = opt_.useSimTime.value_or(!estimateOnly);
-        node_ = std::make_shared<rclcpp::Node>("nereus_viewer",
-                                               rclcpp::NodeOptions().parameter_overrides(
-                                                   {rclcpp::Parameter("use_sim_time", simTime)}));
+        node_ = std::make_shared<rclcpp::Node>(
+            "nereus_viewer", rclcpp::NodeOptions().parameter_overrides({rclcpp::Parameter("use_sim_time", simTime)}));
     }
     ros_ = std::make_unique<RosSide>(node_);
     ros_->configurePose(
@@ -368,15 +368,16 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     robotGhost_ = lookup(config_, {"pose", "robot_ghost"}).as<bool>(false);
     gizmoOnEstimate_ = lookup(config_, {"pose", "gizmo_anchor"}).as<std::string>("estimate") == "estimate";
     followEstimate_ = lookup(config_, {"pose", "follow_anchor"}).as<std::string>("truth") == "estimate";
-    ros_->setDetectionMode(parseDetectionMode(
-        !opt_.detectionPlacement.empty() ? opt_.detectionPlacement
-                                         : lookup(config_, {"detections", "placement"}).as<std::string>("pose_source")));
+    ros_->setDetectionMode(
+        parseDetectionMode(!opt_.detectionPlacement.empty()
+                               ? opt_.detectionPlacement
+                               : lookup(config_, {"detections", "placement"}).as<std::string>("pose_source")));
     ros_->setHonorDeleteAll(!opt_.keepDetections && lookup(config_, {"detections", "honor_delete_all"}).as<bool>(true));
     const int width = lookup(config_, {"window", "width"}).as<int>(1480),
               height = lookup(config_, {"window", "height"}).as<int>(940);
-    window_ = std::make_unique<Window>(width, height,
-                                       lookup(config_, {"branding", "window_title"}).as<std::string>("Robotics Pool Viewer"),
-                                       opt_.hidden, opt_.vsync);
+    window_ = std::make_unique<Window>(
+        width, height, lookup(config_, {"branding", "window_title"}).as<std::string>("Robotics Pool Viewer"),
+        opt_.hidden, opt_.vsync);
     fs::path shaders = opt_.shaders;
 #ifdef NEREUS_RENDERING_SHADERS
     if (shaders.empty())
@@ -401,9 +402,10 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     } else if (demoMode_) {
         throw std::runtime_error("--demo needs --scenario FILE (there is no bridge to publish a scene)");
     } else {
-        const std::string topic = !opt_.scenarioTopic.empty()
-                                      ? opt_.scenarioTopic
-                                      : lookup(config_, {"scenario_topic"}).as<std::string>("/talos/simulator/scenario");
+        const std::string topic =
+            !opt_.scenarioTopic.empty()
+                ? opt_.scenarioTopic
+                : lookup(config_, {"scenario_topic"}).as<std::string>("/talos/simulator/scenario");
         ros_->watchScenario(topic, [this](const std::string &json) { pendingScenario_ = json; });
     }
 }
@@ -615,19 +617,20 @@ void App::loadScenario(const std::string &json) {
     for (const auto &name : scenario_->ui["demo_targets"])
         if (scenario_->landmarks.count(name.as<std::string>()))
             demoNames_.push_back(name.as<std::string>());
-    window_->setTitle(lookup(config_, {"branding", "window_title"}).as<std::string>(scenario_->robotId + " | " + scenario_->poolId));
+    window_->setTitle(
+        lookup(config_, {"branding", "window_title"}).as<std::string>(scenario_->robotId + " | " + scenario_->poolId));
     if (demoMode_) {
         const auto p = lookup(config_, {"preview", "pose"});
         body_ = p ? pose(vec3(p), {0, 0, p[5].as<float>(0)}) : pose({3, -2, -.75f}, {0, 0, -.14f});
-        const std::string task = !opt_.demoTask.empty() ? opt_.demoTask
-                                                        : lookup(config_, {"preview", "task"}).as<std::string>("");
+        const std::string task =
+            !opt_.demoTask.empty() ? opt_.demoTask : lookup(config_, {"preview", "task"}).as<std::string>("");
         if (!task.empty() && scenario_->landmarks.count(task))
             previewPose(task);
     }
     if (!composition_)
         buildPanels();
-    std::string initial = !opt_.initialFocus.empty() ? opt_.initialFocus
-                                                     : lookup(config_, {"initial_focus"}).as<std::string>("Vehicle");
+    std::string initial =
+        !opt_.initialFocus.empty() ? opt_.initialFocus : lookup(config_, {"initial_focus"}).as<std::string>("Vehicle");
     if (!focusable(initial))
         initial = "Vehicle";
     focus(initial);
@@ -636,9 +639,10 @@ void App::loadScenario(const std::string &json) {
 }
 
 void App::buildPanels() {
-    const std::string configured = opt_.panelsPath.empty()
-                                       ? (configDir_ / lookup(config_, {"panels_config"}).as<std::string>("talos_uwrt_panels.yaml")).string()
-                                       : opt_.panelsPath;
+    const std::string configured =
+        opt_.panelsPath.empty()
+            ? (configDir_ / lookup(config_, {"panels_config"}).as<std::string>("talos_uwrt_panels.yaml")).string()
+            : opt_.panelsPath;
     const bool haveConfig = configured != "none" && fs::exists(configured);
     if (!haveConfig && configured != "none")
         std::cerr << "nereus-viewer: panel composition " << configured << " not found; panels disabled\n";
@@ -774,8 +778,7 @@ void App::smoothEstimateError() {
 }
 
 bool App::courseFromMapping() const {
-    return !demoMode_ && !mappingMarkers_.empty() &&
-           (courseMode_ == 2 || (courseMode_ == 0 && !ros_->truthActive()));
+    return !demoMode_ && !mappingMarkers_.empty() && (courseMode_ == 2 || (courseMode_ == 0 && !ros_->truthActive()));
 }
 
 // Host config `mapping_markers:` {config: <package>/<path> or a file, meshes: optional local mesh folder,
@@ -1110,7 +1113,8 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
     const GLuint texture = depthShown ? tex.depth : tex.rgb;
     if (texture) {
         const bool flip = !depthShown && tex.flipped;
-        ImGui::Image(textureID(texture), {w, h}, flip ? ImVec2(0, 1) : ImVec2(0, 0), flip ? ImVec2(1, 0) : ImVec2(1, 1));
+        ImGui::Image(textureID(texture), {w, h}, flip ? ImVec2(0, 1) : ImVec2(0, 0),
+                     flip ? ImVec2(1, 0) : ImVec2(1, 1));
     } else {
         ImGui::Dummy({w, h});
         auto *draw = ImGui::GetWindowDrawList();
@@ -1123,15 +1127,21 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
         if (texture)
             draw->AddRectFilled(pos, {pos.x + w, pos.y + h}, IM_COL32(4, 13, 19, 175));
         draw->AddText({pos.x + 18, pos.y + 18}, color(muted),
-                      !ready ? "Awaiting vehicle pose" : local && !depthShown ? "Rendering local view"
-                                                                              : "Awaiting camera image");
+                      !ready                 ? "Awaiting vehicle pose"
+                      : local && !depthShown ? "Rendering local view"
+                                             : "Awaiting camera image");
     }
     ImGui::PushFont(window_->small);
     const bool connected = !demoMode_ && feed.connected();
     const bool depthFromRos = feed.wantDepth && !demoMode_;
-    ImGui::TextColored(
-        local && !depthFromRos ? cyan : connected ? cyan : muted, "%s",
-        demoMode_ ? "PREVIEW ONLY" : local && !depthFromRos ? "LOCAL VIEW" : connected ? "CONNECTED" : "NO SENSOR OUTPUT");
+    ImGui::TextColored(local && !depthFromRos ? cyan
+                       : connected            ? cyan
+                                              : muted,
+                       "%s",
+                       demoMode_                ? "PREVIEW ONLY"
+                       : local && !depthFromRos ? "LOCAL VIEW"
+                       : connected              ? "CONNECTED"
+                                                : "NO SENSOR OUTPUT");
     ImGui::SameLine();
     const bool sourceToggle = canLocal && !demoMode_;
     if (sourceToggle) {
@@ -1148,9 +1158,10 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
         }
         ImGui::PopStyleColor(3);
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Click to switch the card's source.\n"
-                              "truth pose: rendered by this viewer at the truth pose (no sensor noise, no bridge latency).\n"
-                              "ROS (stack): the images the bridge publishes, as the robot stack receives them.");
+            ImGui::SetTooltip(
+                "Click to switch the card's source.\n"
+                "truth pose: rendered by this viewer at the truth pose (no sensor noise, no bridge latency).\n"
+                "ROS (stack): the images the bridge publishes, as the robot stack receives them.");
         ImGui::SameLine();
     }
     if (local && !depthFromRos)
@@ -1232,7 +1243,8 @@ void App::drawCourseMap(float width, float height, bool interactive) {
     }
     const float length = s.poolLength, poolWidth = s.poolWidth;
     const float scale = std::min((width - 36) / length, (height - 36) / poolWidth) * (interactive ? mapZoom_ : 1.f);
-    const ImVec2 center(a.x + width / 2 + (interactive ? mapPan_.x : 0), a.y + height / 2 + (interactive ? mapPan_.y : 0));
+    const ImVec2 center(a.x + width / 2 + (interactive ? mapPan_.x : 0),
+                        a.y + height / 2 + (interactive ? mapPan_.y : 0));
     auto poolXY = [&](glm::vec2 p) {
         return ImVec2(center.x + (p.x - length / 2) * scale, center.y - (p.y - poolWidth / 2) * scale);
     };
@@ -1363,7 +1375,8 @@ void App::toolbarSceneSettings() {
     const float y = ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y;
     const float width = std::min(780.f, viewport->WorkSize.x - 16.f);
     const float height = std::clamp(viewport->WorkPos.y + viewport->WorkSize.y - y - 8.f, 120.f, 400.f);
-    ImGui::SetNextWindowPos({std::clamp(button.x, viewport->WorkPos.x + 8.f, viewport->WorkPos.x + viewport->WorkSize.x - width - 8.f), y});
+    ImGui::SetNextWindowPos(
+        {std::clamp(button.x, viewport->WorkPos.x + 8.f, viewport->WorkPos.x + viewport->WorkSize.x - width - 8.f), y});
     ImGui::SetNextWindowSize({width, height});
     if (ImGui::BeginPopup("scene_settings")) {
         drawSceneSettingsPopup();
@@ -1406,8 +1419,9 @@ void App::toolbarPoolViewer() {
             if (ImGui::Combo("Control gizmo", &gizmo, "Truth (sim)\0Estimate (TF)\0"))
                 gizmoOnEstimate_ = gizmo == 1;
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Where the drag axes and rings are drawn. Commands always go to the controller in its\n"
-                                  "(estimate) frame; on Truth they are shown re-rooted at the sim robot.");
+                ImGui::SetTooltip(
+                    "Where the drag axes and rings are drawn. Commands always go to the controller in its\n"
+                    "(estimate) frame; on Truth they are shown re-rooted at the sim robot.");
             ImGui::SetNextItemWidth(170);
             if (ImGui::Combo("Follow", &follow, "Truth (sim)\0Estimate (TF)\0"))
                 followEstimate_ = follow == 1;
@@ -1558,10 +1572,11 @@ void App::drawPointCloudSettings() {
             ImGui::SliderFloat("##size", &layer.size, 1, 8, "%.0f px");
             ImGui::SameLine();
             const bool stale = layer.data && std::chrono::duration<double>(Clock::now() - layer.received).count() > 2;
-            ImGui::TextDisabled("%s", !layer.data ? "waiting"
-                                      : !layer.placed ? "no transform"
-                                      : stale ? "stale"
-                                              : layer.approximate ? "approx" : "");
+            ImGui::TextDisabled("%s", !layer.data         ? "waiting"
+                                      : !layer.placed     ? "no transform"
+                                      : stale             ? "stale"
+                                      : layer.approximate ? "approx"
+                                                          : "");
         }
         ImGui::PopID();
     }
@@ -1590,8 +1605,7 @@ void App::toolbarDetections() {
 void App::toolbarMpcPath() {
     if (demoMode_)
         return;
-    sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
-                   ImGui::CalcTextSize("MPC path").x);
+    sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("MPC path").x);
     ImGui::Checkbox("MPC path", &showMpc_);
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Predicted MPC trajectory over its horizon (%s).\n"
@@ -1636,7 +1650,8 @@ void App::registerHostItems() {
     add("tf", [this] { toolbarTf(); });
     add("mpc_path", [this] { toolbarMpcPath(); });
     add("preview_task", [this] { toolbarPreviewTask(); });
-    add("detections", [this] { toolbarDetections(); },
+    add(
+        "detections", [this] { toolbarDetections(); },
         [this] {
             ImGui::BeginDisabled(demoMode_);
             drawDetectionSettings(true);
@@ -1660,8 +1675,10 @@ void App::drawInterface(double time, float dt) {
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar |
                      ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::SetScrollY(0);
-    const std::string headerTitle = lookup(config_, {"branding", "header"}).as<std::string>(scenario_ ? scenario_->robotId : "");
-    const std::string headerSubtitle = lookup(config_, {"branding", "subtitle"}).as<std::string>(scenario_ ? scenario_->id : "");
+    const std::string headerTitle =
+        lookup(config_, {"branding", "header"}).as<std::string>(scenario_ ? scenario_->robotId : "");
+    const std::string headerSubtitle =
+        lookup(config_, {"branding", "subtitle"}).as<std::string>(scenario_ ? scenario_->id : "");
     ImGui::PushFont(window_->title);
     ImGui::TextUnformatted(headerTitle.c_str());
     ImGui::PopFont();
@@ -1675,10 +1692,11 @@ void App::drawInterface(double time, float dt) {
     ImGui::Separator();
     if (!scenario_) {
         ImGui::Dummy({1, 40});
-        ImGui::TextColored(muted, "Waiting for the bridge scenario document (%s) ...",
-                           !opt_.scenarioTopic.empty()
-                               ? opt_.scenarioTopic.c_str()
-                               : lookup(config_, {"scenario_topic"}).as<std::string>("/talos/simulator/scenario").c_str());
+        ImGui::TextColored(
+            muted, "Waiting for the bridge scenario document (%s) ...",
+            !opt_.scenarioTopic.empty()
+                ? opt_.scenarioTopic.c_str()
+                : lookup(config_, {"scenario_topic"}).as<std::string>("/talos/simulator/scenario").c_str());
         ImGui::End();
         return;
     }
@@ -1780,7 +1798,8 @@ void App::drawInterface(double time, float dt) {
     renderLocalCards(time, scene);
     if (!demoMode_)
         scene.points = ros_->pointSets(); // main view only (cards render without points)
-    const rendering::View renderView{toEigen(view.view), toEigen(view.projection), Eigen::Vector3f(view.eye.x, view.eye.y, view.eye.z)};
+    const rendering::View renderView{toEigen(view.view), toEigen(view.projection),
+                                     Eigen::Vector3f(view.eye.x, view.eye.y, view.eye.z)};
     auto appearance = observer_.apply(look_.appearance);
     // Original viewer: a 3D focus disc at the orbit target while orbiting/zooming without Follow.
     if (mode_ == 0 && (orbitInteracting_ || opt_.showFocus) && !follow_)
@@ -1798,8 +1817,8 @@ void App::drawInterface(double time, float dt) {
     ImGui::SetCursorScreenPos(imagePos);
     // A promoted sensor view shows the bridge's depth image instead while its card is on DEPTH.
     const std::size_t sensorIndex = sensor ? std::size_t(mode_ - 2) : 0;
-    if (sensor && sensorIndex < cards_.size() && sensorIndex < ros_->feeds.size() && ros_->feeds[sensorIndex].wantDepth &&
-        cards_[sensorIndex].depth)
+    if (sensor && sensorIndex < cards_.size() && sensorIndex < ros_->feeds.size() &&
+        ros_->feeds[sensorIndex].wantDepth && cards_[sensorIndex].depth)
         ImGui::Image(textureID(cards_[sensorIndex].depth), {iw, ih});
     else
         ImGui::Image(textureID(frame.color_texture), {iw, ih}, {0, 1}, {1, 0});
@@ -1828,10 +1847,12 @@ void App::drawInterface(double time, float dt) {
     }
     auto *d = ImGui::GetWindowDrawList();
     d->AddRect(position, {position.x + left, position.y + viewHeight}, IM_COL32(38, 62, 72, 255), 5, 0, 1);
-    d->AddRectFilled({position.x + 14, position.y + 14}, {position.x + 237, position.y + 43}, IM_COL32(8, 22, 29, 225), 4);
-    d->AddText(window_->small, 12, {position.x + 25, position.y + 22}, color(white),
-               (scenario_->poolId + " / " + fixed(scenario_->poolLength, 1) + " x " + fixed(scenario_->poolWidth, 2) + " m")
-                   .c_str());
+    d->AddRectFilled({position.x + 14, position.y + 14}, {position.x + 237, position.y + 43}, IM_COL32(8, 22, 29, 225),
+                     4);
+    d->AddText(
+        window_->small, 12, {position.x + 25, position.y + 22}, color(white),
+        (scenario_->poolId + " / " + fixed(scenario_->poolLength, 1) + " x " + fixed(scenario_->poolWidth, 2) + " m")
+            .c_str());
     if (showProfile_ && !profiler_.recent().empty()) {
         if (time - profileCachedAt_ > .5) {
             profileCachedAt_ = time;
@@ -1881,8 +1902,9 @@ void App::drawInterface(double time, float dt) {
             d->AddText(window_->small, 12, {at.x + 16, at.y - 28}, color(white), key.c_str());
         }
     }
-    const char *controls = mode_ == 1 ? "CLICK  mouse look    WASD  move    SPACE / SHIFT  up / down    CTRL  fast    ESC  release"
-                                      : "LEFT DRAG  orbit   RIGHT / MIDDLE DRAG  pan   SCROLL  zoom   F  focus cursor";
+    const char *controls =
+        mode_ == 1 ? "CLICK  mouse look    WASD  move    SPACE / SHIFT  up / down    CTRL  fast    ESC  release"
+                   : "LEFT DRAG  orbit   RIGHT / MIDDLE DRAG  pan   SCROLL  zoom   F  focus cursor";
     d->AddRectFilled({position.x, position.y + viewHeight - 30}, {position.x + left, position.y + viewHeight},
                      IM_COL32(6, 18, 26, 205));
     d->AddText(window_->small, 12, {position.x + 14, position.y + viewHeight - 21}, color(white), controls);
@@ -1896,8 +1918,8 @@ void App::drawInterface(double time, float dt) {
         drawMinimap(cardWidth);
         ImGui::PushFont(window_->small);
         ImGui::TextWrapped("%s", demoMode_ ? "Scene preview. Start the simulator bridge to stream live cameras."
-                                            : "Images are rendered by the bridge at the physics pose. Observer controls "
-                                              "do not move the vehicle.");
+                                           : "Images are rendered by the bridge at the physics pose. Observer controls "
+                                             "do not move the vehicle.");
         ImGui::PopFont();
         ImGui::EndChild();
     }
@@ -1930,7 +1952,8 @@ void App::renderLocalCards(double t, const rendering::Scene &mainScene) {
         const std::size_t i = (nextCardTurn_ + n) % count;
         const bool ros = !demoMode_ && i < ros_->feeds.size() && ros_->feeds[i].rosMode; // truthActive checked above
         const bool depthShown = i < ros_->feeds.size() && ros_->feeds[i].wantDepth && cards_[i].depth;
-        if (opt_.legacyCards ? (!ros && t >= cardDue_[0]) : (!ros && !depthShown && cardVisible_[i] && t >= cardDue_[i])) {
+        if (opt_.legacyCards ? (!ros && t >= cardDue_[0])
+                             : (!ros && !depthShown && cardVisible_[i] && t >= cardDue_[i])) {
             todo.push_back(i);
             if (!opt_.legacyCards)
                 break;
@@ -1949,8 +1972,8 @@ void App::renderLocalCards(double t, const rendering::Scene &mainScene) {
     PhaseTimer timer{profiler_, Phase::Cards, profileSync()};
     rendering::Scene ownScene;
     // The robot's camera sees the simulated pool and course whatever the observer hides or overlays.
-    const bool observerOnly = !observer_.walls || !observer_.floor || courseFromMapping() ||
-                              (robotGhost_ && haveEstimate_) || mappingGhost_;
+    const bool observerOnly =
+        !observer_.walls || !observer_.floor || courseFromMapping() || (robotGhost_ && haveEstimate_) || mappingGhost_;
     if (observerOnly || opt_.legacyCards) {
         auto state = buildState();
         state.showWalls = state.showFloor = state.showCourse = true;
@@ -1982,7 +2005,8 @@ void App::renderLocalCards(double t, const rendering::Scene &mainScene) {
         k.width = w;
         k.height = h;
         const auto v = sensorView(body_ * camera.opticalInBase, k);
-        const rendering::View renderView{toEigen(v.view), toEigen(v.projection), Eigen::Vector3f(v.eye.x, v.eye.y, v.eye.z)};
+        const rendering::View renderView{toEigen(v.view), toEigen(v.projection),
+                                         Eigen::Vector3f(v.eye.x, v.eye.y, v.eye.z)};
         auto appearance = look_.appearance;
         appearance.preview = !opt_.legacyCards;
         const auto frame = renderer_->draw(scene, renderView, appearance, float(t), w, h);
@@ -2112,30 +2136,30 @@ int App::loop() {
             profiler_.add(Phase::Swap, sec(postSwap - preSwap));
             const auto phases = profiler_.pendingPhases();
             profiler_.add(Phase::Ui, std::max(0., sec(preSwap - frameStart) - phases[int(Phase::Spin)] -
-                                                       phases[int(Phase::Scene)] - phases[int(Phase::Main)] -
-                                                       phases[int(Phase::Cards)]));
+                                                      phases[int(Phase::Scene)] - phases[int(Phase::Main)] -
+                                                      phases[int(Phase::Cards)]));
         }
         if (last) {
             if (scenario_)
-                std::cout << "capture: status=" << status_ << " detections stored/placed=" << ros_->detectionCount() << "/"
-                          << ros_->placedDetections.size() << " mpc_points=" << ros_->mpcPath.size()
+                std::cout << "capture: status=" << status_ << " detections stored/placed=" << ros_->detectionCount()
+                          << "/" << ros_->placedDetections.size() << " mpc_points=" << ros_->mpcPath.size()
                           << " props=" << ros_->props.size() << " projectiles=" << ros_->projectiles.size()
                           << " magnet_lights=" << ros_->magnetLights.size() << " tf_frames=" << tf_.frames.size()
                           << " camera_frames=" << (ros_->feeds.empty() ? 0 : ros_->feeds[0].frames) << " body=("
                           << body_[3].x << "," << body_[3].y << "," << body_[3].z << ")";
-                for (const auto &layer : ros_->pointClouds)
-                    if (layer.enabled)
-                        std::cout << " cloud[" << layer.id << "]=" << (layer.data ? layer.data->xyzrgb.size() / 6 : 0)
-                                  << (layer.placed ? " placed" : " unplaced");
-                std::cout << "\n";
+            for (const auto &layer : ros_->pointClouds)
+                if (layer.enabled)
+                    std::cout << " cloud[" << layer.id << "]=" << (layer.data ? layer.data->xyzrgb.size() / 6 : 0)
+                              << (layer.placed ? " placed" : " unplaced");
+            std::cout << "\n";
             saveCameraImages(opt_.screenshot);
             break;
         }
         const double cap = opt_.renderRate > 0 ? opt_.renderRate : opt_.hidden ? 30. : opt_.vsync ? 0. : 60.;
         if (cap > 0) {
             const auto before = Clock::now();
-            std::this_thread::sleep_until(frameStart + std::chrono::duration_cast<Clock::duration>(
-                                                           std::chrono::duration<double>(1. / cap)));
+            std::this_thread::sleep_until(
+                frameStart + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(1. / cap)));
             profiler_.add(Phase::Sleep, std::chrono::duration<double>(Clock::now() - before).count());
         }
         profiler_.endFrame(Clock::now());
@@ -2144,8 +2168,9 @@ int App::loop() {
             if (profileLogAt_ == Clock::time_point{})
                 profileLogAt_ = now;
             if (now - profileLogAt_ >= std::chrono::seconds(5)) {
-                std::cout << profileReport(profiler_.takeInterval(), std::chrono::duration<double>(now - profileLogAt_).count()) << (ros_ ? ros_->timingReport() : std::string())
-                          << std::endl;
+                std::cout << profileReport(profiler_.takeInterval(),
+                                           std::chrono::duration<double>(now - profileLogAt_).count())
+                          << (ros_ ? ros_->timingReport() : std::string()) << std::endl;
                 profileLogAt_ = now;
             }
         }

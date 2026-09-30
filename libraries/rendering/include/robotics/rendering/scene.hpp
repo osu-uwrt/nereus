@@ -5,15 +5,7 @@
 #include <string>
 
 namespace robotics::rendering {
-enum class SurfaceMaterial {
-    Asset = 0,
-    Tiles = 1,
-    Deck = 2,
-    Lamp = 3,
-    Liner = 4,
-    Clear = 5,
-    Emissive = 6
-};
+enum class SurfaceMaterial { Asset = 0, Tiles = 1, Deck = 2, Lamp = 3, Liner = 4, Clear = 5, Emissive = 6 };
 struct Instance {
     std::shared_ptr<const MeshAsset> mesh;
     Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();

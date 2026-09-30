@@ -7,8 +7,7 @@
 
 using namespace robotics::rendering;
 TEST(MeshAssets, OriginalTalosBodyAndRotorsKeepTriangleCountsAndTransparency) {
-    const std::filesystem::path root =
-        std::filesystem::path(NEREUS_PACK_CONTENT) / "robots/talos/assets/visual";
+    const std::filesystem::path root = std::filesystem::path(NEREUS_PACK_CONTENT) / "robots/talos/assets/visual";
     const auto body = loadMesh(root / "Talos3_body.glb");
     std::size_t triangles = 0, transparent = 0;
     for (const auto &part : body.submeshes) {
@@ -28,10 +27,8 @@ TEST(MeshAssets, OriginalTalosBodyAndRotorsKeepTriangleCountsAndTransparency) {
 }
 TEST(MeshAssets, RejectsMissingMalformedAndOversizedAssets) {
     EXPECT_THROW(loadMesh("/does/not/exist.glb"), std::runtime_error);
-    EXPECT_THROW(loadMesh(std::filesystem::path(NEREUS_PACK_CONTENT) / "robots/talos/robot.yaml"),
-                 std::runtime_error);
-    const auto body =
-        std::filesystem::path(NEREUS_PACK_CONTENT) / "robots/talos/assets/visual/Talos3_body.glb";
+    EXPECT_THROW(loadMesh(std::filesystem::path(NEREUS_PACK_CONTENT) / "robots/talos/robot.yaml"), std::runtime_error);
+    const auto body = std::filesystem::path(NEREUS_PACK_CONTENT) / "robots/talos/assets/visual/Talos3_body.glb";
     AssetLimits limits;
     limits.file_bytes = 1;
     EXPECT_THROW(loadMesh(body, limits), std::runtime_error);
@@ -62,14 +59,12 @@ TEST(MeshAssets, NestedTransformsUseAuthoredAxesAndInverseTransposeNormals) {
     EXPECT_TRUE(asset.maximum.isApprox(Eigen::Vector3f(4, 13, 7), 1e-6f));
     AssetLimits limits;
     limits.nodes = 1;
-    EXPECT_THROW(
-        loadMesh(std::filesystem::path(NEREUS_ASSET_FIXTURES) / "nested_mesh.gltf", limits),
-        std::runtime_error);
+    EXPECT_THROW(loadMesh(std::filesystem::path(NEREUS_ASSET_FIXTURES) / "nested_mesh.gltf", limits),
+                 std::runtime_error);
 }
 
 TEST(MeshAssets, EveryOriginalSubmeshKeepsOrderTopologyMaterialsAndVertexStatistics) {
-    std::ifstream reference(std::filesystem::path(NEREUS_ASSET_FIXTURES) /
-                            "legacy_mesh_assets.csv");
+    std::ifstream reference(std::filesystem::path(NEREUS_ASSET_FIXTURES) / "legacy_mesh_assets.csv");
     ASSERT_TRUE(reference);
     std::string line, previous;
     ASSERT_TRUE(std::getline(reference, line));
@@ -86,10 +81,8 @@ TEST(MeshAssets, EveryOriginalSubmeshKeepsOrderTopologyMaterialsAndVertexStatist
             if (!previous.empty()) {
                 EXPECT_EQ(part_count, asset.submeshes.size());
             }
-            const auto root =
-                std::filesystem::path(NEREUS_PACK_CONTENT) / "robots/talos/assets/visual";
-            asset = loadMesh(fields[0] == "Talos3_body.glb" ? root / fields[0]
-                                                            : root / "rotors" / fields[0]);
+            const auto root = std::filesystem::path(NEREUS_PACK_CONTENT) / "robots/talos/assets/visual";
+            asset = loadMesh(fields[0] == "Talos3_body.glb" ? root / fields[0] : root / "rotors" / fields[0]);
             previous = fields[0];
             part_count = 0;
             ++file_count;
@@ -113,8 +106,8 @@ TEST(MeshAssets, EveryOriginalSubmeshKeepsOrderTopologyMaterialsAndVertexStatist
         normal /= static_cast<double>(part.vertices.size());
         uv /= static_cast<double>(part.vertices.size());
         Eigen::Matrix<double, 18, 1> actual;
-        actual << part.material.base_color.cast<double>(), minimum.cast<double>(),
-            maximum.cast<double>(), position, normal, uv;
+        actual << part.material.base_color.cast<double>(), minimum.cast<double>(), maximum.cast<double>(), position,
+            normal, uv;
         ASSERT_TRUE(actual.allFinite());
         for (Eigen::Index i = 0; i < actual.size(); ++i)
             EXPECT_NEAR(actual[i], std::stod(fields[i + 4]), 1e-6)
@@ -184,8 +177,8 @@ TEST(PerforatePanel, MixedSubmeshSplitsRemainderFirstAndCopiesPanelVertices) {
     for (std::size_t i = 0; i < 3; ++i) {
         EXPECT_EQ(panel.vertices[i].position, source.vertices[i].position);
         EXPECT_EQ(panel.vertices[i].normal, source.vertices[i].normal);
-        EXPECT_TRUE(panel.vertices[i].uv.isApprox(
-            planar(source.vertices[i].position.y(), source.vertices[i].position.z())));
+        EXPECT_TRUE(
+            panel.vertices[i].uv.isApprox(planar(source.vertices[i].position.y(), source.vertices[i].position.z())));
     }
     EXPECT_EQ(result.mesh.minimum, Eigen::Vector3f(-1, -2, -3));
     EXPECT_EQ(result.mesh.maximum, Eigen::Vector3f(4, 5, 6));
@@ -201,8 +194,7 @@ TEST(PerforatePanel, UntexturedPanelSubmeshGetsPlanarUvInPlace) {
     EXPECT_EQ(out.indices, part.indices);
     EXPECT_EQ(out.material.cutouts.size(), 2U);
     for (std::size_t i = 0; i < 3; ++i)
-        EXPECT_TRUE(out.vertices[i].uv.isApprox(
-            planar(part.vertices[i].position.y(), part.vertices[i].position.z())));
+        EXPECT_TRUE(out.vertices[i].uv.isApprox(planar(part.vertices[i].position.y(), part.vertices[i].position.z())));
     EXPECT_EQ(out.vertices[3].uv, Eigen::Vector2f(-1, -1));
 }
 
@@ -211,8 +203,8 @@ TEST(PerforatePanel, TexturedPanelKeepsAuthoredUvAndRejectsMismatch) {
     part.indices = {0, 1, 2};
     part.material.diffuse_texture = "texture.png";
     for (std::size_t i = 0; i < 3; ++i)
-        part.vertices[i].uv = planar(part.vertices[i].position.y(), part.vertices[i].position.z()) +
-                              Eigen::Vector2f(5e-5f, -5e-5f);
+        part.vertices[i].uv =
+            planar(part.vertices[i].position.y(), part.vertices[i].position.z()) + Eigen::Vector2f(5e-5f, -5e-5f);
     const auto result = perforatePanel(asset({part}), panelOptions());
     ASSERT_EQ(result.mesh.submeshes.size(), 1U);
     for (std::size_t i = 0; i < 3; ++i)
@@ -250,10 +242,9 @@ TEST(PerforatePanel, RejectsExistingCutoutsAndSelectsFirstMatchingFaceOnly) {
 
 TEST(PerforatePanel, IgnoresTrianglesOutsideExtentOrOffFace) {
     Submesh part;
-    part.vertices = {vertex(0, -.5f, -.5f), vertex(0, .5f, -.5f),   vertex(0, 0, .5f),
-                     vertex(0, 0, 0),       vertex(0, 1.0004f, 0),  vertex(0, 0, .5f),
-                     vertex(0, 0, 0),       vertex(0, 1.001f, 0),   vertex(0, 0, .5f),
-                     vertex(6e-4f, 0, 0),   vertex(0, .5f, 0),      vertex(0, 0, .5f),
+    part.vertices = {vertex(0, -.5f, -.5f), vertex(0, .5f, -.5f),   vertex(0, 0, .5f),     vertex(0, 0, 0),
+                     vertex(0, 1.0004f, 0), vertex(0, 0, .5f),      vertex(0, 0, 0),       vertex(0, 1.001f, 0),
+                     vertex(0, 0, .5f),     vertex(6e-4f, 0, 0),    vertex(0, .5f, 0),     vertex(0, 0, .5f),
                      vertex(4e-4f, 0, 0),   vertex(-4e-4f, .5f, 0), vertex(0, 0, -1.0004f)};
     part.indices = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
     const auto result = perforatePanel(asset({part}), panelOptions());
@@ -288,12 +279,10 @@ TEST(PerforatePanel, AppliesAssetToPanelTransform) {
     for (std::size_t i = 0; i < 3; ++i) {
         EXPECT_EQ(out.vertices[i].position, part.vertices[i].position);
         EXPECT_TRUE(out.vertices[i].uv.isApprox(
-            planar(part.vertices[i].position.x() + .3f, part.vertices[i].position.z() + .1f),
-            1e-6f));
+            planar(part.vertices[i].position.x() + .3f, part.vertices[i].position.z() + .1f), 1e-6f));
     }
     // The identity transform sees neither triangle on the plane x = 0.
-    EXPECT_EQ(perforatePanel(asset({part}), panelOptions()).face_triangles,
-              std::vector<std::size_t>({0}));
+    EXPECT_EQ(perforatePanel(asset({part}), panelOptions()).face_triangles, std::vector<std::size_t>({0}));
 }
 
 TEST(PerforatePanel, RejectsInvalidParameters) {
@@ -340,8 +329,7 @@ TEST(PerforatePanel, RejectsInvalidParameters) {
 }
 
 TEST(PerforatePanel, RobosubTorpedoSeparatesFrameBackingAndTexturedFront) {
-    const auto path =
-        std::filesystem::path(NEREUS_PACK_CONTENT) / "tasks/robosub_2026/assets/torpedo/model.dae";
+    const auto path = std::filesystem::path(NEREUS_PACK_CONTENT) / "tasks/robosub_2026/assets/torpedo/model.dae";
     const auto source = loadMesh(path);
     PanelCutouts panel;
     panel.faces_x = {0.0f, -0.004f};

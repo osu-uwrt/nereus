@@ -37,7 +37,9 @@ struct Spec {
     bool operator==(const Spec &other) const {
         return dtype == other.dtype && shape == other.shape;
     }
-    bool operator!=(const Spec &other) const { return !(*this == other); }
+    bool operator!=(const Spec &other) const {
+        return !(*this == other);
+    }
     std::string describe() const;
 };
 Spec scalarSpec();  // float

@@ -1,8 +1,8 @@
 // Card previews of the bridge's compressed camera images decode with DCT scaling.
 #include "jpeg_decode.hpp"
+#include <chrono>
 #include <gtest/gtest.h>
 #include <jpeglib.h>
-#include <chrono>
 #include <thread>
 
 using namespace robotics::ros_viewer::host;
@@ -49,8 +49,8 @@ TEST(HostJpeg, DecodesColorsAndScalesToTheRequestedWidth) {
     ASSERT_TRUE(decodeJpeg(data.data(), data.size(), 256, full));
     ASSERT_EQ(full.width, 256);
     ASSERT_EQ(full.height, 128);
-    EXPECT_GT(full.rgb[(10 * 256 + 10) * 3], 200);            // red on the left
-    EXPECT_GT(full.rgb[(10 * 256 + 200) * 3 + 2], 200);       // blue on the right
+    EXPECT_GT(full.rgb[(10 * 256 + 10) * 3], 200);      // red on the left
+    EXPECT_GT(full.rgb[(10 * 256 + 200) * 3 + 2], 200); // blue on the right
     ASSERT_TRUE(decodeJpeg(data.data(), data.size(), 64, small));
     EXPECT_EQ(small.width, 64); // 1/4 scale keeps at least the requested width
     EXPECT_EQ(small.height, 32);

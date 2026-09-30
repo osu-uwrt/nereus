@@ -140,7 +140,8 @@ inline std::string profileReport(const std::vector<FrameSample> &s, double secon
     for (const auto &x : s)
         if (x.frame * 1000 > 1.25 * f.p50)
             ++spikes;
-    std::snprintf(line, sizeof(line), " | >1.25x median: %zu (%.1f%%)", spikes, 100. * double(spikes) / double(s.size()));
+    std::snprintf(line, sizeof(line), " | >1.25x median: %zu (%.1f%%)", spikes,
+                  100. * double(spikes) / double(s.size()));
     out += line;
     out += "\n  phases ms mean/p99/max:";
     for (int i = 0; i < kPhaseCount; ++i) {

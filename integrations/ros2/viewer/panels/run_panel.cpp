@@ -1,9 +1,9 @@
-#include "robotics/ros_viewer/panels/composition.hpp"
-#include <imgui.h>
 #include "robotics/ros_viewer/panel_layout.hpp"
-#include <cmath>
+#include "robotics/ros_viewer/panels/composition.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
+#include <imgui.h>
 namespace robotics::ros_viewer::panels {
 namespace {
 class RunPanel final : public Panel {
@@ -162,8 +162,7 @@ class RunPanel final : public Panel {
         ImGui::BeginDisabled(!run || !s.fresh || !enabled);
         const float button = ImGui::CalcTextSize("Clear").x + 2 * ImGui::GetStyle().FramePadding.x;
         ImGui::SetNextItemWidth(std::max(60.f, ImGui::GetContentRegionAvail().x - 2 * button -
-                                                   2 * ImGui::GetStyle().ItemSpacing.x -
-                                                   ImGui::CalcTextSize("Add").x));
+                                                   2 * ImGui::GetStyle().ItemSpacing.x - ImGui::CalcTextSize("Add").x));
         ImGui::InputFloat("##points", &manualPoints, 10, 50, "%+.1f");
         ImGui::SameLine();
         const auto send = [&](double value) {

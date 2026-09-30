@@ -1,7 +1,7 @@
 #include "robotics/ros_viewer/panels/composition.hpp"
-#include <imgui.h>
 #include <cassert>
 #include <functional>
+#include <imgui.h>
 #include <iostream>
 using namespace robotics::ros_viewer::panels;
 struct FakeMotion : Motion {
@@ -56,14 +56,12 @@ int main() {
     registerPanels(r);
     std::vector<std::string> drawLog; // this test registers its own recording host items
     for (const char *type : {"view", "detections", "scene_settings"})
-        r.panels.emplace(type, ViewFactory<Panel>{Kind::Motion,
-                                                  [type](const YAML::Node &o) {
-                                                      keys(o, {"label"}, type);
-                                                  },
-                                                  [&, type](const Binding &) {
-                                                      return std::unique_ptr<Panel>(new HostItem(type, &drawLog));
-                                                  },
-                                                  true, std::string(type) != "detections"});
+        r.panels.emplace(type,
+                         ViewFactory<Panel>{Kind::Motion, [type](const YAML::Node &o) { keys(o, {"label"}, type); },
+                                            [&, type](const Binding &) {
+                                                return std::unique_ptr<Panel>(new HostItem(type, &drawLog));
+                                            },
+                                            true, std::string(type) != "detections"});
     int created = 0;
     r.providers.emplace("fake.motion", ProviderFactory{Kind::Motion, [](auto) {},
                                                        [&](auto, auto) {
@@ -120,8 +118,8 @@ ownership:
             threw = true;
         }
         if (!threw || created != before)
-            std::cerr << "expected rejection (threw " << threw << ", providers created " << created - before
-                      << "):\n" << YAML::Dump(cfg) << "\n";
+            std::cerr << "expected rejection (threw " << threw << ", providers created " << created - before << "):\n"
+                      << YAML::Dump(cfg) << "\n";
         assert(threw && created == before);
     };
     auto cfg = YAML::Load(text);
@@ -221,24 +219,25 @@ ownership:
         c["toolbar"] = YAML::Load(yaml);
         return c;
     };
-    fails(withToolbar("[{type: nope}]"));                                   // unknown type
-    fails(withToolbar("[{type: view, colour: red}]"));                      // unknown key
-    fails(withToolbar("[{type: view, options: {typo: 1}}]"));               // unknown option
-    fails(withToolbar("[{type: view, provider: motion}]"));                 // host item takes no provider
-    fails(withToolbar("[{type: motion}]"));                                 // provider-backed needs a provider
-    fails(withToolbar("[{type: motion, provider: mission}]"));              // capability mismatch
-    fails(withToolbar("[{type: motion, provider: missing}]"));              // unknown provider
-    fails(withToolbar("[{type: view}, {type: view}]"));                     // duplicate (default) ID
+    fails(withToolbar("[{type: nope}]"));                      // unknown type
+    fails(withToolbar("[{type: view, colour: red}]"));         // unknown key
+    fails(withToolbar("[{type: view, options: {typo: 1}}]"));  // unknown option
+    fails(withToolbar("[{type: view, provider: motion}]"));    // host item takes no provider
+    fails(withToolbar("[{type: motion}]"));                    // provider-backed needs a provider
+    fails(withToolbar("[{type: motion, provider: mission}]")); // capability mismatch
+    fails(withToolbar("[{type: motion, provider: missing}]")); // unknown provider
+    fails(withToolbar("[{type: view}, {type: view}]"));        // duplicate (default) ID
     fails(withToolbar("[{id: a, type: view}, {id: a, type: scene_settings}]"));
-    fails(withToolbar("{type: view}"));                                     // not a sequence
-    fails(withToolbar("[{id: x}]"));                                        // missing type
-    fails(withToolbar("[{type: view, slot: settings}]"));                   // slot is gone
+    fails(withToolbar("{type: view}"));                   // not a sequence
+    fails(withToolbar("[{id: x}]"));                      // missing type
+    fails(withToolbar("[{type: view, slot: settings}]")); // slot is gone
     try {
         Composition bad(withToolbar("[{type: nope}]"), ctx, r);
         assert(false);
     } catch (const std::exception &e) {
         const std::string message = e.what();
-        assert(message.find("toolbar.nope") != std::string::npos && message.find("unknown toolbar item type") != std::string::npos);
+        assert(message.find("toolbar.nope") != std::string::npos &&
+               message.find("unknown toolbar item type") != std::string::npos);
     }
     cfg = YAML::Load(text);
     cfg["panels"][0]["slot"] = "settings";

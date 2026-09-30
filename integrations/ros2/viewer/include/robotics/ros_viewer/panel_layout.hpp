@@ -1,6 +1,6 @@
 #pragma once
-#include <imgui.h>
 #include <algorithm>
+#include <imgui.h>
 namespace robotics::ros_viewer {
 inline void sameLineIfFits(float width) {
     const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;

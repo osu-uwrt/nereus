@@ -16,19 +16,23 @@ constexpr double kMaxPayloadAgeS = 30.0;
 constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
 
 const std::set<std::string> kEventTypes = {
-    "pass_through", "hit", "payload_landing", "drop_into", "activate", "rotation_judged", "attach",
-    "detach", "surface_reached", "surface_lost", "facing_reached", "facing_lost", "breach"};
+    "pass_through",    "hit",         "payload_landing", "drop_into",       "activate",
+    "rotation_judged", "attach",      "detach",          "surface_reached", "surface_lost",
+    "facing_reached",  "facing_lost", "breach"};
 
-[[noreturn]] void invalid(const std::string &message) { throw std::invalid_argument(message); }
-
-void checkTimeValue(std::int64_t time_ns) {
-    if (time_ns < 0) invalid("time_ns must be a nonnegative integer");
+[[noreturn]] void invalid(const std::string &message) {
+    throw std::invalid_argument(message);
 }
 
-Event makeEvent(const std::string &id, const std::string &type, const std::string &task,
-                const std::string &region, std::int64_t time_ns, Json data) {
-    return {{"id", id}, {"type", type}, {"task", task}, {"region", region}, {"time_ns", time_ns},
-            {"data", std::move(data)}};
+void checkTimeValue(std::int64_t time_ns) {
+    if (time_ns < 0)
+        invalid("time_ns must be a nonnegative integer");
+}
+
+Event makeEvent(const std::string &id, const std::string &type, const std::string &task, const std::string &region,
+                std::int64_t time_ns, Json data) {
+    return {{"id", id},         {"type", type},       {"task", task},
+            {"region", region}, {"time_ns", time_ns}, {"data", std::move(data)}};
 }
 
 Pose placementPose(const Json &config) {
@@ -49,15 +53,15 @@ spatial::FixedFrames framesOf(const Json &frames) {
 
 std::vector<Vec3> envelopeOf(const Json &robot) {
     const auto frames = framesOf(robot.at("frames"));
-    const Pose reference_from_root =
-        spatial::inverse(frames.fromRoot(robot.at("reference_frame").get<std::string>()));
+    const Pose reference_from_root = spatial::inverse(frames.fromRoot(robot.at("reference_frame").get<std::string>()));
     std::map<std::string, const Json *> boxes;
-    for (const auto &box : robot.at("collision_boxes")) boxes[box.at("id").get<std::string>()] = &box;
+    for (const auto &box : robot.at("collision_boxes"))
+        boxes[box.at("id").get<std::string>()] = &box;
     std::vector<Vec3> vertices;
     for (const auto &identifier : robot.at("scoring_envelope").at("collision_boxes")) {
         const Json &box = *boxes.at(identifier.get<std::string>());
-        const Pose pose = spatial::compose(
-            reference_from_root, poseFrom(box.at("center_m"), box.at("orientation_wxyz")));
+        const Pose pose =
+            spatial::compose(reference_from_root, poseFrom(box.at("center_m"), box.at("orientation_wxyz")));
         const Vec3 half = vec3(box.at("size_m"), "size_m") / 2;
         for (int sx : {-1, 1})
             for (int sy : {-1, 1})
@@ -65,30 +69,32 @@ std::vector<Vec3> envelopeOf(const Json &robot) {
                     vertices.push_back(spatial::apply(pose, Vec3(half[0] * sx, half[1] * sy, half[2] * sz)));
     }
     for (const auto &point : robot.at("scoring_envelope").at("points")) {
-        const Pose pose = spatial::compose(reference_from_root,
-                                           frames.fromRoot(point.at("frame").get<std::string>()));
+        const Pose pose = spatial::compose(reference_from_root, frames.fromRoot(point.at("frame").get<std::string>()));
         vertices.push_back(spatial::apply(pose, vec3(point.at("position_m"), "position_m")));
     }
-    if (vertices.empty()) invalid("task traversal requires a nonempty robot scoring envelope");
+    if (vertices.empty())
+        invalid("task traversal requires a nonempty robot scoring envelope");
     return vertices;
 }
 
 Vec3 probePoint(const Json &robot, const std::string &mechanism_type) {
     std::vector<const Json *> found;
     for (const auto &item : robot.at("mechanisms"))
-        if (item.at("type") == mechanism_type) found.push_back(&item);
+        if (item.at("type") == mechanism_type)
+            found.push_back(&item);
     if (found.size() != 1)
         invalid("task probe needs exactly one '" + mechanism_type + "' mechanism; robot has " +
                 std::to_string(found.size()));
     const auto frames = framesOf(robot.at("frames"));
-    const Pose pose = spatial::compose(
-        spatial::inverse(frames.fromRoot(robot.at("reference_frame").get<std::string>())),
-        frames.fromRoot(found[0]->at("frame").get<std::string>()));
+    const Pose pose =
+        spatial::compose(spatial::inverse(frames.fromRoot(robot.at("reference_frame").get<std::string>())),
+                         frames.fromRoot(found[0]->at("frame").get<std::string>()));
     return spatial::apply(pose, vec3(found[0]->at("parameters").at("tip_position_m"), "tip_position_m"));
 }
 
 bool finiteJson(const Json &value) {
-    if (value.is_number_float()) return std::isfinite(value.get<double>());
+    if (value.is_number_float())
+        return std::isfinite(value.get<double>());
     if (value.is_array() || value.is_object())
         return std::all_of(value.begin(), value.end(), [](const Json &item) { return finiteJson(item); });
     return true;
@@ -139,18 +145,23 @@ struct TaskRuntime::Impl {
     std::int64_t last_time{0};
     bool failed{false};
 
-    const Json &bindings(const std::string &task) const { return tasks.at(task).at("events"); }
+    const Json &bindings(const std::string &task) const {
+        return tasks.at(task).at("events");
+    }
 
     void refreshLatched() {
         Json latched = Json::object();
-        for (const auto &t : targets) latched[t.task + "/" + t.region] = t.value.latched;
+        for (const auto &t : targets)
+            latched[t.task + "/" + t.region] = t.value.latched;
         state["latched"] = std::move(latched);
     }
 
     void checkTime(std::int64_t time_ns) const {
         checkTimeValue(time_ns);
-        if (failed) throw std::runtime_error("task observer failed; reset before continuing");
-        if (time_ns < last_time) invalid("task time cannot go backwards without reset");
+        if (failed)
+            throw std::runtime_error("task observer failed; reset before continuing");
+        if (time_ns < last_time)
+            invalid("task time cannot go backwards without reset");
     }
 
     void reset(std::int64_t time_ns) {
@@ -158,20 +169,25 @@ struct TaskRuntime::Impl {
         instances.clear();
         for (const auto &entry : scoring) {
             auto rules = entry.factory();
-            if (!rules) invalid("rules factory '" + entry.name + "' returned nothing");
+            if (!rules)
+                invalid("rules factory '" + entry.name + "' returned nothing");
             instances.push_back(std::move(rules));
         }
-        for (auto &t : portals) t.value.reset();
-        for (auto &t : targets) t.value.reset();
-        for (auto &t : surfaces) t.value.reset();
-        for (auto &t : turns) t.value.reset();
+        for (auto &t : portals)
+            t.value.reset();
+        for (auto &t : targets)
+            t.value.reset();
+        for (auto &t : surfaces)
+            t.value.reset();
+        for (auto &t : turns)
+            t.value.reset();
         state["scores"] = Json::object();
         state["history"] = Json::array();
         award_counts.clear();
         projectiles.clear();
         last_time = time_ns;
         failed = false;
-        state["run"] = {{"running", auto_start}, {"ended", false}, {"started_ns", time_ns},
+        state["run"] = {{"running", auto_start}, {"ended", false},     {"started_ns", time_ns},
                         {"stopped_ns", nullptr}, {"options", options}, {"seed", seed}};
         refreshLatched();
     }
@@ -190,12 +206,14 @@ struct TaskRuntime::Impl {
         static const std::set<std::string> keys = {"id", "type", "task", "region", "time_ns", "data"};
         bool ok = event.is_object() && event.size() == keys.size();
         if (ok)
-            for (const auto &key : keys) ok = ok && event.contains(key);
+            for (const auto &key : keys)
+                ok = ok && event.contains(key);
         for (const char *key : {"id", "type", "task", "region"})
             ok = ok && event.at(key).is_string();
         ok = ok && !event.at("id").get<std::string>().empty() && !event.at("type").get<std::string>().empty() &&
              tasks.count(event.at("task").get<std::string>()) > 0 && event.at("data").is_object();
-        if (!ok) invalid("rules emitted a malformed task event");
+        if (!ok)
+            invalid("rules emitted a malformed task event");
         const Json &time = event.at("time_ns");
         if (!time.is_number_integer() || time.get<std::int64_t>() < 0)
             invalid("time_ns must be a nonnegative integer");
@@ -209,13 +227,15 @@ struct TaskRuntime::Impl {
     }
 
     Events evaluate(const Events &events) {
-        if (events.empty()) return {};
+        if (events.empty())
+            return {};
         for (auto &tracker : turns) {
             bool restart = false;
             for (const auto &event : events)
                 for (const auto &entry : tracker.value.restart_events)
                     restart = restart || (event.at("task") == entry.first && event.at("id") == entry.second);
-            if (restart) tracker.value.restart();
+            if (restart)
+                tracker.value.restart();
         }
         refreshLatched();
         const Json committed_scores = state.at("scores");
@@ -230,9 +250,8 @@ struct TaskRuntime::Impl {
                     const Json &parameters = rule.at("parameters");
                     const std::pair<std::string, std::string> key{task, rule.at("id").get<std::string>()};
                     for (const auto &event : events) {
-                        const int limit = parameters.contains("max_awards")
-                                              ? parameters.at("max_awards").get<int>()
-                                              : std::numeric_limits<int>::max();
+                        const int limit = parameters.contains("max_awards") ? parameters.at("max_awards").get<int>()
+                                                                            : std::numeric_limits<int>::max();
                         if (event.at("task") == task && event.at("id") == parameters.at("event") &&
                             counts[key] < limit) {
                             const std::string row = task + "/" + key.second;
@@ -247,7 +266,8 @@ struct TaskRuntime::Impl {
             for (std::size_t i = 0; i < scoring.size(); ++i) {
                 state["scores"] = scores;
                 Json result = instances[i]->evaluate(state, events, scoring[i].parameters);
-                if (!finiteJson(result)) invalid("rules result contains a non-finite number");
+                if (!finiteJson(result))
+                    invalid("rules result contains a non-finite number");
                 if (!result.is_object() || result.size() != 2 || !result.contains("scores") ||
                     !result.contains("events"))
                     invalid("rules must return scores and events");
@@ -269,7 +289,8 @@ struct TaskRuntime::Impl {
             award_counts = std::move(counts);
             Events all = events;
             all.insert(all.end(), emitted.begin(), emitted.end());
-            for (const auto &event : all) state["history"].push_back(event);
+            for (const auto &event : all)
+                state["history"].push_back(event);
             return all;
         } catch (...) {
             state["scores"] = committed_scores;
@@ -286,8 +307,8 @@ struct TaskRuntime::Impl {
         }
         for (const auto &binding : bindings(task)) {
             const Json &p = binding.at("parameters");
-            if (binding.at("type") == event.kind && p.at("region") == region &&
-                p.at("from_side") == event.from_side && p.at("to_side") == event.to_side)
+            if (binding.at("type") == event.kind && p.at("region") == region && p.at("from_side") == event.from_side &&
+                p.at("to_side") == event.to_side)
                 out.push_back(makeEvent(binding.at("id"), event.kind, task, region, event.time_ns, data));
         }
         return out;
@@ -320,9 +341,11 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
         if (unique.size() != m.order.size() || m.order.empty())
             invalid("task_ids must select unique existing tasks");
         for (const auto &id : m.order)
-            if (!definitions.count(id)) invalid("task_ids must select unique existing tasks");
+            if (!definitions.count(id))
+                invalid("task_ids must select unique existing tasks");
     }
-    for (const auto &id : m.order) m.tasks[id] = *definitions.at(id); // owned copy
+    for (const auto &id : m.order)
+        m.tasks[id] = *definitions.at(id); // owned copy
     m.options = scenario.run_options.is_null() ? Json::object() : scenario.run_options;
     m.auto_start = scenario.scenario.at("run").at("auto_start").get<bool>();
     m.seed = scenario.scenario.at("seed");
@@ -349,10 +372,12 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
             frames[frame.at("id").get<std::string>()] = frame;
         }
         m.state["tasks"][id] = {{"frames", frames}};
-        if (!placements.count(id)) invalid("task " + id + " has no placement");
+        if (!placements.count(id))
+            invalid("task " + id + " has no placement");
         const Pose &base = placements.at(id);
         auto placed = [&](const Json &parameters) -> Pose {
-            if (!parameters.contains("frame")) return base;
+            if (!parameters.contains("frame"))
+                return base;
             const Json &frame = *named.at(parameters.at("frame").get<std::string>());
             return spatial::compose(base, poseFrom(frame.at("position_m"), frame.at("orientation_wxyz")));
         };
@@ -363,7 +388,8 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
             if (kind == "perforated_panel") {
                 m.panels.push_back({id, region_id, PerforatedPanel(parameters, base)});
             } else if (kind == "rectangular_portal") {
-                m.portals.push_back({id, region_id, PortalTracker(parameters, placed(parameters), envelope, m.floor_z)});
+                m.portals.push_back(
+                    {id, region_id, PortalTracker(parameters, placed(parameters), envelope, m.floor_z)});
             } else if (kind == "open_crate") {
                 m.crates.push_back({id, region_id, OpenCrate(parameters, placed(parameters))});
             } else if (kind == "proximity_target") {
@@ -377,13 +403,13 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
                 std::vector<std::pair<std::string, Vec3>> positions;
                 for (const auto &name : parameters.at("facing").at("targets")) {
                     const Json &frame = *named.at(name.get<std::string>());
-                    positions.emplace_back(name.get<std::string>(),
-                                           spatial::compose(base, poseFrom(frame.at("position_m"),
-                                                                           frame.at("orientation_wxyz")))
-                                               .translation);
+                    positions.emplace_back(
+                        name.get<std::string>(),
+                        spatial::compose(base, poseFrom(frame.at("position_m"), frame.at("orientation_wxyz")))
+                            .translation);
                 }
-                m.surfaces.push_back({id, region_id,
-                                      SurfaceTracker(parameters, placed(parameters), envelope, surface, positions)});
+                m.surfaces.push_back(
+                    {id, region_id, SurfaceTracker(parameters, placed(parameters), envelope, surface, positions)});
             } else if (kind == "box") { // containment is judged by the rigid-body prop world
                 continue;
             } else if (kind == "turn_zone") {
@@ -394,8 +420,10 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
         }
         for (const auto &event : task.at("events")) {
             const std::string type = event.at("type").get<std::string>();
-            if (type == "contact" && event.at("parameters").at("with") == "robot") continue; // contacts arrive via record()
-            if (!kEventTypes.count(type)) invalid("task " + id + ": unsupported event '" + type + "'");
+            if (type == "contact" && event.at("parameters").at("with") == "robot")
+                continue; // contacts arrive via record()
+            if (!kEventTypes.count(type))
+                invalid("task " + id + ": unsupported event '" + type + "'");
         }
         for (const auto &rule : task.at("scoring")) {
             if (rule.at("type") != "event_points")
@@ -406,7 +434,8 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
     for (const auto &entry : scenario.tasks.at("scoring_rules")) {
         const std::string name = entry.at("name").get<std::string>();
         const auto found = rules.find(name);
-        if (found == rules.end()) invalid("unknown rules '" + name + "'");
+        if (found == rules.end())
+            invalid("unknown rules '" + name + "'");
         m.scoring.push_back({name, found->second, entry.at("parameters")});
     }
     m.reset(0);
@@ -414,18 +443,22 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
 
 TaskRuntime::~TaskRuntime() = default;
 
-void TaskRuntime::reset(std::int64_t time_ns) { impl_->reset(time_ns); }
+void TaskRuntime::reset(std::int64_t time_ns) {
+    impl_->reset(time_ns);
+}
 
 void TaskRuntime::start(std::int64_t time_ns, const Json &options) {
     Impl &m = *impl_;
     m.checkTime(time_ns);
     if (!options.is_null())
         for (auto it = options.begin(); it != options.end(); ++it)
-            if (!m.options.contains(it.key())) invalid("unknown run options: " + it.key());
+            if (!m.options.contains(it.key()))
+                invalid("unknown run options: " + it.key());
     m.reset(time_ns);
     Json &run = m.state["run"];
     if (!options.is_null())
-        for (auto it = options.begin(); it != options.end(); ++it) run["options"][it.key()] = it.value();
+        for (auto it = options.begin(); it != options.end(); ++it)
+            run["options"][it.key()] = it.value();
     run["running"] = true;
     run["started_ns"] = time_ns;
 }
@@ -437,7 +470,8 @@ Events TaskRuntime::stop(std::int64_t time_ns) {
     Events result = m.guarded([&] {
         for (auto &portal : m.portals)
             for (const auto &event : portal.value.finishAttempt(time_ns))
-                for (auto &e : m.portalEvents(portal.task, portal.region, event)) events.push_back(std::move(e));
+                for (auto &e : m.portalEvents(portal.task, portal.region, event))
+                    events.push_back(std::move(e));
         return m.evaluate(events);
     });
     m.last_time = time_ns;
@@ -459,8 +493,10 @@ Json TaskRuntime::describe() const {
     const Json state = snapshot();
     for (std::size_t i = 0; i < m.scoring.size(); ++i) {
         const Json extra = m.instances[i]->describe(state, m.scoring[i].parameters);
-        if (!finiteJson(extra) || !extra.is_object()) invalid("status function must return a finite object");
-        for (auto it = extra.begin(); it != extra.end(); ++it) fields[it.key()] = it.value();
+        if (!finiteJson(extra) || !extra.is_object())
+            invalid("status function must return a finite object");
+        for (auto it = extra.begin(); it != extra.end(); ++it)
+            fields[it.key()] = it.value();
     }
     return fields;
 }
@@ -471,8 +507,10 @@ Json TaskRuntime::feed(const Events &events, const Json &context) const {
     const Json state = snapshot();
     for (std::size_t i = 0; i < m.scoring.size(); ++i) {
         const Json part = m.instances[i]->feed(state, events, context, m.scoring[i].parameters);
-        if (!finiteJson(part) || !part.is_array()) invalid("feed function must return a finite list");
-        for (const auto &item : part) items.push_back(item);
+        if (!finiteJson(part) || !part.is_array())
+            invalid("feed function must return a finite list");
+        for (const auto &item : part)
+            items.push_back(item);
     }
     return items;
 }
@@ -481,7 +519,8 @@ Json TaskRuntime::indicators() const {
     Json out = Json::array();
     for (const auto &t : impl_->targets) {
         Json colors = Json::object();
-        for (const auto &c : t.value.indicator) colors[c.first] = c.second;
+        for (const auto &c : t.value.indicator)
+            colors[c.first] = c.second;
         const auto &q = t.value.face_world.rotation;
         out.push_back({{"task", t.task},
                        {"region", t.region},
@@ -498,7 +537,8 @@ Events TaskRuntime::record(std::int64_t time_ns, const Events &events) {
     m.checkTime(time_ns);
     Events inputs;
     for (const auto &event : events) {
-        if (!event.is_object()) invalid("recorded events must be objects");
+        if (!event.is_object())
+            invalid("recorded events must be objects");
         const Json region = event.contains("region") && event.at("region").is_string() ? event.at("region") : Json("");
         Event item = makeEvent(event.at("id"), event.at("type"), event.at("task"), region,
                                event.at("time_ns").get<std::int64_t>(), event.at("data"));
@@ -518,14 +558,18 @@ Events TaskRuntime::observe(std::int64_t time_ns, const spatial::Pose &world_ref
         const Pose pose = ownedPose(world_reference);
         Events events;
         auto append = [&events](Events more) {
-            for (auto &e : more) events.push_back(std::move(e));
+            for (auto &e : more)
+                events.push_back(std::move(e));
         };
         for (auto &portal : m.portals)
             for (const auto &event : portal.value.observe(time_ns, pose))
                 append(m.portalEvents(portal.task, portal.region, event));
-        for (auto &t : m.targets) append(m.factEvents(t.task, t.region, time_ns, t.value.observe(time_ns, pose)));
-        for (auto &t : m.surfaces) append(m.factEvents(t.task, t.region, time_ns, t.value.observe(time_ns, pose)));
-        for (auto &t : m.turns) append(m.factEvents(t.task, t.region, time_ns, t.value.observe(time_ns, pose)));
+        for (auto &t : m.targets)
+            append(m.factEvents(t.task, t.region, time_ns, t.value.observe(time_ns, pose)));
+        for (auto &t : m.surfaces)
+            append(m.factEvents(t.task, t.region, time_ns, t.value.observe(time_ns, pose)));
+        for (auto &t : m.turns)
+            append(m.factEvents(t.task, t.region, time_ns, t.value.observe(time_ns, pose)));
         return m.evaluate(events);
     });
     m.last_time = time_ns;
@@ -536,11 +580,15 @@ Events TaskRuntime::releaseProjectile(std::int64_t time_ns, int id, const std::s
                                       const Eigen::Vector3d &tip_world, double radius_m, double length_m) {
     Impl &m = *impl_;
     m.checkTime(time_ns);
-    if (id < 0 || m.projectiles.count(id)) invalid("projectile identifiers must be unique nonnegative integers");
-    if (mechanism_type != "launcher" && mechanism_type != "dropper") invalid("unsupported projectile mechanism type");
+    if (id < 0 || m.projectiles.count(id))
+        invalid("projectile identifiers must be unique nonnegative integers");
+    if (mechanism_type != "launcher" && mechanism_type != "dropper")
+        invalid("unsupported projectile mechanism type");
     const Vec3 tip = finite(tip_world, "projectile tip");
-    if (!std::isfinite(radius_m) || radius_m <= 0) invalid("projectile radius must be positive and finite");
-    if (!std::isfinite(length_m) || length_m <= 0) invalid("projectile length must be positive and finite");
+    if (!std::isfinite(radius_m) || radius_m <= 0)
+        invalid("projectile radius must be positive and finite");
+    if (!std::isfinite(length_m) || length_m <= 0)
+        invalid("projectile length must be positive and finite");
     Events events;
     std::set<std::string> tasks;
     for (const auto &panel : m.panels) {
@@ -558,19 +606,22 @@ Events TaskRuntime::releaseProjectile(std::int64_t time_ns, int id, const std::s
         }
     }
     for (const auto &crate : m.crates) {
-        if (tasks.count(crate.task)) continue;
+        if (tasks.count(crate.task))
+            continue;
         bool any = false;
         for (const auto &b : m.bindings(crate.task)) {
-            if (b.at("type") != "payload_landing") continue;
+            if (b.at("type") != "payload_landing")
+                continue;
             const Json &p = b.at("parameters");
             const auto &types = p.at("projectile_mechanism_types");
             const bool listed = std::find(types.begin(), types.end(), Json(mechanism_type)) != types.end();
-            if (!listed) continue;
+            if (!listed)
+                continue;
             const std::string region = p.at("region").get<std::string>();
-            any = std::any_of(m.crates.begin(), m.crates.end(), [&](const auto &c) {
-                return c.task == crate.task && c.region == region;
-            });
-            if (any) break;
+            any = std::any_of(m.crates.begin(), m.crates.end(),
+                              [&](const auto &c) { return c.task == crate.task && c.region == region; });
+            if (any)
+                break;
         }
         if (any) {
             tasks.insert(crate.task);
@@ -595,11 +646,13 @@ ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const E
                                            const Eigen::Vector3d &velocity_in) {
     Impl &m = *impl_;
     m.checkTime(time_ns);
-    if (id < 0 || !m.projectiles.count(id)) invalid("projectile must be released before observing its motion");
+    if (id < 0 || !m.projectiles.count(id))
+        invalid("projectile must be released before observing its motion");
     const Vec3 start = finite(start_center, "projectile start center");
     const Vec3 end = finite(end_center, "projectile end center");
     const Vec3 axis = finite(axis_in, "projectile axis");
-    if (std::abs(axis.norm() - 1) > 1e-6) invalid("projectile axis must be unit length");
+    if (std::abs(axis.norm() - 1) > 1e-6)
+        invalid("projectile axis must be unit length");
     const Vec3 velocity = finite(velocity_in, "projectile velocity");
     Projectile &state = m.projectiles.at(id);
     if (!state.active) {
@@ -615,7 +668,8 @@ ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const E
     bool stop = false;
     for (const auto &panel : m.panels) {
         const auto hit = panel.value.intersect(start, end, axis, radius);
-        if (!hit) continue;
+        if (!hit)
+            continue;
         state.scored = true;
         if (hit->outcome == "blocked") {
             new_position = panel.value.worldPoint(hit->point_local);
@@ -639,14 +693,17 @@ ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const E
     }
     for (const auto &crate : m.crates) {
         const std::pair<std::string, std::string> key{crate.task, crate.region};
-        const CrateStep step = crate.value.step(start, new_position, current, axis, radius, state.length,
-                                                state.entered.count(key) > 0);
+        const CrateStep step =
+            crate.value.step(start, new_position, current, axis, radius, state.length, state.entered.count(key) > 0);
         new_position = step.position;
         current = step.velocity;
-        if (step.entered) state.entered.insert(key);
-        if (step.outcome.empty()) continue;
+        if (step.entered)
+            state.entered.insert(key);
+        if (step.outcome.empty())
+            continue;
         stop = true;
-        if (state.scored) continue;
+        if (state.scored)
+            continue;
         state.scored = true;
         for (const auto &binding : m.bindings(crate.task)) {
             const Json &p = binding.at("parameters");
@@ -654,7 +711,8 @@ ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const E
                 p.at("outcome") != step.outcome)
                 continue;
             const auto &types = p.at("projectile_mechanism_types");
-            if (std::find(types.begin(), types.end(), Json(mechanism)) == types.end()) continue;
+            if (std::find(types.begin(), types.end(), Json(mechanism)) == types.end())
+                continue;
             events.push_back(makeEvent(binding.at("id"), "payload_landing", crate.task, crate.region, time_ns,
                                        {{"projectile_id", id},
                                         {"mechanism_type", mechanism},
@@ -677,7 +735,8 @@ ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const E
         static_cast<double>(time_ns - state.released_ns) / 1e9 > kMaxPayloadAgeS) {
         current = Vec3::Zero();
         stop = true;
-        if (reason.empty()) reason = "pool_wall_or_timeout";
+        if (reason.empty())
+            reason = "pool_wall_or_timeout";
     }
     if (!reason.empty() && !state.scored) {
         state.scored = true;
@@ -690,8 +749,10 @@ ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const E
     state.active = !stop;
     m.last_time = time_ns;
     result.stop = stop;
-    if (new_position != end) result.position_world = new_position;
-    if (current != velocity) result.velocity_world = current;
+    if (new_position != end)
+        result.position_world = new_position;
+    if (current != velocity)
+        result.velocity_world = current;
     return result;
 }
 } // namespace robotics::session

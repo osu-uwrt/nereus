@@ -19,14 +19,13 @@ struct PropState {
     Eigen::Vector3d position;       // mesh origin in world
     Eigen::Quaterniond orientation; // world from mesh
     bool attached{false};
-    std::string mechanism_id;       // holder when attached
-    std::string basket;             // basket region id when resting in one
+    std::string mechanism_id; // holder when attached
+    std::string basket;       // basket region id when resting in one
 };
 
 class PropWorld {
   public:
-    PropWorld(const ResolvedScenario &scenario, const std::string &task,
-              const std::string &mechanism_id = {});
+    PropWorld(const ResolvedScenario &scenario, const std::string &task, const std::string &mechanism_id = {});
     ~PropWorld();
     PropWorld(const PropWorld &) = delete;
     PropWorld &operator=(const PropWorld &) = delete;
@@ -34,10 +33,8 @@ class PropWorld {
     // robot_root_pose: pose of the robot frame-tree root (COM) in world; velocities of that
     // origin in world axes; claw joints from ClawState::joint_positions_m.
     Events step(double dt_s, std::int64_t time_ns, const spatial::Pose &robot_root_pose,
-                const Eigen::Vector3d &linear_velocity_world,
-                const Eigen::Vector3d &angular_velocity_world,
-                const std::array<double, 2> &claw_joint_positions, const Water &water,
-                bool enabled);
+                const Eigen::Vector3d &linear_velocity_world, const Eigen::Vector3d &angular_velocity_world,
+                const std::array<double, 2> &claw_joint_positions, const Water &water, bool enabled);
     void reset();
     const std::string &task() const;
     const std::string &mechanismId() const;

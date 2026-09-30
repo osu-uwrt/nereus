@@ -22,47 +22,57 @@ using session::Json;
 using Award = std::function<void(const std::string &, std::int64_t)>;
 
 bool truthy(const Json &v) {
-    if (v.is_null()) return false;
-    if (v.is_boolean()) return v.get<bool>();
-    if (v.is_number()) return v.get<double>() != 0.0;
+    if (v.is_null())
+        return false;
+    if (v.is_boolean())
+        return v.get<bool>();
+    if (v.is_number())
+        return v.get<double>() != 0.0;
     return !v.empty(); // string, array, object
 }
 std::int64_t integer(const Json &v) { // integer arithmetic (bool counts as 0/1)
-    if (v.is_boolean()) return v.get<bool>() ? 1 : 0;
-    if (v.is_number_integer()) return v.get<std::int64_t>();
+    if (v.is_boolean())
+        return v.get<bool>() ? 1 : 0;
+    if (v.is_number_integer())
+        return v.get<std::int64_t>();
     throw std::invalid_argument("expected an integer value");
 }
 double real(const Json &v) {
-    if (!v.is_number()) throw std::invalid_argument("expected a number");
+    if (!v.is_number())
+        throw std::invalid_argument("expected a number");
     return v.get<double>();
 }
 bool listed(const Json &value, const Json &list) {
     return std::find(list.begin(), list.end(), value) != list.end();
 }
-Json strOf(const Json &v) { return v.is_string() ? v : Json(v.is_null() ? "None" : v.dump()); }
+Json strOf(const Json &v) {
+    return v.is_string() ? v : Json(v.is_null() ? "None" : v.dump());
+}
 
 // Insertion-ordered map with Json keys.
 template <class V> struct Ordered {
     std::vector<std::pair<Json, V>> items;
     V *find(const Json &key) {
         for (auto &item : items)
-            if (item.first == key) return &item.second;
+            if (item.first == key)
+                return &item.second;
         return nullptr;
     }
     V &insert(const Json &key, V value) {
         items.emplace_back(key, std::move(value));
         return items.back().second;
     }
-    std::size_t size() const { return items.size(); }
+    std::size_t size() const {
+        return items.size();
+    }
 };
 
 bool forward(const Event &event) {
-    if (!(event.at("task") == "gate" && event.at("region") == "gate_opening" &&
-          event.at("id") == "forward_pass" && event.at("type") == "pass_through"))
+    if (!(event.at("task") == "gate" && event.at("region") == "gate_opening" && event.at("id") == "forward_pass" &&
+          event.at("type") == "pass_through"))
         return false;
     const Json &data = event.at("data");
-    return data.at("attempt_id") > 0 && data.at("from_side") == "positive" &&
-           data.at("to_side") == "negative";
+    return data.at("attempt_id") > 0 && data.at("from_side") == "positive" && data.at("to_side") == "negative";
 }
 
 Json projectileId(const Json &data) {
@@ -73,8 +83,7 @@ Json projectileId(const Json &data) {
 }
 double distance(const Json &data) {
     auto it = data.find("release_distance_m");
-    if (it == data.end() || !it->is_number() || !std::isfinite(it->get<double>()) ||
-        it->get<double>() < 0)
+    if (it == data.end() || !it->is_number() || !std::isfinite(it->get<double>()) || it->get<double>() < 0)
         throw std::invalid_argument("launcher release requires a finite nonnegative release_distance_m");
     return it->get<double>();
 }
@@ -94,8 +103,7 @@ Json valueOr(const Json &object, const char *key, Json fallback) {
 class Ledger {
   public:
     Ledger(const Json &state, const Json &parameters, Award award)
-        : state_(state), parameters_(parameters), points_(parameters.at("points")),
-          award_(std::move(award)) {}
+        : state_(state), parameters_(parameters), points_(parameters.at("points")), award_(std::move(award)) {}
 
     std::optional<std::string> role;
     int side{0};
@@ -104,7 +112,8 @@ class Ledger {
     std::map<Json, Json> contents;
 
     void feed(const Event &event) {
-        if (ended) return;
+        if (ended)
+            return;
         const Json &task = event.at("task"), &kind = event.at("type"), &data = event.at("data");
         if (forward(event) && !role) {
             auto [r, s] = selectRole(event, state_, parameters_);
@@ -112,8 +121,10 @@ class Ledger {
         } else if (kind == "breach" && task == "surface") {
             ended = true;
             if (emit)
-                emit->push_back({{"id", "surface:scoring_ended"}, {"type", "scoring_ended"},
-                                 {"task", task}, {"region", event.at("region")},
+                emit->push_back({{"id", "surface:scoring_ended"},
+                                 {"type", "scoring_ended"},
+                                 {"task", task},
+                                 {"region", event.at("region")},
                                  {"time_ns", event.at("time_ns")},
                                  {"data", {{"reason", "breach outside octagon"}}}});
             return;
@@ -148,7 +159,9 @@ class Ledger {
     Json held_, facing_; // null = None
     bool surface_active_{false};
 
-    std::int64_t pt(const char *key) const { return integer(points_.at(key)); }
+    std::int64_t pt(const char *key) const {
+        return integer(points_.at(key));
+    }
     Json targetClass() const {
         return strOf(parameters_.at("roles").at(*role).at("target_class"));
     }
@@ -156,13 +169,12 @@ class Ledger {
     void slalom(const Event &event) {
         const Json &data = event.at("data");
         const Json &region = event.at("region");
-        if (!role || !listed(region, parameters_.at("slalom").at("rows")) ||
-            data.at("from_side") != "positive" || data.at("to_side") != "negative")
+        if (!role || !listed(region, parameters_.at("slalom").at("rows")) || data.at("from_side") != "positive" ||
+            data.at("to_side") != "negative")
             return;
         int s = real(data.at("crossing_point_local").at(1)) > 0 ? 1 : -1;
-        award_(region.get<std::string>(),
-               (s == side ? pt("slalom_same") : pt("slalom_other")) +
-                   pt("slalom_depth") * (truthy(data.at("depth_overlap")) ? 1 : 0));
+        award_(region.get<std::string>(), (s == side ? pt("slalom_same") : pt("slalom_other")) +
+                                              pt("slalom_depth") * (truthy(data.at("depth_overlap")) ? 1 : 0));
     }
 
     void bins(const Event &event) {
@@ -179,13 +191,14 @@ class Ledger {
             return;
         Json identifier = valueOr(data, "projectile_id", Json());
         if (type == "payload_released") {
-            if (!shots_.find(identifier) &&
-                static_cast<std::int64_t>(shots_.size()) < pt("max_shots"))
-                shots_.insert(identifier, {{"eligible", role.has_value()}, {"result", nullptr},
-                                           {"target", ""}, {"correct", false}});
+            if (!shots_.find(identifier) && static_cast<std::int64_t>(shots_.size()) < pt("max_shots"))
+                shots_.insert(
+                    identifier,
+                    {{"eligible", role.has_value()}, {"result", nullptr}, {"target", ""}, {"correct", false}});
         } else if (type == "payload_landing" && data.at("outcome") == "inside") {
             Json *shot = shots_.find(identifier);
-            if (!role || !shot || !truthy(shot->at("eligible")) || truthy(shot->at("result"))) return;
+            if (!role || !shot || !truthy(shot->at("eligible")) || truthy(shot->at("result")))
+                return;
             bool correct = data.at("region_class") == targetClass();
             (*shot)["result"] = correct ? "success" : "wrong_target";
             (*shot)["correct"] = correct;
@@ -196,7 +209,8 @@ class Ledger {
                 const Json &r = item.second.at("result");
                 if (r == "success" || r == "wrong_target") {
                     ++good;
-                    if (item.second.at("correct").get<bool>()) unique.insert(item.second.at("target"));
+                    if (item.second.at("correct").get<bool>())
+                        unique.insert(item.second.at("target"));
                 }
             }
             award_("bins", pt("bin") * good + pt("bin_class") * static_cast<std::int64_t>(unique.size()));
@@ -214,7 +228,8 @@ class Ledger {
                 contents.erase(prop);
             }
         } else if (type == "detach") {
-            if (held_ == prop) held_ = Json();
+            if (held_ == prop)
+                held_ = Json();
             if (role && grasped_.count(prop) && valueOr(data, "reason", "released") == "released") {
                 dropped_.insert(prop);
                 award_("objects_drop", pt("object_drop") * static_cast<std::int64_t>(dropped_.size()));
@@ -222,12 +237,14 @@ class Ledger {
         } else if (type == "drop_into" && role &&
                    listed(valueOr(data, "basket", Json()), parameters_.at("table").at("baskets"))) {
             contents[prop] = data.at("basket");
-            std::int64_t value = data.at("basket") == data.at("expected_basket") ? pt("basket_correct")
-                                                                                 : pt("basket_other");
+            std::int64_t value =
+                data.at("basket") == data.at("expected_basket") ? pt("basket_correct") : pt("basket_other");
             auto [it, inserted] = basket_awards_.emplace(prop, value);
-            if (!inserted) it->second = std::max(value, it->second);
+            if (!inserted)
+                it->second = std::max(value, it->second);
             std::int64_t sum = 0;
-            for (auto &entry : basket_awards_) sum += entry.second;
+            for (auto &entry : basket_awards_)
+                sum += entry.second;
             award_("baskets", sum);
         }
     }
@@ -235,12 +252,14 @@ class Ledger {
     void basketTurns(double turns) {
         double count = static_cast<double>(contents.size());
         if (role && count > 0 && turns > 0)
-            award_("basket_count", turns == count ? pt("basket_count")
-                                   : std::fabs(turns - count) == 1 ? pt("basket_count_near") : 0);
+            award_("basket_count", turns == count                  ? pt("basket_count")
+                                   : std::fabs(turns - count) == 1 ? pt("basket_count_near")
+                                                                   : 0);
     }
 
     void surfaceRows() {
-        if (!role || !surface_active_) return;
+        if (!role || !surface_active_)
+            return;
         award_("surface", pt("surface"));
         if (!held_.is_null() && grasped_.count(held_)) {
             surfaced_.insert(held_);
@@ -263,7 +282,8 @@ Ledger replayed(const Json &state, const Json &parameters) {
     Ledger ledger(state, parameters, [](const std::string &, std::int64_t) {});
     const Json &started = state.at("run").at("started_ns");
     for (const Json &event : state.at("history"))
-        if (event.at("time_ns") >= started && !ledger.ended) ledger.feed(event);
+        if (event.at("time_ns") >= started && !ledger.ended)
+            ledger.feed(event);
     return ledger;
 }
 
@@ -281,7 +301,8 @@ class Robosub2026 final : public session::Rules {
         const Json &started = run.at("started_ns");
         std::vector<const Json *> history;
         for (const Json &event : state.at("history"))
-            if (event.at("time_ns") >= started) history.push_back(&event);
+            if (event.at("time_ns") >= started)
+                history.push_back(&event);
         const Json *selected = nullptr;
         for (const Json *event : history)
             if (event->at("type") == "role_selected" && event->at("task") == "gate") {
@@ -289,11 +310,13 @@ class Robosub2026 final : public session::Rules {
                 break;
             }
         std::optional<std::string> role;
-        if (selected) role = selected->at("data").at("role").get<std::string>();
+        if (selected)
+            role = selected->at("data").at("role").get<std::string>();
 
         Ordered<Json> shots;
         for (const Json *event : history) {
-            if (event->at("task") != "torpedo") continue;
+            if (event->at("task") != "torpedo")
+                continue;
             const Json &data = event->at("data");
             if (event->at("type") == "shot_registered") {
                 if (!shots.find(data.at("projectile_id"))) {
@@ -303,7 +326,8 @@ class Robosub2026 final : public session::Rules {
                 }
             } else if (event->at("type") == "shot_result") {
                 Json *shot = shots.find(data.at("projectile_id"));
-                if (shot && shot->at("result").is_null()) shot->update(data);
+                if (shot && shot->at("result").is_null())
+                    shot->update(data);
             }
         }
         std::set<Json> passed;
@@ -317,7 +341,8 @@ class Robosub2026 final : public session::Rules {
         Award award = [&](const std::string &row, std::int64_t value) {
             auto it = scores.find(row);
             std::int64_t current = it == scores.end() ? 0 : integer(*it);
-            if (value <= current) return;
+            if (value <= current)
+                return;
             scores[row] = value;
             for (auto &entry : updated)
                 if (entry.first == row) {
@@ -327,39 +352,47 @@ class Robosub2026 final : public session::Rules {
             updated.emplace_back(row, value);
         };
         auto gatePoints = [&](std::int64_t style) {
-            std::int64_t bonus = truthy(options.at("role_coin")) && role &&
-                                         Json(*role) == options.at("role")
-                                     ? integer(points.at("role")) : 0;
-            return integer(points.at("gate")) +
-                   integer(points.at("heading")) * integer(options.at("heading_coin")) + bonus + style;
+            std::int64_t bonus = truthy(options.at("role_coin")) && role && Json(*role) == options.at("role")
+                                     ? integer(points.at("role"))
+                                     : 0;
+            return integer(points.at("gate")) + integer(points.at("heading")) * integer(options.at("heading_coin")) +
+                   bonus + style;
         };
         auto emitShot = [&](const Event &event, const char *kind, Json data) {
-            emitted.push_back({{"id", std::string("torpedo:") + kind}, {"type", kind},
-                               {"task", "torpedo"}, {"region", event.at("region")},
-                               {"time_ns", event.at("time_ns")}, {"data", std::move(data)}});
+            emitted.push_back({{"id", std::string("torpedo:") + kind},
+                               {"type", kind},
+                               {"task", "torpedo"},
+                               {"region", event.at("region")},
+                               {"time_ns", event.at("time_ns")},
+                               {"data", std::move(data)}});
         };
         auto awardTorpedoes = [&]() {
             const Json &rules = parameters.at("torpedo");
             const Json &goodResults = rules.at("good_results");
             std::vector<const Json *> good;
             for (auto &item : shots.items)
-                if (listed(item.second.at("result"), goodResults)) good.push_back(&item.second);
+                if (listed(item.second.at("result"), goodResults))
+                    good.push_back(&item.second);
             award("torpedoes", integer(points.at("torpedo")) * static_cast<std::int64_t>(good.size()));
             std::int64_t bonus = 0;
             for (const Json *shot : good) {
                 double d = real(shot->at("release_distance_m"));
-                bonus += d >= real(points.at("distance_far_m")) ? integer(points.at("distance_far"))
-                         : d >= real(points.at("distance_near_m")) ? integer(points.at("distance_near")) : 0;
+                bonus += d >= real(points.at("distance_far_m"))    ? integer(points.at("distance_far"))
+                         : d >= real(points.at("distance_near_m")) ? integer(points.at("distance_near"))
+                                                                   : 0;
             }
             award("distance", bonus);
             const Json &order = rules.at("sequence_order");
-            if (shots.size() != order.size()) return;
+            if (shots.size() != order.size())
+                return;
             for (auto &item : shots.items)
                 if (!listed(item.second.at("result"), goodResults) || !truthy(item.second.at("correct")))
                     return;
             Json sizes = Json::array();
-            for (auto &item : shots.items) sizes.push_back(item.second.at("hole_size"));
-            if (sizes == order) award("sequence", integer(points.at("sequence")));
+            for (auto &item : shots.items)
+                sizes.push_back(item.second.at("hole_size"));
+            if (sizes == order)
+                award("sequence", integer(points.at("sequence")));
         };
 
         auto handle = [&](const Event &event) {
@@ -370,8 +403,10 @@ class Robosub2026 final : public session::Rules {
                     double d = distance(data);
                     if (!shots.find(identifier) &&
                         static_cast<std::int64_t>(shots.size()) < integer(points.at("max_shots"))) {
-                        Json registered = {{"projectile_id", identifier}, {"mechanism_type", "launcher"},
-                                           {"release_distance_m", d}, {"eligible", role.has_value()}};
+                        Json registered = {{"projectile_id", identifier},
+                                           {"mechanism_type", "launcher"},
+                                           {"release_distance_m", d},
+                                           {"eligible", role.has_value()}};
                         Json shot = registered;
                         shot["result"] = nullptr;
                         shots.insert(identifier, shot);
@@ -394,12 +429,14 @@ class Robosub2026 final : public session::Rules {
                         }
                     Json *shot = shots.find(identifier);
                     if (role && shot && truthy(shot->at("eligible")) && shot->at("result").is_null()) {
-                        bool correct = valueOr(data, "hole_class", Json()) ==
-                                       parameters.at("roles").at(*role).at("target_class");
+                        bool correct =
+                            valueOr(data, "hole_class", Json()) == parameters.at("roles").at(*role).at("target_class");
                         Json accepted = {
-                            {"projectile_id", identifier}, {"mechanism_type", "launcher"},
+                            {"projectile_id", identifier},
+                            {"mechanism_type", "launcher"},
                             {"result", outcome == "pass" ? Json(correct ? "success" : "wrong_target") : outcome},
-                            {"correct", correct}, {"hole_id", valueOr(data, "hole_id", "")},
+                            {"correct", correct},
+                            {"hole_id", valueOr(data, "hole_id", "")},
                             {"hole_size", valueOr(data, "hole_size", "")}};
                         shot->update(accepted);
                         emitShot(event, "shot_result", accepted);
@@ -408,32 +445,33 @@ class Robosub2026 final : public session::Rules {
                 }
                 return;
             }
-            if (event.at("task") != "gate" || event.at("region") != "gate_opening") return;
+            if (event.at("task") != "gate" || event.at("region") != "gate_opening")
+                return;
             if (forward(event)) {
                 if (!role) {
                     double y = real(data.at("crossing_point_local").at(1));
                     const auto &reference =
                         parameters.at("gate").at("role_reference_frame").get_ref<const std::string &>();
-                    double repair_y = real(state.at("tasks").at("gate").at("frames").at(reference)
-                                               .at("position_m").at(1));
+                    double repair_y =
+                        real(state.at("tasks").at("gate").at("frames").at(reference).at("position_m").at(1));
                     role = y * repair_y > 0 ? "repair" : "rescue";
-                    emitted.push_back({{"id", "gate:role_selected"}, {"type", "role_selected"},
-                                       {"task", "gate"}, {"region", "gate_opening"},
-                                       {"time_ns", event.at("time_ns")},
-                                       {"data", {{"role", *role}, {"side", y > 0 ? 1 : -1},
-                                                 {"attempt_id", data.at("attempt_id")}}}});
+                    emitted.push_back(
+                        {{"id", "gate:role_selected"},
+                         {"type", "role_selected"},
+                         {"task", "gate"},
+                         {"region", "gate_opening"},
+                         {"time_ns", event.at("time_ns")},
+                         {"data", {{"role", *role}, {"side", y > 0 ? 1 : -1}, {"attempt_id", data.at("attempt_id")}}}});
                 }
                 passed.insert(data.at("attempt_id"));
                 award("gate", gatePoints(0));
-            } else if (event.at("id") == "gate_opening:attempt_finished" &&
-                       event.at("type") == "attempt_finished" && role &&
-                       passed.count(data.at("attempt_id"))) {
+            } else if (event.at("id") == "gate_opening:attempt_finished" && event.at("type") == "attempt_finished" &&
+                       role && passed.count(data.at("attempt_id"))) {
                 const Json &style = parameters.at("gate").at("style");
                 std::vector<std::int64_t> quarters;
                 for (const Json &turn : data.at("rotation_vector_body"))
                     quarters.push_back(static_cast<std::int64_t>(std::floor(
-                        (std::fabs(real(turn)) + real(style.at("epsilon_rad"))) /
-                        real(style.at("quarter_rad")))));
+                        (std::fabs(real(turn)) + real(style.at("epsilon_rad"))) / real(style.at("quarter_rad")))));
                 std::int64_t limit = integer(style.at("max_quarters"));
                 std::int64_t q0 = quarters.at(0), q1 = quarters.at(1), q2 = quarters.at(2), rp, yaw;
                 if (truthy(style.at("roll_pitch_first"))) {
@@ -443,8 +481,7 @@ class Robosub2026 final : public session::Rules {
                     yaw = std::min(limit, q2);
                     rp = std::min(limit - yaw, q0 + q1);
                 }
-                award("gate", gatePoints(integer(points.at("style_rp")) * rp +
-                                         integer(points.at("style_yaw")) * yaw));
+                award("gate", gatePoints(integer(points.at("style_rp")) * rp + integer(points.at("style_yaw")) * yaw));
             } else if (event.at("id") == "reverse_pass" && event.at("type") == "pass_through" &&
                        data.at("from_side") == "negative" && data.at("to_side") == "positive" && role &&
                        data.at("envelope_top_world") < state.at("environment").at("surface_z_m")) {
@@ -453,14 +490,17 @@ class Robosub2026 final : public session::Rules {
         };
 
         Ledger ledger(state, parameters, award);
-        for (const Json *event : history) ledger.feed(*event);
+        for (const Json *event : history)
+            ledger.feed(*event);
         ledger.emit = &emitted;
         for (const Event &event : events) {
-            if (event.at("time_ns") < started || ledger.ended) continue;
+            if (event.at("time_ns") < started || ledger.ended)
+                continue;
             handle(event);
             ledger.feed(event);
         }
-        for (auto &entry : updated) scores_out.push_back({{"row", entry.first}, {"points", entry.second}});
+        for (auto &entry : updated)
+            scores_out.push_back({{"row", entry.first}, {"points", entry.second}});
         return {{"scores", scores_out}, {"events", Json(emitted)}};
     }
 
@@ -493,16 +533,14 @@ class Robosub2026 final : public session::Rules {
                 {"ended_reason", ledger.ended ? kEndedReason : ""},
                 {"basket_count", ledger.contents.size()},
                 {"pinger", {{"mode", "disabled"}, {"first", nullptr}, {"active", nullptr}, {"stage", 0}}},
-                {"time_bonus_eligible",
-                 score("surface") && anySlalom && (score("bins") || score("torpedoes"))}};
+                {"time_bonus_eligible", score("surface") && anySlalom && (score("bins") || score("torpedoes"))}};
     }
 
     Json feed(const Events &, const Json &, const Json &) override {
         throw std::logic_error("robosub_2026 feed needs the run state: call feed(state, ...)");
     }
 
-    Json feed(const Json &state, const Events &events, const Json &context,
-              const Json &parameters) override {
+    Json feed(const Json &state, const Events &events, const Json &context, const Json &parameters) override {
         const Json &spec = parameters.at("feed");
         const Json &kinds = spec.at("kinds"), &baskets = spec.at("basket_names");
         Json targetClass = describe(state, parameters).at("target_class");
@@ -510,12 +548,17 @@ class Robosub2026 final : public session::Rules {
         std::set<std::tuple<std::string, Json, Json>> seen;
         Json items = Json::array();
 
-        auto add = [&](const Json &identifier, const std::string &kind, const Json &result,
-                       const Json &target, const Json &time_ns, const Json &slot = Json()) {
-            if (!seen.emplace(kind, identifier, result).second) return;
-            Json item = {{"id", identifier}, {"kind", kind}, {"result", result}, {"target", target},
+        auto add = [&](const Json &identifier, const std::string &kind, const Json &result, const Json &target,
+                       const Json &time_ns, const Json &slot = Json()) {
+            if (!seen.emplace(kind, identifier, result).second)
+                return;
+            Json item = {{"id", identifier},
+                         {"kind", kind},
+                         {"result", result},
+                         {"target", target},
                          {"time", real(time_ns) / 1e9}};
-            if (!slot.is_null()) item["slot"] = slot;
+            if (!slot.is_null())
+                item["slot"] = slot;
             items.push_back(item);
         };
         auto isKind = [&](const Json &mechanism) {
@@ -528,7 +571,8 @@ class Robosub2026 final : public session::Rules {
             Json slot;
             if (identifier.is_number_integer()) {
                 auto it = released.find(std::to_string(identifier.get<std::int64_t>()));
-                if (it != released.end()) slot = valueOr(*it, "slot", Json());
+                if (it != released.end())
+                    slot = valueOr(*it, "slot", Json());
             }
             auto kindOf = [&] { return kinds.at(mechanism.get<std::string>()).get<std::string>(); };
             auto holeId = [&] {
@@ -540,14 +584,13 @@ class Robosub2026 final : public session::Rules {
             } else if (kind == "hit" && isKind(mechanism)) {
                 if (data.at("outcome") == "pass")
                     add(identifier, kindOf(),
-                        valueOr(data, "hole_class", Json()) == targetClass ? "success" : "wrong_target",
-                        holeId(), time_ns, slot);
+                        valueOr(data, "hole_class", Json()) == targetClass ? "success" : "wrong_target", holeId(),
+                        time_ns, slot);
                 else if (data.at("outcome") == "blocked")
                     add(identifier, kindOf(), "blocked", holeId(), time_ns, slot);
             } else if (kind == "payload_landing" && isKind(mechanism)) {
                 Json result = "blocked";
-                if (data.at("outcome") == "inside" &&
-                    mechanism == parameters.at("bins").at("mechanism_type"))
+                if (data.at("outcome") == "inside" && mechanism == parameters.at("bins").at("mechanism_type"))
                     result = data.at("region_class") == targetClass ? "success" : "wrong_target";
                 add(identifier, kindOf(), result, event.at("region"), time_ns, slot);
             } else if (kind == "miss" && isKind(mechanism)) {
@@ -557,8 +600,8 @@ class Robosub2026 final : public session::Rules {
             } else if (kind == "attach" && event.at("task") == "table") {
                 add(data.at("prop_id"), kinds.at("claw").get<std::string>(), "grasped", "", time_ns);
             } else if (kind == "detach" && event.at("task") == "table") {
-                add(data.at("prop_id"), kinds.at("claw").get<std::string>(),
-                    valueOr(data, "reason", "released"), "", time_ns);
+                add(data.at("prop_id"), kinds.at("claw").get<std::string>(), valueOr(data, "reason", "released"), "",
+                    time_ns);
             } else if (kind == "drop_into" && event.at("id") == "basket_drop") {
                 Json result = data.at("basket") == data.at("expected_basket") ? "success" : "wrong_target";
                 Json target = data.at("basket");
@@ -572,5 +615,7 @@ class Robosub2026 final : public session::Rules {
 };
 } // namespace
 
-std::unique_ptr<session::Rules> makeRobosub2026() { return std::make_unique<Robosub2026>(); }
+std::unique_ptr<session::Rules> makeRobosub2026() {
+    return std::make_unique<Robosub2026>();
+}
 } // namespace robotics::rules

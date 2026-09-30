@@ -2,14 +2,14 @@
 // one riptide_meshes model per mapping TF frame. The viewer reads the same file and draws each mesh at the
 // latest transform of its frame, so the course follows the mapping estimate exactly as RViz shows it.
 #pragma once
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <yaml-cpp/yaml.h>
 #include <filesystem>
 #include <functional>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <yaml-cpp/yaml.h>
 
 namespace robotics::ros_viewer::host {
 struct MappingMarker {
@@ -20,16 +20,17 @@ struct MappingMarker {
 // `share(package)` resolves a ROS package share directory (used for the file's mesh_pkg unless `meshes`
 // names a local folder of <mesh>/model.dae). Marker entries whose mesh is a builtin shape (arrow,
 // sphere, cube) are skipped: only mesh markers make up the course.
-inline std::vector<MappingMarker> loadMappingMarkers(const std::filesystem::path &file,
-                                                     const std::function<std::filesystem::path(const std::string &)> &share,
-                                                     const std::filesystem::path &meshesOverride = {}) {
+inline std::vector<MappingMarker>
+loadMappingMarkers(const std::filesystem::path &file,
+                   const std::function<std::filesystem::path(const std::string &)> &share,
+                   const std::filesystem::path &meshesOverride = {}) {
     const YAML::Node root = YAML::LoadFile(file.string());
     if (!root.IsMap() || root.size() != 1)
         throw std::runtime_error(file.string() + ": expected one node's ros__parameters");
     const YAML::Node params = root.begin()->second["ros__parameters"];
-    const auto meshes = !meshesOverride.empty()
-                            ? meshesOverride
-                            : share(params["mesh_pkg"].as<std::string>()) / params["mesh_directory"].as<std::string>("meshes");
+    const auto meshes = !meshesOverride.empty() ? meshesOverride
+                                                : share(params["mesh_pkg"].as<std::string>()) /
+                                                      params["mesh_directory"].as<std::string>("meshes");
     std::vector<MappingMarker> out;
     // MarkerPublisher reads marker0, marker1, ... until the first incomplete entry.
     for (int i = 0;; ++i) {

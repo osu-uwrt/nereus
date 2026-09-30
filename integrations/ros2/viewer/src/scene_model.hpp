@@ -7,10 +7,10 @@
 #include "status_lights.hpp"
 #include "thruster_visuals.hpp"
 #include "visual_state.hpp"
-#include <robotics/pack_scene/pack_scene.hpp>
-#include <robotics/rendering/scene.hpp>
 #include <map>
 #include <memory>
+#include <robotics/pack_scene/pack_scene.hpp>
+#include <robotics/rendering/scene.hpp>
 
 namespace robotics::ros_viewer::host {
 struct ExtraVisual {
@@ -20,7 +20,7 @@ struct ExtraVisual {
     std::string mechanism;
 };
 struct SceneModelOptions {
-    YAML::Node config;                   // host viewer document
+    YAML::Node config;                     // host viewer document
     std::filesystem::path configDirectory; // for relative resources (calibration board texture)
     bool robotOnly = false;                // hide pool, water and course visuals (real-robot use)
 };

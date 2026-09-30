@@ -104,6 +104,7 @@ def assets(data: dict[str, Any], root: Path, present: dict[Path, str] | None = N
 
 # ------------------------------------------------------------------ robot
 
+
 def robot_frames(robot: dict[str, Any]) -> set[str]:
     frames = robot["frames"]
     return {frames["root"], *(item["child"] for item in frames["transforms"])}
@@ -112,8 +113,13 @@ def robot_frames(robot: dict[str, Any]) -> set[str]:
 _RIGHT_OUTPUTS = frozenset({"rgb_right", "camera_info_right"})
 
 
-def _stereo(item: dict[str, Any], parent_of: dict[str, str], transforms: dict[str, Any],
-            where: str, problems: list[str]) -> None:
+def _stereo(
+    item: dict[str, Any],
+    parent_of: dict[str, str],
+    transforms: dict[str, Any],
+    where: str,
+    problems: list[str],
+) -> None:
     """Depth range order and a rectified right eye one baseline along the left optical +X."""
     parameters = item["parameters"]
     depth = parameters["depth"]
@@ -125,15 +131,19 @@ def _stereo(item: dict[str, Any], parent_of: dict[str, str], transforms: dict[st
             problems.append(f"{where}/parameters: right-eye outputs require right_frame")
         return
     if parent_of.get(right) != item["frame"]:
-        problems.append(f"{where}/parameters/right_frame: '{right}' must be a child of "
-                        f"sensor frame '{item['frame']}'")
+        problems.append(
+            f"{where}/parameters/right_frame: '{right}' must be a child of "
+            f"sensor frame '{item['frame']}'"
+        )
         return
     transform = transforms[right]
     offset = np.subtract(transform["position_m"], [parameters["baseline_m"], 0, 0])
     rotation = np.abs(transform["orientation_wxyz"]) - [1, 0, 0, 0]
     if np.abs(offset).max() > DIRECTION_TOLERANCE or np.abs(rotation).max() > QUATERNION_TOLERANCE:
-        problems.append(f"{where}/parameters/right_frame: '{right}' must be at [baseline_m, 0, 0] "
-                        "with identity orientation")
+        problems.append(
+            f"{where}/parameters/right_frame: '{right}' must be at [baseline_m, 0, 0] "
+            "with identity orientation"
+        )
 
 
 def robot(data: dict[str, Any]) -> list[str]:
@@ -169,8 +179,10 @@ def robot(data: dict[str, Any]) -> list[str]:
     if _symmetric_semidefinite(body["inertia_matrix"], where, problems):
         moments = np.linalg.eigvalsh(np.asarray(body["inertia_matrix"], float))
         if moments.min() <= 0 or moments.max() > moments.sum() / 2 + TRIANGLE_TOLERANCE:
-            problems.append(f"{where}: must be positive definite and satisfy the "
-                            "principal-moment triangle inequalities")
+            problems.append(
+                f"{where}: must be positive definite and satisfy the "
+                "principal-moment triangle inequalities"
+            )
     for key in ("added_mass_matrix", "linear_damping_matrix"):
         _symmetric_semidefinite(body[key], f"/body/parameters/{key}", problems)
 
@@ -178,8 +190,9 @@ def robot(data: dict[str, Any]) -> list[str]:
     duplicates(boxes, "collision box", problems)
     duplicates((item["id"] for item in data["thrusters"]), "thruster", problems)
     for item in data["thrusters"]:
-        _unit(item["direction"], f"/thrusters/{item['id']}/direction", problems,
-              DIRECTION_TOLERANCE)
+        _unit(
+            item["direction"], f"/thrusters/{item['id']}/direction", problems, DIRECTION_TOLERANCE
+        )
         response = item["parameters"]
         if response["forward_limit_n"] <= 0 and response["reverse_limit_n"] <= 0:
             problems.append(f"/thrusters/{item['id']}: cannot produce force")
@@ -238,6 +251,7 @@ def robot(data: dict[str, Any]) -> list[str]:
 
 # ------------------------------------------------------------------ pool
 
+
 def pool(data: dict[str, Any]) -> list[str]:
     problems: list[str] = []
     duplicates((item["id"] for item in data["collision_boxes"]), "collision box", problems)
@@ -246,6 +260,7 @@ def pool(data: dict[str, Any]) -> list[str]:
 
 
 # ------------------------------------------------------------------ tasks
+
 
 def tasks(data: dict[str, Any], root: Path) -> list[str]:
     problems: list[str] = []
@@ -262,10 +277,15 @@ def tasks(data: dict[str, Any], root: Path) -> list[str]:
 
 # Event type -> region types it may name (drop_into names several box regions, checked below).
 _EVENT_REGION = {
-    "pass_through": ("rectangular_portal",), "hit": ("perforated_panel",),
-    "payload_landing": ("open_crate",), "activate": ("proximity_target",),
-    "surface_reached": ("surface",), "surface_lost": ("surface",), "breach": ("surface",),
-    "facing_reached": ("surface",), "facing_lost": ("surface",),
+    "pass_through": ("rectangular_portal",),
+    "hit": ("perforated_panel",),
+    "payload_landing": ("open_crate",),
+    "activate": ("proximity_target",),
+    "surface_reached": ("surface",),
+    "surface_lost": ("surface",),
+    "breach": ("surface",),
+    "facing_reached": ("surface",),
+    "facing_lost": ("surface",),
     "rotation_judged": ("turn_zone",),
 }
 
@@ -291,17 +311,27 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
     props = {item["id"]: item for item in data["props"]}
     regions = {item["id"]: item for item in data["regions"]}
     events = {item["id"] for item in data["events"]}
-    for what, items in (("prop", data["props"]), ("region", data["regions"]),
-                        ("event", data["events"]), ("scoring", data["scoring"])):
+    for what, items in (
+        ("prop", data["props"]),
+        ("region", data["regions"]),
+        ("event", data["events"]),
+        ("scoring", data["scoring"]),
+    ):
         duplicates((item["id"] for item in items), what, problems)
     for identifier, item in props.items():
         parameters = item["parameters"]
-        duplicates((box["id"] for box in parameters.get("collision_boxes", [])), f"{identifier} box", problems)
+        duplicates(
+            (box["id"] for box in parameters.get("collision_boxes", [])),
+            f"{identifier} box",
+            problems,
+        )
         for visual in parameters.get("visuals", []):
             if asset_ids is not None and visual["asset"] not in asset_ids:
                 problems.append(f"/props/{identifier}/visuals: unknown asset '{visual['asset']}'")
             if asset_ids is not None and "texture" in visual and visual["texture"] not in asset_ids:
-                problems.append(f"/props/{identifier}/visuals: unknown texture asset '{visual['texture']}'")
+                problems.append(
+                    f"/props/{identifier}/visuals: unknown texture asset '{visual['texture']}'"
+                )
             if visual["frame"] not in frames:
                 problems.append(f"/props/{identifier}/visuals: unknown frame '{visual['frame']}'")
             if "radiance" in visual and visual.get("material") != "emissive":
@@ -315,7 +345,10 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
                 if region is None or "indicator" not in region["parameters"]:
                     problems.append(f"{where}: region '{indicator['region']}' has no indicator")
                 else:
-                    missing = sorted(set(region["parameters"]["indicator"].values()) - set(indicator["color_rgb"]))
+                    missing = sorted(
+                        set(region["parameters"]["indicator"].values())
+                        - set(indicator["color_rgb"])
+                    )
                     if missing:
                         problems.append(f"{where}/color_rgb: no color for {missing}")
         cutouts = parameters.get("cutouts")
@@ -327,7 +360,9 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
     for identifier, item in props.items():
         for mesh in item["parameters"].get("collision_meshes", []):
             meshes.add(mesh["id"])
-            _known(mesh["frame"], frames, f"/props/{identifier}/collision_meshes", "frame", problems)
+            _known(
+                mesh["frame"], frames, f"/props/{identifier}/collision_meshes", "frame", problems
+            )
             _asset(mesh["asset"], asset_ids, f"/props/{identifier}/collision_meshes", problems)
         if item["type"] == "rigid_body":
             parameters = item["parameters"]
@@ -353,8 +388,10 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
         if item["type"] == "box":
             _known(item["parameters"]["frame"], frames, f"/regions/{identifier}", "frame", problems)
             if item["parameters"]["support_mesh"] not in meshes:
-                problems.append(f"/regions/{identifier}/support_mesh: unknown collision mesh "
-                                f"'{item['parameters']['support_mesh']}'")
+                problems.append(
+                    f"/regions/{identifier}/support_mesh: unknown collision mesh "
+                    f"'{item['parameters']['support_mesh']}'"
+                )
             low, high = item["parameters"]["z_range_m"]
             if low >= high:
                 problems.append(f"/regions/{identifier}/z_range_m: must be increasing")
@@ -365,8 +402,9 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
         if expected is not None:
             region = regions.get(parameters["region"])
             if region is None or region["type"] not in expected:
-                problems.append(f"{where}/parameters/region: must name a "
-                                f"{' or '.join(expected)} region")
+                problems.append(
+                    f"{where}/parameters/region: must name a {' or '.join(expected)} region"
+                )
         if item["type"] == "pass_through" and parameters["from_side"] == parameters["to_side"]:
             problems.append(f"{where}/parameters: from_side and to_side must differ")
         if item["type"] == "drop_into":
@@ -385,6 +423,7 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
 
 
 # ------------------------------------------------------------------ bridge
+
 
 def bridge(data: dict[str, Any]) -> list[str]:
     """Internal bridge references; robot bindings are checked by ``bridge_binding``."""
@@ -420,8 +459,11 @@ def bridge(data: dict[str, Any]) -> list[str]:
         if key in placement and placement[key] not in services:
             problems.append(f"/placement/{key}: unknown service '{placement[key]}'")
     if "estimator_alignment" in placement:
-        stream(placement["estimator_alignment"]["estimate_stream"],
-               "/placement/estimator_alignment/estimate_stream", "subscribe")
+        stream(
+            placement["estimator_alignment"]["estimate_stream"],
+            "/placement/estimator_alignment/estimate_stream",
+            "subscribe",
+        )
     thrusters = data.get("thrusters")
     if thrusters is not None and len(thrusters["order"]) != len(thrusters["input_scales"]):
         problems.append("/thrusters: order and input_scales must have equal length")
@@ -434,8 +476,9 @@ def bridge(data: dict[str, Any]) -> list[str]:
     duplicates((edge["child"] for edge in edges), "TF child/owner", problems)
     parents = {edge["child"]: edge["parent"] for edge in edges}
     for edge in published:
-        if any(fnmatch.fnmatchcase(edge["child"], pattern)
-               for pattern in tf.get("never_publish", [])):
+        if any(
+            fnmatch.fnmatchcase(edge["child"], pattern) for pattern in tf.get("never_publish", [])
+        ):
             problems.append(f"/tf: '{edge['child']}' is listed in never_publish")
     for child in parents:
         seen: set[str] = set()
@@ -452,8 +495,10 @@ def bridge(data: dict[str, Any]) -> list[str]:
 def bridge_binding(data: dict[str, Any], robot_data: dict[str, Any]) -> list[str]:
     problems: list[str] = []
     if "requires_robot" in data and data["requires_robot"] != robot_data["id"]:
-        problems.append(f"/requires_robot: bridge requires '{data['requires_robot']}', "
-                        f"scenario selects '{robot_data['id']}'")
+        problems.append(
+            f"/requires_robot: bridge requires '{data['requires_robot']}', "
+            f"scenario selects '{robot_data['id']}'"
+        )
     thrusters = data.get("thrusters")
     robot_thrusters = [item["id"] for item in robot_data["thrusters"]]
     if thrusters is not None and sorted(thrusters["order"]) != sorted(robot_thrusters):
@@ -469,7 +514,9 @@ def bridge_binding(data: dict[str, Any], robot_data: dict[str, Any]) -> list[str
             if frame not in frames or frame == WORLD:
                 problems.append(f"/tf/static/{index}/{native_name}: unknown robot frame '{frame}'")
             elif not edge.get("truth", False) and frame in names and names[frame] != edge[ros_name]:
-                problems.append(f"/tf/static/{index}/{ros_name}: differs from frame_names['{frame}']")
+                problems.append(
+                    f"/tf/static/{index}/{ros_name}: differs from frame_names['{frame}']"
+                )
     sensors = {item["id"]: item for item in robot_data["sensors"]}
     mechanisms = {item["id"] for item in robot_data["mechanisms"]}
     for item in [*data["streams"], *data.get("services", [])]:
@@ -491,8 +538,14 @@ def bridge_binding(data: dict[str, Any], robot_data: dict[str, Any]) -> list[str
 
 # ------------------------------------------------------------------ scenario
 
-def scenario(data: dict[str, Any], robot_data: dict[str, Any], tasks_data: dict[str, Any],
-             task_ids: list[str], mechanism_types: Counter[str]) -> tuple[list[str], dict[str, Any]]:
+
+def scenario(
+    data: dict[str, Any],
+    robot_data: dict[str, Any],
+    tasks_data: dict[str, Any],
+    task_ids: list[str],
+    mechanism_types: Counter[str],
+) -> tuple[list[str], dict[str, Any]]:
     """Check scenario bindings and return resolved run options (defaults applied)."""
     problems: list[str] = []
     placed = [item["task"] for item in data["task_placements"]]
@@ -507,15 +560,19 @@ def scenario(data: dict[str, Any], robot_data: dict[str, Any], tasks_data: dict[
         problems.append(f"/initial/frame: unknown robot frame '{data['initial']['frame']}'")
     for sensor in robot_data["sensors"]:
         if sensor.get("enabled", True) and sensor["period_ns"] < data["timestep_ns"]:
-            problems.append(f"robot sensor '{sensor['id']}': rate_hz {sensor['rate_hz']:g} is faster than "
-                            f"the {data['timestep_s']:g} s physics step")
+            problems.append(
+                f"robot sensor '{sensor['id']}': rate_hz {sensor['rate_hz']:g} is faster than "
+                f"the {data['timestep_s']:g} s physics step"
+            )
     for requirement in tasks_data["requires"]:
         if requirement["task"] not in task_ids:
             problems.append(f"tasks /requires: unknown task '{requirement['task']}'")
         if mechanism_types[requirement["mechanism_type"]] < requirement["min_count"]:
-            problems.append(f"task '{requirement['task']}' requires {requirement['min_count']} "
-                            f"{requirement['mechanism_type']} mechanism(s); robot has "
-                            f"{mechanism_types[requirement['mechanism_type']]}")
+            problems.append(
+                f"task '{requirement['task']}' requires {requirement['min_count']} "
+                f"{requirement['mechanism_type']} mechanism(s); robot has "
+                f"{mechanism_types[requirement['mechanism_type']]}"
+            )
     declared = {item["key"]: item for item in tasks_data["run_options"]}
     options = {key: item["default"] for key, item in declared.items()}
     for key, value in data["run"]["options"].items():

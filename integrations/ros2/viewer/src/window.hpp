@@ -1,7 +1,7 @@
 // GLFW/GLEW/ImGui context of the host: one window, DejaVu fonts, the dark pool-viewer theme.
 #pragma once
-#include <imgui.h>
 #include <filesystem>
+#include <imgui.h>
 #include <string>
 #include <vector>
 
@@ -18,9 +18,9 @@ class Window {
     }
     bool closing() const;
     void setTitle(const std::string &);
-    void beginFrame();                                          // poll events + ImGui NewFrame
+    void beginFrame();                                                           // poll events + ImGui NewFrame
     void present(bool screenshotFrame, const std::filesystem::path &screenshot); // render ImGui, optional PNG
-    void swap();                                                // present the frame (blocks on vsync)
+    void swap();                                                                 // present the frame (blocks on vsync)
     ImFont *normal = nullptr, *small = nullptr, *title = nullptr, *number = nullptr;
     int imguiErrors() const;
 

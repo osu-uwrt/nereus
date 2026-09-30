@@ -30,8 +30,7 @@ def _prefixed(path: Path, problems: list[str]) -> list[str]:
     return [f"{path}:{problem}" for problem in problems]
 
 
-def _includes(document: PackDocument, data: dict[str, Any],
-              hashes: dict[Path, str]) -> list[str]:
+def _includes(document: PackDocument, data: dict[str, Any], hashes: dict[Path, str]) -> list[str]:
     """Load and check every task include of a tasks pack."""
     problems: list[str] = []
     asset_ids = {item["id"] for item in data.get("assets", [])}
@@ -165,8 +164,10 @@ class ResolvedScenario:
             "bridge": self.bridge,
             "run_options": self.run_options,
             "sources": [
-                {"path": Path(os.path.relpath(source, base)).as_posix(),
-                 "sha256": self.source_sha256[source]}
+                {
+                    "path": Path(os.path.relpath(source, base)).as_posix(),
+                    "sha256": self.source_sha256[source],
+                }
                 for source in self.sources
             ],
         }
@@ -181,8 +182,9 @@ class ResolvedScenario:
         """
         changed = self.changed_sources()
         if changed:
-            raise PackError([f"{source}: changed since the scenario was resolved"
-                             for source in changed])
+            raise PackError(
+                [f"{source}: changed since the scenario was resolved" for source in changed]
+            )
         target = Path(path)
         text = json.dumps(self.manifest(), indent=2, allow_nan=False) + "\n"
         descriptor, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
@@ -249,7 +251,14 @@ def resolve_scenario(path: Path) -> ResolvedScenario:
         raise PackError(problems)
 
     return ResolvedScenario(
-        path=scenario.path, scenario=data, robot=robot, pool=documents["pool"].plain(),
-        tasks=tasks_data, bridge=bridge, task_definitions=definitions, run_options=options,
-        sources=list(hashes), source_sha256=hashes,
+        path=scenario.path,
+        scenario=data,
+        robot=robot,
+        pool=documents["pool"].plain(),
+        tasks=tasks_data,
+        bridge=bridge,
+        task_definitions=definitions,
+        run_options=options,
+        sources=list(hashes),
+        source_sha256=hashes,
     )

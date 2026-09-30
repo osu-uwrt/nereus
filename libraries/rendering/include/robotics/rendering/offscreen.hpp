@@ -17,8 +17,8 @@ class OffscreenRenderer {
     ~OffscreenRenderer();
     OffscreenRenderer(const OffscreenRenderer &) = delete;
     OffscreenRenderer &operator=(const OffscreenRenderer &) = delete;
-    ImageCapture capture(const Scene &, const View &, const Appearance &, float time,
-                         int width, int height, bool color = true, bool depth = true);
+    ImageCapture capture(const Scene &, const View &, const Appearance &, float time, int width, int height,
+                         bool color = true, bool depth = true);
     const std::string &device() const;
 
   private:

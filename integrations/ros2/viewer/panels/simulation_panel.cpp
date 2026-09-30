@@ -1,8 +1,8 @@
-#include "robotics/ros_viewer/panels/composition.hpp"
 #include "robotics/ros_viewer/panel_layout.hpp"
-#include <imgui.h>
-#include <cmath>
+#include "robotics/ros_viewer/panels/composition.hpp"
 #include <algorithm>
+#include <cmath>
+#include <imgui.h>
 namespace robotics::ros_viewer::panels {
 namespace {
 class SimulationPanel final : public Panel {
@@ -13,7 +13,8 @@ class SimulationPanel final : public Panel {
   public:
     explicit SimulationPanel(const Binding &b) : simulation(std::dynamic_pointer_cast<Simulation>(b.provider)) {}
     void toolbar() override {
-        robotics::ros_viewer::sameLineIfFits(ImGui::CalcTextSize("Simulation settings").x + 2 * ImGui::GetStyle().FramePadding.x);
+        robotics::ros_viewer::sameLineIfFits(ImGui::CalcTextSize("Simulation settings").x +
+                                             2 * ImGui::GetStyle().FramePadding.x);
         if (ImGui::Button("Simulation settings"))
             ImGui::OpenPopup("simulation_settings");
         // A known width and anchor prevent wrapped text from causing a first-frame

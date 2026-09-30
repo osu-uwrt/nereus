@@ -1,7 +1,7 @@
 #include "ros_runtime.hpp"
+#include <rcl_interfaces/msg/parameter_type.hpp>
 #include <rcl_interfaces/srv/get_parameters.hpp>
 #include <rcl_interfaces/srv/set_parameters.hpp>
-#include <rcl_interfaces/msg/parameter_type.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
 namespace robotics::ros_viewer::panels {

@@ -1,5 +1,6 @@
 // CameraSink over robotics::session_cameras::SessionCameras (built when NEREUS_BUILD_SESSION_CAMERAS
-// is on): compiles the camera streams and formats their messages; the scheduling, bounded workers, stale discard and seed reset live in SessionCameras.
+// is on): compiles the camera streams and formats their messages; the scheduling, bounded workers, stale discard and
+// seed reset live in SessionCameras.
 #ifdef NEREUS_BRIDGE_CAMERAS
 #include "camera_sink.hpp"
 #include "mapping.hpp"
@@ -38,8 +39,8 @@ static_assert(sizeof(CloudPoint) == 32 && offsetof(CloudPoint, b) == 16);
 
 SpecTree infoSources() {
     SpecTree sample(std::map<std::string, SpecTree>{{"time", timeSpec()}});
-    SpecTree info(std::map<std::string, SpecTree>{{"width", integerSpec()}, {"height", integerSpec()},
-                                                  {"k", floatArray({9})}, {"p", floatArray({12})}});
+    SpecTree info(std::map<std::string, SpecTree>{
+        {"width", integerSpec()}, {"height", integerSpec()}, {"k", floatArray({9})}, {"p", floatArray({12})}});
     return SpecTree(std::map<std::string, SpecTree>{{"sample", sample}, {"info", info}});
 }
 SpecTree sampleSources() {
@@ -87,9 +88,9 @@ class SessionCameraSink final : public CameraSink {
             const double ratio = rate > 0 ? 1e9 / (rate * config.at("period_ns").get<double>()) : 0;
             const int every = static_cast<int>(std::lround(ratio));
             if (output == "point_cloud" ? (every < 1 || std::fabs(ratio - every) > 1e-6) : std::fabs(ratio - 1) > 1e-6)
-                throw MappingError("camera stream " + repr(id) + (output == "point_cloud"
-                                                                      ? " rate must be the sensor rate divided by an integer"
-                                                                      : " rate differs from its sensor"));
+                throw MappingError("camera stream " + repr(id) +
+                                   (output == "point_cloud" ? " rate must be the sensor rate divided by an integer"
+                                                            : " rate differs from its sensor"));
             const bool right = output.size() >= 5 && output.compare(output.size() - 5, 5, "right") == 0;
             const std::string frame = right ? config.at("parameters").at("right_frame").get<std::string>()
                                             : config.at("frame").get<std::string>();
@@ -114,8 +115,8 @@ class SessionCameraSink final : public CameraSink {
         for (const auto &[id, sensor] : sensors) {
             if (sensor.value("latency_ns", 0) != 0)
                 throw MappingError("camera " + repr(id) + ": nonzero delivery latency is not implemented");
-            if (sensor.value("capacity", 1) < 1 ||
-                (sensor.value("overflow", "drop_oldest") != "fail" && sensor.value("overflow", "drop_oldest") != "drop_oldest"))
+            if (sensor.value("capacity", 1) < 1 || (sensor.value("overflow", "drop_oldest") != "fail" &&
+                                                    sensor.value("overflow", "drop_oldest") != "drop_oldest"))
                 throw MappingError("camera " + repr(id) + ": invalid pending queue policy");
         }
         sc::Options camera_options;
@@ -132,9 +133,13 @@ class SessionCameraSink final : public CameraSink {
         if (payload_asset_)
             payload_mesh_ = cameras_->scene().mesh("robot", *payload_asset_);
     }
-    ~SessionCameraSink() override { close(); }
+    ~SessionCameraSink() override {
+        close();
+    }
 
-    std::vector<std::string> streamIds() const override { return stream_ids_; }
+    std::vector<std::string> streamIds() const override {
+        return stream_ids_;
+    }
 
     void start(std::function<void(EncodedImage)> publish) override {
         publish_ = std::move(publish);
@@ -166,7 +171,9 @@ class SessionCameraSink final : public CameraSink {
                 }
     }
 
-    void invalidate(std::optional<std::uint64_t> seed) override { cameras_->invalidate(seed); }
+    void invalidate(std::optional<std::uint64_t> seed) override {
+        cameras_->invalidate(seed);
+    }
     void close() override {
         if (cameras_)
             cameras_->close();
@@ -176,38 +183,43 @@ class SessionCameraSink final : public CameraSink {
         Json pending = Json::object();
         for (const auto &sensor : resolved_.robot.at("sensors"))
             if (streams_.count(sensor.at("id").get<std::string>()))
-                pending[sensor.at("id").get<std::string>()] = {
-                    {"capacity", sensor.value("capacity", 1)},
-                    {"overflow", sensor.value("overflow", "drop_oldest")}};
+                pending[sensor.at("id").get<std::string>()] = {{"capacity", sensor.value("capacity", 1)},
+                                                               {"overflow", sensor.value("overflow", "drop_oldest")}};
         Json jpeg = Json::object();
         for (const auto &[camera, list] : streams_)
             jpeg[camera] = quality_.count(camera) ? Json(quality_.at(camera)) : Json();
         return {{"capture", cameras_->describe()},
-                {"worker", {{"count", streams_.size()},
-                            {"in_flight_capacity", streams_.size()},
-                            {"policy", "one per selected camera; shared GL serialized, on-demand outputs"},
-                            {"pending", pending},
-                            {"jpeg_quality", jpeg}}}};
+                {"worker",
+                 {{"count", streams_.size()},
+                  {"in_flight_capacity", streams_.size()},
+                  {"policy", "one per selected camera; shared GL serialized, on-demand outputs"},
+                  {"pending", pending},
+                  {"jpeg_quality", jpeg}}}};
     }
 
     Json stats() const override {
         Json out = Json::object();
         for (const auto &[camera, item] : cameras_->stats())
-            out[camera] = {{"requested", item.requested}, {"skipped_no_demand", item.skipped_no_demand},
-                           {"captured", item.captured}, {"published", item.delivered},
-                           {"dropped_pending", item.dropped_pending}, {"discarded_stale", item.discarded_stale},
-                           {"capture_wall_ns", item.capture_wall_ns}, {"render_ns", item.render_ns},
+            out[camera] = {{"requested", item.requested},
+                           {"skipped_no_demand", item.skipped_no_demand},
+                           {"captured", item.captured},
+                           {"published", item.delivered},
+                           {"dropped_pending", item.dropped_pending},
+                           {"discarded_stale", item.discarded_stale},
+                           {"capture_wall_ns", item.capture_wall_ns},
+                           {"render_ns", item.render_ns},
                            {"process_ns", item.process_ns}};
         return out;
     }
 
   private:
-    bool anyDemand() const { return !demanded_.empty() || always_; }
+    bool anyDemand() const {
+        return !demanded_.empty() || always_;
+    }
 
     void compileInfo(CameraStream &item, const Json &stream, const std::string &where, const std::string &frame_id) {
         item.info = true;
-        if (stream.at("direction") != "publish" ||
-            (item.output != "camera_info" && item.output != "camera_info_right"))
+        if (stream.at("direction") != "publish" || (item.output != "camera_info" && item.output != "camera_info_right"))
             throw MappingError(where + ": camera_info requires a camera metadata publication");
         if (stream.at("message_type") != "sensor_msgs/msg/CameraInfo" || stream.contains("image"))
             throw MappingError(where + ": camera_info requires sensor_msgs/msg/CameraInfo");
@@ -255,7 +267,8 @@ class SessionCameraSink final : public CameraSink {
             quality[camera] = value;
         } else {
             item.encoding = options.at("encoding");
-            const bool allowed = item.depth ? item.encoding == "32FC1" : (item.encoding == "rgb8" || item.encoding == "bgr8");
+            const bool allowed =
+                item.depth ? item.encoding == "32FC1" : (item.encoding == "rgb8" || item.encoding == "bgr8");
             if (!allowed || type != "sensor_msgs/msg/Image")
                 throw MappingError(where + ": " + output + " needs sensor_msgs/msg/Image with " +
                                    (item.depth ? "['32FC1']" : "['bgr8', 'rgb8']"));
@@ -311,7 +324,8 @@ class SessionCameraSink final : public CameraSink {
         cloud.point_step = sizeof(CloudPoint);
         cloud.row_step = cloud.point_step * cloud.width;
         cloud.fields.clear();
-        for (const auto &[name, offset] : {std::pair<const char *, std::uint32_t>{"x", 0}, {"y", 4}, {"z", 8}, {"rgb", 16}}) {
+        for (const auto &[name, offset] :
+             {std::pair<const char *, std::uint32_t>{"x", 0}, {"y", 4}, {"z", 8}, {"rgb", 16}}) {
             sensor_msgs::msg::PointField field;
             field.name = name;
             field.offset = offset;
@@ -354,9 +368,9 @@ class SessionCameraSink final : public CameraSink {
         if (payload_mesh_)
             for (const auto &payload : session_.payloadVisuals()) {
                 Eigen::Matrix4d pose = Eigen::Matrix4d::Identity();
-                pose.topLeftCorner<3, 3>() = payload.orientation.toRotationMatrix() *
-                                             Eigen::DiagonalMatrix<double, 3>(payload.length_m, 2 * payload.radius_m,
-                                                                              2 * payload.radius_m);
+                pose.topLeftCorner<3, 3>() =
+                    payload.orientation.toRotationMatrix() *
+                    Eigen::DiagonalMatrix<double, 3>(payload.length_m, 2 * payload.radius_m, 2 * payload.radius_m);
                 pose.topRightCorner<3, 1>() = payload.position;
                 rendering::Instance instance;
                 instance.mesh = payload_mesh_;
@@ -413,13 +427,14 @@ class SessionCameraSink final : public CameraSink {
                                   Value::map({{"sample", Value::map({{"time", Value::time(products.ros_stamp_ns)}})},
                                               {"info", Value::map({{"width", Value::integer(info.width)},
                                                                    {"height", Value::integer(info.height)},
-                                                                   {"k", Value::array(k)}, {"p", Value::array(p)}})}}));
+                                                                   {"k", Value::array(k)},
+                                                                   {"p", Value::array(p)}})}}));
             } else {
                 const auto &frame = item.right_eye ? products.right : products.left;
                 if (!frame)
                     continue; // output not produced (no demand)
-                const bool produced = item.cloud  ? !frame->depth.empty() && !frame->rgb.empty()
-                                      : item.jpeg ? !frame->jpeg.empty()
+                const bool produced = item.cloud   ? !frame->depth.empty() && !frame->rgb.empty()
+                                      : item.jpeg  ? !frame->jpeg.empty()
                                       : item.depth ? !frame->depth.empty()
                                                    : !frame->rgb.empty();
                 if (!produced)
@@ -451,7 +466,10 @@ class SessionCameraSink final : public CameraSink {
     bool always_{false};
 
   public:
-    void setAlways(bool value) { always_ = value; cameras_->setAlways(value); }
+    void setAlways(bool value) {
+        always_ = value;
+        cameras_->setAlways(value);
+    }
 };
 } // namespace
 

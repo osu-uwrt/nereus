@@ -35,17 +35,20 @@ TEST(Mechanisms, ReplaysTheRecordedScript) {
             const auto r = m.fire(op[1], pose, lin, ang, "base_link", 998.2, killed, release);
             actual["result"] = resultJson(r);
             if (r.accepted)
-                actual["result"]["release"] = {
-                    {"slot_id", release.slot_id}, {"slot_index", release.slot_index}, {"time_ns", release.time_ns},
-                    {"position", flat(release.position_world)}, {"orientation", quat(release.orientation_world)},
-                    {"velocity", flat(release.velocity_com_world)},
-                    {"angular_velocity", flat(release.angular_velocity_world)}};
+                actual["result"]["release"] = {{"slot_id", release.slot_id},
+                                               {"slot_index", release.slot_index},
+                                               {"time_ns", release.time_ns},
+                                               {"position", flat(release.position_world)},
+                                               {"orientation", quat(release.orientation_world)},
+                                               {"velocity", flat(release.velocity_com_world)},
+                                               {"angular_velocity", flat(release.angular_velocity_world)}};
         } else if (name == "claw") {
             actual["result"] = resultJson(m.commandClaw(op[1], op[2], killed));
         } else if (name == "move_claw") {
             actual["result"] = resultJson(m.moveClaw(op[1], op[2], killed));
         } else if (name == "advance") {
-            for (int n = 0; n < op[1].get<int>(); ++n) m.advance(dt, killed);
+            for (int n = 0; n < op[1].get<int>(); ++n)
+                m.advance(dt, killed);
         } else if (name == "kill" || name == "unkill") {
             killed = name == "kill";
             m.advance(0, killed);

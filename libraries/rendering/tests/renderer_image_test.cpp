@@ -52,8 +52,8 @@ struct Context {
 };
 
 // Writes an 8-bit PNG; rows are given top row first, as stored in the file.
-void writePng(const fs::path &path, int width, int height, int channels,
-              const std::vector<std::uint8_t> &pixels, int bit_depth = 8) {
+void writePng(const fs::path &path, int width, int height, int channels, const std::vector<std::uint8_t> &pixels,
+              int bit_depth = 8) {
     FILE *file = std::fopen(path.c_str(), "wb");
     if (!file)
         throw std::runtime_error("cannot write test PNG");
@@ -65,9 +65,8 @@ void writePng(const fs::path &path, int width, int height, int channels,
         throw std::runtime_error("test PNG encoding failed");
     }
     png_init_io(png, file);
-    png_set_IHDR(png, info, width, height, bit_depth,
-                 channels == 4 ? PNG_COLOR_TYPE_RGBA : PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
-                 PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+    png_set_IHDR(png, info, width, height, bit_depth, channels == 4 ? PNG_COLOR_TYPE_RGBA : PNG_COLOR_TYPE_RGB,
+                 PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
     png_write_info(png, info);
     const std::size_t stride = std::size_t(width) * channels * (bit_depth / 8);
     for (int y = 0; y < height; ++y)
@@ -78,14 +77,12 @@ void writePng(const fs::path &path, int width, int height, int channels,
 }
 
 // Unit quad in the YZ plane at x = 0 facing +X, with uv (0,0) at (y=-.5, z=-.5).
-std::shared_ptr<r::MeshAsset> quad(std::optional<fs::path> texture = {},
-                                   std::vector<r::UvCutout> cutouts = {}) {
+std::shared_ptr<r::MeshAsset> quad(std::optional<fs::path> texture = {}, std::vector<r::UvCutout> cutouts = {}) {
     auto mesh = std::make_shared<r::MeshAsset>();
     r::Submesh part;
     const float c[4][2] = {{-.5f, -.5f}, {.5f, -.5f}, {.5f, .5f}, {-.5f, .5f}};
     for (const auto &corner : c)
-        part.vertices.push_back(
-            {{0, corner[0], corner[1]}, {1, 0, 0}, {corner[0] + .5f, corner[1] + .5f}});
+        part.vertices.push_back({{0, corner[0], corner[1]}, {1, 0, 0}, {corner[0] + .5f, corner[1] + .5f}});
     part.indices = {0, 1, 2, 0, 2, 3};
     part.material.diffuse_texture = texture;
     part.material.cutouts = std::move(cutouts);
@@ -228,8 +225,7 @@ TEST_F(RendererImage, UvCutoutsRemoveColorAndDepthUsingTheUnchangedShaders) {
     // Shadow pass also honours cutouts; it must render without GL errors.
     auto shadowed = plain();
     shadowed.shadows = true;
-    EXPECT_NO_THROW(
-        renderer->draw(scene(quad({}, {{{.5f, .5f}, .2f}})), view(), shadowed, 0, 32, 32));
+    EXPECT_NO_THROW(renderer->draw(scene(quad({}, {{{.5f, .5f}, .2f}})), view(), shadowed, 0, 32, 32));
 }
 
 TEST_F(RendererImage, TransparentTexelsBelowTheOriginalThresholdAreDiscarded) {
@@ -245,8 +241,7 @@ TEST_F(RendererImage, TransparentTexelsBelowTheOriginalThresholdAreDiscarded) {
 
 TEST_F(RendererImage, InvalidCutoutsAndTexturesAreRejectedAndTheRendererRecovers) {
     const auto rejects = [&](std::shared_ptr<r::MeshAsset> mesh) {
-        EXPECT_THROW(renderer->draw(scene(mesh), view(), plain(), 0, 16, 16),
-                     std::invalid_argument);
+        EXPECT_THROW(renderer->draw(scene(mesh), view(), plain(), 0, 16, 16), std::invalid_argument);
         EXPECT_THROW(renderer->captureImage(), std::logic_error) << "failed draw invalidates frame";
     };
     rejects(quad({}, std::vector<r::UvCutout>(5, {{.5f, .5f}, .1f})));
@@ -297,8 +292,7 @@ TEST_F(RendererImage, SharedTexturesAreReusedAndReleasedWithTheirMeshes) {
 }
 
 TEST_F(RendererImage, ImportedTaskAssetWithTextureRenders) {
-    const fs::path asset =
-        fs::path(NEREUS_PACK_CONTENT) / "tasks/robosub_2026/assets/torpedo/model.dae";
+    const fs::path asset = fs::path(NEREUS_PACK_CONTENT) / "tasks/robosub_2026/assets/torpedo/model.dae";
     if (!fs::exists(asset))
         GTEST_SKIP() << "imported torpedo asset unavailable";
     auto mesh = std::make_shared<r::MeshAsset>(r::loadMesh(asset));

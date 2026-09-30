@@ -1,10 +1,10 @@
-#include "robotics/ros_viewer/panels/composition.hpp"
 #include "robotics/ros_viewer/panel_layout.hpp"
+#include "robotics/ros_viewer/panels/composition.hpp"
 #include "robotics/ros_viewer/panels/pose_math.hpp"
+#include <cmath>
+#include <cstdio>
 #include <imgui.h>
 #include <imgui_internal.h>
-#include <cstdio>
-#include <cmath>
 
 namespace robotics::ros_viewer::panels {
 namespace {

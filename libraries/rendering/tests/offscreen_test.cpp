@@ -1,8 +1,8 @@
-#include <robotics/rendering/offscreen.hpp>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
-#include <gtest/gtest.h>
 #include <future>
+#include <gtest/gtest.h>
+#include <robotics/rendering/offscreen.hpp>
 
 namespace r = robotics::rendering;
 namespace {
@@ -32,7 +32,7 @@ r::Appearance appearance() {
 r::ImageCapture capture(r::OffscreenRenderer &host, int width = 32) {
     return host.capture(scene(), view(), appearance(), 0, width, 32);
 }
-}
+} // namespace
 TEST(Offscreen, CapturesWithoutAWindowAndOwnsPixelsAcrossResize) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     EXPECT_FALSE(host.device().empty());
@@ -74,12 +74,10 @@ TEST(Offscreen, FailedConstructionReleasesItsContext) {
 }
 TEST(Offscreen, RestoresCallersEglContextAndApiAfterSuccessAndFailure) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
-    const auto get = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
-        eglGetProcAddress("eglGetPlatformDisplayEXT"));
+    const auto get = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
     ASSERT_NE(get, nullptr);
     const auto display = get(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
-    const EGLint attributes[] = {EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-                                EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_NONE};
+    const EGLint attributes[] = {EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_NONE};
     EGLConfig config;
     EGLint count;
     ASSERT_TRUE(eglChooseConfig(display, attributes, &config, 1, &count));
@@ -119,11 +117,9 @@ TEST(Offscreen, HostCanBeDestroyedOnAWorkerThread) {
 
 TEST(Offscreen, LastHostDoesNotInvalidateAnExternalContextOnTheSameDisplay) {
     auto host = std::make_unique<r::OffscreenRenderer>(NEREUS_RENDERING_SHADERS);
-    const auto get = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
-        eglGetProcAddress("eglGetPlatformDisplayEXT"));
+    const auto get = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
     const auto display = get(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
-    const EGLint attributes[] = {EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-                                EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_NONE};
+    const EGLint attributes[] = {EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_NONE};
     EGLConfig config;
     EGLint count;
     ASSERT_TRUE(eglChooseConfig(display, attributes, &config, 1, &count));
@@ -151,8 +147,7 @@ TEST(Offscreen, ReinitializesDisplayTerminatedBetweenHostLifetimes) {
         r::OffscreenRenderer first(NEREUS_RENDERING_SHADERS);
         capture(first);
     }
-    const auto get = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
-        eglGetProcAddress("eglGetPlatformDisplayEXT"));
+    const auto get = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
     const auto display = get(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
     ASSERT_TRUE(eglTerminate(display));
     r::OffscreenRenderer next(NEREUS_RENDERING_SHADERS);

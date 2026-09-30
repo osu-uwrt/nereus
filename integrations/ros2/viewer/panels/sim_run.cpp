@@ -1,8 +1,8 @@
 #include "ros_runtime.hpp"
-#include <std_msgs/msg/string.hpp>
-#include <std_msgs/msg/empty.hpp>
 #include <set>
+#include <std_msgs/msg/empty.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
 namespace robotics::ros_viewer::panels {

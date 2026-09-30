@@ -56,8 +56,10 @@ class DocumentTests(unittest.TestCase):
         reloaded = load_pack(self.root / "robot")
         self.assertEqual(list(reloaded.data), order)
         self.assertEqual(reloaded.plain()["body"]["parameters"]["mass_kg"], 21.5)
-        self.assertEqual(reloaded.plain()["metadata"],
-                         {"author": "tests", "note": "free non-executable annotation"})
+        self.assertEqual(
+            reloaded.plain()["metadata"],
+            {"author": "tests", "note": "free non-executable annotation"},
+        )
         before = load_pack(self.root / "pool").plain()
         self.assertEqual(before, load_pack(self.root / "pool").plain())
 
@@ -184,8 +186,7 @@ class CommandLineTests(unittest.TestCase):
             code, out, _ = self.run_cli("validate", str(scenario), "--dump", str(dump))
             self.assertEqual(code, 0)
             self.assertIn("OK scenario", out)
-            self.assertEqual(json.loads(dump.read_text())["format"],
-                             "nereus.resolved_scenario")
+            self.assertEqual(json.loads(dump.read_text())["format"], "nereus.resolved_scenario")
             (Path(directory) / "tasks" / "assets" / "hoop.dae").unlink()
             code, _, err = self.run_cli("validate", str(scenario))
             self.assertEqual(code, 1)

@@ -17,8 +17,8 @@
 namespace robotics::ros_bridge {
 
 struct EncodedImage {
-    std::string stream;                // bridge stream id (image or camera_info)
-    std::shared_ptr<Message> message;  // already filled; the node serializes and publishes it
+    std::string stream;               // bridge stream id (image or camera_info)
+    std::shared_ptr<Message> message; // already filled; the node serializes and publishes it
 };
 
 class CameraSink {
@@ -49,7 +49,7 @@ class SessionPort;
 // build has no camera acquisition (the bridge then requires --no-cameras). Throws
 // MappingError/BridgeError for unusable camera stream declarations.
 std::unique_ptr<CameraSink> createCameraSink(const session::ResolvedScenario &scenario,
-                                             const std::vector<std::string> &camera_ids,
-                                             SessionPort &session, const CameraSinkOptions &options);
+                                             const std::vector<std::string> &camera_ids, SessionPort &session,
+                                             const CameraSinkOptions &options);
 
 } // namespace robotics::ros_bridge

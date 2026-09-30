@@ -28,12 +28,24 @@ def main() -> None:
     paths = ["python", "tests/python", "tools/check_python.py"]
     run([interpreter, "-m", "ruff", "check", *paths], cwd=ROOT, env=env)
     run([interpreter, "-m", "ruff", "format", "--check", *paths], cwd=ROOT, env=env)
-    run([interpreter, "-m", "mypy", "python/src", "tests/python", "tools/check_python.py"], cwd=ROOT, env=env)
+    run(
+        [interpreter, "-m", "mypy", "python/src", "tests/python", "tools/check_python.py"],
+        cwd=ROOT,
+        env=env,
+    )
     tests_env = dict(env, PYTHONPATH=str(ROOT / "python/src"))
-    run([interpreter, "-m", "pytest", "-q", "-p", "no:cacheprovider"], cwd=ROOT / "tests/python", env=tests_env)
+    run(
+        [interpreter, "-m", "pytest", "-q", "-p", "no:cacheprovider"],
+        cwd=ROOT / "tests/python",
+        env=tests_env,
+    )
     with tempfile.TemporaryDirectory(prefix="nereus-python-") as directory:
         temp = Path(directory)
-        run([interpreter, "-m", "build", "--wheel", "--no-isolation", "--outdir", temp], cwd=ROOT, env=env)
+        run(
+            [interpreter, "-m", "build", "--wheel", "--no-isolation", "--outdir", temp],
+            cwd=ROOT,
+            env=env,
+        )
         (wheel,) = temp.glob("*.whl")
         venv.EnvBuilder(with_pip=True).create(temp / "environment")
         python = temp / "environment/bin/python"

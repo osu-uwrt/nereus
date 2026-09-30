@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "display_clock.hpp"
 #include <cmath>
+#include <gtest/gtest.h>
 #include <random>
 using namespace robotics::ros_viewer::host;
 
@@ -147,7 +147,8 @@ TEST(HostDisplayClock, LoadedDeliveryStaysEvenWithoutHolding) {
     EXPECT_LT(truth.held, truth.frames / 100) << "display must almost never wait at the newest stamp";
     const auto estimate = loaded(.034); // 30 Hz EKF
     EXPECT_FALSE(estimate.ahead);
-    EXPECT_LT(estimate.cv, .05) << "held " << estimate.held << "/" << estimate.frames << " max step ratio " << estimate.maxStepRatio;
+    EXPECT_LT(estimate.cv, .05) << "held " << estimate.held << "/" << estimate.frames << " max step ratio "
+                                << estimate.maxStepRatio;
     EXPECT_LT(estimate.held, estimate.frames / 100);
 }
 

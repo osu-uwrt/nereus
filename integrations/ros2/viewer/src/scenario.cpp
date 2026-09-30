@@ -26,7 +26,8 @@ fs::path locatePackDirectory(const YAML::Node &doc, const fs::path &hint) {
     const fs::path root = fs::path(NEREUS_PACK_CONTENT) / "scenarios";
     if (fs::is_directory(root))
         for (const auto &entry : fs::directory_iterator(root))
-            if (entry.is_directory() && fs::exists(entry.path() / doc["scenario_file"].as<std::string>("scenario.yaml")) &&
+            if (entry.is_directory() &&
+                fs::exists(entry.path() / doc["scenario_file"].as<std::string>("scenario.yaml")) &&
                 usable(entry.path()))
                 return entry.path();
 #endif
@@ -299,8 +300,8 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
                         spec.facesX.push_back(face.as<float>());
                     spec.halfSize = region["half_size_m"].as<float>();
                     for (const auto &hole : region["holes"])
-                        spec.holes.push_back({{hole["uv"][0].as<float>(), hole["uv"][1].as<float>()},
-                                              hole["radius_uv"].as<float>()});
+                        spec.holes.push_back(
+                            {{hole["uv"][0].as<float>(), hole["uv"][1].as<float>()}, hole["radius_uv"].as<float>()});
                     v.cutouts = std::move(spec);
                 }
                 s.taskVisuals.push_back(std::move(v));

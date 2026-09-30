@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "viewer_input.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+#include <gtest/gtest.h>
 #include <limits>
 using namespace robotics::ros_viewer::host;
 #include <glm/gtc/matrix_transform.hpp>
@@ -26,7 +26,7 @@ TEST(HostViewerInput, PanFocusPicking) {
     ASSERT_TRUE(glm::length(glm::vec2(after - before) * glm::vec2(width, height) - drag) < .001f);
     // Pan scales with distance, maintaining the same grab behavior after zooming.
     ASSERT_TRUE(glm::length(orbitPan(view, projection, glm::distance(eye, target) * 2, height, drag) -
-                       translation * 2.f) < .0001f);
+                            translation * 2.f) < .0001f);
     // F can focus an off-center rendered surface, including under a rotated camera.
     const glm::vec3 surface(2.2, -2.6, -1.4);
     auto pixel = screen(projection * view, surface);

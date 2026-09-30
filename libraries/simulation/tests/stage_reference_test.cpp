@@ -56,10 +56,9 @@ TEST(StageReference, MatchesPinnedLegacySurfaceSubmergedAndEntryMotion) {
             const auto observed = plant.motion();
             const auto &body = observed.state.body;
             Eigen::Matrix<double, 20, 1> actual;
-            actual << body.position, body.orientation.w(), body.orientation.x(),
-                body.orientation.y(), body.orientation.z(), body.linear_velocity,
-                body.angular_velocity, observed.state.thruster_forces, observed.acceleration_body,
-                observed.angular_acceleration_body;
+            actual << body.position, body.orientation.w(), body.orientation.x(), body.orientation.y(),
+                body.orientation.z(), body.linear_velocity, body.angular_velocity, observed.state.thruster_forces,
+                observed.acceleration_body, observed.angular_acceleration_body;
             for (int i = 0; i < actual.size(); ++i)
                 EXPECT_NEAR(actual[i], expected[static_cast<std::size_t>(i) + 2], 2e-12);
             EXPECT_EQ(observed.state.elapsed.count(), tick * 2000000LL);

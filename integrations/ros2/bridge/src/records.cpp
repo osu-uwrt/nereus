@@ -28,9 +28,9 @@ Json executionRecord(const session::ResolvedScenario &resolved, const BridgeCore
         bool bridged = false;
         for (const auto &stream : config.at("streams")) {
             const std::string native = stream.at("native");
-            if (native.rfind("sensor:", 0) == 0 && native.substr(7, native.find('.') == std::string::npos
-                                                                        ? std::string::npos
-                                                                        : native.find('.') - 7) == name)
+            if (native.rfind("sensor:", 0) == 0 &&
+                native.substr(7, native.find('.') == std::string::npos ? std::string::npos : native.find('.') - 7) ==
+                    name)
                 bridged = true;
         }
         if (!bridged)
@@ -38,8 +38,8 @@ Json executionRecord(const session::ResolvedScenario &resolved, const BridgeCore
     }
     Json streams = Json::array();
     for (const auto &stream : config.at("streams"))
-        streams.push_back(pick(stream, {"id", "direction", "topic", "message_type", "native", "frame_id",
-                                        "rate_hz", "format"}));
+        streams.push_back(
+            pick(stream, {"id", "direction", "topic", "message_type", "native", "frame_id", "rate_hz", "format"}));
     Json services = Json::array();
     for (const auto &service : config.value("services", Json::array()))
         services.push_back(pick(service, {"id", "service", "service_type", "action"}));
@@ -49,12 +49,16 @@ Json executionRecord(const session::ResolvedScenario &resolved, const BridgeCore
         {"resolved_content_sha256", resolved.document.value("content_sha256", "")},
         {"timestep_ns", core.timestepNs()},
         {"duration_ns", duration_ns ? Json(*duration_ns) : Json()},
-        {"clock", {{"epoch_ns", core.epochNs()}, {"reset_policy", core.resetPolicy()},
-                   {"real_time_factor", core.realTimeFactor()}, {"topic", config.at("clock").at("topic")}}},
+        {"clock",
+         {{"epoch_ns", core.epochNs()},
+          {"reset_policy", core.resetPolicy()},
+          {"real_time_factor", core.realTimeFactor()},
+          {"topic", config.at("clock").at("topic")}}},
         {"namespace", config.at("namespace")},
         {"node_name", config.value("node_name", "nereus_bridge")},
-        {"parameters", {{"real_time_factor", "double on the bridge node; 0 pauses stepping and /clock, "
-                                             "negative or non-finite values are rejected"}}},
+        {"parameters",
+         {{"real_time_factor", "double on the bridge node; 0 pauses stepping and /clock, "
+                               "negative or non-finite values are rejected"}}},
         {"world_frame", core.worldFrame()},
         {"sensors", {{"selected", sensors}, {"not_executed", deferred}, {"selected_without_stream", without_stream}}},
         {"streams", streams},
@@ -88,8 +92,10 @@ Json summaryRecord(BridgeCore &core, const std::string &reason, const CameraSink
     const auto snapshot = core.session().observe();
     Json stats = Json::object();
     for (const auto &[name, item] : core.session().sensorStats())
-        stats[name] = {{"acquired", item.acquired}, {"delivered", item.delivered},
-                       {"unavailable", item.unavailable}, {"dropped_pending", item.dropped_pending},
+        stats[name] = {{"acquired", item.acquired},
+                       {"delivered", item.delivered},
+                       {"unavailable", item.unavailable},
+                       {"dropped_pending", item.dropped_pending},
                        {"dropped_delivered", item.dropped_delivered}};
     return Json{{"format", "nereus.summary"},
                 {"version", 1},

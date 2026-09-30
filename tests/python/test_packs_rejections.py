@@ -148,8 +148,11 @@ class ScoringRulesRejectionTests(PackRejectionCase):
         self.assert_load_rejects("tasks", "'name' is a required property")
 
     def test_rules_entry_rejects_python_hook_fields(self) -> None:
-        self.edit("tasks/tasks.yaml", "scoring_rules: []",
-                  "scoring_rules: [{name: practice, module: rules, parameters: {}}]")
+        self.edit(
+            "tasks/tasks.yaml",
+            "scoring_rules: []",
+            "scoring_rules: [{name: practice, module: rules, parameters: {}}]",
+        )
         self.assert_load_rejects("tasks", "'module' was unexpected")
 
 
@@ -198,8 +201,7 @@ class BridgeRejectionTests(PackRejectionCase):
         self.edit(
             "bridge/bridge.yaml",
             SENSOR_LINE,
-            SENSOR_LINE
-            + "- id: cmd\n  direction: subscribe\n  topic: cmd\n"
+            SENSOR_LINE + "- id: cmd\n  direction: subscribe\n  topic: cmd\n"
             "  message_type: std_msgs/msg/Float64\n  native: 'command:mechanisms.marker.drop'\n"
             "  frame_id: ''\n  rate_hz: 5\n"
             "  qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}\n"
@@ -236,8 +238,7 @@ class BridgeRejectionTests(PackRejectionCase):
         self.edit(
             "bridge/bridge.yaml",
             SENSOR_LINE,
-            SENSOR_LINE
-            + "placement:\n  estimator_alignment: {client: /align,"
+            SENSOR_LINE + "placement:\n  estimator_alignment: {client: /align,"
             " service_type: std_srvs/srv/Trigger,"
             " triggers: [startup], estimate_stream: nope, pose: reference_frame,"
             " covariance_diagonal: 1.0}\n",
@@ -279,8 +280,11 @@ class TaskRejectionTests(PackRejectionCase):
         self.assert_resolve_rejects("unknown asset 'ghost_mesh'")
 
     def test_visual_texture_must_be_a_declared_asset(self) -> None:
-        self.edit("tasks/hoop.yaml", "frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}\nregions",
-                  "frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: ghost_png}\nregions")
+        self.edit(
+            "tasks/hoop.yaml",
+            "frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}\nregions",
+            "frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: ghost_png}\nregions",
+        )
         self.assert_resolve_rejects("unknown texture asset 'ghost_png'")
 
     def test_pass_through_sides_must_differ(self) -> None:

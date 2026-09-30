@@ -125,9 +125,9 @@ TEST(PackScene, TableTokenBodiesAreUntexturedDarkPlastic) {
     // triangle may sit entirely at UV (0,0) (it would sample the vinyl's transparent corner and vanish).
     ps::PackScene pack(talos());
     for (const auto *asset : {"pill_visual", "nut_and_bolt_visual"}) {
-        const auto mesh = pack.mesh("tasks", asset, std::string(asset) == "pill_visual"
-                                                        ? "pill_visual_task5_pill_fixed"
-                                                        : "nut_and_bolt_visual_task5_nutbolt_fixed");
+        const auto mesh = pack.mesh("tasks", asset,
+                                    std::string(asset) == "pill_visual" ? "pill_visual_task5_pill_fixed"
+                                                                        : "nut_and_bolt_visual_task5_nutbolt_fixed");
         ASSERT_TRUE(mesh) << asset;
         std::size_t body = 0, top = 0;
         for (const auto &part : mesh->submeshes) {

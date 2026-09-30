@@ -59,12 +59,18 @@ class FidelityTests(ReviewCase):
         for loop in ("&loop {self: *loop}", "&loop [1, [*loop]]"):
             with self.subTest(loop=loop):
                 self.scenario = write_generic_packs(self.root)
-                self.edit("robot/robot.yaml", "metadata: {author: tests, note: free "
-                          "non-executable annotation}", f"metadata: {loop}")
+                self.edit(
+                    "robot/robot.yaml",
+                    "metadata: {author: tests, note: free non-executable annotation}",
+                    f"metadata: {loop}",
+                )
                 self.rejects("robot", "recursive alias '*loop'")
         self.scenario = write_generic_packs(self.root)  # a plain (acyclic) alias stays valid
-        self.edit("robot/robot.yaml", "metadata: {author: tests, note: free non-executable "
-                  "annotation}", "metadata: {a: &shared [1, 2], b: *shared}")
+        self.edit(
+            "robot/robot.yaml",
+            "metadata: {author: tests, note: free non-executable annotation}",
+            "metadata: {a: &shared [1, 2], b: *shared}",
+        )
         self.assertEqual(load_pack(self.root / "robot").plain()["metadata"]["b"], [1, 2])
 
     def test_crlf_bytes_survive_unedited_save(self) -> None:
@@ -94,7 +100,9 @@ class PhysicalInvariantTests(ReviewCase):
         self.rejects("robot", "added_mass_matrix: must be positive semidefinite")
 
     def test_indefinite_linear_damping(self) -> None:
-        self.edit("robot/robot.yaml", "linear_damping_matrix: [[10,", "linear_damping_matrix: [[-1,")
+        self.edit(
+            "robot/robot.yaml", "linear_damping_matrix: [[10,", "linear_damping_matrix: [[-1,"
+        )
         self.rejects("robot", "linear_damping_matrix: must be positive semidefinite")
 
     def test_impossible_principal_moments(self) -> None:
@@ -102,18 +110,24 @@ class PhysicalInvariantTests(ReviewCase):
         self.rejects("robot", "triangle inequalities")
 
     def test_near_symmetry_uses_native_threshold(self) -> None:
-        self.edit("robot/robot.yaml", "[[1.0, 0.0, 0.0], [0.0, 1.5",
-                  "[[1.0, 0.000001, 0.0], [0.0, 1.5")
+        self.edit(
+            "robot/robot.yaml", "[[1.0, 0.0, 0.0], [0.0, 1.5", "[[1.0, 0.000001, 0.0], [0.0, 1.5"
+        )
         self.rejects("robot", "inertia_matrix: must be symmetric")
 
     def test_direction_and_quaternion_tolerances(self) -> None:
-        self.edit("robot/robot.yaml", "position_m: [-0.3, 0.2, 0], direction: [1, 0, 0]",
-                  "position_m: [-0.3, 0.2, 0], direction: [1.00000001, 0, 0]")
+        self.edit(
+            "robot/robot.yaml",
+            "position_m: [-0.3, 0.2, 0], direction: [1, 0, 0]",
+            "position_m: [-0.3, 0.2, 0], direction: [1.00000001, 0, 0]",
+        )
         self.rejects("robot", "/thrusters/t0/direction: must have unit norm")
         self.scenario = write_generic_packs(self.root)
-        self.edit("robot/robot.yaml", "child: imu_mount, position_m: [0.1, 0, 0], "
-                  "orientation_wxyz: [1, 0, 0, 0]", "child: imu_mount, position_m: [0.1, 0, 0], "
-                  "orientation_wxyz: [0.99999995, 0, 0, 0]")  # |q| - 1 = 5e-8 > 1e-8
+        self.edit(
+            "robot/robot.yaml",
+            "child: imu_mount, position_m: [0.1, 0, 0], orientation_wxyz: [1, 0, 0, 0]",
+            "child: imu_mount, position_m: [0.1, 0, 0], orientation_wxyz: [0.99999995, 0, 0, 0]",
+        )  # |q| - 1 = 5e-8 > 1e-8
         self.rejects("robot", "orientation_wxyz: must have unit norm")
 
     def test_sensor_period_shorter_than_timestep(self) -> None:
@@ -127,8 +141,11 @@ class PhysicalInvariantTests(ReviewCase):
 
 class InactiveMetadataTests(ReviewCase):
     def test_pose_like_inactive_data_is_not_a_runtime_pose(self) -> None:
-        self.edit("robot/robot.yaml", "metadata: {author: tests,",
-                  "metadata: {orientation_wxyz: [9, 9, 9, 9], author: tests,")
+        self.edit(
+            "robot/robot.yaml",
+            "metadata: {author: tests,",
+            "metadata: {orientation_wxyz: [9, 9, 9, 9], author: tests,",
+        )
         load_pack(self.root / "robot")
 
 

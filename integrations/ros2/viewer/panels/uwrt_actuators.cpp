@@ -1,9 +1,9 @@
 #include "ros_runtime.hpp"
 #include <riptide_msgs2/msg/actuator_status.hpp>
-#include <std_msgs/msg/bool.hpp>
-#include <std_msgs/msg/float32.hpp>
-#include <std_msgs/msg/empty.hpp>
 #include <set>
+#include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/empty.hpp>
+#include <std_msgs/msg/float32.hpp>
 
 namespace robotics::ros_viewer::panels {
 namespace {

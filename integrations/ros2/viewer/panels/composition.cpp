@@ -1,10 +1,10 @@
 #include "robotics/ros_viewer/panels/composition.hpp"
 #include "robotics/ros_viewer/panel_layout.hpp"
+#include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <imgui.h>
 #include <set>
-#include <algorithm>
-#include <cstring>
-#include <cmath>
 #include <stdexcept>
 
 namespace robotics::ros_viewer::panels {
@@ -55,8 +55,8 @@ void validateSubstitutions(const YAML::Node &node, const Context &ctx) {
 } // namespace
 Composition::Composition(const YAML::Node &config, const Context &ctx, const Registry &registry) {
     keys(config,
-         {"sidebar_width", "sidebar_width_fraction", "sidebar_visible", "providers", "panels",
-          "toolbar", "overlays", "ownership"},
+         {"sidebar_width", "sidebar_width_fraction", "sidebar_visible", "providers", "panels", "toolbar", "overlays",
+          "ownership"},
          "composition");
     sidebarShown = config["sidebar_visible"].as<bool>(true);
     if (config["sidebar_width"] && config["sidebar_width_fraction"])
@@ -263,8 +263,8 @@ std::vector<std::string> Composition::panelIds() const {
 }
 const std::vector<HostItemType> &hostItemTypes() {
     static const std::vector<HostItemType> types{
-        {"scene_settings", false}, {"pool_viewer", false}, {"view", false},     {"focus", false},
-        {"follow", false},         {"labels", false},      {"tf", false},       {"mpc_path", false},
+        {"scene_settings", false}, {"pool_viewer", false}, {"view", false}, {"focus", false},
+        {"follow", false},         {"labels", false},      {"tf", false},   {"mpc_path", false},
         {"preview_task", false},   {"detections", true}};
     return types;
 }
@@ -283,15 +283,15 @@ void registerHostItem(Registry &registry, const std::string &type, std::function
         }
     };
     const bool sidebar = static_cast<bool>(panel);
-    registry.panels.insert_or_assign(
-        type, ViewFactory<Panel>{Kind::Motion, [type](const YAML::Node &n) { keys(n, {}, type); },
-                                 [toolbar, panel](const Binding &) {
-                                     auto item = std::make_unique<HostPanel>();
-                                     item->bar = toolbar;
-                                     item->body = panel;
-                                     return std::unique_ptr<Panel>(std::move(item));
-                                 },
-                                 true, !sidebar});
+    registry.panels.insert_or_assign(type, ViewFactory<Panel>{Kind::Motion,
+                                                              [type](const YAML::Node &n) { keys(n, {}, type); },
+                                                              [toolbar, panel](const Binding &) {
+                                                                  auto item = std::make_unique<HostPanel>();
+                                                                  item->bar = toolbar;
+                                                                  item->body = panel;
+                                                                  return std::unique_ptr<Panel>(std::move(item));
+                                                              },
+                                                              true, !sidebar});
 }
 
 void registerHostPlaceholders(Registry &registry) {

@@ -14,8 +14,8 @@
 
 namespace robotics::session {
 struct ObjMesh {
-    std::vector<Eigen::Vector3d> vertices;           // every `v` line, in file order
-    std::vector<std::array<int, 3>> triangles;       // indices into `vertices`
+    std::vector<Eigen::Vector3d> vertices;     // every `v` line, in file order
+    std::vector<std::array<int, 3>> triangles; // indices into `vertices`
     // Vertices referenced by at least one face, in first-use order (a viewer-side loader keeps
     // one vertex per face corner; a hull over these equals a hull over the corners).
     std::vector<Eigen::Vector3d> referenced() const {

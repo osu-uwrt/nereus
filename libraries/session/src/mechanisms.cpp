@@ -164,7 +164,8 @@ Mechanisms::Mechanisms(const Json &robot) : impl_(std::make_unique<Impl>()) {
                 number(projectile.at("center_of_mass_m"), "center_of_mass_m", -INFINITY);
             std::vector<Pose> mounts;
             for (const auto &s : slots)
-                mounts.push_back(composeChecked(mount, composeChecked({}, makePose(at(s, "position_m"), at(s, "orientation_wxyz"), "slot"))));
+                mounts.push_back(composeChecked(
+                    mount, composeChecked({}, makePose(at(s, "position_m"), at(s, "orientation_wxyz"), "slot"))));
             m.mounts[id] = std::move(mounts);
             m.release_configs[id] = p;
         } else if (kind == "claw") {
@@ -173,8 +174,7 @@ Mechanisms::Mechanisms(const Json &robot) : impl_(std::make_unique<Impl>()) {
             claw.maximum = number(at(p, "max_gap_m"), "max_gap_m");
             claw.speed = number(at(p, "jaw_speed_m_s"), "jaw_speed_m_s");
             claw.tolerance = number(at(p, "completion_tolerance_m"), "completion_tolerance_m");
-            if (claw.maximum <= claw.minimum || claw.speed <= 0 ||
-                claw.tolerance >= (claw.maximum - claw.minimum) / 2)
+            if (claw.maximum <= claw.minimum || claw.speed <= 0 || claw.tolerance >= (claw.maximum - claw.minimum) / 2)
                 throw std::invalid_argument("invalid claw travel, speed or completion tolerance");
             const Json &initial = at(p, "initial_state");
             if (!initial.is_string() || (initial != "open" && initial != "closed"))
@@ -224,9 +224,8 @@ CommandResult Mechanisms::reloadAll(bool killed) {
 
 CommandResult Mechanisms::fire(const std::string &id, const Pose &world_from_reference,
                                const Eigen::Vector3d &linear_velocity_reference,
-                               const Eigen::Vector3d &angular_velocity_reference,
-                               const std::string &reference_frame, double water_density, bool killed,
-                               PayloadRelease &release) {
+                               const Eigen::Vector3d &angular_velocity_reference, const std::string &reference_frame,
+                               double water_density, bool killed, PayloadRelease &release) {
     auto &m = *impl_;
     const auto found = m.release_configs.find(id);
     if (found == m.release_configs.end())
@@ -253,7 +252,8 @@ CommandResult Mechanisms::fire(const std::string &id, const Pose &world_from_ref
         return {false, "No ammunition; reload first"};
     const int capacity = m.capacity(id);
     const int index = capacity - m.available.at(id);
-    const Pose mount = composeChecked(inverseChecked(root_from_reference), m.mounts.at(id)[static_cast<std::size_t>(index)]);
+    const Pose mount =
+        composeChecked(inverseChecked(root_from_reference), m.mounts.at(id)[static_cast<std::size_t>(index)]);
     const Pose pose = composeChecked(world, mount);
     const Eigen::Vector3d axis = rotate(pose.rotation, Eigen::Vector3d::UnitX());
     const Json &projectile = p.at("projectile");
@@ -265,8 +265,8 @@ CommandResult Mechanisms::fire(const std::string &id, const Pose &world_from_ref
         throw std::invalid_argument("effective projectile inertial mass must be positive");
     const double speed = std::sqrt(2 * p.at("launch").at("spring_energy_j").get<double>() / inertia);
     const Eigen::Vector3d world_omega = rotate(world.rotation, angular_velocity_reference);
-    Eigen::Vector3d world_velocity = rotate(
-        world.rotation, linear_velocity_reference + angular_velocity_reference.cross(mount.translation));
+    Eigen::Vector3d world_velocity =
+        rotate(world.rotation, linear_velocity_reference + angular_velocity_reference.cross(mount.translation));
     const double com = projectile.contains("center_of_mass_m") ? projectile.at("center_of_mass_m").get<double>() : 0.;
     world_velocity += axis * speed + world_omega.cross(axis * com);
     if (!world_velocity.allFinite())
@@ -334,17 +334,19 @@ MechanismState Mechanisms::snapshot(bool killed) const {
         const std::int64_t deadline = found == m.cooldowns.end() ? 0 : found->second.first;
         const std::string owner = found == m.cooldowns.end() ? "" : found->second.second;
         const int available = m.available.at(key);
-        const char *name = m.blocked(key, killed) ? "disarmed"
+        const char *name = m.blocked(key, killed)                   ? "disarmed"
                            : (m.time_ns < deadline && owner == key) ? "busy"
-                           : available ? "loaded" : "empty";
+                           : available                              ? "loaded"
+                                                                    : "empty";
         state.releases[key] = {name, available};
     }
     for (const auto &[key, claw] : m.claws) {
         const bool moving = !m.blocked(key, killed) && std::fabs(claw.q - claw.target) > claw.tolerance;
         busy = busy || moving;
-        const char *name = m.blocked(key, killed) ? "disarmed"
-                           : moving ? (claw.direction > 0 ? "opening" : "closing")
-                           : claw.q > claw.travel() - claw.tolerance ? "opened" : "closed";
+        const char *name = m.blocked(key, killed)                    ? "disarmed"
+                           : moving                                  ? (claw.direction > 0 ? "opening" : "closing")
+                           : claw.q > claw.travel() - claw.tolerance ? "opened"
+                                                                     : "closed";
         state.claws[key] = {name, claw.minimum + 2 * claw.q, claw.minimum + 2 * claw.target, {claw.q, claw.q}};
     }
     state.any_busy = busy;

@@ -161,7 +161,9 @@ def write_generic_packs(root: Path, bridge: bool = True) -> Path:
         "pool/pool.yaml": POOL,
         "tasks/tasks.yaml": TASKS,
         "tasks/hoop.yaml": HOOP,
-        "scenario/scenario.yaml": SCENARIO if bridge else SCENARIO.replace("bridge: ../bridge\n", ""),
+        "scenario/scenario.yaml": SCENARIO
+        if bridge
+        else SCENARIO.replace("bridge: ../bridge\n", ""),
     }
     if bridge:
         files["bridge/bridge.yaml"] = BRIDGE

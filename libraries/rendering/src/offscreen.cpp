@@ -1,7 +1,7 @@
 #include "robotics/rendering/offscreen.hpp"
-#include <GL/glew.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include <GL/glew.h>
 #include <mutex>
 #include <stdexcept>
 
@@ -11,8 +11,7 @@ namespace {
 // hosts as well as context migration; the renderer itself remains caller-context-owned.
 std::mutex host_mutex;
 std::runtime_error eglError(const char *operation) {
-    return std::runtime_error(std::string(operation) + " failed (EGL " +
-                              std::to_string(eglGetError()) + ")");
+    return std::runtime_error(std::string(operation) + " failed (EGL " + std::to_string(eglGetError()) + ")");
 }
 EGLDisplay sharedDisplay() {
     // EGL initialization is not reference-counted. Keep the process-wide display
@@ -21,8 +20,8 @@ EGLDisplay sharedDisplay() {
     static EGLDisplay display = EGL_NO_DISPLAY;
     auto next = display;
     if (next == EGL_NO_DISPLAY) {
-        const auto get = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
-            eglGetProcAddress("eglGetPlatformDisplayEXT"));
+        const auto get =
+            reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
         if (!get)
             throw std::runtime_error("surfaceless EGL platform support is unavailable");
         next = get(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
@@ -90,9 +89,19 @@ OffscreenRenderer::OffscreenRenderer(const std::filesystem::path &shader_directo
     auto next = std::make_unique<Impl>();
     next->display = sharedDisplay();
     const auto display = next->display;
-    const EGLint attributes[] = {EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_RENDERABLE_TYPE,
-        EGL_OPENGL_BIT, EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8,
-        EGL_DEPTH_SIZE, 24, EGL_NONE};
+    const EGLint attributes[] = {EGL_SURFACE_TYPE,
+                                 EGL_PBUFFER_BIT,
+                                 EGL_RENDERABLE_TYPE,
+                                 EGL_OPENGL_BIT,
+                                 EGL_RED_SIZE,
+                                 8,
+                                 EGL_GREEN_SIZE,
+                                 8,
+                                 EGL_BLUE_SIZE,
+                                 8,
+                                 EGL_DEPTH_SIZE,
+                                 24,
+                                 EGL_NONE};
     EGLConfig config;
     EGLint count = 0;
     if (!eglChooseConfig(display, attributes, &config, 1, &count) || count != 1)
@@ -104,15 +113,18 @@ OffscreenRenderer::OffscreenRenderer(const std::filesystem::path &shader_directo
     const auto api = eglQueryAPI();
     if (!eglBindAPI(EGL_OPENGL_API))
         throw eglError("select OpenGL API");
-    const EGLint context_attributes[] = {EGL_CONTEXT_MAJOR_VERSION_KHR, 3,
-        EGL_CONTEXT_MINOR_VERSION_KHR, 3, EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR,
-        EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR, EGL_NONE};
+    const EGLint context_attributes[] = {EGL_CONTEXT_MAJOR_VERSION_KHR,
+                                         3,
+                                         EGL_CONTEXT_MINOR_VERSION_KHR,
+                                         3,
+                                         EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR,
+                                         EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR,
+                                         EGL_NONE};
     next->context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attributes);
     const auto context_error = eglGetError();
     eglBindAPI(api);
     if (next->context == EGL_NO_CONTEXT)
-        throw std::runtime_error("create OpenGL 3.3 context failed (EGL " +
-                                 std::to_string(context_error) + ")");
+        throw std::runtime_error("create OpenGL 3.3 context failed (EGL " + std::to_string(context_error) + ")");
     {
         Binding binding(display, next->surface, next->context);
         glewExperimental = GL_TRUE;
@@ -120,11 +132,11 @@ OffscreenRenderer::OffscreenRenderer(const std::filesystem::path &shader_directo
         // Linux GLEW loads the GL entry points before asking for a GLX display.
         // EGL deliberately has no GLX display. Accept only that specific status.
         if (status != GLEW_OK && status != GLEW_ERROR_NO_GLX_DISPLAY)
-            throw std::runtime_error("initialize OpenGL functions failed: " +
-                                     std::to_string(status));
+            throw std::runtime_error("initialize OpenGL functions failed: " + std::to_string(status));
         if (!GLEW_VERSION_3_3)
             throw std::runtime_error("OpenGL 3.3 is unavailable in the offscreen context");
-        while (glGetError() != GL_NO_ERROR) {}
+        while (glGetError() != GL_NO_ERROR) {
+        }
         const auto *name = glGetString(GL_RENDERER);
         next->device = name ? reinterpret_cast<const char *>(name) : "unknown";
         next->renderer = std::make_unique<Renderer>(shader_directory);
@@ -135,9 +147,8 @@ OffscreenRenderer::~OffscreenRenderer() {
     std::lock_guard<std::mutex> lock(host_mutex);
     impl_.reset();
 }
-ImageCapture OffscreenRenderer::capture(const Scene &scene, const View &view,
-                                       const Appearance &appearance, float time,
-                                       int width, int height, bool color, bool depth) {
+ImageCapture OffscreenRenderer::capture(const Scene &scene, const View &view, const Appearance &appearance, float time,
+                                        int width, int height, bool color, bool depth) {
     std::lock_guard<std::mutex> lock(host_mutex);
     Binding binding(impl_->display, impl_->surface, impl_->context);
     impl_->renderer->draw(scene, view, appearance, time, width, height);

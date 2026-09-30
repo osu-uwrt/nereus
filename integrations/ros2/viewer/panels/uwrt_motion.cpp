@@ -1,10 +1,10 @@
 #include "ros_runtime.hpp"
+#include <atomic>
 #include <riptide_msgs2/msg/controller_command.hpp>
 #include <riptide_msgs2/msg/kill_switch_report.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <unistd.h>
-#include <atomic>
 
 namespace robotics::ros_viewer::panels {
 namespace {

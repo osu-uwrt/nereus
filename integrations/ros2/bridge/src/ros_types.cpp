@@ -39,16 +39,13 @@ std::shared_ptr<const MessageType> MessageType::get(const std::string &name) {
     type->name_ = full;
     try {
         type->cpp_library_ = rclcpp::get_typesupport_library(full, "rosidl_typesupport_cpp");
-        type->type_support_ = rclcpp::get_typesupport_handle(full, "rosidl_typesupport_cpp",
-                                                             *type->cpp_library_);
-        type->introspection_library_ =
-            rclcpp::get_typesupport_library(full, "rosidl_typesupport_introspection_cpp");
-        const auto *handle = rclcpp::get_typesupport_handle(
-            full, "rosidl_typesupport_introspection_cpp", *type->introspection_library_);
+        type->type_support_ = rclcpp::get_typesupport_handle(full, "rosidl_typesupport_cpp", *type->cpp_library_);
+        type->introspection_library_ = rclcpp::get_typesupport_library(full, "rosidl_typesupport_introspection_cpp");
+        const auto *handle =
+            rclcpp::get_typesupport_handle(full, "rosidl_typesupport_introspection_cpp", *type->introspection_library_);
         type->members_ = static_cast<const introspection::MessageMembers *>(handle->data);
     } catch (const std::exception &error) {
-        throw MappingError("ROS message type " + repr(name) + " is not installed (" +
-                           error.what() + ")");
+        throw MappingError("ROS message type " + repr(name) + " is not installed (" + error.what() + ")");
     }
     cache.emplace(full, type);
     return type;
@@ -74,8 +71,7 @@ std::shared_ptr<const ServiceType> ServiceType::get(const std::string &name) {
         type->request = members->request_members_;
         type->response = members->response_members_;
     } catch (const std::exception &error) {
-        throw MappingError("ROS service type " + repr(name) + " is not installed (" +
-                           error.what() + ")");
+        throw MappingError("ROS service type " + repr(name) + " is not installed (" + error.what() + ")");
     }
     cache.emplace(full, type);
     return type;
@@ -104,23 +100,40 @@ std::string baseName(const introspection::MessageMembers *members) {
 namespace {
 const char *primitiveName(std::uint8_t id) {
     using namespace introspection;
-    if (id == ROS_TYPE_FLOAT) return "float";
-    if (id == ROS_TYPE_DOUBLE) return "double";
-    if (id == ROS_TYPE_LONG_DOUBLE) return "long double";
-    if (id == ROS_TYPE_CHAR) return "char";
-    if (id == ROS_TYPE_WCHAR) return "wchar";
-    if (id == ROS_TYPE_BOOLEAN) return "boolean";
-    if (id == ROS_TYPE_OCTET) return "octet";
-    if (id == ROS_TYPE_UINT8) return "uint8";
-    if (id == ROS_TYPE_INT8) return "int8";
-    if (id == ROS_TYPE_UINT16) return "uint16";
-    if (id == ROS_TYPE_INT16) return "int16";
-    if (id == ROS_TYPE_UINT32) return "uint32";
-    if (id == ROS_TYPE_INT32) return "int32";
-    if (id == ROS_TYPE_UINT64) return "uint64";
-    if (id == ROS_TYPE_INT64) return "int64";
-    if (id == ROS_TYPE_STRING) return "string";
-    if (id == ROS_TYPE_WSTRING) return "wstring";
+    if (id == ROS_TYPE_FLOAT)
+        return "float";
+    if (id == ROS_TYPE_DOUBLE)
+        return "double";
+    if (id == ROS_TYPE_LONG_DOUBLE)
+        return "long double";
+    if (id == ROS_TYPE_CHAR)
+        return "char";
+    if (id == ROS_TYPE_WCHAR)
+        return "wchar";
+    if (id == ROS_TYPE_BOOLEAN)
+        return "boolean";
+    if (id == ROS_TYPE_OCTET)
+        return "octet";
+    if (id == ROS_TYPE_UINT8)
+        return "uint8";
+    if (id == ROS_TYPE_INT8)
+        return "int8";
+    if (id == ROS_TYPE_UINT16)
+        return "uint16";
+    if (id == ROS_TYPE_INT16)
+        return "int16";
+    if (id == ROS_TYPE_UINT32)
+        return "uint32";
+    if (id == ROS_TYPE_INT32)
+        return "int32";
+    if (id == ROS_TYPE_UINT64)
+        return "uint64";
+    if (id == ROS_TYPE_INT64)
+        return "int64";
+    if (id == ROS_TYPE_STRING)
+        return "string";
+    if (id == ROS_TYPE_WSTRING)
+        return "wstring";
     return "unknown";
 }
 const introspection::MessageMembers *nested(const introspection::MessageMember &member) {
@@ -130,16 +143,15 @@ const introspection::MessageMembers *nested(const introspection::MessageMember &
 
 bool isNumericId(std::uint8_t id) {
     using namespace introspection;
-    return id == ROS_TYPE_FLOAT || id == ROS_TYPE_DOUBLE || id == ROS_TYPE_CHAR ||
-           id == ROS_TYPE_OCTET || id == ROS_TYPE_UINT8 || id == ROS_TYPE_INT8 ||
-           id == ROS_TYPE_UINT16 || id == ROS_TYPE_INT16 || id == ROS_TYPE_UINT32 ||
-           id == ROS_TYPE_INT32 || id == ROS_TYPE_UINT64 || id == ROS_TYPE_INT64;
+    return id == ROS_TYPE_FLOAT || id == ROS_TYPE_DOUBLE || id == ROS_TYPE_CHAR || id == ROS_TYPE_OCTET ||
+           id == ROS_TYPE_UINT8 || id == ROS_TYPE_INT8 || id == ROS_TYPE_UINT16 || id == ROS_TYPE_INT16 ||
+           id == ROS_TYPE_UINT32 || id == ROS_TYPE_INT32 || id == ROS_TYPE_UINT64 || id == ROS_TYPE_INT64;
 }
 
 RosType memberType(const introspection::MessageMember &member) {
     RosType type;
-    type.base = member.type_id_ == introspection::ROS_TYPE_MESSAGE ? baseName(nested(member))
-                                                                   : primitiveName(member.type_id_);
+    type.base =
+        member.type_id_ == introspection::ROS_TYPE_MESSAGE ? baseName(nested(member)) : primitiveName(member.type_id_);
     if (member.is_array_) {
         if (member.array_size_ == 0 || member.is_upper_bound_)
             type.sequence = true;
@@ -149,16 +161,14 @@ RosType memberType(const introspection::MessageMember &member) {
     return type;
 }
 
-FieldPath resolveField(const introspection::MessageMembers *owner, const std::string &path,
-                       bool writable) {
+FieldPath resolveField(const introspection::MessageMembers *owner, const std::string &path, bool writable) {
     FieldPath result;
     result.path = path;
     std::optional<RosType> current;
     for (const auto &token : parsePath(path)) {
         if (current) {
             if (!current->isMessage() || current->isArray())
-                throw MappingError(repr(path) + ": " + repr(token.name) +
-                                   " is below a non-message field");
+                throw MappingError(repr(path) + ": " + repr(token.name) + " is below a non-message field");
             // `owner` was set from the previous hop below.
         }
         const introspection::MessageMember *found = nullptr;
@@ -166,8 +176,7 @@ FieldPath resolveField(const introspection::MessageMembers *owner, const std::st
             if (token.name == owner->members_[k].name_)
                 found = &owner->members_[k];
         if (!found)
-            throw MappingError(repr(path) + ": " + owner->message_name_ + " has no field " +
-                               repr(token.name));
+            throw MappingError(repr(path) + ": " + owner->message_name_ + " has no field " + repr(token.name));
         RosType type = memberType(*found);
         Hop hop{found, -1};
         if (token.indexes.size() > 1)
@@ -176,11 +185,11 @@ FieldPath resolveField(const introspection::MessageMembers *owner, const std::st
             if (!type.isArray())
                 throw MappingError(repr(path) + ": " + repr(token.name) + " is not an array");
             if (writable && type.sequence)
-                throw MappingError(repr(path) + ": cannot assign an element of sequence " +
-                                   repr(token.name) + "; assign the whole sequence");
+                throw MappingError(repr(path) + ": cannot assign an element of sequence " + repr(token.name) +
+                                   "; assign the whole sequence");
             if (type.length >= 0 && index >= type.length)
-                throw MappingError(repr(path) + ": index " + std::to_string(index) + " exceeds " +
-                                   token.name + "[" + std::to_string(type.length) + "]");
+                throw MappingError(repr(path) + ": index " + std::to_string(index) + " exceeds " + token.name + "[" +
+                                   std::to_string(type.length) + "]");
             hop.index = index;
             type = type.element();
         }
@@ -200,8 +209,7 @@ const void *locateConst(const void *message, const FieldPath &path) {
         address = static_cast<const char *>(address) + hop.member->offset_;
         if (hop.index >= 0) {
             if (static_cast<std::size_t>(hop.index) >= hop.member->size_function(address))
-                throw MappingError(repr(path.path) +
-                                   ": message sequence is shorter than the mapped index");
+                throw MappingError(repr(path.path) + ": message sequence is shorter than the mapped index");
             address = hop.member->get_const_function(address, static_cast<std::size_t>(hop.index));
         }
     }
@@ -221,19 +229,30 @@ void *locate(void *message, const FieldPath &path) {
 namespace {
 Json scalarJson(std::uint8_t id, const void *p) {
     using namespace introspection;
-    if (id == ROS_TYPE_FLOAT) return *static_cast<const float *>(p);
-    if (id == ROS_TYPE_DOUBLE) return *static_cast<const double *>(p);
-    if (id == ROS_TYPE_BOOLEAN) return *static_cast<const bool *>(p);
+    if (id == ROS_TYPE_FLOAT)
+        return *static_cast<const float *>(p);
+    if (id == ROS_TYPE_DOUBLE)
+        return *static_cast<const double *>(p);
+    if (id == ROS_TYPE_BOOLEAN)
+        return *static_cast<const bool *>(p);
     if (id == ROS_TYPE_CHAR || id == ROS_TYPE_OCTET || id == ROS_TYPE_UINT8)
         return *static_cast<const std::uint8_t *>(p);
-    if (id == ROS_TYPE_INT8) return *static_cast<const std::int8_t *>(p);
-    if (id == ROS_TYPE_UINT16) return *static_cast<const std::uint16_t *>(p);
-    if (id == ROS_TYPE_INT16) return *static_cast<const std::int16_t *>(p);
-    if (id == ROS_TYPE_UINT32) return *static_cast<const std::uint32_t *>(p);
-    if (id == ROS_TYPE_INT32) return *static_cast<const std::int32_t *>(p);
-    if (id == ROS_TYPE_UINT64) return *static_cast<const std::uint64_t *>(p);
-    if (id == ROS_TYPE_INT64) return *static_cast<const std::int64_t *>(p);
-    if (id == ROS_TYPE_STRING) return *static_cast<const std::string *>(p);
+    if (id == ROS_TYPE_INT8)
+        return *static_cast<const std::int8_t *>(p);
+    if (id == ROS_TYPE_UINT16)
+        return *static_cast<const std::uint16_t *>(p);
+    if (id == ROS_TYPE_INT16)
+        return *static_cast<const std::int16_t *>(p);
+    if (id == ROS_TYPE_UINT32)
+        return *static_cast<const std::uint32_t *>(p);
+    if (id == ROS_TYPE_INT32)
+        return *static_cast<const std::int32_t *>(p);
+    if (id == ROS_TYPE_UINT64)
+        return *static_cast<const std::uint64_t *>(p);
+    if (id == ROS_TYPE_INT64)
+        return *static_cast<const std::int64_t *>(p);
+    if (id == ROS_TYPE_STRING)
+        return *static_cast<const std::string *>(p);
     return nullptr;
 }
 } // namespace
@@ -244,9 +263,8 @@ Json messageToJson(const introspection::MessageMembers *members, const void *mes
         const auto &member = members->members_[k];
         const void *field = static_cast<const char *>(message) + member.offset_;
         const auto element = [&](const void *p) {
-            return member.type_id_ == introspection::ROS_TYPE_MESSAGE
-                       ? messageToJson(nested(member), p)
-                       : scalarJson(member.type_id_, p);
+            return member.type_id_ == introspection::ROS_TYPE_MESSAGE ? messageToJson(nested(member), p)
+                                                                      : scalarJson(member.type_id_, p);
         };
         if (!member.is_array_) {
             out[member.name_] = element(field);

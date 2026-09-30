@@ -10,30 +10,30 @@
 #include "status_lights.hpp"
 #include "tf_tree.hpp"
 #include "thruster_visuals.hpp"
+#include <atomic>
+#include <chrono>
+#include <deque>
+#include <functional>
 #include <geometry_msgs/msg/transform_stamped.hpp>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <nav_msgs/msg/path.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <set>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/color_rgba.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
-#include <tf2_msgs/msg/tf_message.hpp>
-#include <visualization_msgs/msg/marker_array.hpp>
-#include <atomic>
-#include <mutex>
 #include <thread>
-#include <chrono>
-#include <deque>
-#include <functional>
-#include <map>
-#include <memory>
-#include <set>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 namespace robotics::ros_viewer::host {
 using Clock = std::chrono::steady_clock;

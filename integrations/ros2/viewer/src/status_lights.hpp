@@ -34,10 +34,17 @@ struct LightState {
         float brightness = 1;
         // Match RViz's ROS-clock phase and periods, including paused sim time.
         switch (mode) {
-        case LightMode::SlowFlash: brightness = std::fmod(now, 2.) < 1. ? 0.f : 1.f; break;
-        case LightMode::FastFlash: brightness = std::fmod(now, .5) < .25 ? 0.f : 1.f; break;
-        case LightMode::Breath: brightness = float((std::sin(now * 2. * 3.141592653589793 / 3.) + 1.) * .5); break;
-        default: break;
+        case LightMode::SlowFlash:
+            brightness = std::fmod(now, 2.) < 1. ? 0.f : 1.f;
+            break;
+        case LightMode::FastFlash:
+            brightness = std::fmod(now, .5) < .25 ? 0.f : 1.f;
+            break;
+        case LightMode::Breath:
+            brightness = float((std::sin(now * 2. * 3.141592653589793 / 3.) + 1.) * .5);
+            break;
+        default:
+            break;
         }
         return steady * brightness;
     }

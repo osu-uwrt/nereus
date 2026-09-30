@@ -40,9 +40,8 @@ Matrix4 matrixFrom(const Vec3 &position, double w, double x, double y, double z)
     const double n = std::sqrt(w * w + x * x + y * y + z * z);
     w /= n, x /= n, y /= n, z /= n;
     Matrix4 t = Matrix4::Identity();
-    t.block<3, 3>(0, 0) << 1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w),
-        2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w), 2 * (x * z - y * w),
-        2 * (y * z + x * w), 1 - 2 * (x * x + y * y);
+    t.block<3, 3>(0, 0) << 1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w), 2 * (x * y + z * w),
+        1 - 2 * (x * x + z * z), 2 * (y * z - x * w), 2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y);
     t.block<3, 1>(0, 3) = position;
     return t;
 }
@@ -54,8 +53,7 @@ Matrix4 matrixFrom(const Vec3 &position, const Eigen::Quaterniond &q) {
 std::array<double, 4> xyzw(const Matrix4 &m) {
     const auto r = m.block<3, 3>(0, 0);
     const double trace = r.trace();
-    const double candidates[4] = {1 + trace, 1 + 2 * r(0, 0) - trace, 1 + 2 * r(1, 1) - trace,
-                                  1 + 2 * r(2, 2) - trace};
+    const double candidates[4] = {1 + trace, 1 + 2 * r(0, 0) - trace, 1 + 2 * r(1, 1) - trace, 1 + 2 * r(2, 2) - trace};
     int i = 0;
     for (int k = 1; k < 4; ++k)
         if (candidates[k] > candidates[i])
@@ -79,15 +77,23 @@ std::array<double, 4> xyzw(const Matrix4 &m) {
 Matrix4 fromXyzw(const Vec3 &position, const btQuaternion &q) {
     return matrixFrom(position, q.w(), q.x(), q.y(), q.z());
 }
-Matrix4 poseMatrix(const spatial::Pose &pose) { return matrixFrom(pose.translation, pose.rotation); }
+Matrix4 poseMatrix(const spatial::Pose &pose) {
+    return matrixFrom(pose.translation, pose.rotation);
+}
 
-btVector3 toBt(const Vec3 &v) { return btVector3(v.x(), v.y(), v.z()); }
-Vec3 fromBt(const btVector3 &v) { return Vec3(v.x(), v.y(), v.z()); }
+btVector3 toBt(const Vec3 &v) {
+    return btVector3(v.x(), v.y(), v.z());
+}
+Vec3 fromBt(const btVector3 &v) {
+    return Vec3(v.x(), v.y(), v.z());
+}
 btQuaternion quatOf(const Matrix4 &m) {
     const auto q = xyzw(m);
     return btQuaternion(q[0], q[1], q[2], q[3]);
 }
-btTransform transformOf(const Matrix4 &m) { return btTransform(quatOf(m), toBt(m.block<3, 1>(0, 3))); }
+btTransform transformOf(const Matrix4 &m) {
+    return btTransform(quatOf(m), toBt(m.block<3, 1>(0, 3)));
+}
 
 Vec3 vec3(const Json &j, const char *name) {
     if (!j.is_array() || j.size() != 3)
@@ -100,15 +106,18 @@ Matrix4 poseOf(const Json &position, const Json &wxyz) {
 }
 Matrix4 yawMatrix(const Json &placement) {
     const double half = placement.at("yaw_deg").get<double>() * M_PI / 180.0 / 2;
-    return matrixFrom(vec3(placement.at("position_m"), "position_m"), std::cos(half), 0, 0,
-                      std::sin(half));
+    return matrixFrom(vec3(placement.at("position_m"), "position_m"), std::cos(half), 0, 0, std::sin(half));
 }
-bool allFinite(const Vec3 &v) { return v.allFinite(); }
-double sign(double v) { return v > 0 ? 1.0 : (v < 0 ? -1.0 : 0.0); }
+bool allFinite(const Vec3 &v) {
+    return v.allFinite();
+}
+double sign(double v) {
+    return v > 0 ? 1.0 : (v < 0 ? -1.0 : 0.0);
+}
 
 struct Contact {
-    int other{-1};  // body index of the other object
-    Vec3 normal;    // normal on the other body (points towards the queried body)
+    int other{-1}; // body index of the other object
+    Vec3 normal;   // normal on the other body (points towards the queried body)
     double distance{0}, force{0};
 };
 
@@ -116,8 +125,7 @@ struct Contact {
 // the algorithm), in algorithm order.
 struct ClosestPoints : btManifoldResult {
     std::vector<Contact> points;
-    ClosestPoints(const btCollisionObjectWrapper *a, const btCollisionObjectWrapper *b)
-        : btManifoldResult(a, b) {}
+    ClosestPoints(const btCollisionObjectWrapper *a, const btCollisionObjectWrapper *b) : btManifoldResult(a, b) {}
     void addContactPoint(const btVector3 &normalOnB, const btVector3 &point, btScalar depth) override {
         Contact c;
         c.normal = fromBt(normalOnB);
@@ -229,7 +237,9 @@ class VehicleContacts final : public simulation::ContactResolver {
         std::unique_ptr<btCollisionShape> shape;
         std::unique_ptr<btTriangleMesh> mesh;
         btCollisionObject object;
-        bool robot() const { return kind == kRobot || attached; }
+        bool robot() const {
+            return kind == kRobot || attached;
+        }
     };
     struct Hit {
         Vec3 point, normal; // world; normal pushes the robot out
@@ -368,15 +378,17 @@ struct PropWorld::Impl {
     void syncVehicle();
 
     Impl(const ResolvedScenario &resolved, const std::string &task_id, const std::string &mechanism);
-    ~Impl() { teardown(); }
+    ~Impl() {
+        teardown();
+    }
 
     void build();
     void teardown();
     void resetState();
     void restore(Prop &prop);
 
-    int addBody(std::unique_ptr<btCollisionShape> shape, std::unique_ptr<btTriangleMesh> mesh,
-                double mass, const Matrix4 &pose);
+    int addBody(std::unique_ptr<btCollisionShape> shape, std::unique_ptr<btTriangleMesh> mesh, double mass,
+                const Matrix4 &pose);
     void resetBase(int index, const Vec3 &position, const btQuaternion &orientation);
     void setVelocity(int index, const Vec3 &linear, const Vec3 &angular);
     Matrix4 basePose(int index) const;
@@ -389,10 +401,8 @@ struct PropWorld::Impl {
 
     Matrix4 propPose(const Prop &prop) const;
     std::optional<std::string> destination(std::size_t key, std::vector<std::size_t> resting = {}) const;
-    void placePads(const Matrix4 &mount_pose, double q_value, const Vec3 &velocity,
-                   const Vec3 &angular, double dq);
-    void driveJaws(double dt_s, const Matrix4 &mount_pose, const Vec3 &velocity, const Vec3 &angular,
-                   double target);
+    void placePads(const Matrix4 &mount_pose, double q_value, const Vec3 &velocity, const Vec3 &angular, double dq);
+    void driveJaws(double dt_s, const Matrix4 &mount_pose, const Vec3 &velocity, const Vec3 &angular, double target);
     Event event(const std::string &key, std::int64_t t, const Json &region, Json data) const;
     void release(const std::string &reason, std::int64_t t);
     void inferDirection(double command, bool enabled);
@@ -400,8 +410,7 @@ struct PropWorld::Impl {
     void settle(double dt_s, std::int64_t t);
 };
 
-PropWorld::Impl::Impl(const ResolvedScenario &resolved, const std::string &task_id,
-                      const std::string &mechanism) {
+PropWorld::Impl::Impl(const ResolvedScenario &resolved, const std::string &task_id, const std::string &mechanism) {
     const Json *found = nullptr;
     for (const auto &item : resolved.task_definitions)
         if (item.at("id") == task_id)
@@ -448,25 +457,23 @@ PropWorld::Impl::Impl(const ResolvedScenario &resolved, const std::string &task_
     for (const char *key : {"attach", "detach", "drop_in_region", "drop_elsewhere"}) {
         const auto it = all_events.find(key);
         if (it == all_events.end())
-            throw std::invalid_argument(std::string("task lacks an event needed by the prop world: ") +
-                                        key);
+            throw std::invalid_argument(std::string("task lacks an event needed by the prop world: ") + key);
         events[key] = it->second;
     }
 
     for (const auto &[id, path] : resolved.asset_paths.count("tasks") ? resolved.asset_paths.at("tasks")
-                                                                       : std::map<std::string, std::filesystem::path>{})
+                                                                      : std::map<std::string, std::filesystem::path>{})
         task_assets[id] = path;
     std::vector<const Json *> claws;
     for (const auto &item : resolved.robot.at("mechanisms"))
-        if (item.at("type") == settings.at("claw_mechanism_type") &&
-            (mechanism.empty() || item.at("id") == mechanism))
+        if (item.at("type") == settings.at("claw_mechanism_type") && (mechanism.empty() || item.at("id") == mechanism))
             claws.push_back(&item);
     if (claws.size() != 1)
         throw std::invalid_argument("expected exactly one matching claw mechanism");
     mechanism_id = claws[0]->at("id").get<std::string>();
     claw = claws[0]->at("parameters");
-    for (const char *key : {"max_gap_m", "min_gap_m", "jaw_speed_m_s", "hold_force_n", "friction",
-                            "contact_margin_m", "grasp_dwell_s", "slip_distance_m"}) {
+    for (const char *key : {"max_gap_m", "min_gap_m", "jaw_speed_m_s", "hold_force_n", "friction", "contact_margin_m",
+                            "grasp_dwell_s", "slip_distance_m"}) {
         const double value = claw.at(key).get<double>();
         if (!std::isfinite(value) || value <= 0)
             throw std::invalid_argument(std::string("Invalid claw ") + key);
@@ -491,8 +498,8 @@ PropWorld::Impl::Impl(const ResolvedScenario &resolved, const std::string &task_
         edge.child = entry.at("child").get<std::string>();
         edge.pose.translation = vec3(entry.at("position_m"), "position_m");
         const auto &o = entry.at("orientation_wxyz");
-        edge.pose.rotation = Eigen::Quaterniond(o[0].get<double>(), o[1].get<double>(),
-                                                o[2].get<double>(), o[3].get<double>());
+        edge.pose.rotation =
+            Eigen::Quaterniond(o[0].get<double>(), o[1].get<double>(), o[2].get<double>(), o[3].get<double>());
         edges.push_back(edge);
     }
     const spatial::FixedFrames fixed(resolved.robot.at("frames").at("root").get<std::string>(), edges);
@@ -507,9 +514,8 @@ PropWorld::Impl::Impl(const ResolvedScenario &resolved, const std::string &task_
     for (const auto &b : resolved.pool.at("collision_boxes")) {
         const Vec3 center = vec3(b.at("center_m"), "center_m");
         const Vec3 size = vec3(b.at("size_m"), "size_m");
-        pool_boxes.push_back(
-            {pool_from_world * poseOf(b.at("center_m"), b.at("orientation_wxyz")), size / 2,
-             std::abs(center.z() + size.z() / 2 - (water_level - depth)) < 1e-3});
+        pool_boxes.push_back({pool_from_world * poseOf(b.at("center_m"), b.at("orientation_wxyz")), size / 2,
+                              std::abs(center.z() + size.z() / 2 - (water_level - depth)) < 1e-3});
     }
     build();
 }
@@ -535,8 +541,8 @@ void PropWorld::Impl::teardown() {
     configuration.reset();
 }
 
-int PropWorld::Impl::addBody(std::unique_ptr<btCollisionShape> shape,
-                             std::unique_ptr<btTriangleMesh> mesh, double mass, const Matrix4 &pose) {
+int PropWorld::Impl::addBody(std::unique_ptr<btCollisionShape> shape, std::unique_ptr<btTriangleMesh> mesh, double mass,
+                             const Matrix4 &pose) {
     Body b;
     b.fixed = mass <= 0;
     btVector3 inertia(0, 0, 0);
@@ -557,8 +563,7 @@ int PropWorld::Impl::addBody(std::unique_ptr<btCollisionShape> shape,
         b.collider->setRestitution(0);
         b.collider->setUserIndex(index);
         if (b.fixed)
-            b.collider->setCollisionFlags(b.collider->getCollisionFlags() |
-                                          btCollisionObject::CF_STATIC_OBJECT);
+            b.collider->setCollisionFlags(b.collider->getCollisionFlags() | btCollisionObject::CF_STATIC_OBJECT);
         b.body->setBaseCollider(b.collider.get());
     }
     world->addMultiBody(b.body.get());
@@ -630,8 +635,8 @@ void PropWorld::Impl::build() {
     pair_cache->setOverlapFilterCallback(&pair_filter);
     broadphase = std::make_unique<btDbvtBroadphase>(pair_cache.get());
     solver = std::make_unique<btMultiBodyConstraintSolver>();
-    world = std::make_unique<btMultiBodyDynamicsWorld>(dispatcher.get(), broadphase.get(),
-                                                       solver.get(), configuration.get());
+    world = std::make_unique<btMultiBodyDynamicsWorld>(dispatcher.get(), broadphase.get(), solver.get(),
+                                                       configuration.get());
     world->setGravity(btVector3(0, 0, -gravity));
     world->getSolverInfo().m_numIterations = settings.at("solver_iterations").get<int>();
     world->getDispatchInfo().m_deterministicOverlappingPairs = true;
@@ -665,8 +670,7 @@ void PropWorld::Impl::build() {
                 auto shape = std::make_unique<btBvhTriangleMeshShape>(triangles.get(), true, true);
                 const Matrix4 &t = frames.at(mesh.at("frame").get<std::string>());
                 const int uid = addBody(std::move(shape), std::move(triangles), 0, t);
-                changeDynamics(uid, mesh.at("lateral_friction").get<double>(),
-                               mesh.at("restitution").get<double>());
+                changeDynamics(uid, mesh.at("lateral_friction").get<double>(), mesh.at("restitution").get<double>());
                 static_meshes[mesh.at("id").get<std::string>()] = uid;
                 scenery.push_back(uid);
             }
@@ -690,8 +694,8 @@ void PropWorld::Impl::build() {
         points.reserve(obj.vertices.size());
         for (const auto &v : obj.vertices)
             points.push_back(toBt(v - center));
-        auto shape = std::make_unique<btConvexHullShape>(&points[0].x(), static_cast<int>(points.size()),
-                                                         sizeof(btVector3));
+        auto shape =
+            std::make_unique<btConvexHullShape>(&points[0].x(), static_cast<int>(points.size()), sizeof(btVector3));
         shape->setMargin(kUrdfDefaultMarginM);
         shape->recalcLocalAabb();
         const Matrix4 &t = frames.at(c.at("frame").get<std::string>());
@@ -727,8 +731,8 @@ void PropWorld::Impl::build() {
             points.push_back(toBt(v));
         if (points.empty())
             throw std::invalid_argument("pad mesh has no faces: " + path.string());
-        auto shape = std::make_unique<btConvexHullShape>(&points[0].x(), static_cast<int>(points.size()),
-                                                         sizeof(btVector3));
+        auto shape =
+            std::make_unique<btConvexHullShape>(&points[0].x(), static_cast<int>(points.size()), sizeof(btVector3));
         shape->setMargin(kUrdfDefaultMarginM);
         shape->recalcLocalAabb();
         btCollisionShape *raw = shape.get();
@@ -744,8 +748,7 @@ void PropWorld::Impl::build() {
     }
     for (const auto &r : baskets)
         basket.push_back({r.at("id").get<std::string>(),
-                          frames.at(r.at("parameters").at("frame").get<std::string>()).inverse(),
-                          &r.at("parameters")});
+                          frames.at(r.at("parameters").at("frame").get<std::string>()).inverse(), &r.at("parameters")});
     resetState();
 }
 
@@ -826,8 +829,7 @@ Matrix4 PropWorld::Impl::propPose(const Prop &prop) const {
     return t;
 }
 
-std::optional<std::string> PropWorld::Impl::destination(std::size_t key,
-                                                        std::vector<std::size_t> resting) const {
+std::optional<std::string> PropWorld::Impl::destination(std::size_t key, std::vector<std::size_t> resting) const {
     const Prop &p = props[key];
     if (held && *held == key)
         return std::nullopt;
@@ -842,8 +844,8 @@ std::optional<std::string> PropWorld::Impl::destination(std::size_t key,
         const double high = region.at("z_range_m").at(1).get<double>();
         const double hx = region.at("half_extents_xy_m").at(0).get<double>();
         const double hy = region.at("half_extents_xy_m").at(1).get<double>();
-        if (std::abs(local.x()) + extent.x() < hx && std::abs(local.y()) + extent.y() < hy &&
-            low < local.z() && local.z() < high) {
+        if (std::abs(local.x()) + extent.x() < hx && std::abs(local.y()) + extent.y() < hy && low < local.z() &&
+            local.z() < high) {
             const int support = static_meshes.at(region.at("support_mesh").get<std::string>());
             if (!contactPoints(p.body, support).empty())
                 return b.id;
@@ -865,20 +867,20 @@ std::optional<std::string> PropWorld::Impl::destination(std::size_t key,
 
 // ---------------------------------------------------------------------------------- dynamics
 
-void PropWorld::Impl::placePads(const Matrix4 &mount_pose, double q_value, const Vec3 &velocity,
-                                const Vec3 &angular, double dq) {
+void PropWorld::Impl::placePads(const Matrix4 &mount_pose, double q_value, const Vec3 &velocity, const Vec3 &angular,
+                                double dq) {
     const double signs[2] = {1, -1};
     const Vec3 axis = mount_pose.block<3, 1>(0, 1);
     for (int i = 0; i < 2; ++i) {
         const Vec3 offset = axis * (signs[i] * q_value);
         resetBase(pads[static_cast<std::size_t>(i)], mount_pose.block<3, 1>(0, 3) + offset, quatOf(mount_pose));
-        setVelocity(pads[static_cast<std::size_t>(i)],
-                    velocity + angular.cross(offset) + axis * (signs[i] * dq), angular);
+        setVelocity(pads[static_cast<std::size_t>(i)], velocity + angular.cross(offset) + axis * (signs[i] * dq),
+                    angular);
     }
 }
 
-void PropWorld::Impl::driveJaws(double dt_s, const Matrix4 &mount_pose, const Vec3 &velocity,
-                                const Vec3 &angular, double target) {
+void PropWorld::Impl::driveJaws(double dt_s, const Matrix4 &mount_pose, const Vec3 &velocity, const Vec3 &angular,
+                                double target) {
     const double old = q;
     const double step = claw.at("jaw_speed_m_s").get<double>() * dt_s;
     double proposed = std::min(std::max(target, old - step), old + step);
@@ -918,8 +920,7 @@ void PropWorld::Impl::driveJaws(double dt_s, const Matrix4 &mount_pose, const Ve
     placePads(mount_pose, q, velocity, angular, (q - old) / dt_s);
 }
 
-Event PropWorld::Impl::event(const std::string &key, std::int64_t t, const Json &region,
-                             Json data) const {
+Event PropWorld::Impl::event(const std::string &key, std::int64_t t, const Json &region, Json data) const {
     const Json &source = events.at(key);
     const auto emits = source.at("parameters").find("emits");
     if (emits != source.at("parameters").end()) {
@@ -929,8 +930,9 @@ Event PropWorld::Impl::event(const std::string &key, std::int64_t t, const Json 
                 filtered[name] = value;
         data = filtered;
     }
-    return Event{{"task", task}, {"type", source.at("type")}, {"id", source.at("id")},
-                 {"region", region}, {"time_ns", t}, {"data", data}};
+    return Event{{"task", task},          {"type", source.at("type")},
+                 {"id", source.at("id")}, {"region", region},
+                 {"time_ns", t},          {"data", data}};
 }
 
 void PropWorld::Impl::release(const std::string &reason, std::int64_t t) {
@@ -942,9 +944,7 @@ void PropWorld::Impl::release(const std::string &reason, std::int64_t t) {
         for (const int uid : pads)
             setCollisionPair(uid, props[*held].body, true);
         pending.push_back(event("detach", t, Json(),
-                                {{"prop_id", props[*held].id},
-                                 {"mechanism_id", mechanism_id},
-                                 {"reason", reason}}));
+                                {{"prop_id", props[*held].id}, {"mechanism_id", mechanism_id}, {"reason", reason}}));
     }
     held.reset();
 }
@@ -1035,14 +1035,12 @@ void PropWorld::Impl::settle(double dt_s, std::int64_t t) {
             p.settled += dt_s;
             if (p.settled > rest_time) {
                 if (dest) {
-                    pending.push_back(event("drop_in_region", t, *dest,
-                                            {{"prop_id", p.id},
-                                             {"basket", *dest},
-                                             {"expected_basket", p.config->at("expected_region")}}));
+                    pending.push_back(event(
+                        "drop_in_region", t, *dest,
+                        {{"prop_id", p.id}, {"basket", *dest}, {"expected_basket", p.config->at("expected_region")}}));
                 } else {
                     const Json &surfaces = events.at("drop_elsewhere").at("parameters").at("surfaces");
-                    pending.push_back(event("drop_elsewhere", t,
-                                            surfaces.at(floor_label ? "floor" : "support"),
+                    pending.push_back(event("drop_elsewhere", t, surfaces.at(floor_label ? "floor" : "support"),
                                             {{"prop_id", p.id}}));
                 }
                 p.scored = true;
@@ -1090,8 +1088,8 @@ void PropWorld::Impl::buildVehicle(double friction) {
                          world_from_task * poseOf(box.at("center_m"), box.at("orientation_wxyz")));
     }
     for (const auto &path : pad_paths)
-        vehicle_pads.push_back(vehicle->add(hull(loadObj(path).referenced(), Vec3::Zero()), nullptr,
-                                            VehicleContacts::kRobot, mount));
+        vehicle_pads.push_back(
+            vehicle->add(hull(loadObj(path).referenced(), Vec3::Zero()), nullptr, VehicleContacts::kRobot, mount));
     for (const auto &p : props) {
         const auto obj = loadObj(task_assets.at(p.config->at("collision_asset").get<std::string>()));
         vehicle_props.push_back(
@@ -1119,14 +1117,19 @@ void PropWorld::Impl::syncVehicle() {
 
 // ------------------------------------------------------------------------------------ facade
 
-PropWorld::PropWorld(const ResolvedScenario &scenario, const std::string &task,
-                     const std::string &mechanism_id)
+PropWorld::PropWorld(const ResolvedScenario &scenario, const std::string &task, const std::string &mechanism_id)
     : impl_(std::make_unique<Impl>(scenario, task, mechanism_id)) {}
 PropWorld::~PropWorld() = default;
 
-const std::string &PropWorld::task() const { return impl_->task; }
-const std::string &PropWorld::mechanismId() const { return impl_->mechanism_id; }
-double PropWorld::jawPosition() const { return impl_->q; }
+const std::string &PropWorld::task() const {
+    return impl_->task;
+}
+const std::string &PropWorld::mechanismId() const {
+    return impl_->mechanism_id;
+}
+double PropWorld::jawPosition() const {
+    return impl_->q;
+}
 
 void PropWorld::reset() {
     // Recreate the contact world (clears broadphase caches, constraints and poses).
@@ -1173,10 +1176,8 @@ std::map<std::string, std::string> PropWorld::basketContents() const {
 }
 
 Events PropWorld::step(double dt_s, std::int64_t time_ns, const spatial::Pose &robot_root_pose,
-                       const Eigen::Vector3d &linear_velocity_world,
-                       const Eigen::Vector3d &angular_velocity_world,
-                       const std::array<double, 2> &claw_joint_positions, const Water &water,
-                       bool enabled) {
+                       const Eigen::Vector3d &linear_velocity_world, const Eigen::Vector3d &angular_velocity_world,
+                       const std::array<double, 2> &claw_joint_positions, const Water &water, bool enabled) {
     Impl &s = *impl_;
     if (time_ns < 0 || (s.time_ns && time_ns < *s.time_ns))
         throw std::invalid_argument("time_ns must be a nondecreasing nonnegative int");
@@ -1197,8 +1198,7 @@ Events PropWorld::step(double dt_s, std::int64_t time_ns, const spatial::Pose &r
     const Matrix4 mount = body * s.mount;
     const Vec3 mount_velocity =
         linear_velocity_world + angular_velocity_world.cross(Vec3(mount.block<3, 1>(0, 3) - body.block<3, 1>(0, 3)));
-    const double command =
-        std::min(std::max((claw_joint_positions[0] + claw_joint_positions[1]) / 2, 0.0), s.travel);
+    const double command = std::min(std::max((claw_joint_positions[0] + claw_joint_positions[1]) / 2, 0.0), s.travel);
 
     s.dt = dt_s;
     s.inferDirection(command, enabled);

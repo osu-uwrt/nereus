@@ -59,7 +59,8 @@ TEST(HostStatusLights, ModesTargetsAndPulses) {
 }
 
 TEST(HostStatusLights, RejectsInvalidDocuments) {
-    EXPECT_THROW(StatusLights(YAML::Load("input: {type: other/msg/Type, topic: x}\nlights: []")), std::invalid_argument);
+    EXPECT_THROW(StatusLights(YAML::Load("input: {type: other/msg/Type, topic: x}\nlights: []")),
+                 std::invalid_argument);
     EXPECT_THROW(StatusLights(YAML::Load("input: {type: std_msgs/msg/ColorRGBA, topic: x}\nlights: []")),
                  std::invalid_argument);
     EXPECT_THROW(StatusLights(YAML::Load("input: {type: std_msgs/msg/ColorRGBA, topic: x}\nlights:\n"

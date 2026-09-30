@@ -123,8 +123,8 @@ TEST(SessionCameras, OnlyDemandedOutputsAreProduced) {
         EXPECT_EQ(p.ros_stamp_ns, 111);
         ASSERT_TRUE(p.left.has_value());
         EXPECT_FALSE(p.left->rgb.empty());
-        EXPECT_TRUE(p.left->depth.empty());  // depth was not requested
-        EXPECT_TRUE(p.left->jpeg.empty());   // no JPEG quality configured
+        EXPECT_TRUE(p.left->depth.empty()); // depth was not requested
+        EXPECT_TRUE(p.left->jpeg.empty());  // no JPEG quality configured
         EXPECT_FALSE(p.right.has_value());
         EXPECT_EQ(p.left->rgb.size(), 1920u * 1200u * 3u);
         EXPECT_GT(p.render_ms, 0);
@@ -157,7 +157,8 @@ TEST(SessionCameras, ScheduleFollowsSensorPeriod) {
         cameras->request(t, t, poolPose());
     for (const auto &id : cameras->cameraIds()) {
         const auto s = cameras->stats().at(id);
-        EXPECT_EQ(s.requested, 4u); // due at 0, 66.7, 133.3 and 200 ms; the 200 ms slot is the first request >= 200000001 ns
+        EXPECT_EQ(s.requested,
+                  4u); // due at 0, 66.7, 133.3 and 200 ms; the 200 ms slot is the first request >= 200000001 ns
         EXPECT_EQ(s.dropped_pending, 3u); // capacity 1, drop_oldest
     }
 }
@@ -275,7 +276,8 @@ TEST(SessionCameras, RequestNeverWaitsForRendering) {
     for (int i = 0; i < 40; ++i) {
         const auto start = std::chrono::steady_clock::now();
         cameras->request(std::int64_t(i) * 70'000'000, i, poolPose());
-        worst = std::max(worst, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+        worst = std::max(worst,
+                         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
         std::this_thread::sleep_for(5ms);
     }
     std::cout << "[cost] worst request() call: " << worst << " ms\n";

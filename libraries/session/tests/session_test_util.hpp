@@ -34,7 +34,8 @@ inline Json bodyJson(const simulation::BodyState &b) {
 }
 
 // Long-horizon trajectories: Release builds reproduce the recordings to ~1e-12; Debug builds
-// differ in floating-point contraction and chaotic amplification (observed up to ~5e-4 absolute after 1-2 s of contact-rich motion; only Release is a tight check).
+// differ in floating-point contraction and chaotic amplification (observed up to ~5e-4 absolute after 1-2 s of
+// contact-rich motion; only Release is a tight check).
 #ifdef NDEBUG
 constexpr double kTrajectoryTolerance = 1e-9;
 #else
@@ -48,8 +49,9 @@ inline std::string diff(const Json &expected, const Json &actual, const std::str
         if (expected.is_number_integer() && actual.is_number_integer())
             return expected == actual ? "" : path + ": " + expected.dump() + " != " + actual.dump();
         const double a = expected.get<double>(), b = actual.get<double>();
-        return std::abs(a - b) <= tolerance * (1 + std::abs(a)) ? ""
-                                                                 : path + ": " + expected.dump() + " != " + actual.dump();
+        return std::abs(a - b) <= tolerance * (1 + std::abs(a))
+                   ? ""
+                   : path + ": " + expected.dump() + " != " + actual.dump();
     }
     if (expected.type() != actual.type())
         return path + ": type " + expected.dump().substr(0, 60) + " vs " + actual.dump().substr(0, 60);
@@ -127,10 +129,14 @@ inline void drain(sensors::Runtime &runtime, const PackRuntime &pack) {
     using namespace sensors;
     for (const auto &id : pack.sensor_ids) {
         const std::string &type = pack.sensor_types.at(id);
-        if (type == "ahrs") runtime.stream<AhrsReading>(id)->drain();
-        else if (type == "fog") runtime.stream<FogReading>(id)->drain();
-        else if (type == "reference_velocity") runtime.stream<VelocityReading>(id)->drain();
-        else if (type == "reference_altitude") runtime.stream<AltitudeReading>(id)->drain();
+        if (type == "ahrs")
+            runtime.stream<AhrsReading>(id)->drain();
+        else if (type == "fog")
+            runtime.stream<FogReading>(id)->drain();
+        else if (type == "reference_velocity")
+            runtime.stream<VelocityReading>(id)->drain();
+        else if (type == "reference_altitude")
+            runtime.stream<AltitudeReading>(id)->drain();
     }
 }
 inline Json resultJson(const CommandResult &r) {
@@ -145,8 +151,8 @@ inline Json mechJson(const MechanismState &s) {
                     {"gap_m", v.gap_m},
                     {"target_gap_m", v.target_gap_m},
                     {"joints", Json::array({v.joint_positions_m[0], v.joint_positions_m[1]})}};
-    return {{"time_ns", s.time_ns}, {"armed", s.armed}, {"any_busy", s.any_busy},
-            {"releases", releases}, {"claws", claws}};
+    return {
+        {"time_ns", s.time_ns}, {"armed", s.armed}, {"any_busy", s.any_busy}, {"releases", releases}, {"claws", claws}};
 }
 inline std::vector<std::string> sensorNames(const ResolvedScenario &scenario) {
     std::vector<std::string> ids;

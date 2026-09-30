@@ -65,12 +65,15 @@ Arguments parse(int argc, char **argv) {
             arguments.scenario = arg;
     }
     if (arguments.scenario.empty() || arguments.output.empty())
-        throw std::invalid_argument("usage: nereus-sim <resolved.json> --output <run dir> "
-                                    "[--sensors a,b] [--duration s] [--no-cameras] [--always-cameras] [--validate-only]");
+        throw std::invalid_argument(
+            "usage: nereus-sim <resolved.json> --output <run dir> "
+            "[--sensors a,b] [--duration s] [--no-cameras] [--always-cameras] [--validate-only]");
     return arguments;
 }
 
-bool isCamera(const Json &sensor) { return sensor.at("type") == "stereo_camera"; }
+bool isCamera(const Json &sensor) {
+    return sensor.at("type") == "stereo_camera";
+}
 
 // Drops every camera sensor stream and image stream from the bridge (no GPU run).
 void withoutCameras(session::ResolvedScenario &resolved) {
@@ -84,9 +87,8 @@ void withoutCameras(session::ResolvedScenario &resolved) {
     for (const auto &stream : resolved.bridge.at("streams")) {
         const std::string native = stream.at("native");
         const bool camera = native.rfind("sensor:", 0) == 0 &&
-                            cameras.count(native.substr(7, native.find('.') == std::string::npos
-                                                              ? std::string::npos
-                                                              : native.find('.') - 7));
+                            cameras.count(native.substr(
+                                7, native.find('.') == std::string::npos ? std::string::npos : native.find('.') - 7));
         if (!stream.contains("image") && !camera)
             streams.push_back(stream);
     }
@@ -163,9 +165,9 @@ int main(int argc, char **argv) {
         for (const auto &id : adapter->deferredSensorIds())
             if (std::find(camera_ids.begin(), camera_ids.end(), id) == camera_ids.end())
                 deferred.push_back(id);
-        epoch_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                       std::chrono::system_clock::now().time_since_epoch())
-                       .count();
+        epoch_ns =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
+                .count();
         if (arguments.duration)
             duration_ns = static_cast<std::int64_t>(std::llround(*arguments.duration * 1e9));
         if (fs::exists(arguments.output))
@@ -181,8 +183,8 @@ int main(int argc, char **argv) {
         return 1;
     }
     if (arguments.validate_only) {
-        std::cout << "validated " << arguments.scenario.string() << "; records in "
-                  << arguments.output.string() << "\n";
+        std::cout << "validated " << arguments.scenario.string() << "; records in " << arguments.output.string()
+                  << "\n";
         return 0;
     }
 
@@ -211,22 +213,30 @@ int main(int argc, char **argv) {
         Json summary = summaryRecord(*core, reason, cameras.get());
         if (node) {
             const auto &perf = node->performance();
-            summary["performance"] = {{"ticks", perf.ticks}, {"mean_tick_us", perf.meanTickUs()},
-                                      {"max_tick_us", perf.tick_ns_max / 1e3},
-                                      {"session_advance_us_per_tick", core->timing().advance_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
-                                      {"sensor_mapping_us_per_tick", core->timing().sensors_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
-                                      {"streams_us_per_tick", core->timing().timed_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
-                                      {"wall_s", perf.wall_ns / 1e9}, {"sim_s", perf.sim_ns / 1e9},
-                                      {"real_time_factor", perf.realTimeFactor()},
-                                      {"max_behind_ms", perf.max_behind_ns / 1e6},
-                                      {"catchup_bursts", perf.catchup_bursts}};
+            summary["performance"] = {
+                {"ticks", perf.ticks},
+                {"mean_tick_us", perf.meanTickUs()},
+                {"max_tick_us", perf.tick_ns_max / 1e3},
+                {"session_advance_us_per_tick",
+                 core->timing().advance_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
+                {"sensor_mapping_us_per_tick", core->timing().sensors_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
+                {"streams_us_per_tick", core->timing().timed_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
+                {"wall_s", perf.wall_ns / 1e9},
+                {"sim_s", perf.sim_ns / 1e9},
+                {"real_time_factor", perf.realTimeFactor()},
+                {"max_behind_ms", perf.max_behind_ns / 1e6},
+                {"catchup_bursts", perf.catchup_bursts}};
             const auto phase = [&](const robotics::ros_bridge::BridgeNode::Phase &item) {
                 return Json{{"mean_us", item.total_ns / 1e3 / std::max<std::int64_t>(perf.ticks, 1)},
-                            {"max_ms", item.max_ns / 1e6}, {"over_1ms", item.over_1ms}, {"over_5ms", item.over_5ms}};
+                            {"max_ms", item.max_ns / 1e6},
+                            {"over_1ms", item.over_1ms},
+                            {"over_5ms", item.over_5ms}};
             };
             summary["skipped_without_subscribers"] = node->skippedPublications();
-            summary["performance"]["phases"] = {{"drain", phase(perf.drain)}, {"step", phase(perf.step)},
-                                                {"publish", phase(perf.publish)}, {"cameras", phase(perf.cameras)},
+            summary["performance"]["phases"] = {{"drain", phase(perf.drain)},
+                                                {"step", phase(perf.step)},
+                                                {"publish", phase(perf.publish)},
+                                                {"cameras", phase(perf.cameras)},
                                                 {"oversleep", phase(perf.oversleep)}};
         }
         writeJson(arguments.output / "summary.json", summary);

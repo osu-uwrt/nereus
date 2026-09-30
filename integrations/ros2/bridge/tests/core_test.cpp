@@ -38,21 +38,30 @@ Json withStreams(const std::map<std::string, Json> &changes) {
 }
 
 Json setPoseService(bool becomes_start = true, bool align = false) {
-    return {{"id", "set_pose"}, {"service", "set_pose"}, {"service_type", "robot_localization/srv/SetPose"},
+    return {{"id", "set_pose"},
+            {"service", "set_pose"},
+            {"service_type", "robot_localization/srv/SetPose"},
             {"action", "command:robot.place"},
-            {"request", {{"frame", {{"from", "pose.header.frame_id"}}},
-                         {"position_m", {{"from", "pose.pose.pose.position"}}},
-                         {"orientation_w", {{"from", "pose.pose.pose.orientation.w"}}},
-                         {"orientation_x", {{"from", "pose.pose.pose.orientation.x"}}},
-                         {"orientation_y", {{"from", "pose.pose.pose.orientation.y"}}},
-                         {"orientation_z", {{"from", "pose.pose.pose.orientation.z"}}}}},
+            {"request",
+             {{"frame", {{"from", "pose.header.frame_id"}}},
+              {"position_m", {{"from", "pose.pose.pose.position"}}},
+              {"orientation_w", {{"from", "pose.pose.pose.orientation.w"}}},
+              {"orientation_x", {{"from", "pose.pose.pose.orientation.x"}}},
+              {"orientation_y", {{"from", "pose.pose.pose.orientation.y"}}},
+              {"orientation_z", {{"from", "pose.pose.pose.orientation.z"}}}}},
             {"response", Json::object()},
-            {"placement", {{"pose_source", "request"}, {"keep_velocity", false},
-                           {"becomes_start_pose", becomes_start}, {"align_estimator", align}}}};
+            {"placement",
+             {{"pose_source", "request"},
+              {"keep_velocity", false},
+              {"becomes_start_pose", becomes_start},
+              {"align_estimator", align}}}};
 }
 Json resetService() {
-    return {{"id", "reset"}, {"service", "reset"}, {"service_type", "std_srvs/srv/Trigger"},
-            {"action", "command:robot.reset_to_start"}, {"request", Json::object()},
+    return {{"id", "reset"},
+            {"service", "reset"},
+            {"service_type", "std_srvs/srv/Trigger"},
+            {"action", "command:robot.reset_to_start"},
+            {"request", Json::object()},
             {"response", {{"success", {{"from", "accepted"}}}, {"message", {{"from", "message"}}}}}};
 }
 Json withServices(std::vector<Json> services, Json bridge = defaultBridge()) {
@@ -100,7 +109,7 @@ std::vector<Publication> receive(Rig &rig, const std::string &stream, const std:
     return rig.core->receive(stream, message->data());
 }
 robot_localization::srv::SetPose::Request poseRequest(const std::string &frame, Eigen::Vector3d p,
-                                                       Eigen::Quaterniond q = Eigen::Quaterniond::Identity()) {
+                                                      Eigen::Quaterniond q = Eigen::Quaterniond::Identity()) {
     robot_localization::srv::SetPose::Request request;
     request.pose.header.frame_id = frame;
     request.pose.pose.pose.position.x = p.x();
@@ -117,23 +126,30 @@ robot_localization::srv::SetPose::Request poseRequest(const std::string &frame, 
 // ------------------------------------------------------------------ construction
 
 TEST(Construction, SensorRateMismatchRaises) {
-    EXPECT_NE(bridgeError([] { Rig rig(withStreams({{"altitude", {{"rate_hz", 49}}}})); }).find("rate_hz"), std::string::npos);
-}
-TEST(Construction, UnknownNativeEndpointRaises) {
-    EXPECT_NE(bridgeError([] { Rig rig(withStreams({{"ticker", {{"native", "state:unknown"}}}})); }).find("state:unknown"),
+    EXPECT_NE(bridgeError([] { Rig rig(withStreams({{"altitude", {{"rate_hz", 49}}}})); }).find("rate_hz"),
               std::string::npos);
 }
+TEST(Construction, UnknownNativeEndpointRaises) {
+    EXPECT_NE(
+        bridgeError([] { Rig rig(withStreams({{"ticker", {{"native", "state:unknown"}}}})); }).find("state:unknown"),
+        std::string::npos);
+}
 TEST(Construction, UnselectedAndUnknownSensorsRaise) {
-    EXPECT_NE(bridgeError([] { Rig rig(defaultBridge(), defaultRobot(), {}); }).find("not selected"), std::string::npos);
-    EXPECT_NE(bridgeError([] { Rig rig(withStreams({{"altitude", {{"native", "sensor:missing"}}}})); }).find("unknown robot sensor"),
+    EXPECT_NE(bridgeError([] { Rig rig(defaultBridge(), defaultRobot(), {}); }).find("not selected"),
+              std::string::npos);
+    EXPECT_NE(bridgeError([] {
+                  Rig rig(withStreams({{"altitude", {{"native", "sensor:missing"}}}}));
+              }).find("unknown robot sensor"),
               std::string::npos);
 }
 TEST(Construction, ImageStreamsAreNotExecuted) {
-    EXPECT_NE(bridgeError([] { Rig rig(withStreams({{"ticker", {{"image", {{"encoding", "rgb8"}}}}}})); }).find("image"),
-              std::string::npos);
+    EXPECT_NE(
+        bridgeError([] { Rig rig(withStreams({{"ticker", {{"image", {{"encoding", "rgb8"}}}}}})); }).find("image"),
+        std::string::npos);
 }
 TEST(Construction, FastTimersAndClocksRaise) {
-    EXPECT_NE(bridgeError([] { Rig rig(withStreams({{"ticker", {{"rate_hz", 1000}}}})); }).find("physics step rate"), std::string::npos);
+    EXPECT_NE(bridgeError([] { Rig rig(withStreams({{"ticker", {{"rate_hz", 1000}}}})); }).find("physics step rate"),
+              std::string::npos);
     Json bridge = defaultBridge();
     bridge["clock"]["rate_hz"] = 1000;
     EXPECT_NE(bridgeError([&] { Rig rig(bridge); }).find("clock"), std::string::npos);
@@ -150,8 +166,9 @@ TEST(Construction, ThrusterBlockValidation) {
     EXPECT_NE(bridgeError([&] { Rig rig(bridge); }).find("thrusters block"), std::string::npos);
 }
 TEST(Construction, InvalidFieldMapIsABridgeError) {
-    EXPECT_NE(bridgeError([] { Rig rig(withStreams({{"altitude", {{"fields", {{"data", {{"from", "reading.nope"}}}}}}}})); }),
-              "<no error>");
+    EXPECT_NE(
+        bridgeError([] { Rig rig(withStreams({{"altitude", {{"fields", {{"data", {{"from", "reading.nope"}}}}}}}})); }),
+        "<no error>");
 }
 TEST(Construction, EpochAndWorldFrameComeFromConfiguration) {
     Rig rig;
@@ -165,12 +182,13 @@ TEST(Construction, UnsupportedServiceTypeAndActionRaise) {
     EXPECT_NE(bridgeError([&] { Rig rig(withServices({service})); }).find("command:robot.teleport"), std::string::npos);
     service = resetService();
     service["service_type"] = "std_srvs/srv/Empty";
-    EXPECT_NE(bridgeError([&] { Rig rig(withServices({service})); }).find("not supported by this bridge"), std::string::npos);
+    EXPECT_NE(bridgeError([&] { Rig rig(withServices({service})); }).find("not supported by this bridge"),
+              std::string::npos);
 }
 TEST(Construction, KillBindingsMustMatchEndpoints) {
     Json bridge = defaultBridge();
     bridge["streams"].push_back(publishStream("kill_dup", "std_msgs/msg/Bool", "event:robot.kill_changed",
-                                               {{"data", {{"from", "killed"}}}}, 0));
+                                              {{"data", {{"from", "killed"}}}}, 0));
     bridge["kill"] = {{"command_stream", "kill_cmd"}, {"state_stream", "altitude"}};
     EXPECT_NE(bridgeError([&] { Rig rig(bridge); }).find("kill.state_stream"), std::string::npos);
 }
@@ -242,7 +260,8 @@ TEST(Stepping, TimerAndStatePublishAtTheirPeriods) {
     EXPECT_EQ(pose.size(), 20u);
     EXPECT_EQ(publicationJson(ticker[0]).at("data"), 7);
     for (std::size_t n = 0; n < pose.size(); ++n)
-        EXPECT_EQ(stampNs(publicationJson(pose[n])["header"]["stamp"]), kEpochNs + 10'000'000 * static_cast<std::int64_t>(n + 1));
+        EXPECT_EQ(stampNs(publicationJson(pose[n])["header"]["stamp"]),
+                  kEpochNs + 10'000'000 * static_cast<std::int64_t>(n + 1));
     EXPECT_EQ(rig.core->counters().published.at("ticker"), 2u);
     EXPECT_EQ(rig.core->counters().published.count("altitude"), 0u);
 }
@@ -267,8 +286,10 @@ TEST(Stepping, PoseIsTheCenterOfMassPoseComposedWithTheReferenceOffset) {
 
 TEST(Stepping, TransformsAreProducedOnlyWhenConfigured) {
     Json bridge = defaultBridge();
-    bridge["tf"] = {{"publish", Json::array({{{"native", "state:robot.reference_pose"}, {"parent", kWorld},
-                                              {"child", "base"}, {"rate_hz", 100}}})}};
+    bridge["tf"] = {
+        {"publish",
+         Json::array(
+             {{{"native", "state:robot.reference_pose"}, {"parent", kWorld}, {"child", "base"}, {"rate_hz", 100}}})}};
     Rig rig(bridge);
     std::vector<Transform> transforms;
     for (int k = 0; k < 10; ++k)
@@ -282,9 +303,13 @@ TEST(Stepping, TransformsAreProducedOnlyWhenConfigured) {
 }
 
 TEST(Stepping, ResetsPreserveRosTimeAndReplayTheClock) {
-    Json bridge = withServices({{{"id", "full"}, {"service", "full"}, {"service_type", "std_srvs/srv/Trigger"},
-                                 {"action", "command:scenario.reset"}, {"request", Json::object()},
-                                 {"response", {{"success", {{"from", "accepted"}}}, {"message", {{"from", "message"}}}}}}});
+    Json bridge =
+        withServices({{{"id", "full"},
+                       {"service", "full"},
+                       {"service_type", "std_srvs/srv/Trigger"},
+                       {"action", "command:scenario.reset"},
+                       {"request", Json::object()},
+                       {"response", {{"success", {{"from", "accepted"}}}, {"message", {{"from", "message"}}}}}}});
     Rig rig(bridge);
     for (int k = 0; k < 10; ++k)
         rig.core->step();
@@ -302,14 +327,26 @@ TEST(Stepping, ResetsPreserveRosTimeAndReplayTheClock) {
 
 TEST(Stepping, FeedAndStatusStreamsUseTheSessionRecords) {
     Json bridge = defaultBridge();
-    bridge["streams"].push_back({{"id", "feed"}, {"direction", "publish"}, {"topic", "/demo/feed"},
-                                 {"message_type", "std_msgs/msg/String"}, {"native", "event:tasks.feed"},
-                                 {"format", "json"}, {"fields", Json::object()}, {"rate_hz", 0},
-                                 {"frame_id", ""}, {"qos", qos()}});
-    bridge["streams"].push_back({{"id", "score"}, {"direction", "publish"}, {"topic", "/demo/score"},
-                                 {"message_type", "std_msgs/msg/String"}, {"native", "state:task_score"},
-                                 {"format", "json"}, {"fields", Json::object()}, {"rate_hz", 100},
-                                 {"frame_id", ""}, {"qos", qos()}});
+    bridge["streams"].push_back({{"id", "feed"},
+                                 {"direction", "publish"},
+                                 {"topic", "/demo/feed"},
+                                 {"message_type", "std_msgs/msg/String"},
+                                 {"native", "event:tasks.feed"},
+                                 {"format", "json"},
+                                 {"fields", Json::object()},
+                                 {"rate_hz", 0},
+                                 {"frame_id", ""},
+                                 {"qos", qos()}});
+    bridge["streams"].push_back({{"id", "score"},
+                                 {"direction", "publish"},
+                                 {"topic", "/demo/score"},
+                                 {"message_type", "std_msgs/msg/String"},
+                                 {"native", "state:task_score"},
+                                 {"format", "json"},
+                                 {"fields", Json::object()},
+                                 {"rate_hz", 100},
+                                 {"frame_id", ""},
+                                 {"qos", qos()}});
     Rig rig(bridge);
     rig.port.feed = Json::array({{{"type", "gate_pass"}}, {{"type", "torpedo_hit"}}});
     std::vector<Publication> all;
@@ -344,8 +381,9 @@ TEST(Commands, WrongLengthAndNonfiniteAreRejectedAndCounted) {
     receive(rig, "thruster_cmd", floats({INFINITY, 0.0, 0.0}));
     receive(rig, "thruster_cmd", floats({1e308, 0.0, 0.0})); // finite but overflows when scaled
     EXPECT_TRUE(rig.port.commands.empty());
-    EXPECT_EQ(rig.core->counters().rejected_commands,
-              (CounterTable{{"thruster_cmd:wrong_length", 2}, {"thruster_cmd:nonfinite", 2}, {"thruster_cmd:nonfinite_scaled", 1}}));
+    EXPECT_EQ(rig.core->counters().rejected_commands, (CounterTable{{"thruster_cmd:wrong_length", 2},
+                                                                    {"thruster_cmd:nonfinite", 2},
+                                                                    {"thruster_cmd:nonfinite_scaled", 1}}));
 }
 
 TEST(Commands, InitiallyKilledPoliciesZeroOrReject) {
@@ -556,11 +594,13 @@ TEST(Mechanisms, TopicCommandsReplyOnTheDeclaredStream) {
                                        {{"id", "torpedo"}, {"type", "launcher"}, {"parameters", Json::object()}}});
     Json bridge = defaultBridge();
     bridge["streams"].push_back(publishStream("cmd_status", "std_msgs/msg/Bool", "event:mechanisms.command_result",
-                                               {{"data", {{"from", "accepted"}}}}, 0));
-    bridge["streams"].push_back(subscribeStream("torpedo_topic", "std_msgs/msg/Empty", "command:mechanisms.torpedo.fire",
-                                                Json::object(), {{"reply_stream", "cmd_status"}}));
-    bridge["streams"].push_back(subscribeStream("claw_move", "std_msgs/msg/Float32", "command:mechanisms.claw.timed_move",
-                                                {{"signed_duration_s", {{"from", "data"}}}}, {{"reply_stream", "cmd_status"}}));
+                                              {{"data", {{"from", "accepted"}}}}, 0));
+    bridge["streams"].push_back(subscribeStream("torpedo_topic", "std_msgs/msg/Empty",
+                                                "command:mechanisms.torpedo.fire", Json::object(),
+                                                {{"reply_stream", "cmd_status"}}));
+    bridge["streams"].push_back(
+        subscribeStream("claw_move", "std_msgs/msg/Float32", "command:mechanisms.claw.timed_move",
+                        {{"signed_duration_s", {{"from", "data"}}}}, {{"reply_stream", "cmd_status"}}));
     bridge["streams"].push_back(subscribeStream("claw_topic", "std_msgs/msg/Bool", "command:mechanisms.claw.command",
                                                 {{"open", {{"from", "data"}}}}, {{"reply_stream", "cmd_status"}}));
     Rig rig(bridge, robot);
@@ -579,16 +619,19 @@ TEST(Mechanisms, TopicCommandsReplyOnTheDeclaredStream) {
     receive(rig, "claw_topic", boolMessage(true));
     EXPECT_EQ(rig.port.calls.back(), "claw:claw:open");
     // Wrong mechanism kinds fail at construction.
-    bridge["streams"].push_back(subscribeStream("bad", "std_msgs/msg/Empty", "command:mechanisms.claw.fire", Json::object()));
-    EXPECT_NE(bridgeError([&] { Rig bad(bridge, robot); }).find("is not a robot launcher/dropper mechanism"), std::string::npos);
+    bridge["streams"].push_back(
+        subscribeStream("bad", "std_msgs/msg/Empty", "command:mechanisms.claw.fire", Json::object()));
+    EXPECT_NE(bridgeError([&] { Rig bad(bridge, robot); }).find("is not a robot launcher/dropper mechanism"),
+              std::string::npos);
 }
 
 // ------------------------------------------------------------------ static TF and alignment
 
 TEST(StaticTf, StaticEdgesComeFromTheFrameTreeAndAreValidated) {
     Json bridge = defaultBridge();
-    bridge["tf"] = {{"static", Json::array({{{"parent", "rig"}, {"child", "cam"}, {"from_frame", "com"}, {"to_frame", "base"}}})},
-                    {"never_publish", Json::array({"forbidden*"})}};
+    bridge["tf"] = {
+        {"static", Json::array({{{"parent", "rig"}, {"child", "cam"}, {"from_frame", "com"}, {"to_frame", "base"}}})},
+        {"never_publish", Json::array({"forbidden*"})}};
     Rig rig(bridge);
     ASSERT_EQ(rig.core->staticTransforms().size(), 1u);
     EXPECT_EQ(rig.core->staticTransforms()[0].parent, "rig");
@@ -598,8 +641,9 @@ TEST(StaticTf, StaticEdgesComeFromTheFrameTreeAndAreValidated) {
     duplicate["tf"]["static"].push_back(duplicate["tf"]["static"][0]);
     EXPECT_NE(bridgeError([&] { Rig r(duplicate); }).find("duplicate child/owner 'cam'"), std::string::npos);
     Json cycle = bridge;
-    cycle["tf"]["static"] = Json::array({{{"parent", "a"}, {"child", "b"}, {"from_frame", "com"}, {"to_frame", "base"}},
-                                         {{"parent", "b"}, {"child", "a"}, {"from_frame", "com"}, {"to_frame", "base"}}});
+    cycle["tf"]["static"] =
+        Json::array({{{"parent", "a"}, {"child", "b"}, {"from_frame", "com"}, {"to_frame", "base"}},
+                     {{"parent", "b"}, {"child", "a"}, {"from_frame", "com"}, {"to_frame", "base"}}});
     EXPECT_NE(bridgeError([&] { Rig r(cycle); }).find("tf: cycle"), std::string::npos);
     Json forbidden = bridge;
     forbidden["tf"]["static"][0]["child"] = "forbidden_child";
@@ -613,17 +657,23 @@ TEST(StaticTf, StaticEdgesComeFromTheFrameTreeAndAreValidated) {
     names["tf"]["static"][0]["child"] = "cam";
     EXPECT_NE(bridgeError([&] { Rig r(names); }).find("differs from frame_names['base']"), std::string::npos);
     Json truth = bridge;
-    truth["tf"]["publish"] = Json::array({{{"native", "state:robot.reference_pose"}, {"parent", "not_world"}, {"child", "x"}, {"rate_hz", 100}}});
+    truth["tf"]["publish"] = Json::array(
+        {{{"native", "state:robot.reference_pose"}, {"parent", "not_world"}, {"child", "x"}, {"rate_hz", 100}}});
     EXPECT_NE(bridgeError([&] { Rig r(truth); }).find("truth transforms must have parent"), std::string::npos);
 }
 
 TEST(StaticTf, TruthEdgesMirrorFramesUnderAPublishedTruthFrame) {
     Json bridge = defaultBridge();
     bridge["frame_names"]["base"] = "vehicle/mount";
-    bridge["tf"] = {{"publish", Json::array({{{"native", "state:robot.reference_pose"}, {"parent", bridge["frame_names"]["world"]},
-                                              {"child", "sim/root"}, {"rate_hz", 10}}})},
-                    {"static", Json::array({{{"parent", "sim/root"}, {"child", "sim/mount"}, {"from_frame", "com"},
-                                             {"to_frame", "base"}, {"truth", true}}})}};
+    bridge["tf"] = {{"publish", Json::array({{{"native", "state:robot.reference_pose"},
+                                              {"parent", bridge["frame_names"]["world"]},
+                                              {"child", "sim/root"},
+                                              {"rate_hz", 10}}})},
+                    {"static", Json::array({{{"parent", "sim/root"},
+                                             {"child", "sim/mount"},
+                                             {"from_frame", "com"},
+                                             {"to_frame", "base"},
+                                             {"truth", true}}})}};
     Rig rig(bridge); // same robot frame as frame_names['base'] under another ROS name: allowed
     ASSERT_EQ(rig.core->staticTransforms().size(), 1u);
     EXPECT_EQ(rig.core->staticTransforms()[0].child, "sim/mount");
@@ -636,16 +686,20 @@ TEST(StaticTf, TruthEdgesMirrorFramesUnderAPublishedTruthFrame) {
 namespace {
 Json alignmentBridge() {
     Json bridge = defaultBridge();
-    bridge["streams"].push_back(subscribeStream(
-        "estimate", "nav_msgs/msg/Odometry", "estimate:latest",
-        {{"frame", {{"from", "header.frame_id"}}}, {"position_m", {{"from", "pose.pose.position"}}},
-         {"orientation_w", {{"from", "pose.pose.orientation.w"}}}, {"orientation_x", {{"from", "pose.pose.orientation.x"}}},
-         {"orientation_y", {{"from", "pose.pose.orientation.y"}}}, {"orientation_z", {{"from", "pose.pose.orientation.z"}}}}));
-    bridge["placement"] = {{"estimator_alignment", {{"client", "/demo/set_pose"},
-                                                   {"service_type", "robot_localization/srv/SetPose"},
-                                                   {"triggers", Json::array({"startup", "placement", "reset_to_start", "full_reset"})},
-                                                   {"estimate_stream", "estimate"}, {"pose", "reference_frame"},
-                                                   {"covariance_diagonal", 1e-6}}}};
+    bridge["streams"].push_back(subscribeStream("estimate", "nav_msgs/msg/Odometry", "estimate:latest",
+                                                {{"frame", {{"from", "header.frame_id"}}},
+                                                 {"position_m", {{"from", "pose.pose.position"}}},
+                                                 {"orientation_w", {{"from", "pose.pose.orientation.w"}}},
+                                                 {"orientation_x", {{"from", "pose.pose.orientation.x"}}},
+                                                 {"orientation_y", {{"from", "pose.pose.orientation.y"}}},
+                                                 {"orientation_z", {{"from", "pose.pose.orientation.z"}}}}));
+    bridge["placement"] = {{"estimator_alignment",
+                            {{"client", "/demo/set_pose"},
+                             {"service_type", "robot_localization/srv/SetPose"},
+                             {"triggers", Json::array({"startup", "placement", "reset_to_start", "full_reset"})},
+                             {"estimate_stream", "estimate"},
+                             {"pose", "reference_frame"},
+                             {"covariance_diagonal", 1e-6}}}};
     return withServices({setPoseService(true, true), resetService()}, bridge);
 }
 } // namespace

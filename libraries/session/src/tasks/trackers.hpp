@@ -30,8 +30,8 @@ struct Fact {
 double number(const Json &value, const std::string &field, bool positive = false);
 Vec3 vec3(const Json &value, const std::string &name);
 Vec3 finite(const Vec3 &value, const std::string &name);
-void requireKeys(const Json &value, std::initializer_list<const char *> expected,
-                 const std::string &field, std::initializer_list<const char *> optional = {});
+void requireKeys(const Json &value, std::initializer_list<const char *> expected, const std::string &field,
+                 std::initializer_list<const char *> optional = {});
 Pose ownedPose(const Pose &pose); // validated, renormalized copy
 Pose poseFrom(const Json &position_m, const Json &orientation_wxyz);
 Mat3 rotationMatrix(const Pose &pose);
@@ -75,8 +75,7 @@ class PortalTracker {
         int next_id;
     };
     void checkTime(std::int64_t time_ns) const;
-    static std::vector<PortalEvent> finished(const std::optional<Attempt> &attempt,
-                                             std::int64_t time_ns, double top);
+    static std::vector<PortalEvent> finished(const std::optional<Attempt> &attempt, std::int64_t time_ns, double top);
     Advance advance(std::int64_t time_ns, const Observation &current, const std::vector<Vec3> &world,
                     const std::vector<Vec3> &local) const;
 
@@ -108,8 +107,8 @@ class PerforatedPanel {
     PerforatedPanel(const Json &parameters, const Pose &world_from_task);
     Vec3 worldPoint(const Vec3 &point_local) const;
     double releaseDistance(const Vec3 &tip_world) const;
-    std::optional<PanelHit> intersect(const Vec3 &start_world, const Vec3 &end_world,
-                                      const Vec3 &axis_world, double radius_m) const;
+    std::optional<PanelHit> intersect(const Vec3 &start_world, const Vec3 &end_world, const Vec3 &axis_world,
+                                      double radius_m) const;
 
   private:
     struct Hole {
@@ -132,9 +131,11 @@ struct CrateStep {
 class OpenCrate {
   public:
     OpenCrate(const Json &parameters, const Pose &world_from_crate);
-    const std::string &crateClass() const { return class_; }
-    CrateStep step(const Vec3 &old_world, const Vec3 &new_world, const Vec3 &velocity_world,
-                   const Vec3 &axis_world, double radius_m, double length_m, bool entered) const;
+    const std::string &crateClass() const {
+        return class_;
+    }
+    CrateStep step(const Vec3 &old_world, const Vec3 &new_world, const Vec3 &velocity_world, const Vec3 &axis_world,
+                   double radius_m, double length_m, bool entered) const;
 
   private:
     std::string class_;

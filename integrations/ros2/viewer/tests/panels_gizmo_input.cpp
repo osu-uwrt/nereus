@@ -1,7 +1,7 @@
 #include "robotics/ros_viewer/panels/composition.hpp"
 #include "robotics/ros_viewer/panels/pose_math.hpp"
-#include <imgui.h>
 #include <cassert>
+#include <imgui.h>
 using namespace robotics::ros_viewer::panels;
 namespace {
 struct MotionProbe : Motion {

@@ -38,9 +38,9 @@ class Rules {
         (void)events, (void)context, (void)parameters;
         return Json::array();
     }
-    // TaskRuntime calls this overload with the frozen run snapshot (`TaskRuntime::snapshot()`). The default forwards to the stateless one.
-    virtual Json feed(const Json &state, const Events &events, const Json &context,
-                      const Json &parameters) {
+    // TaskRuntime calls this overload with the frozen run snapshot (`TaskRuntime::snapshot()`). The default forwards to
+    // the stateless one.
+    virtual Json feed(const Json &state, const Events &events, const Json &context, const Json &parameters) {
         (void)state;
         return feed(events, context, parameters);
     }
@@ -74,9 +74,9 @@ class TaskRuntime {
                                   const Eigen::Vector3d &end_center, const Eigen::Vector3d &axis,
                                   const Eigen::Vector3d &velocity);
 
-    Json describe() const;                            // run_score extras from the rules
+    Json describe() const;                                      // run_score extras from the rules
     Json feed(const Events &events, const Json &context) const; // task_events records
-    Json indicators() const;                          // e.g. magnet light states/poses
+    Json indicators() const;                                    // e.g. magnet light states/poses
 
   private:
     struct Impl;

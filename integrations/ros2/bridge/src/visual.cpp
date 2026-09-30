@@ -33,8 +33,8 @@ void checkOptions(const Json &options, const std::string &where, const std::set<
             missing.insert(key);
     if (!unknown.empty() || !missing.empty())
         throw BridgeError(where + "/options: keys must be " + listRepr(required) + " plus optional " +
-                          listRepr(optional) + " (unknown " + listRepr(unknown) + ", missing " +
-                          listRepr(missing) + ")");
+                          listRepr(optional) + " (unknown " + listRepr(unknown) + ", missing " + listRepr(missing) +
+                          ")");
 }
 
 std::vector<double> numbers(const Json &value, std::size_t count, const std::string &where) {
@@ -62,8 +62,8 @@ struct Item {
     std::array<double, 4> orientation{1, 0, 0, 0}, color{};
 };
 
-std::shared_ptr<Message> encodeMarkers(const std::shared_ptr<const MessageType> &type,
-                                       std::int64_t stamp, const std::vector<Item> &items) {
+std::shared_ptr<Message> encodeMarkers(const std::shared_ptr<const MessageType> &type, std::int64_t stamp,
+                                       const std::vector<Item> &items) {
     auto message = std::make_shared<Message>(type);
     auto &array = *static_cast<MarkerArray *>(message->data());
     for (const auto &item : items) {
@@ -108,9 +108,15 @@ std::shared_ptr<Message> encodeMarkers(const std::shared_ptr<const MessageType> 
     return message;
 }
 
-std::array<double, 3> triple(const std::vector<double> &v) { return {v[0], v[1], v[2]}; }
-std::array<double, 4> quad(const std::vector<double> &v) { return {v[0], v[1], v[2], v[3]}; }
-std::array<double, 4> wxyz(const Eigen::Quaterniond &q) { return {q.w(), q.x(), q.y(), q.z()}; }
+std::array<double, 3> triple(const std::vector<double> &v) {
+    return {v[0], v[1], v[2]};
+}
+std::array<double, 4> quad(const std::vector<double> &v) {
+    return {v[0], v[1], v[2], v[3]};
+}
+std::array<double, 4> wxyz(const Eigen::Quaterniond &q) {
+    return {q.w(), q.x(), q.y(), q.z()};
+}
 std::array<double, 4> jsonQuad(const Json &j) {
     return {j.at(0).get<double>(), j.at(1).get<double>(), j.at(2).get<double>(), j.at(3).get<double>()};
 }
@@ -147,8 +153,8 @@ ItemSource indicatorItems(VisualContext &context, const Json &options, const std
             if (!colors.count(color.get<std::string>()))
                 missing.insert(color.get<std::string>());
         if (!missing.empty())
-            throw BridgeError(where + "/options/colors: no color for " + listRepr(missing) +
-                              " of indicator " + repr(item.at("region").get<std::string>()));
+            throw BridgeError(where + "/options/colors: no color for " + listRepr(missing) + " of indicator " +
+                              repr(item.at("region").get<std::string>()));
     }
     SessionPort *session = &context.session;
     return [session, scale, colors, frame_id]() {
@@ -176,10 +182,8 @@ ItemSource propItems(VisualContext &context, const Json &options, const std::str
     if (!options["held_frame_id"].is_string() || options["held_frame_id"].get<std::string>().empty())
         throw BridgeError(where + "/options/held_frame_id: must be a ROS frame name");
     const std::string held_frame = options["held_frame_id"];
-    const auto scale = triple(numbers(options.value("scale_m", Json::array({1, 1, 1})), 3,
-                                      where + "/options/scale_m"));
-    const auto color = quad(numbers(options.value("color", Json::array({0, 0, 0, 1})), 4,
-                                    where + "/options/color"));
+    const auto scale = triple(numbers(options.value("scale_m", Json::array({1, 1, 1})), 3, where + "/options/scale_m"));
+    const auto color = quad(numbers(options.value("color", Json::array({0, 0, 0, 1})), 4, where + "/options/color"));
     auto uris = std::make_shared<std::map<std::pair<std::string, std::string>, std::string>>();
     for (const auto &task : context.resolved.task_definitions)
         for (const auto &prop : task.at("props")) {
@@ -188,9 +192,9 @@ ItemSource propItems(VisualContext &context, const Json &options, const std::str
             const auto &parameters = prop.at("parameters");
             if (!parameters.contains("visual_asset") || parameters["visual_asset"].is_null())
                 continue;
-            (*uris)[{task.at("id").get<std::string>(), prop.at("id").get<std::string>()}] = assetUri(
-                context, "tasks", parameters["visual_asset"].get<std::string>(),
-                where + ": prop " + repr(prop.at("id").get<std::string>()));
+            (*uris)[{task.at("id").get<std::string>(), prop.at("id").get<std::string>()}] =
+                assetUri(context, "tasks", parameters["visual_asset"].get<std::string>(),
+                         where + ": prop " + repr(prop.at("id").get<std::string>()));
         }
     VisualContext *ctx = &context;
     return [ctx, uris, scale, color, frame_id, held_frame]() {
@@ -239,14 +243,13 @@ ItemSource payloadItems(VisualContext &context, const Json &options, const std::
             missing.insert(type);
     }
     if (!missing.empty())
-        throw BridgeError(where + "/options/namespaces: no namespace for mechanism types " +
-                          listRepr(missing));
+        throw BridgeError(where + "/options/namespaces: no namespace for mechanism types " + listRepr(missing));
     if (!options["loaded_suffix"].is_string())
         throw BridgeError(where + "/options/loaded_suffix: must be a string");
     const std::string suffix = options["loaded_suffix"];
     const auto color = quad(numbers(options["color"], 4, where + "/options/color"));
-    const std::string uri = assetUri(context, "robot", options["mesh_asset"].get<std::string>(),
-                                     where + "/options/mesh_asset");
+    const std::string uri =
+        assetUri(context, "robot", options["mesh_asset"].get<std::string>(), where + "/options/mesh_asset");
     const bool delete_all = options.value("delete_all", false);
     SessionPort *session = &context.session;
     return [=]() {
@@ -274,8 +277,7 @@ ItemSource payloadItems(VisualContext &context, const Json &options, const std::
     };
 }
 
-std::shared_ptr<Message> encodeJson(const std::shared_ptr<const MessageType> &type,
-                                    const std::string &text) {
+std::shared_ptr<Message> encodeJson(const std::shared_ptr<const MessageType> &type, const std::string &text) {
     auto message = std::make_shared<Message>(type);
     const auto path = resolveField(type->members(), "data");
     *static_cast<std::string *>(locate(message->data(), path)) = text;
@@ -299,8 +301,8 @@ std::optional<EndpointKind> formatEndpoint(const std::string &endpoint) {
     return found->second;
 }
 
-FormatStream compileFormat(VisualContext &context, const Json &stream,
-                           const std::shared_ptr<const MessageType> &type, const std::string &where) {
+FormatStream compileFormat(VisualContext &context, const Json &stream, const std::shared_ptr<const MessageType> &type,
+                           const std::string &where) {
     const std::string endpoint = stream.at("native"), encoding = stream.at("format");
     const auto known = formatEndpoint(endpoint);
     if (!known || known->format != encoding)

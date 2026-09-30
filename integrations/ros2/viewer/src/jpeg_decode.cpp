@@ -43,8 +43,8 @@ bool decodeJpeg(const std::uint8_t *data, std::size_t size, int minWidth, Decode
     out.height = static_cast<int>(info.output_height);
     out.rgb.assign(static_cast<std::size_t>(out.width) * static_cast<std::size_t>(out.height) * 3, 0);
     while (info.output_scanline < info.output_height) {
-        JSAMPROW row = out.rgb.data() + static_cast<std::size_t>(info.output_scanline) *
-                                            static_cast<std::size_t>(out.width) * 3;
+        JSAMPROW row =
+            out.rgb.data() + static_cast<std::size_t>(info.output_scanline) * static_cast<std::size_t>(out.width) * 3;
         jpeg_read_scanlines(&info, &row, 1);
     }
     jpeg_finish_decompress(&info);

@@ -24,7 +24,8 @@ int main(int argc, char **argv) {
         sc::SessionCameras cameras(resolved, options);
         robotics::spatial::Pose pose;
         pose.translation = {std::stod(argv[3]), std::stod(argv[4]), std::stod(argv[5])};
-        pose.rotation = Eigen::Quaterniond(std::stod(argv[6]), std::stod(argv[7]), std::stod(argv[8]), std::stod(argv[9]));
+        pose.rotation =
+            Eigen::Quaterniond(std::stod(argv[6]), std::stod(argv[7]), std::stod(argv[8]), std::stod(argv[9]));
         const double time = std::stod(argv[10]);
         const int repeat = argc > 12 ? std::stoi(argv[12]) : 1;
         std::mutex mutex;
@@ -54,8 +55,9 @@ int main(int argc, char **argv) {
             .write(reinterpret_cast<const char *>(first.left->depth.data()),
                    std::streamsize(first.left->depth.size() * sizeof(float)));
         std::ofstream(prefix + ".json") << "{\"width\":" << first.left->width << ",\"height\":" << first.left->height
-                                        << ",\"render_ms\":" << render / repeat << ",\"process_ms\":" << process / repeat
-                                        << ",\"wall_ms\":" << wall / repeat << "}\n";
+                                        << ",\"render_ms\":" << render / repeat
+                                        << ",\"process_ms\":" << process / repeat << ",\"wall_ms\":" << wall / repeat
+                                        << "}\n";
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
         return 1;

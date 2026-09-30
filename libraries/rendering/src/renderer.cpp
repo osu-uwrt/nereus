@@ -65,10 +65,8 @@ class Frustum {
             return false;
         for (const auto &p : planes) {
             const glm::vec3 n(p);
-            const glm::vec3 s(n.x >= 0 ? b.max.x : b.min.x, n.y >= 0 ? b.max.y : b.min.y,
-                              n.z >= 0 ? b.max.z : b.min.z);
-            const float tolerance =
-                1e-5f * (glm::dot(glm::abs(n), glm::abs(s)) + glm::abs(p.w) + 1.f);
+            const glm::vec3 s(n.x >= 0 ? b.max.x : b.min.x, n.y >= 0 ? b.max.y : b.min.y, n.z >= 0 ? b.max.z : b.min.z);
+            const float tolerance = 1e-5f * (glm::dot(glm::abs(n), glm::abs(s)) + glm::abs(p.w) + 1.f);
             if (glm::dot(n, s) + p.w < -tolerance)
                 return false;
         }
@@ -135,8 +133,7 @@ void bindTexture(GLuint id, int unit) {
 void checkGl(const char *operation) {
     const auto error = glGetError();
     if (error != GL_NO_ERROR)
-        throw std::runtime_error(std::string(operation) + " failed with OpenGL error " +
-                                 std::to_string(error));
+        throw std::runtime_error(std::string(operation) + " failed with OpenGL error " + std::to_string(error));
 }
 constexpr std::uintmax_t maximum_image_bytes = 256u * 1024 * 1024;
 constexpr int maximum_image_side = 16384;
@@ -176,8 +173,7 @@ bool decodePng(png_structp png, png_infop info, int maximum_side, PngOutput *out
     const auto width = png_get_image_width(png, info), height = png_get_image_height(png, info);
     const int depth = png_get_bit_depth(png, info), type = png_get_color_type(png, info);
     if (width == 0 || height == 0 || width > static_cast<png_uint_32>(maximum_side) ||
-        height > static_cast<png_uint_32>(maximum_side) ||
-        std::uintmax_t{width} * height * 4 > maximum_image_bytes) {
+        height > static_cast<png_uint_32>(maximum_side) || std::uintmax_t{width} * height * 4 > maximum_image_bytes) {
         out->error = "PNG dimensions exceed the texture limits";
         return false;
     }
@@ -241,8 +237,8 @@ PngOutput loadPng(const std::filesystem::path &path, int maximum_side) {
     }
     png_destroy_read_struct(&png, &info, nullptr);
     if (!ok)
-        throw std::invalid_argument(std::string(output.error ? output.error : "invalid PNG data") +
-                                    ": " + path.string());
+        throw std::invalid_argument(std::string(output.error ? output.error : "invalid PNG data") + ": " +
+                                    path.string());
     output.rows.clear();
     return output;
 }
@@ -267,8 +263,8 @@ std::shared_ptr<Texture> uploadTexture(const std::filesystem::path &path, int ma
     glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
     glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
     glPixelStorei(GL_UNPACK_SWAP_BYTES, GL_FALSE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, image.width, image.height, 0, GL_RGBA,
-                 GL_UNSIGNED_BYTE, image.rgba.data());
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 image.rgba.data());
     glGenerateMipmap(GL_TEXTURE_2D);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -300,11 +296,10 @@ struct Mesh {
     Mesh(const Submesh &input, const TextureLoader &load) {
         if (input.vertices.empty() || input.indices.empty() || input.indices.size() % 3 ||
             input.indices.size() > static_cast<std::size_t>(std::numeric_limits<GLsizei>::max()) ||
-            input.vertices.size() >
-                static_cast<std::size_t>(std::numeric_limits<GLsizeiptr>::max()) / sizeof(Vertex))
+            input.vertices.size() > static_cast<std::size_t>(std::numeric_limits<GLsizeiptr>::max()) / sizeof(Vertex))
             throw std::invalid_argument("invalid GPU triangle mesh size");
-        if (!input.material.base_color.allFinite() ||
-            (input.material.base_color.array() < 0).any() || input.material.base_color.w() > 1)
+        if (!input.material.base_color.allFinite() || (input.material.base_color.array() < 0).any() ||
+            input.material.base_color.w() > 1)
             throw std::invalid_argument("invalid mesh color/opacity");
         if (input.material.cutouts.size() > maximum_cutouts)
             throw std::invalid_argument("at most four UV cutouts per submesh");
@@ -315,8 +310,7 @@ struct Mesh {
         }
         color = glm::make_vec4(input.material.base_color.data());
         for (const auto &v : input.vertices)
-            if (!v.position.allFinite() || !v.normal.allFinite() || !v.uv.allFinite() ||
-                v.normal.squaredNorm() == 0)
+            if (!v.position.allFinite() || !v.normal.allFinite() || !v.uv.allFinite() || v.normal.squaredNorm() == 0)
                 throw std::invalid_argument("invalid GPU vertex");
         for (auto index : input.indices) {
             if (index >= input.vertices.size())
@@ -334,12 +328,10 @@ struct Mesh {
         glGenBuffers(1, &gpu.ebo);
         glBindVertexArray(gpu.vao);
         glBindBuffer(GL_ARRAY_BUFFER, gpu.vbo);
-        glBufferData(GL_ARRAY_BUFFER,
-                     static_cast<GLsizeiptr>(input.vertices.size() * sizeof(Vertex)),
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(input.vertices.size() * sizeof(Vertex)),
                      input.vertices.data(), GL_STATIC_DRAW);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gpu.ebo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                     static_cast<GLsizeiptr>(input.indices.size() * sizeof(std::uint32_t)),
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(input.indices.size() * sizeof(std::uint32_t)),
                      input.indices.data(), GL_STATIC_DRAW);
         for (GLuint i = 0; i < 3; ++i)
             glEnableVertexAttribArray(i);
@@ -347,8 +339,7 @@ struct Mesh {
                               reinterpret_cast<void *>(offsetof(Vertex, position)));
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                               reinterpret_cast<void *>(offsetof(Vertex, normal)));
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                              reinterpret_cast<void *>(offsetof(Vertex, uv)));
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void *>(offsetof(Vertex, uv)));
         glBindVertexArray(0);
         checkGl("mesh upload");
     }
@@ -433,13 +424,11 @@ struct Target {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, next.color,
-                                   0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, next.color, 0);
         }
         glGenTextures(1, &next.depth);
         glBindTexture(GL_TEXTURE_2D, next.depth);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT,
-                     nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -482,8 +471,8 @@ bool affine(const Eigen::Matrix4f &m) {
 } // namespace
 struct Renderer::Resources {
     // Every new owned GL object must also be zeroed by abandon() after context loss.
-    GLuint sceneProgram = 0, waterProgram = 0, shadowProgram = 0, postProgram = 0, bloomProgram = 0,
-           focusProgram = 0, pointsProgram = 0, quad = 0;
+    GLuint sceneProgram = 0, waterProgram = 0, shadowProgram = 0, postProgram = 0, bloomProgram = 0, focusProgram = 0,
+           pointsProgram = 0, quad = 0;
     struct PointBuffer {
         std::shared_ptr<const PointData> source;
         GLuint vao = 0, vbo = 0;
@@ -544,7 +533,7 @@ struct Renderer::Resources {
             }
     }
     std::shared_ptr<Mesh> focusDisc;
-    Frame f, preview; // `preview` is swapped into `f` for Appearance::preview draws
+    Frame f, preview;          // `preview` is swapped into `f` for Appearance::preview draws
     bool shadow_valid = false; // the shadow map holds a real (shadows-on) pass
     Target shadow, reflection;
     glm::mat4 lightMatrix{1}, poolToMap{1}, mapToPool{1};
@@ -579,21 +568,23 @@ struct Renderer::Resources {
     ~Resources() {
         for (auto &entry : pointBuffers)
             releasePoints(entry.second);
-        for (auto id : {sceneProgram, waterProgram, shadowProgram, postProgram, bloomProgram, focusProgram, pointsProgram})
+        for (auto id :
+             {sceneProgram, waterProgram, shadowProgram, postProgram, bloomProgram, focusProgram, pointsProgram})
             if (id)
                 glDeleteProgram(id);
         if (quad)
             glDeleteVertexArrays(1, &quad);
     }
     void abandon() noexcept {
-        sceneProgram = waterProgram = shadowProgram = postProgram = bloomProgram = focusProgram = pointsProgram = quad = 0;
+        sceneProgram = waterProgram = shadowProgram = postProgram = bloomProgram = focusProgram = pointsProgram = quad =
+            0;
         for (auto &entry : pointBuffers)
             entry.second.vao = entry.second.vbo = 0;
         pointBuffers.clear();
         pointDraws.clear();
-        for (auto *target : {&f.opaque, &f.composite, &f.final, &f.bloom[0], &f.bloom[1], &preview.opaque,
-                             &preview.composite, &preview.final, &preview.bloom[0], &preview.bloom[1],
-                             &shadow, &reflection})
+        for (auto *target :
+             {&f.opaque, &f.composite, &f.final, &f.bloom[0], &f.bloom[1], &preview.opaque, &preview.composite,
+              &preview.final, &preview.bloom[0], &preview.bloom[1], &shadow, &reflection})
             target->fbo = target->color = target->depth = 0;
         const auto forget = [](auto &meshes) {
             for (auto &mesh : meshes) {
@@ -640,18 +631,15 @@ struct Renderer::Resources {
         checkGl("renderer initialization");
     }
     Object instance(const Instance &input) {
-        if (!input.mesh || input.mesh->submeshes.empty() || !affine(input.transform) ||
-            !input.tint.allFinite() || (input.tint.array() < 0).any() || input.tint.w() > 1 ||
-            !std::isfinite(input.radiance) || input.radiance < 0 ||
-            static_cast<int>(input.material) < 0 || static_cast<int>(input.material) > 6)
+        if (!input.mesh || input.mesh->submeshes.empty() || !affine(input.transform) || !input.tint.allFinite() ||
+            (input.tint.array() < 0).any() || input.tint.w() > 1 || !std::isfinite(input.radiance) ||
+            input.radiance < 0 || static_cast<int>(input.material) < 0 || static_cast<int>(input.material) > 6)
             throw std::invalid_argument("invalid render instance");
         auto found = cache.find(input.mesh.get());
         if (found == cache.end()) {
             Cached next;
             next.source = input.mesh;
-            const TextureLoader load = [this](const std::filesystem::path &path) {
-                return texture(path);
-            };
+            const TextureLoader load = [this](const std::filesystem::path &path) { return texture(path); };
             for (const auto &part : input.mesh->submeshes)
                 next.meshes.push_back(std::make_shared<Mesh>(part, load));
             found = cache.emplace(input.mesh.get(), std::move(next)).first;
@@ -671,8 +659,8 @@ struct Renderer::Resources {
 };
 void Renderer::Resources::shadows(const Look &look) {
     auto sun = look.outdoor ? look.sunDirection() : glm::normalize(glm::vec3(-.2f, -.1f, 1));
-    lightMatrix = glm::ortho(-33.f, 33.f, -33.f, 33.f, .1f, 140.f) *
-                  glm::lookAt(center + sun * 60.f, center, glm::vec3(0, 1, 0));
+    lightMatrix =
+        glm::ortho(-33.f, 33.f, -33.f, 33.f, .1f, 140.f) * glm::lookAt(center + sun * 60.f, center, glm::vec3(0, 1, 0));
     glBindFramebuffer(GL_FRAMEBUFFER, shadow.fbo);
     glViewport(0, 0, shadow.width, shadow.height);
     glDepthMask(GL_TRUE);
@@ -703,15 +691,14 @@ void Renderer::Resources::shadows(const Look &look) {
             integer(shadowProgram, "hasTexture", m->texture != 0);
             integer(shadowProgram, "holeCount", int(m->holes.size()));
             if (!m->holes.empty())
-                glUniform3fv(glGetUniformLocation(shadowProgram, "holes"),
-                             static_cast<GLsizei>(m->holes.size()), glm::value_ptr(m->holes[0]));
+                glUniform3fv(glGetUniformLocation(shadowProgram, "holes"), static_cast<GLsizei>(m->holes.size()),
+                             glm::value_ptr(m->holes[0]));
             m->draw();
         }
     }
     glDisable(GL_POLYGON_OFFSET_FILL);
 }
-void Renderer::Resources::drawScene(const InternalView &camera, const Look &look, float time,
-                                    bool clip) {
+void Renderer::Resources::drawScene(const InternalView &camera, const Look &look, float time, bool clip) {
     glUseProgram(sceneProgram);
     integer(sceneProgram, "waterEnabled", hasWater);
     uniform(sceneProgram, "view", camera.view);
@@ -771,8 +758,7 @@ void Renderer::Resources::drawScene(const InternalView &camera, const Look &look
                 bindTexture(m->texture, 0);
                 integer(sceneProgram, "holeCount", int(m->holes.size()));
                 if (!m->holes.empty())
-                    glUniform3fv(glGetUniformLocation(sceneProgram, "holes"),
-                                 static_cast<GLsizei>(m->holes.size()),
+                    glUniform3fv(glGetUniformLocation(sceneProgram, "holes"), static_cast<GLsizei>(m->holes.size()),
                                  glm::value_ptr(m->holes[0]));
                 m->draw();
             }
@@ -785,20 +771,18 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
-    const bool surfaceVisible = hasWater && water.visible && look.surface &&
-                                Frustum(camera.projection * camera.view * water.transform)
-                                    .intersects(water.meshes.front()->bounds);
-    const bool reflectionActive =
-        look.surfaceReflections && surfaceVisible && camera.eye.z > waterLevel;
+    const bool surfaceVisible =
+        hasWater && water.visible && look.surface &&
+        Frustum(camera.projection * camera.view * water.transform).intersects(water.meshes.front()->bounds);
+    const bool reflectionActive = look.surfaceReflections && surfaceVisible && camera.eye.z > waterLevel;
     if (reflectionActive) {
         reflection.resize(std::max(160, f.opaque.width / 2), std::max(100, f.opaque.height / 2));
         glBindFramebuffer(GL_FRAMEBUFFER, reflection.fbo);
         glViewport(0, 0, reflection.width, reflection.height);
-        glClearColor(look.outdoor ? .30f : .13f, look.outdoor ? .48f : .16f,
-                     look.outdoor ? .68f : .18f, 1);
+        glClearColor(look.outdoor ? .30f : .13f, look.outdoor ? .48f : .16f, look.outdoor ? .68f : .18f, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glm::mat4 mirror = glm::translate(glm::mat4(1), {0, 0, 2 * waterLevel}) *
-                           glm::scale(glm::mat4(1), glm::vec3(1, 1, -1));
+        glm::mat4 mirror =
+            glm::translate(glm::mat4(1), {0, 0, 2 * waterLevel}) * glm::scale(glm::mat4(1), glm::vec3(1, 1, -1));
         InternalView reflected = camera;
         reflected.eye.z = 2 * waterLevel - reflected.eye.z;
         reflected.view = camera.view * mirror;
@@ -806,8 +790,7 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
     }
     glBindFramebuffer(GL_FRAMEBUFFER, f.opaque.fbo);
     glViewport(0, 0, f.opaque.width, f.opaque.height);
-    glClearColor(look.outdoor ? .30f : .13f, look.outdoor ? .48f : .16f, look.outdoor ? .68f : .18f,
-                 1);
+    glClearColor(look.outdoor ? .30f : .13f, look.outdoor ? .48f : .16f, look.outdoor ? .68f : .18f, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     drawScene(camera, look, time);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, f.opaque.fbo);
@@ -839,8 +822,8 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
         bindTexture(f.opaque.color, 0);
         bindTexture(reflection.color, 1);
         bindTexture(f.opaque.depth, 2);
-        glUniform2f(glGetUniformLocation(waterProgram, "resolution"),
-                    static_cast<float>(f.opaque.width), static_cast<float>(f.opaque.height));
+        glUniform2f(glGetUniformLocation(waterProgram, "resolution"), static_cast<float>(f.opaque.width),
+                    static_cast<float>(f.opaque.height));
         glDepthMask(GL_FALSE);
         water.meshes.front()->draw();
         glDepthMask(GL_TRUE);
@@ -919,8 +902,7 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
     uniform(postProgram, "eye", camera.eye);
     uniform(postProgram, "sunDirection", look.sunDirection());
     uniform(postProgram, "glare", look.outdoor ? look.glare * look.directLight : 0.f);
-    glUniform2f(glGetUniformLocation(postProgram, "texel"),
-                1.f / static_cast<float>(f.opaque.width),
+    glUniform2f(glGetUniformLocation(postProgram, "texel"), 1.f / static_cast<float>(f.opaque.width),
                 1.f / static_cast<float>(f.opaque.height));
     glBindVertexArray(quad);
     glDrawArrays(GL_TRIANGLES, 0, 3);
@@ -941,8 +923,8 @@ void Renderer::abandonContext() noexcept {
         resources_.reset();
     }
 }
-RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appearance &a, float time,
-                             int width, int height) {
+RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appearance &a, float time, int width,
+                             int height) {
     if (!resources_)
         throw std::logic_error("renderer context was abandoned");
     auto &r = *resources_;
@@ -966,15 +948,14 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
         !view.eye.allFinite() || !affine(view.view) || !view.projection.allFinite() ||
         !view.projection.fullPivLu().isInvertible() || !scene.lighting_center.allFinite())
         throw std::invalid_argument("invalid render view, size or time");
-    for (float value : {a.caustics, a.exposure, a.direct_light, a.ambient_light, a.glare,
-                        a.water.scattering, a.water.distance_scale, a.water.clear_distance})
+    for (float value : {a.caustics, a.exposure, a.direct_light, a.ambient_light, a.glare, a.water.scattering,
+                        a.water.distance_scale, a.water.clear_distance})
         if (!std::isfinite(value) || value < 0)
             throw std::invalid_argument("invalid render appearance");
-    if (!std::isfinite(a.sun_azimuth) || !std::isfinite(a.sun_elevation) ||
-        !std::isfinite(a.water.distance_power) || a.water.distance_power < .25f ||
-        a.water.distance_power > 3 || !a.water.tint.allFinite() ||
-        (a.water.tint.array() < 0).any() || (a.water.tint.array() > 1).any() ||
-        !a.water.absorption.allFinite() || (a.water.absorption.array() < 0).any())
+    if (!std::isfinite(a.sun_azimuth) || !std::isfinite(a.sun_elevation) || !std::isfinite(a.water.distance_power) ||
+        a.water.distance_power < .25f || a.water.distance_power > 3 || !a.water.tint.allFinite() ||
+        (a.water.tint.array() < 0).any() || (a.water.tint.array() > 1).any() || !a.water.absorption.allFinite() ||
+        (a.water.absorption.array() < 0).any())
         throw std::invalid_argument("invalid sun or water appearance");
     glDisable(GL_COLOR_LOGIC_OP);
     for (GLint i = 0; i < r.clip_distances; ++i)
@@ -1023,20 +1004,16 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
             !(m.topLeftCorner<3, 3>().transpose() * m.topLeftCorner<3, 3>())
                  .isApprox(Eigen::Matrix3f::Identity(), 1e-5f) ||
             std::abs(m.topLeftCorner<3, 3>().determinant() - 1) > 1e-5f)
-            throw std::invalid_argument(
-                "water requires positive dimensions and a horizontal rigid frame");
+            throw std::invalid_argument("water requires positive dimensions and a horizontal rigid frame");
         if (!water.surface.mesh || !affine(water.surface.transform))
             throw std::invalid_argument("invalid water surface instance");
         for (const auto &part : water.surface.mesh->submeshes)
             for (const auto &vertex : part.vertices) {
                 const Eigen::Vector4f position =
-                    water.surface.transform * Eigen::Vector4f(vertex.position.x(),
-                                                              vertex.position.y(),
-                                                              vertex.position.z(), 1);
-                if (!position.allFinite() ||
-                    std::abs(position.z() - water.level) > 1e-5f * (1 + std::abs(water.level)))
-                    throw std::invalid_argument(
-                        "water surface vertices must lie on the declared horizontal plane");
+                    water.surface.transform *
+                    Eigen::Vector4f(vertex.position.x(), vertex.position.y(), vertex.position.z(), 1);
+                if (!position.allFinite() || std::abs(position.z() - water.level) > 1e-5f * (1 + std::abs(water.level)))
+                    throw std::invalid_argument("water surface vertices must lie on the declared horizontal plane");
             }
         r.water = r.instance(water.surface);
         if (r.water.meshes.size() != 1)
@@ -1060,20 +1037,20 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
         guard.swapped = true;
     }
     r.f.resize(width, height);
-    Look look{{vector(a.water.tint), vector(a.water.absorption), a.water.scattering,
-                     a.water.distance_scale, a.water.distance_power, a.water.clear_distance},
-                    a.caustics,
-                    a.exposure,
-                    a.surface,
-                    a.shadows,
-                    a.reflections && !a.preview,
-                    a.outdoor,
-                    a.sun_azimuth,
-                    a.sun_elevation,
-                    a.direct_light,
-                    a.ambient_light,
-                    a.glare,
-                    !a.preview};
+    Look look{{vector(a.water.tint), vector(a.water.absorption), a.water.scattering, a.water.distance_scale,
+               a.water.distance_power, a.water.clear_distance},
+              a.caustics,
+              a.exposure,
+              a.surface,
+              a.shadows,
+              a.reflections && !a.preview,
+              a.outdoor,
+              a.sun_azimuth,
+              a.sun_elevation,
+              a.direct_light,
+              a.ambient_light,
+              a.glare,
+              !a.preview};
     if (a.focus && a.focus->allFinite() && !a.preview) {
         look.hasFocus = true;
         look.focus = vector(*a.focus);
@@ -1109,8 +1086,7 @@ Capture Renderer::capture() const {
     glPixelStorei(GL_PACK_ROW_LENGTH, 0);
     glPixelStorei(GL_PACK_SKIP_ROWS, 0);
     glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
-    const auto read = [&](const Target &target, std::vector<float> &color,
-                          std::vector<float> &depth) {
+    const auto read = [&](const Target &target, std::vector<float> &color, std::vector<float> &depth) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, target.fbo);
         glReadBuffer(GL_COLOR_ATTACHMENT0);
         glReadPixels(0, 0, result.width, result.height, GL_RGBA, GL_FLOAT, color.data());
@@ -1145,14 +1121,12 @@ ImageCapture Renderer::captureImage(bool color, bool depth) const {
         result.rgb.resize(pixels * 3);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, f.final.fbo);
         glReadBuffer(GL_COLOR_ATTACHMENT0);
-        glReadPixels(0, 0, result.width, result.height, GL_RGB, GL_UNSIGNED_BYTE,
-                     result.rgb.data());
+        glReadPixels(0, 0, result.width, result.height, GL_RGB, GL_UNSIGNED_BYTE, result.rgb.data());
     }
     if (depth) { // Opaque pass depth: the water surface never occludes sensor depth.
         result.depth.resize(pixels);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, f.opaque.fbo);
-        glReadPixels(0, 0, result.width, result.height, GL_DEPTH_COMPONENT, GL_FLOAT,
-                     result.depth.data());
+        glReadPixels(0, 0, result.width, result.height, GL_DEPTH_COMPONENT, GL_FLOAT, result.depth.data());
     }
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     checkGl("image capture");

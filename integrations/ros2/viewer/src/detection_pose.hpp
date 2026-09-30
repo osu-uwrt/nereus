@@ -120,10 +120,18 @@ inline DetectionShow resolveDetectionMode(DetectionMode requested, bool truthAva
         return show;
     }
     switch (requested) {
-    case DetectionMode::PoseSource: (truthActive ? show.truth : show.estimate) = true; break;
-    case DetectionMode::Truth: show.truth = true; break;
-    case DetectionMode::Estimate: show.estimate = true; break;
-    case DetectionMode::Both: show.truth = show.estimate = true; break;
+    case DetectionMode::PoseSource:
+        (truthActive ? show.truth : show.estimate) = true;
+        break;
+    case DetectionMode::Truth:
+        show.truth = true;
+        break;
+    case DetectionMode::Estimate:
+        show.estimate = true;
+        break;
+    case DetectionMode::Both:
+        show.truth = show.estimate = true;
+        break;
     }
     return show;
 }

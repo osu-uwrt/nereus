@@ -1,11 +1,11 @@
 #pragma once
-#include <glm/glm.hpp>
-#include <yaml-cpp/yaml.h>
-#include <memory>
 #include <cstdint>
+#include <glm/glm.hpp>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
+#include <yaml-cpp/yaml.h>
 
 namespace robotics::ros_viewer::panels {
 using Pose = glm::mat4;

@@ -14,9 +14,8 @@ void validate(const std::vector<BoxProxy> &proxies) {
         throw std::invalid_argument("too many collision proxies");
     for (const auto &proxy : proxies) {
         if (proxy.id.empty() || !ids.insert(proxy.id).second || !proxy.size.allFinite() ||
-            (proxy.size.array() <= 0).any() || !proxy.center.allFinite() ||
-            !proxy.orientation.coeffs().allFinite() || !std::isfinite(proxy.orientation.norm()) ||
-            proxy.orientation.norm() < 1e-10)
+            (proxy.size.array() <= 0).any() || !proxy.center.allFinite() || !proxy.orientation.coeffs().allFinite() ||
+            !std::isfinite(proxy.orientation.norm()) || proxy.orientation.norm() < 1e-10)
             throw std::invalid_argument("invalid collision box identity, size or pose");
     }
 }
@@ -31,9 +30,9 @@ struct Box {
           orientation((body.normalized() * proxy.orientation.normalized()).normalized()),
           rotation(orientation.toRotationMatrix()) {
         for (int i = 0; i < 8; ++i)
-            vertices.col(i) = Eigen::Vector3d((i & 4) ? size.x() / 2 : -size.x() / 2,
-                                              (i & 2) ? size.y() / 2 : -size.y() / 2,
-                                              (i & 1) ? size.z() / 2 : -size.z() / 2);
+            vertices.col(i) =
+                Eigen::Vector3d((i & 4) ? size.x() / 2 : -size.x() / 2, (i & 2) ? size.y() / 2 : -size.y() / 2,
+                                (i & 1) ? size.z() / 2 : -size.z() / 2);
         vertices = (rotation * vertices + center.replicate(1, 8)).eval();
         if (!vertices.allFinite())
             throw std::invalid_argument("collision box transformed vertices overflow");
@@ -48,8 +47,7 @@ struct Box {
         return vertices.col(index);
     }
     bool contains(const Eigen::Vector3d &point) const {
-        return ((orientation.conjugate() * (point - center)).cwiseAbs().array() <= size.array() / 2)
-            .all();
+        return ((orientation.conjugate() * (point - center)).cwiseAbs().array() <= size.array() / 2).all();
     }
     Eigen::Vector3d clamp(const Eigen::Vector3d &point) const {
         const Eigen::Vector3d local = orientation.conjugate() * (point - center);
@@ -78,8 +76,8 @@ Contact collide(const Box &body, const Box &world) {
         axis /= norm;
         if (body.center.dot(axis) > world.center.dot(axis))
             axis = -axis;
-        const double overlap = (body.vertices.transpose() * axis).maxCoeff() -
-                               (world.vertices.transpose() * axis).minCoeff();
+        const double overlap =
+            (body.vertices.transpose() * axis).maxCoeff() - (world.vertices.transpose() * axis).minCoeff();
         if (overlap < depth) {
             depth = overlap;
             minimum = axis;
@@ -107,13 +105,11 @@ struct BoxContacts::Impl {
     std::vector<Box> world; // Static geometry prepared once, outside integration.
     double restitution = .1, friction = .4;
 };
-BoxContacts::BoxContacts(std::vector<BoxProxy> body, std::vector<BoxProxy> world,
-                         double restitution, double friction)
+BoxContacts::BoxContacts(std::vector<BoxProxy> body, std::vector<BoxProxy> world, double restitution, double friction)
     : impl_(std::make_unique<Impl>()) {
     validate(body);
     validate(world);
-    if (!std::isfinite(restitution) || restitution < 0 || restitution > 1 ||
-        !std::isfinite(friction) || friction < 0)
+    if (!std::isfinite(restitution) || restitution < 0 || restitution > 1 || !std::isfinite(friction) || friction < 0)
         throw std::invalid_argument("invalid contact restitution/friction");
     impl_->body = std::move(body);
     for (const auto &proxy : impl_->body)
@@ -134,8 +130,7 @@ State13d BoxContacts::resolve(State13d state, const Matrix6d &inverse_mass) cons
             if (!contact.collided)
                 continue;
             const Eigen::Vector3d offset = contact.point - state.head<3>();
-            const double speed =
-                (q * state.segment<3>(7) + (q * state.tail<3>()).cross(offset)).dot(contact.normal);
+            const double speed = (q * state.segment<3>(7) + (q * state.tail<3>()).cross(offset)).dot(contact.normal);
             state.head<3>() += contact.normal * contact.depth;
             if (speed >= 0)
                 continue;
@@ -155,8 +150,7 @@ State13d BoxContacts::resolve(State13d state, const Matrix6d &inverse_mass) cons
                 Vector6d jt;
                 jt << tangent, arm.cross(tangent);
                 const double jt_inverse = jt.dot(inverse_mass * jt);
-                const double friction =
-                    std::min(impl_->friction * impulse, jt.dot(state.tail<6>()) / jt_inverse);
+                const double friction = std::min(impl_->friction * impulse, jt.dot(state.tail<6>()) / jt_inverse);
                 state.tail<6>() -= inverse_mass * jt * friction;
             }
         }

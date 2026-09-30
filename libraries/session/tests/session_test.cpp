@@ -21,10 +21,16 @@ namespace {
 Json payloadsJson(const Session &s) {
     Json out = Json::array();
     for (const auto &p : s.payloads())
-        out.push_back({{"id", p.id}, {"mechanism_id", p.mechanism_id}, {"mechanism_type", p.mechanism_type},
-                       {"active", p.active}, {"outcome", p.outcome}, {"released_ns", p.released_ns},
-                       {"position", flat(p.state.position)}, {"orientation", quat(p.state.orientation)},
-                       {"velocity", flat(p.state.velocity)}, {"angular_velocity", flat(p.state.angular_velocity)}});
+        out.push_back({{"id", p.id},
+                       {"mechanism_id", p.mechanism_id},
+                       {"mechanism_type", p.mechanism_type},
+                       {"active", p.active},
+                       {"outcome", p.outcome},
+                       {"released_ns", p.released_ns},
+                       {"position", flat(p.state.position)},
+                       {"orientation", quat(p.state.orientation)},
+                       {"velocity", flat(p.state.velocity)},
+                       {"angular_velocity", flat(p.state.angular_velocity)}});
     return out;
 }
 Json checkpoint(Session &s, bool tasks) {
@@ -36,10 +42,14 @@ Json checkpoint(Session &s, bool tasks) {
         extra["run"] = *s.runSnapshot();
         extra["indicators"] = s.indicators();
     }
-    Json result = {{"time_ns", s.timeNs()}, {"killed", s.killed()},
-            {"body", bodyJson(s.lastStep().snapshot.body)}, {"forces", flat(s.thrusterForces())},
-            {"payloads", payloadsJson(s)}, {"mechanisms", mechJson(*s.mechanismState())}, {"jaws", jaws},
-            {"sensors", sensorsJson(s.runtime(), s.pack())}};
+    Json result = {{"time_ns", s.timeNs()},
+                   {"killed", s.killed()},
+                   {"body", bodyJson(s.lastStep().snapshot.body)},
+                   {"forces", flat(s.thrusterForces())},
+                   {"payloads", payloadsJson(s)},
+                   {"mechanisms", mechJson(*s.mechanismState())},
+                   {"jaws", jaws},
+                   {"sensors", sensorsJson(s.runtime(), s.pack())}};
     result.update(extra);
     return result;
 }
@@ -55,8 +65,7 @@ void replay(const std::string &fixture_name, bool tasks) {
     std::vector<std::string> task_ids;
     if (fixture.contains("task_ids"))
         task_ids = fixture.at("task_ids").get<std::vector<std::string>>();
-    Session s(scenario, createRuntime(scenario, &sensors), rules,
-              SessionOptions{tasks ? &task_ids : nullptr, tasks});
+    Session s(scenario, createRuntime(scenario, &sensors), rules, SessionOptions{tasks ? &task_ids : nullptr, tasks});
     EXPECT_EQ(s.timestepNs(), fixture.at("timestep_ns").get<std::int64_t>());
     const auto &ops = fixture.at("ops");
     const auto &log = fixture.at("log");
@@ -83,7 +92,8 @@ void replay(const std::string &fixture_name, bool tasks) {
             s.setKilled(name == "kill");
         } else if (name == "thrusters") {
             Eigen::VectorXd f(static_cast<Eigen::Index>(op[1].size()));
-            for (std::size_t k = 0; k < op[1].size(); ++k) f[static_cast<Eigen::Index>(k)] = op[1][k].get<double>();
+            for (std::size_t k = 0; k < op[1].size(); ++k)
+                f[static_cast<Eigen::Index>(k)] = op[1][k].get<double>();
             s.commandThrusters(f);
         } else if (name == "fire") {
             const auto r = s.fire(op[1]);
@@ -91,9 +101,12 @@ void replay(const std::string &fixture_name, bool tasks) {
             if (r.accepted) { // release details come from the payload the session created
                 const auto &p = s.payloads().back();
                 actual["result"]["release"] = {{"slot_id", log[i]["result"]["release"]["slot_id"]},
-                    {"slot_index", log[i]["result"]["release"]["slot_index"]}, {"time_ns", p.released_ns},
-                    {"position", flat(p.state.position)}, {"orientation", quat(p.state.orientation)},
-                    {"velocity", flat(p.state.velocity)}, {"angular_velocity", flat(p.state.angular_velocity)}};
+                                               {"slot_index", log[i]["result"]["release"]["slot_index"]},
+                                               {"time_ns", p.released_ns},
+                                               {"position", flat(p.state.position)},
+                                               {"orientation", quat(p.state.orientation)},
+                                               {"velocity", flat(p.state.velocity)},
+                                               {"angular_velocity", flat(p.state.angular_velocity)}};
             }
         } else if (name == "claw") {
             actual["result"] = resultJson(s.commandClaw(op[1], op[2]));
@@ -115,7 +128,8 @@ void replay(const std::string &fixture_name, bool tasks) {
         } else if (name == "reset_tasks") {
             actual["result"] = resultJson(s.resetTasks());
         } else if (name == "full_reset") {
-            actual["body"] = bodyJson(s.fullReset(op[1].is_null() ? std::nullopt : std::optional<std::uint64_t>(op[1])).body);
+            actual["body"] =
+                bodyJson(s.fullReset(op[1].is_null() ? std::nullopt : std::optional<std::uint64_t>(op[1])).body);
             actual["seed"] = s.seed();
             tick = 0;
         } else if (name == "run_start") {
@@ -163,8 +177,7 @@ TEST(Session, RunSnapshotDocumentMatchesReference) {
 }
 
 namespace {
-void throughput(bool tasks, const char *label,
-                std::vector<std::string> task_ids = {"gate", "torpedo", "slalom"}) {
+void throughput(bool tasks, const char *label, std::vector<std::string> task_ids = {"gate", "torpedo", "slalom"}) {
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     const RulesRegistry rules = robotics::rules::standardRules();
     const auto sensors = sensorNames(scenario);
@@ -229,7 +242,8 @@ TEST(Session, GraspedPropStaysInTheClawWhileCarried) {
         s.setArmed(true);
         s.commandClaw("claw", true);
         Eigen::Matrix4d mount = Eigen::Matrix4d::Identity();
-        mount.block<3, 3>(0, 0) = Eigen::AngleAxisd(deg * M_PI / 180, Eigen::Vector3d::UnitZ()).toRotationMatrix() * base_rotation;
+        mount.block<3, 3>(0, 0) =
+            Eigen::AngleAxisd(deg * M_PI / 180, Eigen::Vector3d::UnitZ()).toRotationMatrix() * base_rotation;
         const double dt = s.timestepNs() / 1e9;
         std::string log;
         int tick = 0;
@@ -267,8 +281,8 @@ TEST(Session, GraspedPropStaysInTheClawWhileCarried) {
             }
         };
         const Eigen::Vector3d above = grasp_point + Eigen::Vector3d(0, 0, .3);
-        drive(above, above, 3);            // jaws open
-        drive(above, grasp_point, 2);      // lower around the bandage
+        drive(above, above, 3);       // jaws open
+        drive(above, grasp_point, 2); // lower around the bandage
         s.commandClaw("claw", false);
         drive(grasp_point, grasp_point, 3); // close
         const Eigen::Vector3d lifted = grasp_point + Eigen::Vector3d(0, 0, .3);

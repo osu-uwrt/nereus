@@ -11,8 +11,7 @@ namespace robotics::simulation::detail {
 using simulation::BoxProxy;
 class BoxContacts {
   public:
-    BoxContacts(std::vector<BoxProxy> body, std::vector<BoxProxy> world, double restitution = .1,
-                double friction = .4);
+    BoxContacts(std::vector<BoxProxy> body, std::vector<BoxProxy> world, double restitution = .1, double friction = .4);
     ~BoxContacts();
     BoxContacts(const BoxContacts &) = delete;
     BoxContacts &operator=(const BoxContacts &) = delete;

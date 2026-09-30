@@ -1,7 +1,7 @@
 #pragma once
-// Viewer-facing state endpoints and the named encoders that turn them into messages. Streams declare `native: state:<name>` and `format: json | marker_array` plus
-// `options`; everything is driven by pack data (frames, assets, mechanism types, indicator
-// colors), never by robot, task or year names.
+// Viewer-facing state endpoints and the named encoders that turn them into messages. Streams declare `native:
+// state:<name>` and `format: json | marker_array` plus `options`; everything is driven by pack data (frames, assets,
+// mechanism types, indicator colors), never by robot, task or year names.
 #include "ros_types.hpp"
 #include "session_port.hpp"
 
@@ -35,7 +35,7 @@ struct EndpointKind {
 std::optional<EndpointKind> formatEndpoint(const std::string &endpoint);
 
 // Validates one `format` stream and returns its encoders. Throws BridgeError.
-FormatStream compileFormat(VisualContext &context, const Json &stream,
-                           const std::shared_ptr<const MessageType> &type, const std::string &where);
+FormatStream compileFormat(VisualContext &context, const Json &stream, const std::shared_ptr<const MessageType> &type,
+                           const std::string &where);
 
 } // namespace robotics::ros_bridge

@@ -1,7 +1,7 @@
 #include "ros_side.hpp"
 #include "jpeg_decode.hpp"
-#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <algorithm>
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cstring>
 #include <iostream>
 #ifdef NEREUS_VIEWER_UWRT
@@ -69,7 +69,8 @@ RosSide::RosSide(rclcpp::Node::SharedPtr node) : node_(std::move(node)) {
     rclcpp::NodeOptions options;
     options.start_parameter_services(false).start_parameter_event_publisher(false);
     options.parameter_overrides({rclcpp::Parameter("use_sim_time", node_->get_parameter("use_sim_time").as_bool())});
-    timingNode_ = std::make_shared<rclcpp::Node>(node_->get_name() + std::string("_timing"), node_->get_namespace(), options);
+    timingNode_ =
+        std::make_shared<rclcpp::Node>(node_->get_name() + std::string("_timing"), node_->get_namespace(), options);
     timingStaticSub_ = timingNode_->create_subscription<tf2_msgs::msg::TFMessage>(
         "/tf_static", rclcpp::QoS(100).reliable().transient_local(), [this](const tf2_msgs::msg::TFMessage &msg) {
             for (const auto &t : msg.transforms)
@@ -142,9 +143,11 @@ void RosSide::spin() {
 std::string RosSide::timingReport() {
     const auto truth = truthClock_.takeCounts(), estimate = estimateClock_.takeCounts();
     char line[200];
-    std::snprintf(line, sizeof(line), "\n  pose timing: truth re-anchors %d holds %d delay %.0f ms | estimate re-anchors %d holds "
-                  "%d delay %.0f ms | lookup fallbacks %d", truth.first, truth.second, 1e3 * truthClock_.delay(truthDelay_),
-                  estimate.first, estimate.second, 1e3 * estimateClock_.delay(otherDelay_), lookupFallbacks_.exchange(0));
+    std::snprintf(line, sizeof(line),
+                  "\n  pose timing: truth re-anchors %d holds %d delay %.0f ms | estimate re-anchors %d holds "
+                  "%d delay %.0f ms | lookup fallbacks %d",
+                  truth.first, truth.second, 1e3 * truthClock_.delay(truthDelay_), estimate.first, estimate.second,
+                  1e3 * estimateClock_.delay(otherDelay_), lookupFallbacks_.exchange(0));
     return line;
 }
 
@@ -166,7 +169,8 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
         feeds.emplace_back();
         feeds.back().camera = &camera;
     }
-    mpcTopic = scenario.absolute(lookup(config, {"topics", "mpc_path"}).as<std::string>("controller/mpc/predicted_path"));
+    mpcTopic =
+        scenario.absolute(lookup(config, {"topics", "mpc_path"}).as<std::string>("controller/mpc/predicted_path"));
     pointClouds.clear();
     for (const auto &entry : config["point_clouds"]) {
         PointCloudLayer layer;
@@ -176,11 +180,12 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
         layer.size = std::clamp(entry["size"].as<float>(3), 1.f, 16.f);
         layer.enabled = entry["enabled"].as<bool>(false);
         if (entry["color"] && entry["color"].IsSequence() && entry["color"].size() == 3)
-            layer.fallback = {entry["color"][0].as<float>(), entry["color"][1].as<float>(), entry["color"][2].as<float>()};
+            layer.fallback = {entry["color"][0].as<float>(), entry["color"][1].as<float>(),
+                              entry["color"][2].as<float>()};
         pointClouds.push_back(std::move(layer));
     }
-    detectionTopic =
-        scenario.absolute(lookup(config, {"topics", "detections"}).as<std::string>("yolo_orientation/visualization_marker_array"));
+    detectionTopic = scenario.absolute(
+        lookup(config, {"topics", "detections"}).as<std::string>("yolo_orientation/visualization_marker_array"));
     if (!live)
         return;
     const auto topic = [&](const char *key, const char *fallback) {
@@ -200,12 +205,23 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
                 using Command = riptide_msgs2::msg::LedCommand;
                 LightMode mode;
                 switch (msg.mode) {
-                case Command::MODE_SOLID: mode = LightMode::Solid; break;
-                case Command::MODE_SLOW_FLASH: mode = LightMode::SlowFlash; break;
-                case Command::MODE_FAST_FLASH: mode = LightMode::FastFlash; break;
-                case Command::MODE_BREATH: mode = LightMode::Breath; break;
-                case Command::SINGLETON_FLASH: mode = LightMode::Flash; break;
-                default: return;
+                case Command::MODE_SOLID:
+                    mode = LightMode::Solid;
+                    break;
+                case Command::MODE_SLOW_FLASH:
+                    mode = LightMode::SlowFlash;
+                    break;
+                case Command::MODE_FAST_FLASH:
+                    mode = LightMode::FastFlash;
+                    break;
+                case Command::MODE_BREATH:
+                    mode = LightMode::Breath;
+                    break;
+                case Command::SINGLETON_FLASH:
+                    mode = LightMode::Flash;
+                    break;
+                default:
+                    return;
                 }
                 if (msg.target > Command::TARGET_ALL)
                     return;
@@ -278,8 +294,9 @@ void RosSide::subscribeCamera(CameraFeed &feed) {
                 for (int y = 0; y < h; ++y)
                     for (int x = 0; x < w; ++x) {
                         float metres;
-                        std::memcpy(&metres, msg->data.data() + std::size_t(y * stride) * msg->step +
-                                                 std::size_t(x * stride) * sizeof(float),
+                        std::memcpy(&metres,
+                                    msg->data.data() + std::size_t(y * stride) * msg->step +
+                                        std::size_t(x * stride) * sizeof(float),
                                     sizeof(float));
                         colorize(metres, float(feed.camera->minRange), float(feed.camera->maxRange),
                                  feed.depth.data() + (std::size_t(y) * std::size_t(w) + std::size_t(x)) * 3);
@@ -362,7 +379,8 @@ bool RosSide::lookupAt(const std::string &frame, double t, bool useTime, glm::ma
     }
     if (useTime) {
         try {
-            out = matrixOf(buffer_->lookupTransform(map, frame, rclcpp::Time(int64_t(t * 1e9), RCL_ROS_TIME)).transform);
+            out =
+                matrixOf(buffer_->lookupTransform(map, frame, rclcpp::Time(int64_t(t * 1e9), RCL_ROS_TIME)).transform);
             return true;
         } catch (const tf2::TransformException &) {
             ++lookupFallbacks_;
@@ -385,8 +403,12 @@ bool RosSide::updatePose(glm::mat4 &body, bool &first) {
     probe(estimate_, scenario_->estimateBaseFrame);
     bool truth;
     switch (source_) {
-    case PoseSource::Truth: truth = true; break;
-    case PoseSource::Estimate: truth = false; break;
+    case PoseSource::Truth:
+        truth = true;
+        break;
+    case PoseSource::Estimate:
+        truth = false;
+        break;
     default: // simulator truth while it is alive, else the estimate; before any pose, truth until proven absent
         truth = truth_.fresh || (!estimate_.fresh && (truth_.seen || !estimate_.seen));
     }
@@ -399,11 +421,14 @@ bool RosSide::updatePose(glm::mat4 &body, bool &first) {
     Probe &src = truth ? truth_ : estimate_;
     if (!src.seen) {
         fresh_ = false;
-        status_ = source_ == PoseSource::Auto ? "WAITING FOR POSE" : truth ? "WAITING FOR PHYSICS" : "WAITING FOR ESTIMATE";
+        status_ = source_ == PoseSource::Auto ? "WAITING FOR POSE"
+                  : truth                     ? "WAITING FOR PHYSICS"
+                                              : "WAITING FOR ESTIMATE";
         return false;
     }
     fresh_ = src.fresh;
-    status_ = truth ? (src.fresh ? "PHYSICS CONNECTED" : "POSE STALE") : (src.fresh ? "ROBOT (ESTIMATE)" : "ESTIMATE STALE");
+    status_ =
+        truth ? (src.fresh ? "PHYSICS CONNECTED" : "POSE STALE") : (src.fresh ? "ROBOT (ESTIMATE)" : "ESTIMATE STALE");
     // The active source's display clock places the robot; frames of the estimate stream (and the rest of
     // the TF tree) use the estimate clock, each sampled once per frame.
     const double wall = wallSeconds();
@@ -447,8 +472,8 @@ void RosSide::receiveMarkers(std::map<MarkerKey, MarkerRecord> &records,
             records.erase({m.ns, m.id});
             continue;
         }
-        const bool attached = m.header.frame_id == scenario_->estimateBaseFrame ||
-                              m.header.frame_id == scenario_->truthBaseFrame;
+        const bool attached =
+            m.header.frame_id == scenario_->estimateBaseFrame || m.header.frame_id == scenario_->truthBaseFrame;
         if (!attached && m.header.frame_id != scenario_->mapFrame)
             continue;
         MarkerRecord record;
@@ -595,14 +620,16 @@ void RosSide::capturePointClouds() {
         };
         if (lookup(stamp))
             layer.placed = true;
-        else if (std::chrono::duration<double>(now - layer.received).count() > .5 && lookup(rclcpp::Time(0, 0, stamp.get_clock_type())))
+        else if (std::chrono::duration<double>(now - layer.received).count() > .5 &&
+                 lookup(rclcpp::Time(0, 0, stamp.get_clock_type())))
             layer.placed = layer.approximate = true;
     }
 }
 
 bool RosSide::truthFromEstimate(glm::mat4 &offset) {
     glm::mat4 truth, estimate;
-    if (!usingTruth_ || !haveTime_ || !scenario_ || !lookupAt(scenario_->estimateBaseFrame, otherTime_, true, estimate) ||
+    if (!usingTruth_ || !haveTime_ || !scenario_ ||
+        !lookupAt(scenario_->estimateBaseFrame, otherTime_, true, estimate) ||
         !lookupAt(scenario_->truthBaseFrame, otherTime_, true, truth))
         return false;
     offset = truth * glm::inverse(estimate);
@@ -660,10 +687,9 @@ void RosSide::captureMpc(bool wanted) {
         const bool settle = mpcFailing_ && std::chrono::duration<double>(Clock::now() - mpcFailingSince_).count() > .2;
         const rclcpp::Time stamp = settle ? rclcpp::Time(0, 0, RCL_ROS_TIME) : rclcpp::Time(mpcMessage_.header.stamp);
         try {
-            const auto estimated =
-                matrixOf(buffer_->lookupTransform(scenario_->estimateBaseFrame, mpcMessage_.header.frame_id, stamp).transform);
-            const auto truth =
-                matrixOf(buffer_->lookupTransform(scenario_->mapFrame, poseFrame(), stamp).transform);
+            const auto estimated = matrixOf(
+                buffer_->lookupTransform(scenario_->estimateBaseFrame, mpcMessage_.header.frame_id, stamp).transform);
+            const auto truth = matrixOf(buffer_->lookupTransform(scenario_->mapFrame, poseFrame(), stamp).transform);
             mpcPath.clear();
             for (const auto &pose : mpcMessage_.poses)
                 mpcPath.push_back(truth * estimated * poseOf(pose.pose));

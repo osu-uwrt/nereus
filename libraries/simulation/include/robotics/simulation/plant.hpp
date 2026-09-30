@@ -55,7 +55,7 @@ struct Thruster {
 
 struct Pool {
     Eigen::Vector2d origin_xy_world = Eigen::Vector2d::Zero(); // Pool corner in world XY.
-    double yaw_world = 0; // Pool-local XY axes rotated into world, radians.
+    double yaw_world = 0;                                      // Pool-local XY axes rotated into world, radians.
     double length = 20.0;
     double width = 10.0;
     double depth = 5.0;
@@ -63,7 +63,7 @@ struct Pool {
     double water_density = 1000.0;
     Eigen::Vector3d current_velocity = Eigen::Vector3d::Zero();              // Mean, world frame.
     Eigen::Vector3d current_oscillation_amplitude = Eigen::Vector3d::Zero(); // m/s.
-    double current_oscillation_frequency = 0; // Hz; zero disables oscillation.
+    double current_oscillation_frequency = 0;                                // Hz; zero disables oscillation.
 };
 
 struct PlantParameters {

@@ -27,8 +27,7 @@ std::filesystem::path ResolvedScenario::asset(const std::string &role, const std
         if (found != pack->second.end())
             return found->second;
     }
-    throw std::out_of_range("resolved scenario: asset '" + id + "' is not present in pack '" + role +
-                            "'");
+    throw std::out_of_range("resolved scenario: asset '" + id + "' is not present in pack '" + role + "'");
 }
 
 ResolvedScenario parseResolvedScenario(const Json &document) {
@@ -49,8 +48,7 @@ ResolvedScenario parseResolvedScenario(const Json &document) {
         for (const auto &[id, path] : assets.items()) {
             const std::filesystem::path absolute(path.get<std::string>());
             if (!absolute.is_absolute())
-                throw std::runtime_error("resolved scenario: asset path of " + role + ":" + id +
-                                         " is not absolute");
+                throw std::runtime_error("resolved scenario: asset path of " + role + ":" + id + " is not absolute");
             result.asset_paths[role][id] = absolute;
         }
     result.document = document;

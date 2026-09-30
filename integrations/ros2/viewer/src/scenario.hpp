@@ -3,12 +3,12 @@
 #pragma once
 #include "camera_geometry.hpp"
 #include "frame_graph.hpp"
-#include <robotics/rendering/scene.hpp>
-#include <robotics/session/scenario.hpp>
 #include <filesystem>
 #include <map>
 #include <memory>
 #include <optional>
+#include <robotics/rendering/scene.hpp>
+#include <robotics/session/scenario.hpp>
 #include <string>
 #include <vector>
 
@@ -32,8 +32,8 @@ struct Mechanism {
     glm::mat4 frameInBase{1};
     std::vector<glm::mat4> slotsInBase; // launchers/droppers: payload seating in base_link
     float projectileLength = 0, projectileRadius = 0;
-    float minGap = 0;                   // claw
-    glm::vec3 tip{0};                   // magnet
+    float minGap = 0; // claw
+    glm::vec3 tip{0}; // magnet
 };
 struct CutoutSpec {
     std::vector<float> facesX;

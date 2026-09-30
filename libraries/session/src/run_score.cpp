@@ -4,8 +4,8 @@
 #include <set>
 
 namespace robotics::session {
-Json buildRunSnapshot(const Json &task_pack, const Json &snapshot, Json extra, std::int64_t now_ns,
-                      double adjustment, const std::string &message) {
+Json buildRunSnapshot(const Json &task_pack, const Json &snapshot, Json extra, std::int64_t now_ns, double adjustment,
+                      const std::string &message) {
     const Json &run = snapshot.at("run");
     const bool running = run.at("running").get<bool>();
     const std::int64_t started = run.at("started_ns").get<std::int64_t>();

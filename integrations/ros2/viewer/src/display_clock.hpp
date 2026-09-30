@@ -100,14 +100,14 @@ class DisplayClock {
         return counts;
     }
 
-    double reanchor = .3;    // seconds of error treated as a reset/pause, not jitter
-    double slew = .1;        // max relative rate correction
-    double settle = 1.;      // seconds to converge on the target
-    double floorLeak = .005; // seconds per second the latency floor may drift towards later arrivals
+    double reanchor = .3;     // seconds of error treated as a reset/pause, not jitter
+    double slew = .1;         // max relative rate correction
+    double settle = 1.;       // seconds to converge on the target
+    double floorLeak = .005;  // seconds per second the latency floor may drift towards later arrivals
     double jitterDecay = 10.; // seconds for the lag envelope to decay (longer than typical burst spacing)
-    double margin = .008;    // added to the lag envelope
+    double margin = .008;     // added to the lag envelope
     double maxDelay = .25;
-    double rateSpan = 2.;    // seconds per rate measurement
+    double rateSpan = 2.; // seconds per rate measurement
 
   private:
     double model(double wall) const {

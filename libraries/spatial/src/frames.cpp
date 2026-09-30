@@ -27,8 +27,7 @@ FixedFrames::FixedFrames(std::string root, std::vector<FixedFrame> edges)
     std::map<std::string, std::size_t> indices;
     for (std::size_t i = 0; i < edges_.size(); ++i) {
         auto &edge = edges_[i];
-        if (edge.parent.empty() || edge.child.empty() || edge.child == root_ ||
-            !indices.emplace(edge.child, i).second)
+        if (edge.parent.empty() || edge.child.empty() || edge.child == root_ || !indices.emplace(edge.child, i).second)
             throw std::invalid_argument("invalid or duplicate fixed frame: " + edge.child);
         validate(edge.pose);
         edge.pose.rotation.normalize();

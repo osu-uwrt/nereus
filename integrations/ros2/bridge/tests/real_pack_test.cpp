@@ -28,8 +28,8 @@ session::ResolvedScenario withoutCameras(session::ResolvedScenario resolved) {
     for (const auto &stream : resolved.bridge.at("streams")) {
         const std::string native = stream.at("native");
         const bool camera = native.rfind("sensor:", 0) == 0 &&
-                            cameras.count(native.substr(7, native.find('.') == std::string::npos ? std::string::npos
-                                                                                                   : native.find('.') - 7));
+                            cameras.count(native.substr(
+                                7, native.find('.') == std::string::npos ? std::string::npos : native.find('.') - 7));
         if (!stream.contains("image") && !camera)
             streams.push_back(stream);
     }
@@ -90,7 +90,9 @@ struct Talos {
     }
 };
 
-Json statusOf(const Publication &p) { return messageToJson(p.message->type().members(), p.message->data()); }
+Json statusOf(const Publication &p) {
+    return messageToJson(p.message->type().members(), p.message->data());
+}
 std::vector<Json> collect(const std::vector<Publication> &all, const std::string &stream) {
     std::vector<Json> out;
     for (const auto &item : all)

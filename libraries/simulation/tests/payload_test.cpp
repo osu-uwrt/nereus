@@ -39,8 +39,7 @@ TEST(Payload, MatchesEveryStateOfIndependentOriginalTrajectories) {
             }
             current_case = std::stoi(fields[1]);
             ASSERT_EQ(current_case, cases++);
-            parameters.model =
-                std::stoi(fields[2]) ? PayloadModel::Finned : PayloadModel::FixedAxis;
+            parameters.model = std::stoi(fields[2]) ? PayloadModel::Finned : PayloadModel::FixedAxis;
             parameters.neutral_buoyancy = std::stoi(fields[3]) != 0;
             const std::vector<double *> targets{&parameters.mass,
                                                 &parameters.displaced_volume,
@@ -77,8 +76,7 @@ TEST(Payload, MatchesEveryStateOfIndependentOriginalTrajectories) {
             expected[i] = std::stod(fields[2 + i]);
             ASSERT_TRUE(std::isfinite(expected[i]));
         }
-        const Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::RowMajor>> expected_rotation(
-            expected.data() + 6);
+        const Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::RowMajor>> expected_rotation(expected.data() + 6);
         if (next_tick == 0) {
             actual.position = expected.head<3>();
             actual.velocity = expected.segment<3>(3);
@@ -90,8 +88,7 @@ TEST(Payload, MatchesEveryStateOfIndependentOriginalTrajectories) {
         EXPECT_TRUE(actual.position.isApprox(expected.head<3>(), 1e-10));
         EXPECT_LE((actual.position - expected.head<3>()).cwiseAbs().maxCoeff(), 1e-10);
         EXPECT_LE((actual.velocity - expected.segment<3>(3)).cwiseAbs().maxCoeff(), 1e-10);
-        EXPECT_LE((actual.orientation.toRotationMatrix() - expected_rotation).cwiseAbs().maxCoeff(),
-                  1e-10);
+        EXPECT_LE((actual.orientation.toRotationMatrix() - expected_rotation).cwiseAbs().maxCoeff(), 1e-10);
         EXPECT_LE((actual.angular_velocity - expected.tail<3>()).cwiseAbs().maxCoeff(), 1e-10);
         EXPECT_NEAR(actual.orientation.norm(), 1.0, 2e-15);
         ++next_tick;
@@ -132,10 +129,9 @@ TEST(Payload, DryFreeFallAndFixedAxisDoNotIntegrateAngularVelocity) {
     input.angular_velocity = Eigen::Vector3d(3., -2., 1.);
     input.orientation = Eigen::AngleAxisd(.6, Eigen::Vector3d::UnitY());
     const auto output = PayloadDynamics(parameters).advance(input, {}, .1);
-    EXPECT_TRUE(output.position.isApprox(
-        input.position + .1 * input.velocity + Eigen::Vector3d(0., 0., -.04903325), 1e-15));
     EXPECT_TRUE(
-        output.velocity.isApprox(input.velocity + Eigen::Vector3d(0., 0., -.980665), 1e-15));
+        output.position.isApprox(input.position + .1 * input.velocity + Eigen::Vector3d(0., 0., -.04903325), 1e-15));
+    EXPECT_TRUE(output.velocity.isApprox(input.velocity + Eigen::Vector3d(0., 0., -.980665), 1e-15));
     EXPECT_TRUE(output.orientation.isApprox(input.orientation));
     EXPECT_EQ(output.angular_velocity, input.angular_velocity);
     EXPECT_EQ(input.position, Eigen::Vector3d(2., -1., 5.));
@@ -179,8 +175,7 @@ TEST(Payload, InvalidRequestsAreRejectedWithoutMutation) {
     parameters.model = PayloadModel::Finned;
     parameters.angular_damping = 1e10;
     state = {};
-    EXPECT_THROW(PayloadDynamics(parameters).advance(state, environment, 1.),
-                 std::invalid_argument);
+    EXPECT_THROW(PayloadDynamics(parameters).advance(state, environment, 1.), std::invalid_argument);
     EXPECT_EQ(state.position, Eigen::Vector3d::Zero());
 }
 } // namespace

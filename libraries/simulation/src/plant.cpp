@@ -19,42 +19,33 @@ void require(bool condition, const std::string &message) {
 }
 
 void validate(const PlantParameters &p) {
-    require(p.timestep.count() > 0 && p.timestep <= std::chrono::milliseconds(100),
-            "timestep must be in (0, 100ms]");
+    require(p.timestep.count() > 0 && p.timestep <= std::chrono::milliseconds(100), "timestep must be in (0, 100ms]");
     for (double value : {p.pool.length, p.pool.width, p.pool.depth, p.pool.water_density}) {
         require(std::isfinite(value) && value > 0, "pool dimensions and density must be positive");
     }
     require(std::isfinite(p.pool.water_level) && p.pool.current_velocity.allFinite(),
             "pool level and current must be finite");
-    require(p.pool.origin_xy_world.allFinite() && std::isfinite(p.pool.yaw_world),
-            "pool placement must be finite");
+    require(p.pool.origin_xy_world.allFinite() && std::isfinite(p.pool.yaw_world), "pool placement must be finite");
     const double frequency = p.pool.current_oscillation_frequency;
     const double omega = 2 * std::acos(-1.0) * frequency;
-    require(std::isfinite(frequency) && frequency >= 0 &&
-                p.pool.current_oscillation_amplitude.allFinite() &&
+    require(std::isfinite(frequency) && frequency >= 0 && p.pool.current_oscillation_amplitude.allFinite() &&
                 (omega * p.pool.current_oscillation_amplitude).allFinite() &&
-                std::isfinite(
-                    omega * (static_cast<double>(std::numeric_limits<std::int64_t>::max()) / 1e9)),
+                std::isfinite(omega * (static_cast<double>(std::numeric_limits<std::int64_t>::max()) / 1e9)),
             "current oscillation must have finite amplitude and nonnegative frequency");
     require(std::isfinite(p.pool.water_level - p.pool.depth), "pool floor must be finite");
     std::set<std::string> ids;
     for (const auto &t : p.thrusters) {
-        require(!t.id.empty() && ids.insert(t.id).second,
-                "thruster IDs must be nonempty and unique");
-        require(t.position.allFinite() && t.direction.allFinite() &&
-                    std::abs(t.direction.norm() - 1.0) < 1e-9,
-                "thruster " + t.id +
-                    ": position must be finite and direction must be a unit vector");
-        require(!t.propeller_radius ||
-                    (std::isfinite(*t.propeller_radius) && *t.propeller_radius > 0),
+        require(!t.id.empty() && ids.insert(t.id).second, "thruster IDs must be nonempty and unique");
+        require(t.position.allFinite() && t.direction.allFinite() && std::abs(t.direction.norm() - 1.0) < 1e-9,
+                "thruster " + t.id + ": position must be finite and direction must be a unit vector");
+        require(!t.propeller_radius || (std::isfinite(*t.propeller_radius) && *t.propeller_radius > 0),
                 "propeller radius must be positive and finite when configured");
     }
 }
 
 detail::State13d pack(const BodyState &s) {
-    require(s.position.allFinite() && s.orientation.coeffs().allFinite() &&
-                std::isfinite(s.orientation.norm()) && s.orientation.norm() > 1e-10 &&
-                s.linear_velocity.allFinite() && s.angular_velocity.allFinite(),
+    require(s.position.allFinite() && s.orientation.coeffs().allFinite() && std::isfinite(s.orientation.norm()) &&
+                s.orientation.norm() > 1e-10 && s.linear_velocity.allFinite() && s.angular_velocity.allFinite(),
             "body state must be finite with a nonzero quaternion");
     const auto q = s.orientation.normalized();
     detail::State13d x;
@@ -81,30 +72,25 @@ class PoolContacts {
           upper_(p.pool.length - p.body.collision_radius, p.pool.width - p.body.collision_radius,
                  std::numeric_limits<double>::infinity()),
           origin_(p.pool.origin_xy_world.x(), p.pool.origin_xy_world.y(), 0),
-          rotation_(
-              Eigen::AngleAxisd(p.pool.yaw_world, Eigen::Vector3d::UnitZ()).toRotationMatrix()) {
+          rotation_(Eigen::AngleAxisd(p.pool.yaw_world, Eigen::Vector3d::UnitZ()).toRotationMatrix()) {
         if (!p.pool.origin_xy_world.isZero(0) || p.pool.yaw_world != 0)
-            boundary_tolerance_ =
-                16 * std::numeric_limits<double>::epsilon() *
-                std::max({1.0, origin_.cwiseAbs().maxCoeff(), p.pool.length, p.pool.width,
-                          std::abs(p.pool.water_level), p.pool.depth});
+            boundary_tolerance_ = 16 * std::numeric_limits<double>::epsilon() *
+                                  std::max({1.0, origin_.cwiseAbs().maxCoeff(), p.pool.length, p.pool.width,
+                                            std::abs(p.pool.water_level), p.pool.depth});
         require(std::isfinite(p.body.collision_radius) && p.body.collision_radius > 0 &&
-                    2 * p.body.collision_radius <
-                        std::min({p.pool.length, p.pool.width, p.pool.depth}),
+                    2 * p.body.collision_radius < std::min({p.pool.length, p.pool.width, p.pool.depth}),
                 "positive finite collision sphere must fit in the pool");
     }
 
     void validateInitial(const detail::State13d &x) const {
         const auto position = local(x.head<3>());
-        require((position.array() >= lower_.array()).all() &&
-                    (position.array() <= upper_.array()).all(),
+        require((position.array() >= lower_.array()).all() && (position.array() <= upper_.array()).all(),
                 "initial collision sphere must be inside the pool walls and above the floor");
     }
 
     bool touching(const detail::State13d &x) const {
         const auto position = local(x.head<3>());
-        return (position.array() <= lower_.array() + 1e-9).any() ||
-               (position.array() >= upper_.array() - 1e-9).any();
+        return (position.array() <= lower_.array() + 1e-9).any() || (position.array() >= upper_.array() - 1e-9).any();
     }
 
     void resolve(detail::State13d &x, const Matrix6 &inverse_mass) const {
@@ -158,8 +144,7 @@ class PoolContacts {
 } // namespace
 
 struct Plant::Impl {
-    explicit Impl(const PlantParameters &p, const BodyState &initial)
-        : parameters(p), state(pack(initial)) {
+    explicit Impl(const PlantParameters &p, const BodyState &initial) : parameters(p), state(pack(initial)) {
         validate(p);
         switch (p.contacts.model) {
         case ContactModel::Disabled:
@@ -169,9 +154,8 @@ struct Plant::Impl {
             pool_contacts->validateInitial(state);
             break;
         case ContactModel::BoxScene:
-            box_contacts =
-                std::make_unique<detail::BoxContacts>(p.contacts.body_boxes, p.contacts.world_boxes,
-                                                      p.contacts.restitution, p.contacts.friction);
+            box_contacts = std::make_unique<detail::BoxContacts>(p.contacts.body_boxes, p.contacts.world_boxes,
+                                                                 p.contacts.restitution, p.contacts.friction);
             break;
         default:
             throw std::invalid_argument("unknown contact model");
@@ -179,8 +163,8 @@ struct Plant::Impl {
         const auto &b = p.body;
         dynamics.configure(b.mass, b.inertia, b.added_mass);
         dynamics.configureDamping(b.linear_damping, b.quadratic_damping, b.damping_center);
-        dynamics.configureHydrostatics(p.pool.water_density, b.displaced_volume, b.buoyancy_center,
-                                       b.buoyancy_radii, 9.80665, p.pool.water_level);
+        dynamics.configureHydrostatics(p.pool.water_density, b.displaced_volume, b.buoyancy_center, b.buoyancy_radii,
+                                       9.80665, p.pool.water_level);
         std::vector<detail::ThrusterParameters> actuator_parameters;
         allocation.resize(6, static_cast<Eigen::Index>(p.thrusters.size()));
         for (std::size_t i = 0; i < p.thrusters.size(); ++i) {
@@ -197,8 +181,7 @@ struct Plant::Impl {
             a.reverseScale = t.reverse_scale;
             a.efficiency = t.efficiency;
             actuator_parameters.push_back(a);
-            allocation.col(static_cast<Eigen::Index>(i)) << t.direction,
-                t.position.cross(t.direction);
+            allocation.col(static_cast<Eigen::Index>(i)) << t.direction, t.position.cross(t.direction);
         }
         require(allocation.allFinite(), "thruster allocation must be finite");
         actuators.configure(actuator_parameters, p.command_timeout);
@@ -206,8 +189,7 @@ struct Plant::Impl {
     }
 
     Vector6 propulsion(const detail::State13d &stage, Eigen::VectorXd forces) const {
-        const Eigen::Quaterniond q =
-            Eigen::Quaterniond(stage[3], stage[4], stage[5], stage[6]).normalized();
+        const Eigen::Quaterniond q = Eigen::Quaterniond(stage[3], stage[4], stage[5], stage[6]).normalized();
         const double pi = std::acos(-1.0);
         for (std::size_t i = 0; i < parameters.thrusters.size(); ++i) {
             const auto &thruster = parameters.thrusters[i];
@@ -215,22 +197,19 @@ struct Plant::Impl {
                 continue;
             const double z = (stage.head<3>() + q * thruster.position).z();
             const double axis_z = (q * thruster.direction).z();
-            const double extent = std::max(.001, *thruster.propeller_radius *
-                                                     std::sqrt(std::max(0.0, 1 - axis_z * axis_z)));
+            const double extent =
+                std::max(.001, *thruster.propeller_radius * std::sqrt(std::max(0.0, 1 - axis_z * axis_z)));
             const double c = std::clamp((parameters.pool.water_level - z) / extent, -1.0, 1.0);
-            forces[static_cast<Eigen::Index>(i)] *=
-                (std::acos(-c) + c * std::sqrt(std::max(0.0, 1 - c * c))) / pi;
+            forces[static_cast<Eigen::Index>(i)] *= (std::acos(-c) + c * std::sqrt(std::max(0.0, 1 - c * c))) / pi;
         }
         return allocation * forces;
     }
-    detail::State13d derivative(const detail::State13d &stage, const Eigen::VectorXd &forces,
-                                double time) const {
+    detail::State13d derivative(const detail::State13d &stage, const Eigen::VectorXd &forces, double time) const {
         const auto &pool = parameters.pool;
         const double omega = 2 * std::acos(-1.0) * pool.current_oscillation_frequency;
         const double phase = omega * time;
         return dynamics.derivative(stage, propulsion(stage, forces),
-                                   pool.current_velocity +
-                                       pool.current_oscillation_amplitude * std::sin(phase),
+                                   pool.current_velocity + pool.current_oscillation_amplitude * std::sin(phase),
                                    pool.current_oscillation_amplitude * (omega * std::cos(phase)));
     }
 
@@ -265,10 +244,9 @@ void Plant::stopThrusters() {
 
 Snapshot Plant::observe() const {
     const auto &p = *impl_;
-    return {
-        p.generation, p.tick,
-        std::chrono::nanoseconds(static_cast<std::int64_t>(p.tick) * p.parameters.timestep.count()),
-        unpack(p.state), p.committed_forces};
+    return {p.generation, p.tick,
+            std::chrono::nanoseconds(static_cast<std::int64_t>(p.tick) * p.parameters.timestep.count()),
+            unpack(p.state), p.committed_forces};
 }
 
 MotionSample Plant::motion() const {
@@ -278,11 +256,10 @@ MotionSample Plant::motion() const {
     }
     MotionSample sample;
     sample.state = observe();
-    const auto derivative = p.derivative(
-        p.state, p.committed_forces, std::chrono::duration<double>(sample.state.elapsed).count());
+    const auto derivative =
+        p.derivative(p.state, p.committed_forces, std::chrono::duration<double>(sample.state.elapsed).count());
     const auto &body = sample.state.body;
-    sample.acceleration_body =
-        derivative.segment<3>(7) + body.angular_velocity.cross(body.linear_velocity);
+    sample.acceleration_body = derivative.segment<3>(7) + body.angular_velocity.cross(body.linear_velocity);
     sample.angular_acceleration_body = derivative.tail<3>();
     // Box contacts expose post-impulse free-motion derivatives, excluding the
     // impulse itself, as in the reference. Sphere contacts retain their policy.
@@ -298,8 +275,8 @@ Snapshot Plant::advance(std::uint64_t ticks) {
     if (p.faulted) {
         throw std::logic_error("plant must be reset after a failed advance");
     }
-    const auto max_tick = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max() /
-                                                     p.parameters.timestep.count());
+    const auto max_tick =
+        static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max() / p.parameters.timestep.count());
     if (ticks > max_tick - p.tick) {
         throw std::overflow_error("requested advance overflows simulation time");
     }

@@ -11,8 +11,8 @@
 
 #include <array>
 #include <cstdint>
-#include <memory>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -29,11 +29,11 @@ struct PayloadRelease {
     std::string mechanism_id, mechanism_type, slot_id;
     int slot_index{0};
     std::int64_t time_ns{0};
-    Eigen::Vector3d position_world;           // visible mesh centre, NOT centre of mass
-    Eigen::Quaterniond orientation_world;     // world from payload body
+    Eigen::Vector3d position_world;       // visible mesh centre, NOT centre of mass
+    Eigen::Quaterniond orientation_world; // world from payload body
     Eigen::Vector3d velocity_com_world;
     Eigen::Vector3d angular_velocity_world;
-    const Json *projectile{nullptr};          // robot-pack projectile parameters (owned by scenario)
+    const Json *projectile{nullptr}; // robot-pack projectile parameters (owned by scenario)
 };
 
 struct ReleaseState {
@@ -65,9 +65,8 @@ class Mechanisms {
     // is filled; ammunition and cooldown change only then.
     CommandResult fire(const std::string &id, const Pose &world_from_reference,
                        const Eigen::Vector3d &linear_velocity_reference,
-                       const Eigen::Vector3d &angular_velocity_reference,
-                       const std::string &reference_frame, double water_density, bool killed,
-                       PayloadRelease &release);
+                       const Eigen::Vector3d &angular_velocity_reference, const std::string &reference_frame,
+                       double water_density, bool killed, PayloadRelease &release);
     CommandResult commandClaw(const std::string &id, bool open, bool killed);
     CommandResult moveClaw(const std::string &id, double signed_duration_s, bool killed);
     void advance(std::int64_t dt_ns, bool killed);

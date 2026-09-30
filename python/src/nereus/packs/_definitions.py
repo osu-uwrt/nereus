@@ -127,7 +127,9 @@ def type_catalog() -> dict[str, Any]:
         "$schema": _DIALECT,
         "$id": "urn:nereus:types:1",
         "categories": {
-            category: {name: {"$ref": f"#/$defs/{definition}"} for name, definition in types.items()}
+            category: {
+                name: {"$ref": f"#/$defs/{definition}"} for name, definition in types.items()
+            }
             for category, types in registry().items()
         },
         "$defs": _expand(defs),

@@ -5,8 +5,8 @@
 #include <fnmatch.h>
 
 #include <algorithm>
-#include <cmath>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <regex>
 #include <set>
@@ -19,13 +19,17 @@ const std::set<std::string> kSimpleActions = {"command:mechanisms.reload_all", "
                                               "command:scenario.reset", "command:robot.reset_to_start"};
 const std::set<std::string> kAlignmentTriggers = {"startup", "placement", "reset_to_start", "full_reset"};
 
-SpecTree tree(std::map<std::string, SpecTree> nodes) { return SpecTree(std::move(nodes)); }
-SpecTree simTime() { return tree({{"time", timeSpec()}}); }
+SpecTree tree(std::map<std::string, SpecTree> nodes) {
+    return SpecTree(std::move(nodes));
+}
+SpecTree simTime() {
+    return tree({{"time", timeSpec()}});
+}
 
 const std::map<std::string, Spec> &poseArguments() {
     static const std::map<std::string, Spec> arguments = {
-        {"frame", stringSpec()},          {"position_m", vector3Spec()},   {"orientation_w", scalarSpec()},
-        {"orientation_x", scalarSpec()},  {"orientation_y", scalarSpec()}, {"orientation_z", scalarSpec()}};
+        {"frame", stringSpec()},         {"position_m", vector3Spec()},   {"orientation_w", scalarSpec()},
+        {"orientation_x", scalarSpec()}, {"orientation_y", scalarSpec()}, {"orientation_z", scalarSpec()}};
     return arguments;
 }
 
@@ -42,13 +46,19 @@ std::string numberText(const Json &value) {
     return value.is_string() ? value.get<std::string>() : value.dump();
 }
 
-Spec fixedFloat(int n) { return floatArray({n}); }
+Spec fixedFloat(int n) {
+    return floatArray({n});
+}
 
 Eigen::Vector3d rotateBy(const spatial::Pose &pose, const Eigen::Vector3d &v) {
     return pose.rotation * v;
 }
-Value vec3(const Eigen::Vector3d &v) { return Value::array({v.x(), v.y(), v.z()}); }
-Value quat4(const Eigen::Quaterniond &q) { return Value::array({q.w(), q.x(), q.y(), q.z()}); }
+Value vec3(const Eigen::Vector3d &v) {
+    return Value::array({v.x(), v.y(), v.z()});
+}
+Value quat4(const Eigen::Quaterniond &q) {
+    return Value::array({q.w(), q.x(), q.y(), q.z()});
+}
 
 std::vector<std::string> keysOf(const Json &array, const char *field) {
     std::vector<std::string> out;
@@ -86,12 +96,12 @@ Json Counters::toJson() const {
 
 SpecTree readingSpec(const Json &sensor) {
     const auto imu = [] {
-        return tree({{"specific_force", vector3Spec()}, {"angular_velocity", vector3Spec()},
-                     {"force_covariance", matrix3Spec()}, {"angular_covariance", matrix3Spec()}});
+        return tree({{"specific_force", vector3Spec()},
+                     {"angular_velocity", vector3Spec()},
+                     {"force_covariance", matrix3Spec()},
+                     {"angular_covariance", matrix3Spec()}});
     };
-    const auto attitude = [] {
-        return tree({{"orientation_wxyz", quaternionSpec()}, {"covariance", matrix3Spec()}});
-    };
+    const auto attitude = [] { return tree({{"orientation_wxyz", quaternionSpec()}, {"covariance", matrix3Spec()}}); };
     const std::string kind = sensor.at("type");
     if (kind == "imu")
         return imu();
@@ -106,14 +116,16 @@ SpecTree readingSpec(const Json &sensor) {
     if (kind == "reference_velocity")
         return tree({{"reference_relative_velocity", vector3Spec()}, {"covariance", matrix3Spec()}});
     if (kind == "dvl")
-        return tree({{"bottom_relative_velocity", vector3Spec()}, {"covariance", matrix3Spec()},
+        return tree({{"bottom_relative_velocity", vector3Spec()},
+                     {"covariance", matrix3Spec()},
                      {"bottom_distance", scalarSpec()}});
     if (kind == "reference_altitude")
-        return tree({{"mounted_world_z", scalarSpec()}, {"target_world_z", scalarSpec()},
-                     {"variance", scalarSpec()}});
+        return tree({{"mounted_world_z", scalarSpec()}, {"target_world_z", scalarSpec()}, {"variance", scalarSpec()}});
     if (kind == "pressure")
-        return tree({{"absolute_pressure", scalarSpec()}, {"pressure_variance", scalarSpec()},
-                     {"depth", scalarSpec()}, {"depth_variance", scalarSpec()}});
+        return tree({{"absolute_pressure", scalarSpec()},
+                     {"pressure_variance", scalarSpec()},
+                     {"depth", scalarSpec()},
+                     {"depth_variance", scalarSpec()}});
     throw MappingError("sensor " + repr(sensor.at("id").get<std::string>()) + ": no native reading for type " +
                        repr(kind));
 }
@@ -144,8 +156,8 @@ std::int64_t BridgeCore::steppedPeriod(double rate_hz, const std::string &where)
     return period;
 }
 
-BridgeCore::BridgeCore(const session::ResolvedScenario &resolved, SessionPort &session,
-                       std::int64_t epoch_ns, Lookup lookup, CameraSink *cameras)
+BridgeCore::BridgeCore(const session::ResolvedScenario &resolved, SessionPort &session, std::int64_t epoch_ns,
+                       Lookup lookup, CameraSink *cameras)
     : resolved_(resolved), session_(session), cameras_(cameras), lookup_(std::move(lookup)) {
     if (resolved.bridge.is_null())
         throw BridgeError("scenario selects no bridge pack");
@@ -180,8 +192,7 @@ BridgeCore::BridgeCore(const session::ResolvedScenario &resolved, SessionPort &s
         stream_config_[stream.at("id")] = stream;
     visual_ = std::make_unique<VisualContext>(VisualContext{
         session_, resolved_, world_frame_, [this] { return clockNs(); },
-        [this](const simulation::BodyState &body) { return referencePose(body); },
-        [this] { return scenarioJson(); }});
+        [this](const simulation::BodyState &body) { return referencePose(body); }, [this] { return scenarioJson(); }});
     compileStreams();
     compileServices();
     compileTf();
@@ -215,13 +226,12 @@ std::vector<std::size_t> BridgeCore::thrusterPermutation() {
                           "accepts neither");
     std::vector<std::size_t> index;
     for (const auto &name : order)
-        index.push_back(static_cast<std::size_t>(
-            std::find(native_ids.begin(), native_ids.end(), name) - native_ids.begin()));
+        index.push_back(
+            static_cast<std::size_t>(std::find(native_ids.begin(), native_ids.end(), name) - native_ids.begin()));
     return index;
 }
 
-std::pair<std::string, std::string> BridgeCore::mechanism(const std::string &endpoint,
-                                                          const std::string &where) const {
+std::pair<std::string, std::string> BridgeCore::mechanism(const std::string &endpoint, const std::string &where) const {
     static const std::regex pattern("^command:mechanisms\\.([A-Za-z0-9_]+)\\.(timed_move|fire|command)$");
     std::smatch match;
     if (!std::regex_match(endpoint, match, pattern))
@@ -238,14 +248,12 @@ std::pair<std::string, std::string> BridgeCore::mechanism(const std::string &end
 }
 
 SpecTree BridgeCore::mechanismSpec() const {
-    std::map<std::string, SpecTree> spec = {{"sim", simTime()}, {"armed", booleanSpec()},
-                                            {"any_busy", booleanSpec()}};
+    std::map<std::string, SpecTree> spec = {{"sim", simTime()}, {"armed", booleanSpec()}, {"any_busy", booleanSpec()}};
     for (const auto &[identifier, kind] : mechanism_types_) {
         if (kind == "launcher" || kind == "dropper")
             spec[identifier] = tree({{"state", stringSpec()}, {"available", integerSpec()}});
         else if (kind == "claw")
-            spec[identifier] = tree({{"state", stringSpec()}, {"gap_m", scalarSpec()},
-                                     {"target_gap_m", scalarSpec()}});
+            spec[identifier] = tree({{"state", stringSpec()}, {"gap_m", scalarSpec()}, {"target_gap_m", scalarSpec()}});
     }
     return tree(spec);
 }
@@ -297,11 +305,10 @@ void BridgeCore::compileStreams() {
     for (const auto &stream : config_.at("streams")) {
         const std::string id = stream.at("id"), where = "streams/" + id, endpoint = stream.at("native");
         try {
-            const bool camera_owned =
-                cameras_ != nullptr && [&] {
-                    const auto ids = cameras_->streamIds();
-                    return std::find(ids.begin(), ids.end(), id) != ids.end();
-                }();
+            const bool camera_owned = cameras_ != nullptr && [&] {
+                const auto ids = cameras_->streamIds();
+                return std::find(ids.begin(), ids.end(), id) != ids.end();
+            }();
             const auto type = MessageType::get(stream.at("message_type"));
             stream_types_[id] = type;
             if (camera_owned)
@@ -367,8 +374,8 @@ void BridgeCore::compileStreams() {
                     throw BridgeError(where + ": thruster state needs a thrusters block");
                 if (endpoint == "state:robot")
                     sources = tree({{"sim", simTime()},
-                                    {"reference_pose", tree({{"position", vector3Spec()},
-                                                             {"orientation_wxyz", quaternionSpec()}})},
+                                    {"reference_pose",
+                                     tree({{"position", vector3Spec()}, {"orientation_wxyz", quaternionSpec()}})},
                                     {"reference_body_velocity", vector3Spec()},
                                     {"body_angular_velocity", vector3Spec()}});
                 else if (endpoint == "state:mechanisms")
@@ -452,12 +459,11 @@ void BridgeCore::compileServices() {
                                   " is not supported by this bridge (supported: " + list + ")");
             }
             const auto type = ServiceType::get(type_name);
-            ServiceEntry entry{type,
-                               compileReader(type->request, service.at("request"), arguments, Json(),
-                                             where + "/request"),
-                               compileWriter(type->response, service.at("response"), resultSources(),
-                                             std::nullopt, where + "/response"),
-                               options};
+            ServiceEntry entry{
+                type, compileReader(type->request, service.at("request"), arguments, Json(), where + "/request"),
+                compileWriter(type->response, service.at("response"), resultSources(), std::nullopt,
+                              where + "/response"),
+                options};
             options["action"] = action;
             entry.options = options;
             services_.emplace(id, std::move(entry));
@@ -523,8 +529,8 @@ void BridgeCore::compileStaticTf() {
         }
         try {
             const auto pose = session_.frames()->lookup(edge.at("from_frame"), edge.at("to_frame"));
-            static_transforms_.push_back({edge.at("parent"), edge.at("child"), last_ros_ns_,
-                                          pose.translation, pose.rotation});
+            static_transforms_.push_back(
+                {edge.at("parent"), edge.at("child"), last_ros_ns_, pose.translation, pose.rotation});
         } catch (const std::exception &error) {
             throw BridgeError(std::string("tf: invalid static robot frames: ") + error.what());
         }
@@ -571,8 +577,7 @@ void BridgeCore::checkBindings() {
     std::map<std::string, Json> services;
     for (const auto &item : config_.value("services", Json::array()))
         services[item.at("id")] = item;
-    const auto require = [](const std::string &kind, const std::string &name, bool check,
-                            const std::string &expected) {
+    const auto require = [](const std::string &kind, const std::string &name, bool check, const std::string &expected) {
         if (!check)
             throw BridgeError(kind + " " + repr(name) + " must be " + expected);
     };
@@ -585,22 +590,21 @@ void BridgeCore::checkBindings() {
         require("kill.state_stream", state.at("id"), state.at("native") == "event:robot.kill_changed",
                 "event:robot.kill_changed");
     }
-    static const std::map<std::string, std::string> actions = {
-        {"robot_service", "command:robot.reset_to_start"},
-        {"tasks_service", "command:tasks.reset"},
-        {"full_service", "command:scenario.reset"}};
+    static const std::map<std::string, std::string> actions = {{"robot_service", "command:robot.reset_to_start"},
+                                                               {"tasks_service", "command:tasks.reset"},
+                                                               {"full_service", "command:scenario.reset"}};
     const Json reset = config_.value("reset", Json::object());
     for (const auto &[key, value] : reset.items()) {
         const auto action = actions.find(key);
         const std::string service = value;
-        const bool ok = action != actions.end() && services.count(service) &&
-                        services.at(service).at("action") == action->second;
+        const bool ok =
+            action != actions.end() && services.count(service) && services.at(service).at("action") == action->second;
         require("reset." + key, service, ok,
                 "a service with action " + (action == actions.end() ? "(unknown reset key)" : action->second));
     }
     const Json placement = config_.value("placement", Json::object());
-    for (const auto &[key, source] : {std::pair<const char *, const char *>{"set_service", "request"},
-                                      {"sync_service", "estimate"}}) {
+    for (const auto &[key, source] :
+         {std::pair<const char *, const char *>{"set_service", "request"}, {"sync_service", "estimate"}}) {
         if (!placement.contains(key))
             continue;
         const std::string name = placement[key];
@@ -621,9 +625,8 @@ void BridgeCore::checkBindings() {
         const std::string native = stream.at("native");
         if (native.rfind("sensor:", 0) != 0)
             continue;
-        const std::string name = native.substr(7, native.find('.') == std::string::npos
-                                                      ? std::string::npos
-                                                      : native.find('.') - 7);
+        const std::string name =
+            native.substr(7, native.find('.') == std::string::npos ? std::string::npos : native.find('.') - 7);
         const std::string frame_id = stream.value("frame_id", "");
         for (const auto &sensor : resolved_.robot.at("sensors"))
             if (sensor.at("id") == name && !frame_id.empty() && names.contains(sensor.at("frame").get<std::string>())) {
@@ -681,12 +684,11 @@ Value BridgeCore::robotState(const simulation::Snapshot &snapshot) const {
     const Eigen::Vector3d omega = body.angular_velocity;
     const Eigen::Vector3d velocity = body.linear_velocity + omega.cross(offset);
     const spatial::Pose to_reference = spatial::inverse(root_to_reference_);
-    return Value::map(
-        {{"sim", Value::map({{"time", Value::time(last_ros_ns_)}})},
-         {"reference_pose", Value::map({{"position", vec3(world_reference.translation)},
-                                        {"orientation_wxyz", quat4(world_reference.rotation)}})},
-         {"reference_body_velocity", vec3(rotateBy(to_reference, velocity))},
-         {"body_angular_velocity", vec3(rotateBy(to_reference, omega))}});
+    return Value::map({{"sim", Value::map({{"time", Value::time(last_ros_ns_)}})},
+                       {"reference_pose", Value::map({{"position", vec3(world_reference.translation)},
+                                                      {"orientation_wxyz", quat4(world_reference.rotation)}})},
+                       {"reference_body_velocity", vec3(rotateBy(to_reference, velocity))},
+                       {"body_angular_velocity", vec3(rotateBy(to_reference, omega))}});
 }
 
 Value BridgeCore::thrusterValues() const {
@@ -697,8 +699,8 @@ Value BridgeCore::thrusterValues() const {
         const double scale = scales.at(k).get<double>();
         forces.push_back(scale != 0 ? native[static_cast<Eigen::Index>((*thruster_index_)[k])] / scale : 0.0);
     }
-    return Value::map({{"sim", Value::map({{"time", Value::time(last_ros_ns_)}})},
-                       {"forces_n", Value::array(std::move(forces))}});
+    return Value::map(
+        {{"sim", Value::map({{"time", Value::time(last_ros_ns_)}})}, {"forces_n", Value::array(std::move(forces))}});
 }
 
 Value BridgeCore::clawValues() const {
@@ -715,16 +717,16 @@ Value BridgeCore::clawValues() const {
 
 Value BridgeCore::mechanismValues() const {
     const auto state = session_.mechanismState();
-    std::map<std::string, Value> values = {
-        {"sim", Value::map({{"time", Value::time(last_ros_ns_)}})},
-        {"armed", Value::boolean(state && state->armed)},
-        {"any_busy", Value::boolean(state && state->any_busy)}};
+    std::map<std::string, Value> values = {{"sim", Value::map({{"time", Value::time(last_ros_ns_)}})},
+                                           {"armed", Value::boolean(state && state->armed)},
+                                           {"any_busy", Value::boolean(state && state->any_busy)}};
     if (state) {
         for (const auto &[key, release] : state->releases)
-            values[key] = Value::map({{"state", Value::text(release.state)},
-                                      {"available", Value::integer(release.available)}});
+            values[key] =
+                Value::map({{"state", Value::text(release.state)}, {"available", Value::integer(release.available)}});
         for (const auto &[key, claw] : state->claws)
-            values[key] = Value::map({{"state", Value::text(claw.state)}, {"gap_m", Value::real(claw.gap_m)},
+            values[key] = Value::map({{"state", Value::text(claw.state)},
+                                      {"gap_m", Value::real(claw.gap_m)},
                                       {"target_gap_m", Value::real(claw.target_gap_m)}});
     }
     return Value::map(std::move(values));
@@ -732,7 +734,8 @@ Value BridgeCore::mechanismValues() const {
 
 namespace {
 std::int64_t nowNs() {
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+        .count();
 }
 } // namespace
 
@@ -796,9 +799,8 @@ StepOutput BridgeCore::step() {
         const Value &pose = robot().at("reference_pose");
         const auto &p = pose.at("position").a;
         const auto &q = pose.at("orientation_wxyz").a;
-        out.transforms.push_back({tf_publish_[k].first.at("parent"), tf_publish_[k].first.at("child"),
-                                  last_ros_ns_, Eigen::Vector3d(p[0], p[1], p[2]),
-                                  Eigen::Quaterniond(q[0], q[1], q[2], q[3])});
+        out.transforms.push_back({tf_publish_[k].first.at("parent"), tf_publish_[k].first.at("child"), last_ros_ns_,
+                                  Eigen::Vector3d(p[0], p[1], p[2]), Eigen::Quaterniond(q[0], q[1], q[2], q[3])});
         timed.next_ns += timed.period_ns;
     }
     for (auto &publication : flush())
@@ -812,8 +814,9 @@ std::vector<Publication> BridgeCore::flush() {
     const Json feed = session_.takeFeed();
     for (const auto &item : feed)
         for (const auto &stream : feed_streams_)
-            publications.push_back(publish(stream, Value::map({{"sim", Value::map({{"time", Value::time(last_ros_ns_)}})},
-                                                               {"json", Value::text(item.dump())}})));
+            publications.push_back(
+                publish(stream, Value::map({{"sim", Value::map({{"time", Value::time(last_ros_ns_)}})},
+                                            {"json", Value::text(item.dump())}})));
     return publications;
 }
 
@@ -964,8 +967,8 @@ std::vector<Publication> BridgeCore::setKilled(bool killed) {
     const auto found = events_.find("event:robot.kill_changed");
     if (found == events_.end())
         return out;
-    const Value values = Value::map({{"sim", Value::map({{"time", Value::time(last_ros_ns_)}})},
-                                     {"killed", Value::boolean(session_.killed())}});
+    const Value values = Value::map(
+        {{"sim", Value::map({{"time", Value::time(last_ros_ns_)}})}, {"killed", Value::boolean(session_.killed())}});
     for (const auto &stream : found->second)
         out.push_back(publish(stream, values));
     return out;

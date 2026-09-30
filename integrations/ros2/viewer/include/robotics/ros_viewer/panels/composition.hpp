@@ -1,8 +1,8 @@
 #pragma once
 #include "robotics/ros_viewer/panels/capabilities.hpp"
-#include <yaml-cpp/yaml.h>
 #include <functional>
 #include <map>
+#include <yaml-cpp/yaml.h>
 
 namespace robotics::ros_viewer::panels {
 struct Context {

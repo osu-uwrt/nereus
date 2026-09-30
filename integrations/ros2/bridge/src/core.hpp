@@ -42,10 +42,11 @@ struct Alignment {
 
 using CounterTable = std::map<std::string, std::uint64_t>;
 struct Counters {
-    CounterTable published, unavailable_samples, rejected_commands, filtered_messages,
-        service_calls, alignments, alignments_superseded, alignments_acknowledged,
-        alignments_failed;
-    static void bump(CounterTable &table, const std::string &key) { ++table[key]; }
+    CounterTable published, unavailable_samples, rejected_commands, filtered_messages, service_calls, alignments,
+        alignments_superseded, alignments_acknowledged, alignments_failed;
+    static void bump(CounterTable &table, const std::string &key) {
+        ++table[key];
+    }
     Json toJson() const;
 };
 
@@ -64,30 +65,58 @@ const std::vector<std::string> &supportedServiceTypes();
 class BridgeCore {
   public:
     // `resolved` and `session` must outlive the core. Throws BridgeError.
-    BridgeCore(const session::ResolvedScenario &resolved, SessionPort &session,
-               std::int64_t epoch_ns, Lookup lookup = {}, CameraSink *cameras = nullptr);
+    BridgeCore(const session::ResolvedScenario &resolved, SessionPort &session, std::int64_t epoch_ns,
+               Lookup lookup = {}, CameraSink *cameras = nullptr);
 
-    const Json &config() const { return config_; }
-    const session::ResolvedScenario &resolved() const { return resolved_; }
-    std::int64_t timestepNs() const { return timestep_ns_; }
-    std::int64_t epochNs() const { return epoch_ns_; }
-    const std::string &resetPolicy() const { return reset_policy_; }
-    const std::string &worldFrame() const { return world_frame_; }
-    double realTimeFactor() const { return real_time_factor_.load(); }
+    const Json &config() const {
+        return config_;
+    }
+    const session::ResolvedScenario &resolved() const {
+        return resolved_;
+    }
+    std::int64_t timestepNs() const {
+        return timestep_ns_;
+    }
+    std::int64_t epochNs() const {
+        return epoch_ns_;
+    }
+    const std::string &resetPolicy() const {
+        return reset_policy_;
+    }
+    const std::string &worldFrame() const {
+        return world_frame_;
+    }
+    double realTimeFactor() const {
+        return real_time_factor_.load();
+    }
     // Returns the rejection reason or nullopt (0 pauses).
     std::optional<std::string> setRealTimeFactor(double value);
     static std::optional<std::string> checkRealTimeFactor(double value);
-    void setLookup(Lookup lookup) { lookup_ = std::move(lookup); }
-    bool killed() const { return session_.killed(); }
+    void setLookup(Lookup lookup) {
+        lookup_ = std::move(lookup);
+    }
+    bool killed() const {
+        return session_.killed();
+    }
     // Cumulative wall time inside step(): session advance, sensor mapping, timed streams.
     struct Timing {
         std::int64_t advance_ns{0}, sensors_ns{0}, timed_ns{0};
     };
-    const Timing &timing() const { return timing_; }
-    const Counters &counters() const { return counters_; }
-    Counters &counters() { return counters_; }
-    const Json &taskEvents() const { return task_events_; }
-    SessionPort &session() { return session_; }
+    const Timing &timing() const {
+        return timing_;
+    }
+    const Counters &counters() const {
+        return counters_;
+    }
+    Counters &counters() {
+        return counters_;
+    }
+    const Json &taskEvents() const {
+        return task_events_;
+    }
+    SessionPort &session() {
+        return session_;
+    }
 
     // Streams with their message types (publish and subscribe) for the node.
     const std::map<std::string, std::shared_ptr<const MessageType>> &streamTypes() const {
@@ -99,17 +128,25 @@ class BridgeCore {
         Writer writer;
         Json options;
     };
-    const std::map<std::string, ServiceEntry> &services() const { return services_; }
-    const std::vector<Transform> &staticTransforms() const { return static_transforms_; }
+    const std::map<std::string, ServiceEntry> &services() const {
+        return services_;
+    }
+    const std::vector<Transform> &staticTransforms() const {
+        return static_transforms_;
+    }
 
     // ---- time
-    std::int64_t rosNs(std::int64_t native_ns) const { return epoch_ns_ + offset_ns_ + native_ns; }
-    std::int64_t clockNs() const { return last_ros_ns_; }
+    std::int64_t rosNs(std::int64_t native_ns) const {
+        return epoch_ns_ + offset_ns_ + native_ns;
+    }
+    std::int64_t clockNs() const {
+        return last_ros_ns_;
+    }
 
     // ---- stepping: exactly one tick; clock stamps first, then data, in send order
     StepOutput step();
-    std::vector<Publication> flush();    // events produced outside stepping
-    std::vector<Publication> refresh();  // viewer state while paused
+    std::vector<Publication> flush();   // events produced outside stepping
+    std::vector<Publication> refresh(); // viewer state while paused
     std::vector<Publication> startupPublications();
     std::string scenarioJson() const;
 
@@ -119,8 +156,12 @@ class BridgeCore {
     // Serves one request; `response` is an initialised response message.
     void call(const std::string &service, const void *request, void *response);
     std::optional<Alignment> pendingAlignment();
-    bool hasAlignment() const { return alignment_.has_value(); }
-    const Json &alignmentConfig() const { return *alignment_; }
+    bool hasAlignment() const {
+        return alignment_.has_value();
+    }
+    const Json &alignmentConfig() const {
+        return *alignment_;
+    }
     std::pair<bool, std::string> fullReset();
 
     spatial::Pose referencePose(const simulation::BodyState &body) const;
@@ -137,8 +178,7 @@ class BridgeCore {
         std::function<std::shared_ptr<Message>()> state; // timed format streams
     };
 
-    std::pair<std::string, std::string> mechanism(const std::string &endpoint,
-                                                  const std::string &where) const;
+    std::pair<std::string, std::string> mechanism(const std::string &endpoint, const std::string &where) const;
     SpecTree mechanismSpec() const;
     SpecTree clawSpec() const;
     void compileFormatStream(const Json &stream, const std::shared_ptr<const MessageType> &type,
@@ -164,8 +204,7 @@ class BridgeCore {
     std::vector<Publication> setKilled(bool killed);
     session::CommandResult mechanismAction(const std::string &action, const Value &arguments);
     std::pair<bool, std::string> placeReference(const Value &pose, const Json &options);
-    std::pair<bool, std::string> placeState(const simulation::BodyState &state, bool keep_velocity,
-                                            bool becomes_start);
+    std::pair<bool, std::string> placeState(const simulation::BodyState &state, bool keep_velocity, bool becomes_start);
     std::optional<spatial::Pose> transform(const std::string &target, const std::string &source) const;
     void requestAlignment(const std::string &trigger);
     bool hasEstimateStream() const;

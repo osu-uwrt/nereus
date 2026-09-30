@@ -41,15 +41,13 @@ inline Eigen::Quaterniond quat(const Json &value, const std::string &what) {
 }
 inline Eigen::MatrixXd matrix(const Json &value, std::size_t n, const std::string &what) {
     if (!value.is_array() || value.size() != n)
-        throw std::invalid_argument(what + " must be a " + std::to_string(n) + "x" +
-                                    std::to_string(n) + " matrix");
+        throw std::invalid_argument(what + " must be a " + std::to_string(n) + "x" + std::to_string(n) + " matrix");
     Eigen::MatrixXd out(static_cast<Eigen::Index>(n), static_cast<Eigen::Index>(n));
     for (std::size_t r = 0; r < n; ++r)
         out.row(static_cast<Eigen::Index>(r)) = vec(value[r], n, what).transpose();
     return out;
 }
-inline spatial::Pose makePose(const Json &position, const Json &orientation,
-                              const std::string &what) {
+inline spatial::Pose makePose(const Json &position, const Json &orientation, const std::string &what) {
     return {vec3(position, what), quat(orientation, what)};
 }
 // Pose.compose of the Python binding: both operands and the result must be valid rigid poses.

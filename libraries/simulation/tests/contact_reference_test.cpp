@@ -14,17 +14,14 @@ struct Case {
     State13d state;
 };
 Case contactCase(int scenario) {
-    std::vector<BoxProxy> body{{"hull", {.6, .4, .3}, {.05, -.02, .03}},
-                               {"probe", {.2, .05, .05}, {.4, -.2, -.1}}};
+    std::vector<BoxProxy> body{{"hull", {.6, .4, .3}, {.05, -.02, .03}}, {"probe", {.2, .05, .05}, {.4, -.2, -.1}}};
     if (scenario == 10)
         body[0].orientation = Eigen::AngleAxisd(.3, Eigen::Vector3d::UnitX());
-    std::vector<BoxProxy> world{{"floor", {10, 10, 1}, {0, 0, -.5}},
-                                {"wall", {1, 10, 3}, {1, 0, 1}}};
+    std::vector<BoxProxy> world{{"floor", {10, 10, 1}, {0, 0, -.5}}, {"wall", {1, 10, 3}, {1, 0, 1}}};
     State13d state = State13d::Zero();
     state.head<3>() << (scenario >= 4 ? .45 : 0), 0, (scenario < 4 ? .1 : .3);
-    const Eigen::Quaterniond q =
-        Eigen::Quaterniond(Eigen::AngleAxisd(.1 * scenario, Eigen::Vector3d::UnitZ())) *
-        Eigen::Quaterniond(Eigen::AngleAxisd(.03 * scenario, Eigen::Vector3d::UnitY()));
+    const Eigen::Quaterniond q = Eigen::Quaterniond(Eigen::AngleAxisd(.1 * scenario, Eigen::Vector3d::UnitZ())) *
+                                 Eigen::Quaterniond(Eigen::AngleAxisd(.03 * scenario, Eigen::Vector3d::UnitY()));
     state.segment<4>(3) << q.w(), q.x(), q.y(), q.z();
     if (scenario == 6)
         state.segment<4>(3) *= 1.01;
@@ -42,10 +39,7 @@ Case contactCase(int scenario) {
     if (scenario == 3)
         world.clear();
     else if (scenario == 7)
-        world = {{"tilted",
-                  {1, 3, 3},
-                  {1, 0, 1},
-                  Eigen::Quaterniond(Eigen::AngleAxisd(.4, Eigen::Vector3d::UnitZ()))}};
+        world = {{"tilted", {1, 3, 3}, {1, 0, 1}, Eigen::Quaterniond(Eigen::AngleAxisd(.4, Eigen::Vector3d::UnitZ()))}};
     return {std::move(body), std::move(world), state};
 }
 } // namespace
@@ -122,8 +116,7 @@ TEST(BoxContacts, PlantMatchesOriginalPreAndPostIntegrationContactSequence) {
         p.contacts.world_boxes = input.world;
         robotics::simulation::BodyState initial;
         initial.position = input.state.head<3>();
-        initial.orientation =
-            Eigen::Quaterniond(input.state[3], input.state[4], input.state[5], input.state[6]);
+        initial.orientation = Eigen::Quaterniond(input.state[3], input.state[4], input.state[5], input.state[6]);
         initial.linear_velocity = input.state.segment<3>(7);
         initial.angular_velocity = input.state.tail<3>();
         robotics::simulation::Plant plant(p, initial);
@@ -132,9 +125,8 @@ TEST(BoxContacts, PlantMatchesOriginalPreAndPostIntegrationContactSequence) {
             const auto result = plant.advance();
             const auto &body = result.body;
             State13d actual;
-            actual << body.position, body.orientation.w(), body.orientation.x(),
-                body.orientation.y(), body.orientation.z(), body.linear_velocity,
-                body.angular_velocity;
+            actual << body.position, body.orientation.w(), body.orientation.x(), body.orientation.y(),
+                body.orientation.z(), body.linear_velocity, body.angular_velocity;
             ASSERT_TRUE(actual.allFinite());
             for (std::size_t candidate = 0; candidate < fixtures.size(); ++candidate) {
                 ASSERT_TRUE(std::getline(fixtures[candidate], row));

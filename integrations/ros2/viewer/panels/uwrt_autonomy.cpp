@@ -1,10 +1,10 @@
 #include "ros_runtime.hpp"
-#include <rclcpp_action/rclcpp_action.hpp>
-#include <riptide_msgs2/action/execute_tree.hpp>
-#include <riptide_msgs2/srv/list_trees.hpp>
-#include <riptide_msgs2/msg/tree_stack.hpp>
 #include <action_msgs/msg/goal_status_array.hpp>
 #include <algorithm>
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <riptide_msgs2/action/execute_tree.hpp>
+#include <riptide_msgs2/msg/tree_stack.hpp>
+#include <riptide_msgs2/srv/list_trees.hpp>
 
 namespace robotics::ros_viewer::panels {
 namespace {

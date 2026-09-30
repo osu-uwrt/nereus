@@ -1,6 +1,7 @@
 #pragma once
 // Scheduled, on-demand acquisition of the robot pack's stereo cameras for a running session:
-// capture, processing, scheduling, bounded queues, stale discard and seed reset. No ROS: products are plain buffers and numbers for a bridge to publish.
+// capture, processing, scheduling, bounded queues, stale discard and seed reset. No ROS: products are plain buffers and
+// numbers for a bridge to publish.
 //
 // Threading: request()/setDemand()/invalidate() are called by the session owner and never wait for
 // rendering or delivery (invalidate/reset wait only for an in-flight delivery callback). One worker per
@@ -47,11 +48,11 @@ struct CameraInfo {
 };
 
 struct Options {
-    std::filesystem::path shader_directory; // default: $NEREUS_SHADER_DIR, then the source-tree shaders
-    std::vector<std::string> sensor_ids;    // empty: every enabled stereo_camera
-    bool always = false;                    // render every pack output regardless of demand
+    std::filesystem::path shader_directory;  // default: $NEREUS_SHADER_DIR, then the source-tree shaders
+    std::vector<std::string> sensor_ids;     // empty: every enabled stereo_camera
+    bool always = false;                     // render every pack output regardless of demand
     std::map<std::string, int> jpeg_quality; // sensor id -> JPEG quality for colour outputs (absent: none)
-    bool sensor_noise = true;               // overridden by the scenario's sensor_noise when present
+    bool sensor_noise = true;                // overridden by the scenario's sensor_noise when present
 };
 
 struct Products {
@@ -127,7 +128,7 @@ class SessionCameras {
         std::set<Output> outputs;
         std::array<cameras::Intrinsics, 2> intrinsics; // left, right
         cameras::DepthNoise noise;
-        spatial::Pose left_eye, right_eye;              // root_from_eye
+        spatial::Pose left_eye, right_eye; // root_from_eye
         std::array<cameras::Processor, 2> processors;
         std::array<std::uint32_t, 2> seeds{};
         std::map<Output, std::set<std::string>> demand;

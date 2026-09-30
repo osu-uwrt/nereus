@@ -4,8 +4,12 @@
 
 namespace robotics::ros_bridge {
 namespace {
-Value vec3(const Eigen::Vector3d &v) { return Value::array({v.x(), v.y(), v.z()}); }
-Value quat(const Eigen::Quaterniond &q) { return Value::array({q.w(), q.x(), q.y(), q.z()}); }
+Value vec3(const Eigen::Vector3d &v) {
+    return Value::array({v.x(), v.y(), v.z()});
+}
+Value quat(const Eigen::Quaterniond &q) {
+    return Value::array({q.w(), q.x(), q.y(), q.z()});
+}
 Value matrix(const Eigen::MatrixXd &m) {
     std::vector<double> flat;
     flat.reserve(static_cast<std::size_t>(m.size()));
@@ -27,8 +31,12 @@ Value imuValue(const sensors::ImuReading &r) {
 Value attitudeValue(const sensors::AttitudeReading &r) {
     return Value::map({{"orientation_wxyz", quat(r.sensor_to_world)}, {"covariance", matrix(r.covariance)}});
 }
-Value toValue(const sensors::ImuReading &r) { return imuValue(r); }
-Value toValue(const sensors::AttitudeReading &r) { return attitudeValue(r); }
+Value toValue(const sensors::ImuReading &r) {
+    return imuValue(r);
+}
+Value toValue(const sensors::AttitudeReading &r) {
+    return attitudeValue(r);
+}
 Value toValue(const sensors::AhrsReading &r) {
     return Value::map({{"inertial", imuValue(r.inertial)}, {"attitude", attitudeValue(r.attitude)}});
 }
@@ -41,8 +49,8 @@ Value toValue(const sensors::DvlReading &r) {
                        {"bottom_distance", Value::real(r.bottom_distance)}});
 }
 Value toValue(const sensors::VelocityReading &r) {
-    return Value::map({{"reference_relative_velocity", vec3(r.reference_relative_velocity)},
-                       {"covariance", matrix(r.covariance)}});
+    return Value::map(
+        {{"reference_relative_velocity", vec3(r.reference_relative_velocity)}, {"covariance", matrix(r.covariance)}});
 }
 Value toValue(const sensors::AltitudeReading &r) {
     return Value::map({{"mounted_world_z", Value::real(r.mounted_world_z)},
@@ -80,14 +88,22 @@ template <class Reading> Drain makeDrain(sensors::Runtime &runtime, const std::s
 
 Drain drainFor(sensors::Runtime &runtime, const Json &sensor) {
     const std::string id = sensor.at("id"), kind = sensor.at("type");
-    if (kind == "imu") return makeDrain<sensors::ImuReading>(runtime, id);
-    if (kind == "attitude") return makeDrain<sensors::AttitudeReading>(runtime, id);
-    if (kind == "ahrs") return makeDrain<sensors::AhrsReading>(runtime, id);
-    if (kind == "fog") return makeDrain<sensors::FogReading>(runtime, id);
-    if (kind == "dvl") return makeDrain<sensors::DvlReading>(runtime, id);
-    if (kind == "reference_velocity") return makeDrain<sensors::VelocityReading>(runtime, id);
-    if (kind == "reference_altitude") return makeDrain<sensors::AltitudeReading>(runtime, id);
-    if (kind == "pressure") return makeDrain<sensors::PressureReading>(runtime, id);
+    if (kind == "imu")
+        return makeDrain<sensors::ImuReading>(runtime, id);
+    if (kind == "attitude")
+        return makeDrain<sensors::AttitudeReading>(runtime, id);
+    if (kind == "ahrs")
+        return makeDrain<sensors::AhrsReading>(runtime, id);
+    if (kind == "fog")
+        return makeDrain<sensors::FogReading>(runtime, id);
+    if (kind == "dvl")
+        return makeDrain<sensors::DvlReading>(runtime, id);
+    if (kind == "reference_velocity")
+        return makeDrain<sensors::VelocityReading>(runtime, id);
+    if (kind == "reference_altitude")
+        return makeDrain<sensors::AltitudeReading>(runtime, id);
+    if (kind == "pressure")
+        return makeDrain<sensors::PressureReading>(runtime, id);
     throw BridgeError("sensor " + repr(id) + ": no native reading for type " + repr(kind));
 }
 } // namespace
@@ -96,12 +112,11 @@ struct SessionAdapter::Impl {
     const session::ResolvedScenario &scenario;
     std::unique_ptr<session::Session> session;
     std::vector<Drain> drains;
-    std::optional<session::Mechanisms> mechanisms; // slot geometry for still-loaded payloads
+    std::optional<session::Mechanisms> mechanisms;               // slot geometry for still-loaded payloads
     std::map<std::string, std::pair<double, double>> projectile; // mechanism -> length, radius
     std::map<std::string, std::string> mechanism_type;
 
-    Impl(const session::ResolvedScenario &s, const session::RulesRegistry &rules,
-         const std::vector<std::string> *ids)
+    Impl(const session::ResolvedScenario &s, const session::RulesRegistry &rules, const std::vector<std::string> *ids)
         : scenario(s) {
         session::PackRuntime pack = session::createRuntime(s, ids);
         session = std::make_unique<session::Session>(s, std::move(pack), rules);
@@ -132,10 +147,18 @@ StepResult SessionAdapter::advance() {
     auto step = impl_->session->advance();
     return StepResult{std::move(step.snapshot), std::move(step.task_events)};
 }
-simulation::Snapshot SessionAdapter::observe() const { return impl_->session->runtime().observe(); }
-const simulation::Snapshot &SessionAdapter::lastSnapshot() const { return impl_->session->lastStep().snapshot; }
-std::int64_t SessionAdapter::timeNs() const { return impl_->session->timeNs(); }
-std::int64_t SessionAdapter::timestepNs() const { return impl_->session->timestepNs(); }
+simulation::Snapshot SessionAdapter::observe() const {
+    return impl_->session->runtime().observe();
+}
+const simulation::Snapshot &SessionAdapter::lastSnapshot() const {
+    return impl_->session->lastStep().snapshot;
+}
+std::int64_t SessionAdapter::timeNs() const {
+    return impl_->session->timeNs();
+}
+std::int64_t SessionAdapter::timestepNs() const {
+    return impl_->session->timestepNs();
+}
 std::vector<SensorSample> SessionAdapter::drainSensors() {
     std::vector<SensorSample> out;
     for (auto &drain : impl_->drains)
@@ -148,7 +171,9 @@ std::map<std::string, sensors::StreamStats> SessionAdapter::sensorStats() const 
         out[drain.id] = drain.stats();
     return out;
 }
-std::vector<std::string> SessionAdapter::sensorIds() const { return impl_->session->pack().sensor_ids; }
+std::vector<std::string> SessionAdapter::sensorIds() const {
+    return impl_->session->pack().sensor_ids;
+}
 std::vector<std::string> SessionAdapter::deferredSensorIds() const {
     return impl_->session->pack().deferred_sensor_ids;
 }
@@ -158,11 +183,21 @@ std::shared_ptr<const spatial::FixedFrames> SessionAdapter::frames() const {
 spatial::Pose SessionAdapter::referencePose(const simulation::BodyState &body) const {
     return impl_->session->referencePose(body);
 }
-void SessionAdapter::commandThrusters(const Eigen::VectorXd &forces) { impl_->session->commandThrusters(forces); }
-void SessionAdapter::setKilled(bool killed) { impl_->session->setKilled(killed); }
-bool SessionAdapter::killed() const { return impl_->session->killed(); }
-session::CommandResult SessionAdapter::setArmed(bool armed) { return impl_->session->setArmed(armed); }
-session::CommandResult SessionAdapter::reloadAll() { return impl_->session->reloadAll(); }
+void SessionAdapter::commandThrusters(const Eigen::VectorXd &forces) {
+    impl_->session->commandThrusters(forces);
+}
+void SessionAdapter::setKilled(bool killed) {
+    impl_->session->setKilled(killed);
+}
+bool SessionAdapter::killed() const {
+    return impl_->session->killed();
+}
+session::CommandResult SessionAdapter::setArmed(bool armed) {
+    return impl_->session->setArmed(armed);
+}
+session::CommandResult SessionAdapter::reloadAll() {
+    return impl_->session->reloadAll();
+}
 session::CommandResult SessionAdapter::commandClaw(const std::string &id, bool open) {
     return impl_->session->commandClaw(id, open);
 }
@@ -181,20 +216,48 @@ std::optional<session::MechanismState> SessionAdapter::mechanismState() const {
 simulation::Snapshot SessionAdapter::place(const simulation::BodyState &state, bool clear_actuators) {
     return impl_->session->place(state, clear_actuators);
 }
-const simulation::BodyState &SessionAdapter::startState() const { return impl_->session->startState(); }
-session::CommandResult SessionAdapter::resetTasks() { return impl_->session->resetTasks(); }
-simulation::Snapshot SessionAdapter::fullReset() { return impl_->session->fullReset(); }
-std::uint64_t SessionAdapter::seed() const { return impl_->session->seed(); }
-session::CommandResult SessionAdapter::runStart(const Json &options) { return impl_->session->runStart(options); }
-session::CommandResult SessionAdapter::runStop() { return impl_->session->runStop(); }
-session::CommandResult SessionAdapter::runAdjust(double points) { return impl_->session->runAdjust(points); }
-std::optional<Json> SessionAdapter::runSnapshot() const { return impl_->session->runSnapshot(); }
-void SessionAdapter::setRunMessage(const std::string &message) { impl_->session->setRunMessage(message); }
-Json SessionAdapter::takeFeed() { return impl_->session->takeFeed(); }
-Json SessionAdapter::taskCounters() const { return impl_->session->taskCounters(); }
-Eigen::VectorXd SessionAdapter::thrusterForces() const { return impl_->session->thrusterForces(); }
-std::map<std::string, std::array<double, 2>> SessionAdapter::clawJaws() const { return impl_->session->clawJaws(); }
-Json SessionAdapter::indicators() const { return impl_->session->indicators(); }
+const simulation::BodyState &SessionAdapter::startState() const {
+    return impl_->session->startState();
+}
+session::CommandResult SessionAdapter::resetTasks() {
+    return impl_->session->resetTasks();
+}
+simulation::Snapshot SessionAdapter::fullReset() {
+    return impl_->session->fullReset();
+}
+std::uint64_t SessionAdapter::seed() const {
+    return impl_->session->seed();
+}
+session::CommandResult SessionAdapter::runStart(const Json &options) {
+    return impl_->session->runStart(options);
+}
+session::CommandResult SessionAdapter::runStop() {
+    return impl_->session->runStop();
+}
+session::CommandResult SessionAdapter::runAdjust(double points) {
+    return impl_->session->runAdjust(points);
+}
+std::optional<Json> SessionAdapter::runSnapshot() const {
+    return impl_->session->runSnapshot();
+}
+void SessionAdapter::setRunMessage(const std::string &message) {
+    impl_->session->setRunMessage(message);
+}
+Json SessionAdapter::takeFeed() {
+    return impl_->session->takeFeed();
+}
+Json SessionAdapter::taskCounters() const {
+    return impl_->session->taskCounters();
+}
+Eigen::VectorXd SessionAdapter::thrusterForces() const {
+    return impl_->session->thrusterForces();
+}
+std::map<std::string, std::array<double, 2>> SessionAdapter::clawJaws() const {
+    return impl_->session->clawJaws();
+}
+Json SessionAdapter::indicators() const {
+    return impl_->session->indicators();
+}
 
 std::vector<PropVisual> SessionAdapter::propVisuals() const {
     std::vector<PropVisual> out;
@@ -210,9 +273,8 @@ std::vector<PayloadVisual> SessionAdapter::payloadVisuals() const {
         const auto found = impl_->projectile.find(payload.mechanism_id);
         if (found == impl_->projectile.end())
             continue;
-        out.push_back({payload.mechanism_id, payload.mechanism_type, payload.id, false,
-                       payload.state.position, payload.state.orientation, found->second.first,
-                       found->second.second});
+        out.push_back({payload.mechanism_id, payload.mechanism_type, payload.id, false, payload.state.position,
+                       payload.state.orientation, found->second.first, found->second.second});
     }
     const auto state = impl_->session->mechanismState();
     if (state && impl_->mechanisms) {
@@ -225,8 +287,8 @@ std::vector<PayloadVisual> SessionAdapter::payloadVisuals() const {
             const int count = impl_->mechanisms->slotCount(key);
             for (int index = count - release.available; index < count; ++index) {
                 const auto pose = spatial::compose(root, impl_->mechanisms->slotMount(key, index));
-                out.push_back({key, impl_->mechanism_type.at(key), index, true, pose.translation,
-                               pose.rotation, projectile->second.first, projectile->second.second});
+                out.push_back({key, impl_->mechanism_type.at(key), index, true, pose.translation, pose.rotation,
+                               projectile->second.first, projectile->second.second});
             }
         }
     }

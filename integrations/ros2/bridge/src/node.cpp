@@ -4,13 +4,13 @@
 #include <rclcpp/serialization.hpp>
 #include <robot_localization/srv/set_pose.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
+#include <set>
 #include <std_srvs/srv/set_bool.hpp>
 #include <std_srvs/srv/trigger.hpp>
-#include <tf2_ros/buffer.h>
-#include <tf2_ros/static_transform_broadcaster.h>
-#include <tf2_ros/qos.hpp>
 #include <tf2_msgs/msg/tf_message.hpp>
-#include <set>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/qos.hpp>
+#include <tf2_ros/static_transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 
 #include <chrono>
@@ -64,15 +64,15 @@ geometry_msgs::msg::TransformStamped transformMessage(const Transform &item) {
 
 template <class Srv>
 std::shared_ptr<void> createService(rclcpp::Node &node, const std::string &name, Handler handler, Post post) {
-    return node.create_service<Srv>(
-        name, [handler, post](std::shared_ptr<rclcpp::Service<Srv>> service, std::shared_ptr<rmw_request_id_t> header,
-                              std::shared_ptr<typename Srv::Request> request) {
-            post([handler, service, header, request] {
-                auto response = std::make_shared<typename Srv::Response>();
-                handler(request.get(), response.get());
-                service->send_response(*header, *response);
-            });
+    return node.create_service<Srv>(name, [handler, post](std::shared_ptr<rclcpp::Service<Srv>> service,
+                                                          std::shared_ptr<rmw_request_id_t> header,
+                                                          std::shared_ptr<typename Srv::Request> request) {
+        post([handler, service, header, request] {
+            auto response = std::make_shared<typename Srv::Response>();
+            handler(request.get(), response.get());
+            service->send_response(*header, *response);
         });
+    });
 }
 using ServiceCreator = std::function<std::shared_ptr<void>(rclcpp::Node &, const std::string &, Handler, Post)>;
 const std::map<std::string, ServiceCreator> &serviceCreators() {
@@ -127,12 +127,10 @@ struct BridgeNode::Impl {
     }
 };
 
-BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras)
-    : impl_(std::make_unique<Impl>()), core_(core) {
+BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras) : impl_(std::make_unique<Impl>()), core_(core) {
     impl_->cameras = cameras;
     const Json &config = core.config();
-    node_ = std::make_shared<rclcpp::Node>(config.value("node_name", "nereus_bridge"),
-                                           config.value("namespace", "/"));
+    node_ = std::make_shared<rclcpp::Node>(config.value("node_name", "nereus_bridge"), config.value("namespace", "/"));
     impl_->buffer = std::make_shared<tf2_ros::Buffer>(node_->get_clock());
     impl_->listener = std::make_shared<tf2_ros::TransformListener>(*impl_->buffer, node_, false);
     core.setLookup([buffer = impl_->buffer](const std::string &target,
@@ -141,8 +139,7 @@ BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras)
             const auto transform = buffer->lookupTransform(target, source, tf2::TimePointZero);
             const auto &t = transform.transform.translation;
             const auto &r = transform.transform.rotation;
-            return spatial::Pose{Eigen::Vector3d(t.x, t.y, t.z),
-                                 Eigen::Quaterniond(r.w, r.x, r.y, r.z).normalized()};
+            return spatial::Pose{Eigen::Vector3d(t.x, t.y, t.z), Eigen::Quaterniond(r.w, r.x, r.y, r.z).normalized()};
         } catch (const tf2::TransformException &) {
             return std::nullopt;
         }
@@ -153,8 +150,8 @@ BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras)
     descriptor.dynamic_typing = true;
     descriptor.description = "Simulation speed relative to wall time; 0 pauses stepping and /clock.";
     node_->declare_parameter("real_time_factor", core.realTimeFactor(), descriptor);
-    impl_->parameter_handle = node_->add_on_set_parameters_callback(
-        [this](const std::vector<rclcpp::Parameter> &parameters) {
+    impl_->parameter_handle =
+        node_->add_on_set_parameters_callback([this](const std::vector<rclcpp::Parameter> &parameters) {
             rcl_interfaces::msg::SetParametersResult result;
             result.successful = true;
             for (const auto &parameter : parameters) {
@@ -204,7 +201,8 @@ BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras)
         } else {
             const auto serializer = impl->serializers[id];
             impl->subscriptions.push_back(node_->create_generic_subscription(
-                topic, type->name(), qos, [this, impl, id, type, serializer](std::shared_ptr<rclcpp::SerializedMessage> raw) {
+                topic, type->name(), qos,
+                [this, impl, id, type, serializer](std::shared_ptr<rclcpp::SerializedMessage> raw) {
                     impl->post([this, id, type, serializer, raw] {
                         Message message(type);
                         serializer->deserialize_message(raw.get(), message.data());
@@ -338,11 +336,13 @@ void BridgeNode::tick() {
                     try {
                         future.get();
                     } catch (const std::exception &error) {
-                        RCLCPP_ERROR(node_->get_logger(), "estimator alignment failed (%s): %s", trigger.c_str(), error.what());
+                        RCLCPP_ERROR(node_->get_logger(), "estimator alignment failed (%s): %s", trigger.c_str(),
+                                     error.what());
                         ok = false;
                     }
                     impl->post([this, trigger, ok] {
-                        Counters::bump(ok ? core_.counters().alignments_acknowledged : core_.counters().alignments_failed,
+                        Counters::bump(ok ? core_.counters().alignments_acknowledged
+                                          : core_.counters().alignments_failed,
                                        trigger);
                     });
                 });
@@ -403,7 +403,8 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
         }
         owed += std::chrono::duration<double>(now - previous).count() * rtf;
         previous = now;
-        performance_.max_behind_ns = std::max<std::int64_t>(performance_.max_behind_ns, static_cast<std::int64_t>(owed * 1e9));
+        performance_.max_behind_ns =
+            std::max<std::int64_t>(performance_.max_behind_ns, static_cast<std::int64_t>(owed * 1e9));
         int steps = 0;
         while (owed >= step_s && steps < max_catchup_ticks) {
             const auto started = Clock::now();
@@ -416,7 +417,8 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
             owed -= step_s;
             ++steps;
             if (duration_ns && ticks * core_.timestepNs() >= *duration_ns) {
-                performance_.wall_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - run_start).count();
+                performance_.wall_ns =
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - run_start).count();
                 performance_.sim_ns = ticks * core_.timestepNs();
                 return ticks;
             }
@@ -433,7 +435,8 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
             const auto before = Clock::now();
             std::this_thread::sleep_for(requested);
             const auto slept = std::chrono::duration<double>(Clock::now() - before);
-            performance_.oversleep.add(std::max<std::int64_t>(0, static_cast<std::int64_t>((slept - requested).count() * 1e9)));
+            performance_.oversleep.add(
+                std::max<std::int64_t>(0, static_cast<std::int64_t>((slept - requested).count() * 1e9)));
         }
     }
     performance_.wall_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - run_start).count();

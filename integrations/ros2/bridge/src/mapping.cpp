@@ -19,13 +19,17 @@ constexpr const char *kTime = "builtin_interfaces/Time";
 bool isVectorMessage(const RosType &t) {
     return !t.isArray() && (t.base == "geometry_msgs/Vector3" || t.base == "geometry_msgs/Point");
 }
-bool isFloatBase(const std::string &b) { return b == "float" || b == "double"; }
+bool isFloatBase(const std::string &b) {
+    return b == "float" || b == "double";
+}
 bool intRange(const std::string &base, std::int64_t &low, std::uint64_t &high) {
     static const std::map<std::string, std::pair<std::int64_t, std::uint64_t>> table = {
-        {"int8", {-128, 127}}, {"uint8", {0, 255}}, {"byte", {0, 255}}, {"octet", {0, 255}},
-        {"char", {0, 255}}, {"int16", {-32768, 32767}}, {"uint16", {0, 65535}},
-        {"int32", {INT32_MIN, INT32_MAX}}, {"uint32", {0, UINT32_MAX}},
-        {"int64", {INT64_MIN, INT64_MAX}}, {"uint64", {0, UINT64_MAX}}};
+        {"int8", {-128, 127}},       {"uint8", {0, 255}},
+        {"byte", {0, 255}},          {"octet", {0, 255}},
+        {"char", {0, 255}},          {"int16", {-32768, 32767}},
+        {"uint16", {0, 65535}},      {"int32", {INT32_MIN, INT32_MAX}},
+        {"uint32", {0, UINT32_MAX}}, {"int64", {INT64_MIN, INT64_MAX}},
+        {"uint64", {0, UINT64_MAX}}};
     const auto found = table.find(base);
     if (found == table.end())
         return false;
@@ -67,13 +71,20 @@ Store scalarStore(const introspection::MessageMember &member, const RosType &typ
             checkRange(base, x, where);
             if (id == ROS_TYPE_UINT8 || id == ROS_TYPE_OCTET || id == ROS_TYPE_CHAR)
                 *static_cast<std::uint8_t *>(p) = static_cast<std::uint8_t>(x);
-            else if (id == ROS_TYPE_INT8) *static_cast<std::int8_t *>(p) = static_cast<std::int8_t>(x);
-            else if (id == ROS_TYPE_UINT16) *static_cast<std::uint16_t *>(p) = static_cast<std::uint16_t>(x);
-            else if (id == ROS_TYPE_INT16) *static_cast<std::int16_t *>(p) = static_cast<std::int16_t>(x);
-            else if (id == ROS_TYPE_UINT32) *static_cast<std::uint32_t *>(p) = static_cast<std::uint32_t>(x);
-            else if (id == ROS_TYPE_INT32) *static_cast<std::int32_t *>(p) = static_cast<std::int32_t>(x);
-            else if (id == ROS_TYPE_UINT64) *static_cast<std::uint64_t *>(p) = static_cast<std::uint64_t>(x);
-            else *static_cast<std::int64_t *>(p) = x;
+            else if (id == ROS_TYPE_INT8)
+                *static_cast<std::int8_t *>(p) = static_cast<std::int8_t>(x);
+            else if (id == ROS_TYPE_UINT16)
+                *static_cast<std::uint16_t *>(p) = static_cast<std::uint16_t>(x);
+            else if (id == ROS_TYPE_INT16)
+                *static_cast<std::int16_t *>(p) = static_cast<std::int16_t>(x);
+            else if (id == ROS_TYPE_UINT32)
+                *static_cast<std::uint32_t *>(p) = static_cast<std::uint32_t>(x);
+            else if (id == ROS_TYPE_INT32)
+                *static_cast<std::int32_t *>(p) = static_cast<std::int32_t>(x);
+            else if (id == ROS_TYPE_UINT64)
+                *static_cast<std::uint64_t *>(p) = static_cast<std::uint64_t>(x);
+            else
+                *static_cast<std::int64_t *>(p) = x;
         };
     }
     if (base == "boolean" && spec.dtype == Dtype::Bool)
@@ -122,14 +133,13 @@ Setter makeSetter(const FieldPath &ros, const Spec &spec, const std::string &whe
     const auto &member = ros.member();
     if (type.isArray() && !ros.indexed()) {
         if (type.isMessage() || spec.shape.empty())
-            throw MappingError(where + ": cannot assign native " + spec.describe() + " to ROS " +
-                               type.base + " array");
+            throw MappingError(where + ": cannot assign native " + spec.describe() + " to ROS " + type.base + " array");
         long size = 1;
         for (const int dimension : spec.shape)
             size = (dimension < 0 || size < 0) ? -1 : size * dimension;
         if (type.length >= 0 && size != type.length)
-            throw MappingError(where + ": native " + spec.describe() + " (row-major) does not fill " +
-                               type.base + "[" + std::to_string(type.length) + "]");
+            throw MappingError(where + ": native " + spec.describe() + " (row-major) does not fill " + type.base + "[" +
+                               std::to_string(type.length) + "]");
         if (type.base == "boolean")
             throw MappingError(where + ": boolean arrays are not supported");
         Spec element_spec{spec.dtype, {}};
@@ -140,8 +150,7 @@ Setter makeSetter(const FieldPath &ros, const Spec &spec, const std::string &whe
         return [store, fixed, length, member_ptr, where](void *target, const Value &v) {
             const std::size_t n = v.a.size();
             if (fixed && static_cast<int>(n) != length)
-                throw MappingError(where + ": runtime size " + std::to_string(n) + " != " +
-                                   std::to_string(length));
+                throw MappingError(where + ": runtime size " + std::to_string(n) + " != " + std::to_string(length));
             if (!fixed)
                 member_ptr->resize_function(target, n);
             for (std::size_t k = 0; k < n; ++k) {
@@ -212,24 +221,21 @@ void Writer::apply(void *message, const Value &values) const {
         step.produce(locate(message, step.path), values);
 }
 
-std::shared_ptr<Message> Writer::make(const std::shared_ptr<const MessageType> &type,
-                                      const Value &values) const {
+std::shared_ptr<Message> Writer::make(const std::shared_ptr<const MessageType> &type, const Value &values) const {
     auto message = std::make_shared<Message>(type);
     apply(message->data(), values);
     return message;
 }
 
-Writer compileWriter(const introspection::MessageMembers *type, const Json &fields,
-                     const SpecTree &sources, const std::optional<std::string> &frame_id,
-                     const std::string &where) {
+Writer compileWriter(const introspection::MessageMembers *type, const Json &fields, const SpecTree &sources,
+                     const std::optional<std::string> &frame_id, const std::string &where) {
     Writer writer;
     bool stamped = false;
     for (std::uint32_t k = 0; k < type->member_count_; ++k)
         stamped = stamped || std::string(type->members_[k].name_) == "header";
     if (frame_id) {
         if (!frame_id->empty() && !stamped)
-            throw MappingError(where + ": frame_id " + repr(*frame_id) + " set on unstamped " +
-                               type->message_name_);
+            throw MappingError(where + ": frame_id " + repr(*frame_id) + " set on unstamped " + type->message_name_);
         if (stamped && frame_id->empty())
             throw MappingError(where + ": stamped " + type->message_name_ + " requires a frame_id");
         if (stamped) {
@@ -237,9 +243,8 @@ Writer compileWriter(const introspection::MessageMembers *type, const Json &fiel
                 throw MappingError(where + ": stamped " + type->message_name_ + " must map header.stamp");
             const auto path = resolveField(type, "header.frame_id", true);
             const std::string frame = *frame_id;
-            writer.steps_.push_back({path, [frame](void *target, const Value &) {
-                                         *static_cast<std::string *>(target) = frame;
-                                     }});
+            writer.steps_.push_back(
+                {path, [frame](void *target, const Value &) { *static_cast<std::string *>(target) = frame; }});
         }
     }
     for (const auto &[destination, source] : fields.items()) {
@@ -272,15 +277,14 @@ Writer compileWriter(const introspection::MessageMembers *type, const Json &fiel
             if (isIntBase(ros.type.base) && !ros.type.isArray())
                 for (const auto &entry : table)
                     checkRange(ros.type.base, entry.second, at);
-            writer.steps_.push_back(
-                {ros, [ref, table, set, at](void *target, const Value &values) {
-                     const Value state = ref.read(values);
-                     const auto found = table.find(state.s);
-                     if (found == table.end())
-                         throw MappingError(at + ": native state " + repr(state.s) +
-                                            " has no enum_map entry");
-                     set(target, Value::integer(found->second));
-                 }});
+            writer.steps_.push_back({ros, [ref, table, set, at](void *target, const Value &values) {
+                                         const Value state = ref.read(values);
+                                         const auto found = table.find(state.s);
+                                         if (found == table.end())
+                                             throw MappingError(at + ": native state " + repr(state.s) +
+                                                                " has no enum_map entry");
+                                         set(target, Value::integer(found->second));
+                                     }});
             continue;
         }
         const Setter set = makeSetter(ros, spec, at);
@@ -322,23 +326,34 @@ Spec rosSpec(const FieldPath &field, const std::string &where) {
 
 double readDouble(std::uint8_t id, const void *p) {
     using namespace introspection;
-    if (id == ROS_TYPE_FLOAT) return *static_cast<const float *>(p);
-    if (id == ROS_TYPE_DOUBLE) return *static_cast<const double *>(p);
+    if (id == ROS_TYPE_FLOAT)
+        return *static_cast<const float *>(p);
+    if (id == ROS_TYPE_DOUBLE)
+        return *static_cast<const double *>(p);
     if (id == ROS_TYPE_CHAR || id == ROS_TYPE_OCTET || id == ROS_TYPE_UINT8)
         return *static_cast<const std::uint8_t *>(p);
-    if (id == ROS_TYPE_INT8) return *static_cast<const std::int8_t *>(p);
-    if (id == ROS_TYPE_UINT16) return *static_cast<const std::uint16_t *>(p);
-    if (id == ROS_TYPE_INT16) return *static_cast<const std::int16_t *>(p);
-    if (id == ROS_TYPE_UINT32) return *static_cast<const std::uint32_t *>(p);
-    if (id == ROS_TYPE_INT32) return *static_cast<const std::int32_t *>(p);
-    if (id == ROS_TYPE_UINT64) return static_cast<double>(*static_cast<const std::uint64_t *>(p));
-    if (id == ROS_TYPE_INT64) return static_cast<double>(*static_cast<const std::int64_t *>(p));
+    if (id == ROS_TYPE_INT8)
+        return *static_cast<const std::int8_t *>(p);
+    if (id == ROS_TYPE_UINT16)
+        return *static_cast<const std::uint16_t *>(p);
+    if (id == ROS_TYPE_INT16)
+        return *static_cast<const std::int16_t *>(p);
+    if (id == ROS_TYPE_UINT32)
+        return *static_cast<const std::uint32_t *>(p);
+    if (id == ROS_TYPE_INT32)
+        return *static_cast<const std::int32_t *>(p);
+    if (id == ROS_TYPE_UINT64)
+        return static_cast<double>(*static_cast<const std::uint64_t *>(p));
+    if (id == ROS_TYPE_INT64)
+        return static_cast<double>(*static_cast<const std::int64_t *>(p));
     throw MappingError("unsupported ROS numeric type");
 }
 std::int64_t readInteger(std::uint8_t id, const void *p) {
     using namespace introspection;
-    if (id == ROS_TYPE_UINT64) return static_cast<std::int64_t>(*static_cast<const std::uint64_t *>(p));
-    if (id == ROS_TYPE_INT64) return *static_cast<const std::int64_t *>(p);
+    if (id == ROS_TYPE_UINT64)
+        return static_cast<std::int64_t>(*static_cast<const std::uint64_t *>(p));
+    if (id == ROS_TYPE_INT64)
+        return *static_cast<const std::int64_t *>(p);
     return static_cast<std::int64_t>(readDouble(id, p));
 }
 
@@ -356,8 +371,8 @@ std::function<Value(const void *)> makeRead(const FieldPath &field, const Spec &
         return [member, id, expected, path, spec](const void *p) {
             const std::size_t n = member->size_function(p);
             if (expected >= 0 && static_cast<std::size_t>(expected) != n)
-                throw MappingError(repr(path) + ": received shape [" + std::to_string(n) +
-                                   "] does not match native " + spec.describe());
+                throw MappingError(repr(path) + ": received shape [" + std::to_string(n) + "] does not match native " +
+                                   spec.describe());
             std::vector<double> out(n);
             for (std::size_t k = 0; k < n; ++k)
                 out[k] = readDouble(id, member->get_const_function(p, k));
@@ -365,11 +380,16 @@ std::function<Value(const void *)> makeRead(const FieldPath &field, const Spec &
         };
     }
     switch (spec.dtype) {
-    case Dtype::Float: return [id](const void *p) { return Value::real(readDouble(id, p)); };
-    case Dtype::Int: return [id](const void *p) { return Value::integer(readInteger(id, p)); };
-    case Dtype::Bool: return [](const void *p) { return Value::boolean(*static_cast<const bool *>(p)); };
-    case Dtype::String: return [](const void *p) { return Value::text(*static_cast<const std::string *>(p)); };
-    default: break;
+    case Dtype::Float:
+        return [id](const void *p) { return Value::real(readDouble(id, p)); };
+    case Dtype::Int:
+        return [id](const void *p) { return Value::integer(readInteger(id, p)); };
+    case Dtype::Bool:
+        return [](const void *p) { return Value::boolean(*static_cast<const bool *>(p)); };
+    case Dtype::String:
+        return [](const void *p) { return Value::text(*static_cast<const std::string *>(p)); };
+    default:
+        break;
     }
     throw MappingError("unsupported native type " + spec.describe());
 }
@@ -386,8 +406,7 @@ std::string listRepr(const std::set<std::string> &items) {
 } // namespace
 
 Reader compileReader(const introspection::MessageMembers *type, const Json &fields,
-                     const std::map<std::string, Spec> &arguments, const Json &accept_if,
-                     const std::string &where) {
+                     const std::map<std::string, Spec> &arguments, const Json &accept_if, const std::string &where) {
     std::set<std::string> given, wanted, unknown, missing;
     for (const auto &item : fields.items())
         given.insert(item.key());
@@ -398,8 +417,8 @@ Reader compileReader(const introspection::MessageMembers *type, const Json &fiel
     std::set_difference(wanted.begin(), wanted.end(), given.begin(), given.end(),
                         std::inserter(missing, missing.end()));
     if (!unknown.empty() || !missing.empty())
-        throw MappingError(where + ": native arguments must be exactly " + listRepr(wanted) +
-                           " (unknown " + listRepr(unknown) + ", missing " + listRepr(missing) + ")");
+        throw MappingError(where + ": native arguments must be exactly " + listRepr(wanted) + " (unknown " +
+                           listRepr(unknown) + ", missing " + listRepr(missing) + ")");
     Reader reader;
     for (const auto &[argument, source] : fields.items()) {
         const std::string at = where + "/" + argument;
@@ -409,8 +428,7 @@ Reader compileReader(const introspection::MessageMembers *type, const Json &fiel
         const Spec actual = rosSpec(field, at);
         const Spec &expected = arguments.at(argument);
         if (!compatible(expected, actual))
-            throw MappingError(at + ": ROS " + actual.describe() + " does not provide native " +
-                               expected.describe());
+            throw MappingError(at + ": ROS " + actual.describe() + " does not provide native " + expected.describe());
         reader.steps_.push_back({argument, field, expected, makeRead(field, expected)});
     }
     if (accept_if.is_array()) {
@@ -421,8 +439,7 @@ Reader compileReader(const introspection::MessageMembers *type, const Json &fiel
             const Spec actual = rosSpec(field, at);
             const Json &equals = condition.at("equals");
             if (!actual.shape.empty() || !compatible(actual, constantSpec(equals, at)))
-                throw MappingError(at + ": cannot compare ROS " + actual.describe() + " with " +
-                                   pyRepr(equals));
+                throw MappingError(at + ": cannot compare ROS " + actual.describe() + " with " + pyRepr(equals));
             reader.filters_.push_back({field, constantValue(equals), actual.dtype});
         }
     }
@@ -440,11 +457,20 @@ bool Reader::accepts(const void *message) const {
         const auto id = filter.path.member().type_id_;
         bool equal = false;
         switch (filter.dtype) {
-        case Dtype::Float: equal = readDouble(id, p) == filter.equals.asDouble(); break;
-        case Dtype::Int: equal = readInteger(id, p) == filter.equals.asInt(); break;
-        case Dtype::Bool: equal = *static_cast<const bool *>(p) == (filter.equals.asInt() != 0); break;
-        case Dtype::String: equal = *static_cast<const std::string *>(p) == filter.equals.s; break;
-        default: break;
+        case Dtype::Float:
+            equal = readDouble(id, p) == filter.equals.asDouble();
+            break;
+        case Dtype::Int:
+            equal = readInteger(id, p) == filter.equals.asInt();
+            break;
+        case Dtype::Bool:
+            equal = *static_cast<const bool *>(p) == (filter.equals.asInt() != 0);
+            break;
+        case Dtype::String:
+            equal = *static_cast<const std::string *>(p) == filter.equals.s;
+            break;
+        default:
+            break;
         }
         if (!equal)
             return false;

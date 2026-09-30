@@ -22,8 +22,7 @@ void MarineDynamics::configure(double mass, const Eigen::Matrix3d &inertia, cons
         throw std::invalid_argument("Mass must be finite and positive");
     positiveSemidefinite(inertia, "Rigid inertia");
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eig(inertia);
-    if (eig.eigenvalues().minCoeff() <= 0 ||
-        eig.eigenvalues().maxCoeff() > eig.eigenvalues().sum() / 2. + 1e-9)
+    if (eig.eigenvalues().minCoeff() <= 0 || eig.eigenvalues().maxCoeff() > eig.eigenvalues().sum() / 2. + 1e-9)
         throw std::invalid_argument("Rigid inertia must be positive definite and satisfy the "
                                     "principal-moment triangle inequalities");
     positiveSemidefinite(added, "Added mass");
@@ -48,12 +47,10 @@ void MarineDynamics::configureDamping(const Matrix6d &linear, const Vector6d &qu
     quadratic_damping_ = quadratic;
     damping_center_ = center;
 }
-void MarineDynamics::configureHydrostatics(double density, double volume,
-                                           const Eigen::Vector3d &cob, const Eigen::Vector3d &radii,
-                                           double gravity, double level) {
-    if (!std::isfinite(density) || density <= 0 || !std::isfinite(volume) || volume < 0 ||
-        !std::isfinite(gravity) || gravity <= 0 || !cob.allFinite() || !radii.allFinite() ||
-        radii.minCoeff() <= 0 || !std::isfinite(level))
+void MarineDynamics::configureHydrostatics(double density, double volume, const Eigen::Vector3d &cob,
+                                           const Eigen::Vector3d &radii, double gravity, double level) {
+    if (!std::isfinite(density) || density <= 0 || !std::isfinite(volume) || volume < 0 || !std::isfinite(gravity) ||
+        gravity <= 0 || !cob.allFinite() || !radii.allFinite() || radii.minCoeff() <= 0 || !std::isfinite(level))
         throw std::invalid_argument("Invalid hydrostatic properties");
     density_ = density;
     volume_ = volume;
@@ -80,8 +77,8 @@ Vector6d MarineDynamics::acceleration(const Vector6d &v, const Vector6d &vr, con
                                       const Vector6d &dc) const {
     // Absolute-velocity formulation: ONLY added mass multiplies current
     // acceleration. MRB*v_dot + CRB(v)*v + MA*(v_dot-c_dot) + CA(vr)*vr = tau.
-    return inverse_mass_ * (tau - coriolis(rigid_body_mass_, v) * v -
-                            coriolis(added_mass_, vr) * vr + added_mass_ * dc);
+    return inverse_mass_ *
+           (tau - coriolis(rigid_body_mass_, v) * v - coriolis(added_mass_, vr) * vr + added_mass_ * dc);
 }
 Vector6d MarineDynamics::dampingWrench(const Vector6d &v) const {
     Matrix6d H = Matrix6d::Identity();
@@ -90,11 +87,9 @@ Vector6d MarineDynamics::dampingWrench(const Vector6d &v) const {
     // Map point velocity AND force back to COM. This preserves dissipativity even
     // during simultaneous translation and rotation about an offset drag centre.
     return -H.transpose() *
-           (linear_damping_ * local +
-            (quadratic_damping_.array() * local.array().abs() * local.array()).matrix());
+           (linear_damping_ * local + (quadratic_damping_.array() * local.array().abs() * local.array()).matrix());
 }
-double MarineDynamics::submergedFraction(const Eigen::Vector3d &p,
-                                         const Eigen::Quaterniond &orientation,
+double MarineDynamics::submergedFraction(const Eigen::Vector3d &p, const Eigen::Quaterniond &orientation,
                                          Eigen::Vector3d *center) const {
     const auto q = orientation.normalized();
     const Eigen::Vector3d vertical = q.conjugate() * Eigen::Vector3d::UnitZ();
@@ -110,8 +105,7 @@ double MarineDynamics::submergedFraction(const Eigen::Vector3d &p,
     }
     return fraction;
 }
-Vector6d MarineDynamics::restoringWrench(const Eigen::Vector3d &p,
-                                         const Eigen::Quaterniond &orientation) const {
+Vector6d MarineDynamics::restoringWrench(const Eigen::Vector3d &p, const Eigen::Quaterniond &orientation) const {
     const auto q = orientation.normalized();
     Eigen::Vector3d center;
     const double buoyancy = density_ * gravity_ * volume_ * submergedFraction(p, q, &center);
@@ -125,8 +119,7 @@ void MarineDynamics::validateState(const State13d &x) {
     if (!x.allFinite() || x.segment<4>(3).norm() < 1e-10)
         throw std::invalid_argument("State must be finite with a nonzero quaternion");
 }
-State13d MarineDynamics::derivative(const State13d &x, const Vector6d &propulsion,
-                                    const Eigen::Vector3d &water,
+State13d MarineDynamics::derivative(const State13d &x, const Vector6d &propulsion, const Eigen::Vector3d &water,
                                     const Eigen::Vector3d &waterDot) const {
     validateState(x);
     if (!propulsion.allFinite() || !water.allFinite() || !waterDot.allFinite())
@@ -145,8 +138,8 @@ State13d MarineDynamics::derivative(const State13d &x, const Vector6d &propulsio
     const Eigen::Vector3d pressureForce = density_ * volume_ * wet * (q.conjugate() * waterDot);
     Vector6d fluidPressure;
     fluidPressure << pressureForce, wetCenter.cross(pressureForce);
-    const Vector6d wrench = propulsion + restoringWrench(x.head<3>(), q) +
-                            wet * dampingWrench(relative) + fluidPressure;
+    const Vector6d wrench =
+        propulsion + restoringWrench(x.head<3>(), q) + wet * dampingWrench(relative) + fluidPressure;
     State13d dx;
     dx.head<3>() = q * v.head<3>();
     const Eigen::Quaterniond dq = q * Eigen::Quaterniond(0, v[3], v[4], v[5]);
@@ -154,11 +147,10 @@ State13d MarineDynamics::derivative(const State13d &x, const Vector6d &propulsio
     dx.tail<6>() = acceleration(v, relative, wrench, dc);
     return dx;
 }
-State13d MarineDynamics::step(const State13d &x, const Vector6d &tau, double dt,
-                              const Eigen::Vector3d &water, const Eigen::Vector3d &dw) const {
-    auto next = integrateBodyRk4(x, dt, [&](const State13d &stage, double offset) {
-        return derivative(stage, tau, water + offset * dw, dw);
-    });
+State13d MarineDynamics::step(const State13d &x, const Vector6d &tau, double dt, const Eigen::Vector3d &water,
+                              const Eigen::Vector3d &dw) const {
+    auto next = integrateBodyRk4(
+        x, dt, [&](const State13d &stage, double offset) { return derivative(stage, tau, water + offset * dw, dw); });
     next.segment<4>(3).normalize();
     return next;
 }

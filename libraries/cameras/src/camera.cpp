@@ -9,11 +9,10 @@
 
 namespace robotics::cameras {
 void Intrinsics::validate() const {
-    if (width < 1 || height < 1 || width > 4096 || height > 4096 || !std::isfinite(fx) ||
-        !std::isfinite(fy) || fx <= 0 || fy <= 0 || !std::isfinite(cx) || !std::isfinite(cy) ||
-        !std::isfinite(near_plane) || !std::isfinite(far_plane) || near_plane <= 0 ||
-        far_plane <= near_plane || !std::isfinite(static_cast<float>(far_plane)) ||
-        static_cast<float>(near_plane) <= 0 ||
+    if (width < 1 || height < 1 || width > 4096 || height > 4096 || !std::isfinite(fx) || !std::isfinite(fy) ||
+        fx <= 0 || fy <= 0 || !std::isfinite(cx) || !std::isfinite(cy) || !std::isfinite(near_plane) ||
+        !std::isfinite(far_plane) || near_plane <= 0 || far_plane <= near_plane ||
+        !std::isfinite(static_cast<float>(far_plane)) || static_cast<float>(near_plane) <= 0 ||
         static_cast<float>(far_plane) <= static_cast<float>(near_plane))
         throw std::invalid_argument("invalid rectified camera calibration or clipping planes");
 }
@@ -48,16 +47,14 @@ Processor::Processor(std::uint32_t seed) : random_(seed) {}
 void Processor::reset(std::uint32_t seed) {
     random_.seed(seed);
 }
-Frame Processor::process(const Intrinsics &calibration, const DepthNoise &noise,
-                         const std::vector<std::uint8_t> &rgb, const std::vector<float> &depth,
-                         bool jpeg, int jpeg_quality) {
+Frame Processor::process(const Intrinsics &calibration, const DepthNoise &noise, const std::vector<std::uint8_t> &rgb,
+                         const std::vector<float> &depth, bool jpeg, int jpeg_quality) {
     calibration.validate();
     noise.validate();
     const auto pixels = static_cast<std::size_t>(calibration.width) * calibration.height;
     if ((!rgb.empty() && rgb.size() != pixels * 3) || (!depth.empty() && depth.size() != pixels) ||
         (jpeg && rgb.empty()) || jpeg_quality < 0 || jpeg_quality > 100)
-        throw std::invalid_argument(
-            "camera buffers do not match calibration or requested products");
+        throw std::invalid_argument("camera buffers do not match calibration or requested products");
     Frame result;
     result.width = calibration.width;
     result.height = calibration.height;
@@ -68,17 +65,15 @@ Frame Processor::process(const Intrinsics &calibration, const DepthNoise &noise,
         const auto source = static_cast<std::size_t>(result.height - 1 - y) * result.width;
         const auto target = static_cast<std::size_t>(y) * result.width;
         if (!rgb.empty())
-            std::copy_n(rgb.begin() + source * 3, result.width * 3,
-                        result.rgb.begin() + target * 3);
+            std::copy_n(rgb.begin() + source * 3, result.width * 3, result.rgb.begin() + target * 3);
         if (!depth.empty())
             for (int x = 0; x < result.width; ++x) {
                 const float z = depth[source + x];
                 const float near = static_cast<float>(calibration.near_plane);
                 const float far = static_cast<float>(calibration.far_plane);
-                result.depth[target + x] =
-                    !std::isfinite(z) || z < 0 || z >= .999999f
-                        ? std::numeric_limits<float>::quiet_NaN()
-                        : 2 * near * far / (far + near - (2 * z - 1) * (far - near));
+                result.depth[target + x] = !std::isfinite(z) || z < 0 || z >= .999999f
+                                               ? std::numeric_limits<float>::quiet_NaN()
+                                               : 2 * near * far / (far + near - (2 * z - 1) * (far - near));
             }
     }
     if (!depth.empty())

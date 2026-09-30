@@ -5,45 +5,47 @@
 
 namespace {
 void usage() {
-    std::cout <<
-        "nereus-viewer: ROS 2 pool viewer for the nereus simulator bridge\n"
-        "  --scenario FILE        load the scene from a resolved.json (default: latched scenario topic)\n"
-        "  --pack-dir DIR         scenario pack folder used to resolve assets of a --scenario file\n"
-        "  --config FILE          host viewer document (default content/viewer/talos_uwrt_host.yaml)\n"
-        "  --panels FILE|none     operator panel composition (default content/viewer/talos_uwrt_panels.yaml)\n"
-        "  --scenario-topic NAME  latched scenario topic (default from the config)\n"
-        "  --local-cameras [true|false]  camera cards render from this viewer's scene at the truth pose\n"
-        "                         (default true); each card can switch to the bridge's images (ROS)\n"
-        "  --demo                 scene preview without ROS: fixed vehicle pose, landmark picker\n"
-        "  --show-focus           keep the orbit focus marker visible (screenshots/tests)\n"
-        "  --demo-task NAME       preview target landmark (demo only)\n"
-        "  --focus NAME           initial focus (Course, Vehicle, a landmark, ...)\n"
-        "  --view NAME            initial view: orbit, free, or a camera id\n"
-        "  --inject-f X Y         test aid: hover window position (X,Y) and press F halfway through a capture run\n"
-        "  --orbit YAW PITCH DIST initial orbit angles (radians) and distance (metres) after the focus\n"
-        "  --open NAME            open scene-settings, map, tf, pool-viewer or depth (camera cards) at start (repeatable)\n"
-        "  --show-tf --mpc-path --show-scorecard   initial toggle states\n"
-        "  --detections | --no-detections   detection overlay on/off at start (default on)\n"
-        "  --keep-detections      ignore detector DELETEALL; observations live out their lifetime\n"
-        "  --detections-placement MODE   pose_source (default) | truth | estimate | both; truth/both need the simulator\n"
-        "  --hidden --frames N --screenshot out.png   render N frames, save a PNG, exit\n"
-        "  --render-rate HZ       frame cap (default 60; with --vsync: none, vsync paces)\n"
-        "  --card-rate HZ         local camera card refresh (default: each camera's own rate; 0 = camera rate)\n"
-        "  --vsync | --no-vsync   swap interval 1 / 0 (default 0: a covered or unfocused window's vsync\n"
-        "                         swaps are throttled by the compositor and stall the UI)\n"
-        "  --profile              log frame time mean/p50/p95/p99/max and per-phase CPU cost every 5 s\n"
-        "                         (F3 toggles the on-screen readout)\n"
-        "  --legacy-cards         A/B aid: render both local cards together every 0.1 s with the full pipeline\n"
-        "  --profile-sync         --profile plus glFinish after the main/card draws so phases include GPU time\n"
-        "                         (serializes CPU and GPU: use for attribution, not for the frame-time numbers)\n"
-        "  --pose-source auto|truth|estimate  robot pose: simulator truth when fresh (auto), always truth, or\n"
-        "                         the localization estimate (real robot: no simulator, no bridge)\n"
-        "  --display-delay S      seconds behind the latest truth stamp shown (default 0.02)\n"
-        "  --estimate-delay S     same for estimate / other TF frames (default 0.06)\n"
-        "  --robot-only           draw only the robot: no pool, water or course (real-robot use)\n"
-        "  --shaders DIR          renderer shader folder\n"
-        "  --use-sim-time [true|false]   follow /clock (default true unless --demo)\n"
-        "  --ros-args ...         passed to rclcpp\n";
+    std::cout
+        << "nereus-viewer: ROS 2 pool viewer for the nereus simulator bridge\n"
+           "  --scenario FILE        load the scene from a resolved.json (default: latched scenario topic)\n"
+           "  --pack-dir DIR         scenario pack folder used to resolve assets of a --scenario file\n"
+           "  --config FILE          host viewer document (default content/viewer/talos_uwrt_host.yaml)\n"
+           "  --panels FILE|none     operator panel composition (default content/viewer/talos_uwrt_panels.yaml)\n"
+           "  --scenario-topic NAME  latched scenario topic (default from the config)\n"
+           "  --local-cameras [true|false]  camera cards render from this viewer's scene at the truth pose\n"
+           "                         (default true); each card can switch to the bridge's images (ROS)\n"
+           "  --demo                 scene preview without ROS: fixed vehicle pose, landmark picker\n"
+           "  --show-focus           keep the orbit focus marker visible (screenshots/tests)\n"
+           "  --demo-task NAME       preview target landmark (demo only)\n"
+           "  --focus NAME           initial focus (Course, Vehicle, a landmark, ...)\n"
+           "  --view NAME            initial view: orbit, free, or a camera id\n"
+           "  --inject-f X Y         test aid: hover window position (X,Y) and press F halfway through a capture run\n"
+           "  --orbit YAW PITCH DIST initial orbit angles (radians) and distance (metres) after the focus\n"
+           "  --open NAME            open scene-settings, map, tf, pool-viewer or depth (camera cards) at start "
+           "(repeatable)\n"
+           "  --show-tf --mpc-path --show-scorecard   initial toggle states\n"
+           "  --detections | --no-detections   detection overlay on/off at start (default on)\n"
+           "  --keep-detections      ignore detector DELETEALL; observations live out their lifetime\n"
+           "  --detections-placement MODE   pose_source (default) | truth | estimate | both; truth/both need the "
+           "simulator\n"
+           "  --hidden --frames N --screenshot out.png   render N frames, save a PNG, exit\n"
+           "  --render-rate HZ       frame cap (default 60; with --vsync: none, vsync paces)\n"
+           "  --card-rate HZ         local camera card refresh (default: each camera's own rate; 0 = camera rate)\n"
+           "  --vsync | --no-vsync   swap interval 1 / 0 (default 0: a covered or unfocused window's vsync\n"
+           "                         swaps are throttled by the compositor and stall the UI)\n"
+           "  --profile              log frame time mean/p50/p95/p99/max and per-phase CPU cost every 5 s\n"
+           "                         (F3 toggles the on-screen readout)\n"
+           "  --legacy-cards         A/B aid: render both local cards together every 0.1 s with the full pipeline\n"
+           "  --profile-sync         --profile plus glFinish after the main/card draws so phases include GPU time\n"
+           "                         (serializes CPU and GPU: use for attribution, not for the frame-time numbers)\n"
+           "  --pose-source auto|truth|estimate  robot pose: simulator truth when fresh (auto), always truth, or\n"
+           "                         the localization estimate (real robot: no simulator, no bridge)\n"
+           "  --display-delay S      seconds behind the latest truth stamp shown (default 0.02)\n"
+           "  --estimate-delay S     same for estimate / other TF frames (default 0.06)\n"
+           "  --robot-only           draw only the robot: no pool, water or course (real-robot use)\n"
+           "  --shaders DIR          renderer shader folder\n"
+           "  --use-sim-time [true|false]   follow /clock (default true unless --demo)\n"
+           "  --ros-args ...         passed to rclcpp\n";
 }
 } // namespace
 
@@ -101,8 +103,7 @@ int main(int argc, char **argv) {
             if (i + 1 < argc && argv[i + 1][0] != '-')
                 v = argv[++i];
             options.localCameras = v != "false" && v != "0";
-        }
-        else if (arg == "--no-vsync")
+        } else if (arg == "--no-vsync")
             options.vsync = false;
         else if (arg == "--vsync")
             options.vsync = true;

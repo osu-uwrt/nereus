@@ -1,5 +1,6 @@
 // TaskRuntime against a recorded reference. task_runtime_capture.json holds scripted inputs and
-// the expected results for every task type the robosub_2026 pack uses (gate, slalom, torpedo, bins, surface + turn zone, table record()).
+// the expected results for every task type the robosub_2026 pack uses (gate, slalom, torpedo, bins, surface + turn
+// zone, table record()).
 //   cases        TaskRuntime with scoring rules removed: events, projectile steps,
 //                snapshots and indicators compared with a no-op Rules.
 //   rules_cases  the compiled robosub_2026 Rules: full event streams (including
@@ -40,16 +41,19 @@ Json readJson(const std::string &path) {
         if (expected.size() != actual.size())
             return ::testing::AssertionFailure() << where << ": keys " << expected.dump() << " vs " << actual.dump();
         for (auto it = expected.begin(); it != expected.end(); ++it) {
-            if (!actual.contains(it.key())) return ::testing::AssertionFailure() << where << ": missing " << it.key();
+            if (!actual.contains(it.key()))
+                return ::testing::AssertionFailure() << where << ": missing " << it.key();
             auto r = near(it.value(), actual.at(it.key()), where + "/" + it.key());
-            if (!r) return r;
+            if (!r)
+                return r;
         }
     } else if (expected.is_array()) {
         if (expected.size() != actual.size())
             return ::testing::AssertionFailure() << where << ": size " << expected.size() << " vs " << actual.size();
         for (std::size_t i = 0; i < expected.size(); ++i) {
             auto r = near(expected[i], actual[i], where + "[" + std::to_string(i) + "]");
-            if (!r) return r;
+            if (!r)
+                return r;
         }
     } else if (expected != actual) {
         return ::testing::AssertionFailure() << where << ": " << expected << " != " << actual;
@@ -63,9 +67,15 @@ robotics::spatial::Pose poseOf(const Json &op) {
     pose.rotation = Eigen::Quaterniond(op["wxyz"][0], op["wxyz"][1], op["wxyz"][2], op["wxyz"][3]);
     return pose;
 }
-Eigen::Vector3d vec(const Json &v) { return Eigen::Vector3d(v[0].get<double>(), v[1].get<double>(), v[2].get<double>()); }
-Json toJson(const Events &events) { return Json(events); }
-Json vecJson(const Eigen::Vector3d &v) { return Json::array({v[0], v[1], v[2]}); }
+Eigen::Vector3d vec(const Json &v) {
+    return Eigen::Vector3d(v[0].get<double>(), v[1].get<double>(), v[2].get<double>());
+}
+Json toJson(const Events &events) {
+    return Json(events);
+}
+Json vecJson(const Eigen::Vector3d &v) {
+    return Json::array({v[0], v[1], v[2]});
+}
 
 // No-op stand-in for the competition rules (geometry-only comparison).
 class NoRules : public Rules {
@@ -74,7 +84,9 @@ class NoRules : public Rules {
         return {{"scores", Json::array()}, {"events", Json::array()}};
     }
 };
-RulesRegistry noRules() { return {{"robosub_2026", [] { return std::make_unique<NoRules>(); }}}; }
+RulesRegistry noRules() {
+    return {{"robosub_2026", [] { return std::make_unique<NoRules>(); }}};
+}
 
 const ResolvedScenario &scenario() {
     // The recorded cases start scoring at boot, not at the pack default (operator "start").
@@ -102,7 +114,8 @@ void replay(const Json &captured, const RulesRegistry &rules, bool with_derived)
             ASSERT_TRUE(near(expected["events"], toJson(events), where));
             events_seen += events.size();
         } else if (kind == "release") {
-            const Events events = runtime.releaseProjectile(t, op["id"], op["mech"], vec(op["tip"]), op["radius"], op["length"]);
+            const Events events =
+                runtime.releaseProjectile(t, op["id"], op["mech"], vec(op["tip"]), op["radius"], op["length"]);
             ASSERT_TRUE(near(expected["events"], toJson(events), where));
             events_seen += events.size();
         } else if (kind == "step") {
@@ -110,8 +123,10 @@ void replay(const Json &captured, const RulesRegistry &rules, bool with_derived)
                                                                vec(op["axis"]), vec(op["velocity"]));
             ASSERT_TRUE(near(expected["events"], toJson(step.events), where));
             EXPECT_EQ(expected["stop"].get<bool>(), step.stop) << where;
-            ASSERT_TRUE(near(expected["position"], step.position_world ? vecJson(*step.position_world) : Json(), where + " position"));
-            ASSERT_TRUE(near(expected["velocity"], step.velocity_world ? vecJson(*step.velocity_world) : Json(), where + " velocity"));
+            ASSERT_TRUE(near(expected["position"], step.position_world ? vecJson(*step.position_world) : Json(),
+                             where + " position"));
+            ASSERT_TRUE(near(expected["velocity"], step.velocity_world ? vecJson(*step.velocity_world) : Json(),
+                             where + " velocity"));
             events_seen += step.events.size();
         } else if (kind == "record") {
             const Events events = runtime.record(t, op["events"].get<Events>());
@@ -170,29 +185,38 @@ struct ScriptedRules : Rules {
         for (const auto &event : events)
             if (event["id"] == "forward_pass") {
                 out["scores"].push_back({{"row", "gate"}, {"points", 5}});
-                out["events"].push_back({{"id", "derived"}, {"type", "note"}, {"task", "gate"}, {"region", ""},
+                out["events"].push_back({{"id", "derived"},
+                                         {"type", "note"},
+                                         {"task", "gate"},
+                                         {"region", ""},
                                          {"time_ns", event["time_ns"]},
                                          {"data", {{"seen_scores", state["scores"].size()}}}});
                 seen_running = state["run"]["running"];
             }
         return out;
     }
-    Json describe(const Json &, const Json &) override { return {{"extra", 1}}; }
+    Json describe(const Json &, const Json &) override {
+        return {{"extra", 1}};
+    }
     Json feed(const Json &state, const Events &events, const Json &context, const Json &) override {
-        return Json::array({{{"events", events.size()}, {"payloads", context["payloads"].size()},
+        return Json::array({{{"events", events.size()},
+                             {"payloads", context["payloads"].size()},
                              {"has_run", state.contains("run")}}});
     }
     bool seen_running{false};
 };
 
-RulesRegistry scripted(std::function<std::unique_ptr<Rules>()> factory) { return {{"robosub_2026", factory}}; }
+RulesRegistry scripted(std::function<std::unique_ptr<Rules>()> factory) {
+    return {{"robosub_2026", factory}};
+}
 
 robotics::spatial::Pose gatePose(double x_local) {
     // Gate task frame at the placement in the Talos scenario.
     const Json &placement = scenario().scenario["task_placements"][0];
     const double yaw = placement["yaw_deg"].get<double>() * 3.14159265358979323846 / 180 / 2;
-    robotics::spatial::Pose base{Eigen::Vector3d(placement["position_m"][0], placement["position_m"][1], placement["position_m"][2]),
-                                 Eigen::Quaterniond(std::cos(yaw), 0, 0, std::sin(yaw))};
+    robotics::spatial::Pose base{
+        Eigen::Vector3d(placement["position_m"][0], placement["position_m"][1], placement["position_m"][2]),
+        Eigen::Quaterniond(std::cos(yaw), 0, 0, std::sin(yaw))};
     return robotics::spatial::compose(base, {Eigen::Vector3d(x_local, -0.75, -0.2), Eigen::Quaterniond::Identity()});
 }
 } // namespace
@@ -223,8 +247,12 @@ TEST(TaskRuntime, MalformedRulesOutputFailsTheObserverUntilReset) {
     struct Bad : Rules {
         Json evaluate(const Json &, const Events &events, const Json &) override {
             Json out = {{"scores", Json::array()}, {"events", Json::array()}};
-            out["events"].push_back({{"id", "x"}, {"type", "y"}, {"task", "nope"}, {"region", ""},
-                                     {"time_ns", events[0]["time_ns"]}, {"data", Json::object()}});
+            out["events"].push_back({{"id", "x"},
+                                     {"type", "y"},
+                                     {"task", "nope"},
+                                     {"region", ""},
+                                     {"time_ns", events[0]["time_ns"]},
+                                     {"data", Json::object()}});
             return out;
         }
     };

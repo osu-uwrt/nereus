@@ -19,9 +19,19 @@ class PackStaticTfTests(unittest.TestCase):
         self.path = self.root / "bridge" / "bridge.yaml"
         document = load_pack(self.path)
         document.data["frame_names"] = {"base_link": "auv/body", "imu_mount": "auv/sensor"}
-        document.data["tf"] = {"publish": [], "lookup": [], "never_publish": [], "static": [{
-            "parent": "auv/body", "child": "auv/sensor",
-            "from_frame": "base_link", "to_frame": "imu_mount"}]}
+        document.data["tf"] = {
+            "publish": [],
+            "lookup": [],
+            "never_publish": [],
+            "static": [
+                {
+                    "parent": "auv/body",
+                    "child": "auv/sensor",
+                    "from_frame": "base_link",
+                    "to_frame": "imu_mount",
+                }
+            ],
+        }
         document.save()
 
     def test_generic_fixed_transform_resolves_and_round_trips(self) -> None:
@@ -33,8 +43,12 @@ class PackStaticTfTests(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), original)
 
     def test_invalid_native_frame_and_conflicting_alias_fail_resolution(self) -> None:
-        for field, value in (("from_frame", "missing"), ("to_frame", "world"),
-                             ("parent", "wrong"), ("child", "wrong")):
+        for field, value in (
+            ("from_frame", "missing"),
+            ("to_frame", "world"),
+            ("parent", "wrong"),
+            ("child", "wrong"),
+        ):
             with self.subTest(field=field):
                 doc = load_pack(self.path)
                 old = doc.data["tf"]["static"][0][field]

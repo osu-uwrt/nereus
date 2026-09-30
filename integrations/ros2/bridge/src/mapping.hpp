@@ -16,13 +16,11 @@ class Writer {
   public:
     // Applies every step to an initialised message of the compiled type.
     void apply(void *message, const Value &values) const;
-    std::shared_ptr<Message> make(const std::shared_ptr<const MessageType> &type,
-                                  const Value &values) const;
+    std::shared_ptr<Message> make(const std::shared_ptr<const MessageType> &type, const Value &values) const;
 
   private:
-    friend Writer compileWriter(const introspection::MessageMembers *, const Json &,
-                                const SpecTree &, const std::optional<std::string> &,
-                                const std::string &);
+    friend Writer compileWriter(const introspection::MessageMembers *, const Json &, const SpecTree &,
+                                const std::optional<std::string> &, const std::string &);
     struct Step {
         FieldPath path;
         std::function<void(void *target, const Value &values)> produce;
@@ -31,19 +29,17 @@ class Writer {
 };
 
 // `frame_id` nullopt: not a header-stamped stream (service responses).
-Writer compileWriter(const introspection::MessageMembers *type, const Json &fields,
-                     const SpecTree &sources, const std::optional<std::string> &frame_id,
-                     const std::string &where);
+Writer compileWriter(const introspection::MessageMembers *type, const Json &fields, const SpecTree &sources,
+                     const std::optional<std::string> &frame_id, const std::string &where);
 
 class Reader {
   public:
-    bool accepts(const void *message) const;       // may throw MappingError
-    Value operator()(const void *message) const;   // Map of native arguments; may throw
+    bool accepts(const void *message) const;     // may throw MappingError
+    Value operator()(const void *message) const; // Map of native arguments; may throw
 
   private:
     friend Reader compileReader(const introspection::MessageMembers *, const Json &,
-                                const std::map<std::string, Spec> &, const Json &,
-                                const std::string &);
+                                const std::map<std::string, Spec> &, const Json &, const std::string &);
     struct Step {
         std::string argument;
         FieldPath path;
@@ -60,8 +56,7 @@ class Reader {
 };
 
 Reader compileReader(const introspection::MessageMembers *type, const Json &fields,
-                     const std::map<std::string, Spec> &arguments, const Json &accept_if,
-                     const std::string &where);
+                     const std::map<std::string, Spec> &arguments, const Json &accept_if, const std::string &where);
 
 // Quoted repr of a JSON scalar ('text', 1.5, True), used in messages.
 std::string pyRepr(const Json &value);

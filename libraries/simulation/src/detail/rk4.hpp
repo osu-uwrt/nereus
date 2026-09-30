@@ -6,8 +6,7 @@
 namespace robotics::simulation::detail {
 // Evaluate all state/time-dependent forces at each stage. Actuator midpoint
 // values may be held by the caller, while geometry/environment remain stage-local.
-template <class Derivative>
-State13d integrateBodyRk4(const State13d &state, double dt, Derivative derivative) {
+template <class Derivative> State13d integrateBodyRk4(const State13d &state, double dt, Derivative derivative) {
     if (!std::isfinite(dt) || dt <= 0 || dt > .1)
         throw std::invalid_argument("RK4 step must be in (0,0.1] seconds");
     const State13d k1 = derivative(state, 0.0);

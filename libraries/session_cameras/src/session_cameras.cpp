@@ -24,7 +24,8 @@ double ms(std::int64_t ns) {
 
 // SHA-256 (FIPS 180-4); only used for seed derivation.
 struct Sha256 {
-    std::uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+    std::uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+                          0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
     static std::uint32_t rotr(std::uint32_t x, int n) {
         return (x >> n) | (x << (32 - n));
     }
@@ -40,8 +41,8 @@ struct Sha256 {
             0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
         std::uint32_t w[64];
         for (int i = 0; i < 16; ++i)
-            w[i] = std::uint32_t(p[4 * i]) << 24 | std::uint32_t(p[4 * i + 1]) << 16 | std::uint32_t(p[4 * i + 2]) << 8 |
-                   p[4 * i + 3];
+            w[i] = std::uint32_t(p[4 * i]) << 24 | std::uint32_t(p[4 * i + 1]) << 16 |
+                   std::uint32_t(p[4 * i + 2]) << 8 | p[4 * i + 3];
         for (int i = 16; i < 64; ++i) {
             const auto s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >> 3);
             const auto s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >> 10);
@@ -222,7 +223,8 @@ SessionCameras::SessionCameras(const session::ResolvedScenario &resolved, Option
         else if (camera->outputs.count(Output::RgbRight))
             throw std::runtime_error("sensor '" + id + "': rgb_right requires right_frame");
         camera->left_eye = scene_->frames().fromRoot(camera->frame);
-        camera->right_eye = camera->right_frame.empty() ? camera->left_eye : scene_->frames().fromRoot(camera->right_frame);
+        camera->right_eye =
+            camera->right_frame.empty() ? camera->left_eye : scene_->frames().fromRoot(camera->right_frame);
         const auto quality = options_.jpeg_quality.find(id);
         if (quality != options_.jpeg_quality.end())
             camera->jpeg_quality = quality->second;
@@ -322,8 +324,7 @@ void SessionCameras::raiseFailure() const {
 }
 
 void SessionCameras::request(std::int64_t snapshot_time_ns, std::int64_t ros_stamp_ns,
-                             const spatial::Pose &world_from_root,
-                             const std::vector<rendering::Instance> &dynamic,
+                             const spatial::Pose &world_from_root, const std::vector<rendering::Instance> &dynamic,
                              const std::vector<pack_scene::RobotOverride> &overrides,
                              const std::map<std::string, bool> &latched) {
     spatial::validate(world_from_root);
@@ -432,15 +433,27 @@ Json SessionCameras::describe() const {
         for (const auto output : c.outputs)
             outputs.push_back(outputName(output));
         const auto &n = c.noise;
-        cameraRecords[id] = {
-            {"frame", c.frame}, {"right_frame", c.right_frame}, {"outputs", outputs},
-            {"baseline_m", c.baseline_m}, {"period_ns", c.period_ns}, {"capacity", c.capacity},
-            {"seeds", {c.seeds[0], c.seeds[1]}},
-            {"depth_noise", {{"enabled", n.enabled}, {"min_range", n.min_range}, {"max_range", n.max_range},
-                             {"base_sigma", n.base_sigma}, {"range_sigma", n.range_sigma}, {"exponent", n.exponent},
-                             {"bias", n.bias}, {"dropout", n.dropout}, {"range_dropout", n.range_dropout},
-                             {"edge_dropout", n.edge_dropout}, {"outliers", n.outliers},
-                             {"correlation", n.correlation}, {"patch_size", n.patch_size}}}};
+        cameraRecords[id] = {{"frame", c.frame},
+                             {"right_frame", c.right_frame},
+                             {"outputs", outputs},
+                             {"baseline_m", c.baseline_m},
+                             {"period_ns", c.period_ns},
+                             {"capacity", c.capacity},
+                             {"seeds", {c.seeds[0], c.seeds[1]}},
+                             {"depth_noise",
+                              {{"enabled", n.enabled},
+                               {"min_range", n.min_range},
+                               {"max_range", n.max_range},
+                               {"base_sigma", n.base_sigma},
+                               {"range_sigma", n.range_sigma},
+                               {"exponent", n.exponent},
+                               {"bias", n.bias},
+                               {"dropout", n.dropout},
+                               {"range_dropout", n.range_dropout},
+                               {"edge_dropout", n.edge_dropout},
+                               {"outliers", n.outliers},
+                               {"correlation", n.correlation},
+                               {"patch_size", n.patch_size}}}};
     }
     return {{"device", host_->device()},
             {"clipping_m", {{"near", kNearPlaneM}, {"far", kFarPlaneM}}},
@@ -485,8 +498,8 @@ Products SessionCameras::capture(Camera &c, const Job &job) {
         for (int eye = 0; eye < 2; ++eye)
             if (wantEye[eye]) {
                 const auto &k = c.intrinsics[std::size_t(eye)];
-                raw[std::size_t(eye)] = host_->capture(scene, *views[eye], scene_->appearance(), time, k.width, k.height,
-                                                       wantColor[eye], wantDepth[eye]);
+                raw[std::size_t(eye)] = host_->capture(scene, *views[eye], scene_->appearance(), time, k.width,
+                                                       k.height, wantColor[eye], wantDepth[eye]);
             }
     }
     const auto renderNs = nowNs() - renderStart;
@@ -497,9 +510,9 @@ Products SessionCameras::capture(Camera &c, const Job &job) {
         if (!wantEye[eye])
             continue;
         const bool jpeg = wantColor[eye] && job.jpeg_quality.has_value();
-        auto frame = c.processors[std::size_t(eye)].process(
-            c.intrinsics[std::size_t(eye)], c.noise, raw[std::size_t(eye)].rgb, raw[std::size_t(eye)].depth, jpeg,
-            job.jpeg_quality.value_or(kDefaultJpegQuality));
+        auto frame = c.processors[std::size_t(eye)].process(c.intrinsics[std::size_t(eye)], c.noise,
+                                                            raw[std::size_t(eye)].rgb, raw[std::size_t(eye)].depth,
+                                                            jpeg, job.jpeg_quality.value_or(kDefaultJpegQuality));
         (eye ? products.right : products.left) = std::move(frame);
     }
     products.render_ms = ms(renderNs);

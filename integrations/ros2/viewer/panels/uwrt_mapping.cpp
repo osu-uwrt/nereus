@@ -2,10 +2,10 @@
 #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
 #include <chameleon_tf_msgs/action/model_frame.hpp>
 #endif
+#include <rclcpp_action/rclcpp_action.hpp>
 #include <riptide_msgs2/msg/mapping_target_info.hpp>
 #include <riptide_msgs2/srv/mapping_target.hpp>
 #include <std_srvs/srv/trigger.hpp>
-#include <rclcpp_action/rclcpp_action.hpp>
 
 namespace robotics::ros_viewer::panels {
 namespace {
@@ -174,7 +174,7 @@ class UwrtMapping final : public Mapping {
         std::lock_guard<std::mutex> lock(mutex);
         const auto now = Steady::now();
         auto elapsed = [&](auto since) { return std::chrono::duration<double>(now - since).count(); };
-        #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON
         value.calibrationReady = cal->action_server_is_ready();
 #else
         value.calibrationReady = false;

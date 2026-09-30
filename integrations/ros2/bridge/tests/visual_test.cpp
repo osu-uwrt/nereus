@@ -13,32 +13,48 @@ using visualization_msgs::msg::MarkerArray;
 namespace {
 Json robotWithMechanisms() {
     Json robot = defaultRobot();
-    robot["mechanisms"] = Json::array({{{"id", "torpedo_launcher"}, {"type", "launcher"}, {"parameters", Json::object()}},
-                                       {{"id", "dropper"}, {"type", "dropper"}, {"parameters", Json::object()}}});
+    robot["mechanisms"] =
+        Json::array({{{"id", "torpedo_launcher"}, {"type", "launcher"}, {"parameters", Json::object()}},
+                     {{"id", "dropper"}, {"type", "dropper"}, {"parameters", Json::object()}}});
     return robot;
 }
 Json marker(const std::string &id, const std::string &topic, const std::string &native, Json options,
             const std::string &frame = kWorld) {
-    return {{"id", id}, {"direction", "publish"}, {"topic", "/demo/" + topic},
-            {"message_type", "visualization_msgs/msg/MarkerArray"}, {"native", native}, {"format", "marker_array"},
-            {"fields", Json::object()}, {"rate_hz", 50}, {"frame_id", frame}, {"qos", qos()}, {"options", options}};
+    return {{"id", id},
+            {"direction", "publish"},
+            {"topic", "/demo/" + topic},
+            {"message_type", "visualization_msgs/msg/MarkerArray"},
+            {"native", native},
+            {"format", "marker_array"},
+            {"fields", Json::object()},
+            {"rate_hz", 50},
+            {"frame_id", frame},
+            {"qos", qos()},
+            {"options", options}};
 }
 session::ResolvedScenario scenarioWith(const std::vector<Json> &streams, const Json &robot = robotWithMechanisms()) {
     Json bridge = defaultBridge();
     bridge["streams"] = Json::array();
     for (const auto &stream : streams)
         bridge["streams"].push_back(stream);
-    Json document = {{"format", "nereus.resolved_scenario"}, {"version", 1},
-                     {"scenario", {{"world_frame", "scenario_world"}, {"seed", 0}}}, {"robot", robot},
-                     {"pool", Json::object()}, {"tasks", Json::object()},
-                     {"task_definitions", Json::array({{{"id", "table"},
-                                                        {"props", Json::array({{{"id", "crate"}, {"type", "rigid_body"},
-                                                                                {"parameters", {{"visual_asset", "crate_mesh"}}}},
-                                                                               {{"id", "ghost"}, {"type", "rigid_body"},
-                                                                                {"parameters", Json::object()}}})}}})},
-                     {"bridge", bridge}, {"run_options", Json::object()},
-                     {"asset_paths", {{"tasks", {{"crate_mesh", "/assets/crate.obj"}}},
-                                      {"robot", {{"projectile_mesh", "/assets/torpedo.obj"}}}}}};
+    Json document = {
+        {"format", "nereus.resolved_scenario"},
+        {"version", 1},
+        {"scenario", {{"world_frame", "scenario_world"}, {"seed", 0}}},
+        {"robot", robot},
+        {"pool", Json::object()},
+        {"tasks", Json::object()},
+        {"task_definitions",
+         Json::array(
+             {{{"id", "table"},
+               {"props",
+                Json::array(
+                    {{{"id", "crate"}, {"type", "rigid_body"}, {"parameters", {{"visual_asset", "crate_mesh"}}}},
+                     {{"id", "ghost"}, {"type", "rigid_body"}, {"parameters", Json::object()}}})}}})},
+        {"bridge", bridge},
+        {"run_options", Json::object()},
+        {"asset_paths",
+         {{"tasks", {{"crate_mesh", "/assets/crate.obj"}}}, {"robot", {{"projectile_mesh", "/assets/torpedo.obj"}}}}}};
     return session::parseResolvedScenario(document);
 }
 template <class Fn> std::string bridgeError(Fn &&fn) {
@@ -63,14 +79,21 @@ std::vector<Publication> stepUntil(BridgeCore &core, const std::string &stream, 
 
 TEST(Viewer, MagnetLightsUseLatchedColorsFromTheIndicatorState) {
     const auto resolved = scenarioWith({marker("lights", "lights", "state:indicators",
-                                               {{"shape", "sphere"}, {"scale_m", {0.002, 0.044, 0.044}},
+                                               {{"shape", "sphere"},
+                                                {"scale_m", {0.002, 0.044, 0.044}},
                                                 {"colors", {{"red", {1, 0, 0, 1}}, {"green", {0, 1, 0, 1}}}}})});
     FakePort port;
-    port.indicator_list = Json::array({{{"task", "table"}, {"region", "magnet_a"}, {"position_m", {1.0, 2.0, 3.0}},
-                                        {"orientation_wxyz", {1.0, 0.0, 0.0, 0.0}}, {"latched", false},
+    port.indicator_list = Json::array({{{"task", "table"},
+                                        {"region", "magnet_a"},
+                                        {"position_m", {1.0, 2.0, 3.0}},
+                                        {"orientation_wxyz", {1.0, 0.0, 0.0, 0.0}},
+                                        {"latched", false},
                                         {"colors", {{"initial", "red"}, {"latched", "green"}}}},
-                                       {{"task", "table"}, {"region", "magnet_b"}, {"position_m", {4.0, 5.0, 6.0}},
-                                        {"orientation_wxyz", {0.0, 0.0, 0.0, 1.0}}, {"latched", true},
+                                       {{"task", "table"},
+                                        {"region", "magnet_b"},
+                                        {"position_m", {4.0, 5.0, 6.0}},
+                                        {"orientation_wxyz", {0.0, 0.0, 0.0, 1.0}},
+                                        {"latched", true},
                                         {"colors", {{"initial", "red"}, {"latched", "green"}}}}});
     BridgeCore core(resolved, port, kEpochNs);
     const auto out = stepUntil(core, "lights", 10);
@@ -86,32 +109,45 @@ TEST(Viewer, MagnetLightsUseLatchedColorsFromTheIndicatorState) {
     EXPECT_DOUBLE_EQ(list[1].pose.position.y, 5.0);
     EXPECT_DOUBLE_EQ(list[1].pose.orientation.z, 1.0);
     EXPECT_DOUBLE_EQ(list[0].scale.y, 0.044);
-    EXPECT_EQ(list[0].header.stamp.sec * 1'000'000'000LL + list[0].header.stamp.nanosec, static_cast<std::int64_t>(kEpochNs + 10 * kStepNs));
+    EXPECT_EQ(list[0].header.stamp.sec * 1'000'000'000LL + list[0].header.stamp.nanosec,
+              static_cast<std::int64_t>(kEpochNs + 10 * kStepNs));
 }
 
 TEST(Viewer, IndicatorOptionsAreValidatedAgainstThePackState) {
     FakePort port;
-    port.indicator_list = Json::array({{{"task", "t"}, {"region", "m"}, {"position_m", {0, 0, 0}},
-                                        {"orientation_wxyz", {1, 0, 0, 0}}, {"latched", false},
+    port.indicator_list = Json::array({{{"task", "t"},
+                                        {"region", "m"},
+                                        {"position_m", {0, 0, 0}},
+                                        {"orientation_wxyz", {1, 0, 0, 0}},
+                                        {"latched", false},
                                         {"colors", {{"initial", "red"}, {"latched", "blue"}}}}});
     const auto make = [&](Json options) {
         const auto resolved = scenarioWith({marker("lights", "lights", "state:indicators", options)});
         BridgeCore core(resolved, port, kEpochNs);
     };
-    EXPECT_NE(bridgeError([&] { make({{"shape", "sphere"}, {"scale_m", {1, 1, 1}}, {"colors", {{"red", {1, 0, 0, 1}}}}}); })
-                  .find("no color for ['blue'] of indicator 'm'"), std::string::npos);
-    EXPECT_NE(bridgeError([&] { make({{"shape", "cube"}, {"scale_m", {1, 1, 1}}, {"colors", Json::object()}}); }).find("only 'sphere'"),
+    EXPECT_NE(bridgeError([&] {
+                  make({{"shape", "sphere"}, {"scale_m", {1, 1, 1}}, {"colors", {{"red", {1, 0, 0, 1}}}}});
+              }).find("no color for ['blue'] of indicator 'm'"),
               std::string::npos);
-    EXPECT_NE(bridgeError([&] { make({{"shape", "sphere"}, {"scale_m", {1, 1}}, {"colors", Json::object()}}); })
-                  .find("must be 3 finite numbers"), std::string::npos);
-    EXPECT_NE(bridgeError([&] { make({{"shape", "sphere"}}); }).find("missing ['colors', 'scale_m']"), std::string::npos);
+    EXPECT_NE(bridgeError([&] {
+                  make({{"shape", "cube"}, {"scale_m", {1, 1, 1}}, {"colors", Json::object()}});
+              }).find("only 'sphere'"),
+              std::string::npos);
+    EXPECT_NE(bridgeError([&] {
+                  make({{"shape", "sphere"}, {"scale_m", {1, 1}}, {"colors", Json::object()}});
+              }).find("must be 3 finite numbers"),
+              std::string::npos);
+    EXPECT_NE(bridgeError([&] { make({{"shape", "sphere"}}); }).find("missing ['colors', 'scale_m']"),
+              std::string::npos);
 }
 
 TEST(Viewer, HeldPropsAreExpressedInTheHeldFrame) {
-    const auto resolved = scenarioWith({marker("objects", "objects", "state:props", {{"held_frame_id", "robot/base_link"}})});
+    const auto resolved =
+        scenarioWith({marker("objects", "objects", "state:props", {{"held_frame_id", "robot/base_link"}})});
     FakePort port;
     PropVisual free_prop{"table", "crate", {5.0, 0.0, -1.0}, Eigen::Quaterniond::Identity(), false};
-    PropVisual held{"table", "crate", {1.1, 2.0, 2.95}, Eigen::Quaterniond::Identity(), true}; // at the reference origin
+    PropVisual held{
+        "table", "crate", {1.1, 2.0, 2.95}, Eigen::Quaterniond::Identity(), true}; // at the reference origin
     PropVisual no_mesh{"table", "ghost", {0, 0, 0}, Eigen::Quaterniond::Identity(), false};
     port.props = {free_prop, no_mesh, held};
     BridgeCore core(resolved, port, kEpochNs);
@@ -131,8 +167,11 @@ TEST(Viewer, HeldPropsAreExpressedInTheHeldFrame) {
 }
 
 TEST(Viewer, PayloadsUseNamespacesLoadedSuffixAndDeleteAll) {
-    const Json options = {{"namespaces", {{"launcher", "torpedo"}, {"dropper", "dropper"}}}, {"loaded_suffix", "_loaded"},
-                          {"mesh_asset", "projectile_mesh"}, {"color", {0.65, 0.025, 0.035, 1.0}}, {"delete_all", true}};
+    const Json options = {{"namespaces", {{"launcher", "torpedo"}, {"dropper", "dropper"}}},
+                          {"loaded_suffix", "_loaded"},
+                          {"mesh_asset", "projectile_mesh"},
+                          {"color", {0.65, 0.025, 0.035, 1.0}},
+                          {"delete_all", true}};
     const auto resolved = scenarioWith({marker("projectiles", "projectiles", "state:payloads", options)});
     FakePort port;
     port.payloads = {{"torpedo_launcher", "launcher", 3, false, {1, 2, 3}, Eigen::Quaterniond::Identity(), 0.4, 0.05},
@@ -153,26 +192,34 @@ TEST(Viewer, PayloadsUseNamespacesLoadedSuffixAndDeleteAll) {
     missing["namespaces"] = {{"launcher", "torpedo"}};
     EXPECT_NE(bridgeError([&] {
                   BridgeCore c(scenarioWith({marker("p", "p", "state:payloads", missing)}), port, kEpochNs);
-              }).find("no namespace for mechanism types ['dropper']"), std::string::npos);
+              }).find("no namespace for mechanism types ['dropper']"),
+              std::string::npos);
     Json asset = options;
     asset["mesh_asset"] = "absent";
     EXPECT_NE(bridgeError([&] {
                   BridgeCore c(scenarioWith({marker("p", "p", "state:payloads", asset)}), port, kEpochNs);
-              }).find("asset 'absent' is not present in the robot pack"), std::string::npos);
+              }).find("asset 'absent' is not present in the robot pack"),
+              std::string::npos);
 }
 
 TEST(Viewer, FormatStreamsAreValidated) {
     FakePort port;
-    const auto build = [&](const Json &stream) {
-        BridgeCore core(scenarioWith({stream}), port, kEpochNs);
-    };
+    const auto build = [&](const Json &stream) { BridgeCore core(scenarioWith({stream}), port, kEpochNs); };
     Json wrong_frame = marker("m", "m", "state:props", {{"held_frame_id", "x"}}, "elsewhere");
-    EXPECT_NE(bridgeError([&] { build(wrong_frame); }).find("marker frame_id must be the world frame"), std::string::npos);
+    EXPECT_NE(bridgeError([&] { build(wrong_frame); }).find("marker frame_id must be the world frame"),
+              std::string::npos);
     Json wrong_format = marker("m", "m", "state:run", Json::object());
     EXPECT_NE(bridgeError([&] { build(wrong_format); }).find("cannot use format 'marker_array'"), std::string::npos);
-    Json json_stream = {{"id", "j"}, {"direction", "publish"}, {"topic", "/j"}, {"message_type", "std_msgs/msg/String"},
-                        {"native", "state:run"}, {"format", "json"}, {"fields", {{"data", {{"constant", "x"}}}}},
-                        {"rate_hz", 50}, {"frame_id", ""}, {"qos", qos()}};
+    Json json_stream = {{"id", "j"},
+                        {"direction", "publish"},
+                        {"topic", "/j"},
+                        {"message_type", "std_msgs/msg/String"},
+                        {"native", "state:run"},
+                        {"format", "json"},
+                        {"fields", {{"data", {{"constant", "x"}}}}},
+                        {"rate_hz", 50},
+                        {"frame_id", ""},
+                        {"qos", qos()}};
     EXPECT_NE(bridgeError([&] { build(json_stream); }).find("take no field map"), std::string::npos);
     json_stream["fields"] = Json::object();
     json_stream["frame_id"] = "map";
@@ -185,14 +232,23 @@ TEST(Viewer, FormatStreamsAreValidated) {
     json_stream["rate_hz"] = 5;
     EXPECT_NE(bridgeError([&] { build(json_stream); }).find("event streams have rate_hz 0"), std::string::npos);
     json_stream["direction"] = "subscribe";
-    EXPECT_NE(bridgeError([&] { build(json_stream); }).find("format/options apply to publish streams"), std::string::npos);
+    EXPECT_NE(bridgeError([&] { build(json_stream); }).find("format/options apply to publish streams"),
+              std::string::npos);
 }
 
 TEST(Viewer, ScenarioDescriptionIsPublishedOnceAsTheResolvedDocument) {
-    Json stream = {{"id", "scenario"}, {"direction", "publish"}, {"topic", "/scenario"},
-                   {"message_type", "std_msgs/msg/String"}, {"native", "event:scenario.description"},
-                   {"format", "json"}, {"fields", Json::object()}, {"rate_hz", 0}, {"frame_id", ""},
-                   {"qos", {{"reliability", "reliable"}, {"durability", "transient_local"}, {"history", "keep_last"}, {"depth", 1}}}};
+    Json stream = {
+        {"id", "scenario"},
+        {"direction", "publish"},
+        {"topic", "/scenario"},
+        {"message_type", "std_msgs/msg/String"},
+        {"native", "event:scenario.description"},
+        {"format", "json"},
+        {"fields", Json::object()},
+        {"rate_hz", 0},
+        {"frame_id", ""},
+        {"qos",
+         {{"reliability", "reliable"}, {"durability", "transient_local"}, {"history", "keep_last"}, {"depth", 1}}}};
     const auto resolved = scenarioWith({stream});
     FakePort port;
     BridgeCore core(resolved, port, kEpochNs);
@@ -205,9 +261,15 @@ TEST(Viewer, ScenarioDescriptionIsPublishedOnceAsTheResolvedDocument) {
 }
 
 TEST(Viewer, PausedRefreshSkipsRobotTruthAndSensors) {
-    Json thrusters = {{"id", "forces"}, {"direction", "publish"}, {"topic", "/f"}, {"message_type", "std_msgs/msg/Float32MultiArray"},
-                      {"native", "state:thrusters"}, {"fields", {{"data", {{"from", "forces_n"}}}}}, {"rate_hz", 100},
-                      {"frame_id", ""}, {"qos", qos()}};
+    Json thrusters = {{"id", "forces"},
+                      {"direction", "publish"},
+                      {"topic", "/f"},
+                      {"message_type", "std_msgs/msg/Float32MultiArray"},
+                      {"native", "state:thrusters"},
+                      {"fields", {{"data", {{"from", "forces_n"}}}}},
+                      {"rate_hz", 100},
+                      {"frame_id", ""},
+                      {"qos", qos()}};
     Json truth = publishStream("truth", "std_msgs/msg/UInt8", "state:robot", {{"data", {{"constant", 1}}}}, 100);
     const auto resolved = scenarioWith({thrusters, truth});
     FakePort port;
@@ -218,7 +280,7 @@ TEST(Viewer, PausedRefreshSkipsRobotTruthAndSensors) {
     // Realized native forces (4, -6, 2) are reported in the thrusters.order layout [c, a, b] / scales [2, 1, -1].
     const auto data = publicationJson(refreshed[0]).at("data");
     ASSERT_EQ(data.size(), 3u);
-    EXPECT_DOUBLE_EQ(data[0].get<double>(), 1.0);  // c: 2 / 2
-    EXPECT_DOUBLE_EQ(data[1].get<double>(), 4.0);  // a: 4 / 1
-    EXPECT_DOUBLE_EQ(data[2].get<double>(), 6.0);  // b: -6 / -1
+    EXPECT_DOUBLE_EQ(data[0].get<double>(), 1.0); // c: 2 / 2
+    EXPECT_DOUBLE_EQ(data[1].get<double>(), 4.0); // a: 4 / 1
+    EXPECT_DOUBLE_EQ(data[2].get<double>(), 6.0); // b: -6 / -1
 }

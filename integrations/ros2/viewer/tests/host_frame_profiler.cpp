@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "frame_profiler.hpp"
+#include <gtest/gtest.h>
 using namespace robotics::ros_viewer::host;
 using Clock = std::chrono::steady_clock;
 

@@ -1,12 +1,12 @@
 // sensor_msgs/PointCloud2 -> renderer points (xyz in the message frame, rgb in [0, 1]).
 #pragma once
-#include <robotics/rendering/scene.hpp>
-#include <sensor_msgs/msg/point_cloud2.hpp>
-#include <sensor_msgs/msg/point_field.hpp>
 #include <cmath>
 #include <cstring>
 #include <memory>
 #include <optional>
+#include <robotics/rendering/scene.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/msg/point_field.hpp>
 
 namespace robotics::ros_viewer::host {
 // Reads float32 x/y/z and, when present, a packed float32/uint32 `rgb` or `rgba` field (bytes B, G, R as the
@@ -30,7 +30,8 @@ inline std::shared_ptr<rendering::PointData> convertPointCloud(const sensor_msgs
     for (const Field *f : {x, y, z})
         if (f->datatype != Field::FLOAT32 || f->offset + 4 > msg.point_step)
             return nullptr;
-    if (rgb && ((rgb->datatype != Field::FLOAT32 && rgb->datatype != Field::UINT32) || rgb->offset + 4 > msg.point_step))
+    if (rgb &&
+        ((rgb->datatype != Field::FLOAT32 && rgb->datatype != Field::UINT32) || rgb->offset + 4 > msg.point_step))
         rgb = nullptr;
     const std::size_t count = std::size_t(msg.width) * msg.height;
     if (msg.point_step == 0 || msg.row_step < std::size_t(msg.width) * msg.point_step ||
@@ -45,8 +46,7 @@ inline std::shared_ptr<rendering::PointData> convertPointCloud(const sensor_msgs
         return v;
     };
     for (std::size_t i = 0; i < count; i += step) {
-        const std::uint8_t *point =
-            msg.data.data() + (i / msg.width) * msg.row_step + (i % msg.width) * msg.point_step;
+        const std::uint8_t *point = msg.data.data() + (i / msg.width) * msg.row_step + (i % msg.width) * msg.point_step;
         const float px = read(point + x->offset), py = read(point + y->offset), pz = read(point + z->offset);
         if (!std::isfinite(px) || !std::isfinite(py) || !std::isfinite(pz))
             continue;

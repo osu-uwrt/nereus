@@ -10,8 +10,7 @@
 #include <sstream>
 
 TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
-    auto pack = robotics::session::createRuntime(
-        robotics::session::loadResolvedScenario(NEREUS_RESOLVED_TALOS));
+    auto pack = robotics::session::createRuntime(robotics::session::loadResolvedScenario(NEREUS_RESOLVED_TALOS));
     // The recordings placed the pool corner with a 1e-15 m residual; initial wall contact is
     // sensitive to last-bit point ordering, so use the identical input.
     pack.parameters.pool.origin_xy_world.x() = -1.1948633889920896e-15;
@@ -26,8 +25,7 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
     commands.emplace_back(1000, Eigen::VectorXd::Zero(8));
     std::array<std::ifstream, 2> fixtures{
         std::ifstream(std::string(NEREUS_SOURCE_DIR) + "/tests/fixtures/legacy_talos.csv"),
-        std::ifstream(std::string(NEREUS_SOURCE_DIR) +
-                      "/tests/fixtures/legacy_talos_unoptimized.csv")};
+        std::ifstream(std::string(NEREUS_SOURCE_DIR) + "/tests/fixtures/legacy_talos_unoptimized.csv")};
     std::array<double, 2> error{};
     std::array<std::string, 2> worst;
     std::string row;
@@ -56,10 +54,9 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
                 const auto &state = motion.state;
                 const auto &body = state.body;
                 Eigen::Matrix<double, 27, 1> actual;
-                actual << body.position, body.orientation.w(), body.orientation.x(),
-                    body.orientation.y(), body.orientation.z(), body.linear_velocity,
-                    body.angular_velocity, state.thruster_forces, motion.acceleration_body,
-                    motion.angular_acceleration_body;
+                actual << body.position, body.orientation.w(), body.orientation.x(), body.orientation.y(),
+                    body.orientation.z(), body.linear_velocity, body.angular_velocity, state.thruster_forces,
+                    motion.acceleration_body, motion.angular_acceleration_body;
                 ASSERT_TRUE(actual.allFinite());
                 EXPECT_EQ(state.tick, tick);
                 EXPECT_EQ(state.elapsed.count(), static_cast<std::int64_t>(tick) * 2000000);
@@ -78,8 +75,7 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
                         const auto difference = std::abs(actual[field] - expected);
                         if (difference > error[candidate]) {
                             error[candidate] = difference;
-                            worst[candidate] = "case=" + std::to_string(scenario) +
-                                               " tick=" + std::to_string(tick) +
+                            worst[candidate] = "case=" + std::to_string(scenario) + " tick=" + std::to_string(tick) +
                                                " field=" + std::to_string(field);
                         }
                     }
@@ -97,14 +93,12 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
         EXPECT_FALSE(std::getline(fixture, row));
     // One complete original trajectory must match; never mix candidate values per field.
     EXPECT_LE(std::min(error[0], error[1]), 1e-9)
-        << "optimized max=" << error[0] << " " << worst[0] << "; unoptimized max=" << error[1]
-        << " " << worst[1];
+        << "optimized max=" << error[0] << " " << worst[0] << "; unoptimized max=" << error[1] << " " << worst[1];
 }
 
 TEST(TalosReference, OriginalNoiseDisabledSensorFormulas) {
     namespace sensors = robotics::sensors;
-    const auto pack = robotics::session::createRuntime(
-        robotics::session::loadResolvedScenario(NEREUS_RESOLVED_TALOS));
+    const auto pack = robotics::session::createRuntime(robotics::session::loadResolvedScenario(NEREUS_RESOLVED_TALOS));
     const auto &frames = *pack.frames;
     const auto mount = [&frames](const char *frame) {
         const auto &pose = frames.fromRoot(frame);
@@ -127,8 +121,7 @@ TEST(TalosReference, OriginalNoiseDisabledSensorFormulas) {
     altitude_parameters.target_position_body = frames.fromRoot("base_link").translation;
     altitude_parameters.reported_variance = .0001;
     sensors::ReferenceAltitude altitude(altitude_parameters);
-    std::ifstream fixture(std::string(NEREUS_SOURCE_DIR) +
-                          "/tests/fixtures/legacy_sensor_kinematics.csv");
+    std::ifstream fixture(std::string(NEREUS_SOURCE_DIR) + "/tests/fixtures/legacy_sensor_kinematics.csv");
     ASSERT_TRUE(fixture);
     std::string row;
     ASSERT_TRUE(std::getline(fixture, row));
@@ -150,27 +143,24 @@ TEST(TalosReference, OriginalNoiseDisabledSensorFormulas) {
         body.orientation = Eigen::Quaterniond(values[4], values[5], values[6], values[7]);
         body.linear_velocity = values.segment<3>(8);
         body.angular_velocity = values.segment<3>(11);
-        input.acceleration_body =
-            values.segment<3>(14) + body.angular_velocity.cross(body.linear_velocity);
+        input.acceleration_body = values.segment<3>(14) + body.angular_velocity.cross(body.linear_velocity);
         input.angular_acceleration_body = values.segment<3>(17);
         const auto imu = ahrs.sample(input, .02).value.value();
         const auto gyro = fog.sample(input, .002).value.value();
         Eigen::Quaterniond orientation = imu.attitude.sensor_to_world;
-        const Eigen::Quaterniond expected_orientation(values[26], values[27], values[28],
-                                                      values[29]);
+        const Eigen::Quaterniond expected_orientation(values[26], values[27], values[28], values[29]);
         if (orientation.dot(expected_orientation) < 0)
             orientation.coeffs() *= -1;
         const auto speed = velocity.sample(input, .125).value.value();
         const auto depth = altitude.sample(input, .05).value.value();
         Eigen::Matrix<double, 28, 1> actual;
-        actual << imu.inertial.specific_force, imu.inertial.angular_velocity, orientation.w(),
-            orientation.x(), orientation.y(), orientation.z(), imu.attitude.covariance.diagonal(),
-            imu.inertial.angular_covariance.diagonal(), imu.inertial.force_covariance.diagonal(),
-            gyro.angular_rates[0], gyro.covariance(0, 0), speed.reference_relative_velocity,
-            speed.covariance(0, 0), depth.mounted_world_z, depth.target_world_z, depth.variance;
+        actual << imu.inertial.specific_force, imu.inertial.angular_velocity, orientation.w(), orientation.x(),
+            orientation.y(), orientation.z(), imu.attitude.covariance.diagonal(),
+            imu.inertial.angular_covariance.diagonal(), imu.inertial.force_covariance.diagonal(), gyro.angular_rates[0],
+            gyro.covariance(0, 0), speed.reference_relative_velocity, speed.covariance(0, 0), depth.mounted_world_z,
+            depth.target_world_z, depth.variance;
         ASSERT_TRUE(actual.allFinite());
-        EXPECT_LT((actual - values.segment<28>(20)).cwiseAbs().maxCoeff(), 1e-12)
-            << "case " << values[0];
+        EXPECT_LT((actual - values.segment<28>(20)).cwiseAbs().maxCoeff(), 1e-12) << "case " << values[0];
     }
     EXPECT_EQ(count, 24);
 }

@@ -37,8 +37,7 @@ class Renderer {
     ~Renderer();
     Renderer(const Renderer &) = delete;
     Renderer &operator=(const Renderer &) = delete;
-    RenderedFrame draw(const Scene &, const View &, const Appearance &, float time, int width,
-                       int height);
+    RenderedFrame draw(const Scene &, const View &, const Appearance &, float time, int width, int height);
     // Requires the most recent draw to have completed successfully.
     Capture capture() const; // Explicit synchronous readback; no per-frame CPU copy otherwise.
     // Requires the most recent draw to have completed successfully. Resets pixel-pack

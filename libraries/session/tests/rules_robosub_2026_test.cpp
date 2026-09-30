@@ -16,25 +16,34 @@ using robotics::session::Json;
 
 std::string firstDifference(const Json &a, const Json &b, const std::string &path) {
     if (a.is_number() && b.is_number()) {
-        if (a.is_number_integer() != b.is_number_integer()) return path + ": integer vs float";
-        if (a.is_number_integer()) return a == b ? "" : path + ": " + a.dump() + " != " + b.dump();
+        if (a.is_number_integer() != b.is_number_integer())
+            return path + ": integer vs float";
+        if (a.is_number_integer())
+            return a == b ? "" : path + ": " + a.dump() + " != " + b.dump();
         double x = a.get<double>(), y = b.get<double>();
-        return std::fabs(x - y) <= 1e-9 * std::max(std::fabs(x), std::fabs(y)) ? ""
-                                                                                : path + ": " + a.dump() + " != " + b.dump();
+        return std::fabs(x - y) <= 1e-9 * std::max(std::fabs(x), std::fabs(y))
+                   ? ""
+                   : path + ": " + a.dump() + " != " + b.dump();
     }
-    if (a.type() != b.type()) return path + ": type " + a.dump() + " vs " + b.dump();
+    if (a.type() != b.type())
+        return path + ": type " + a.dump() + " vs " + b.dump();
     if (a.is_object()) {
-        if (a.size() != b.size()) return path + ": keys " + a.dump() + " vs " + b.dump();
+        if (a.size() != b.size())
+            return path + ": keys " + a.dump() + " vs " + b.dump();
         for (auto it = a.begin(); it != a.end(); ++it) {
-            if (!b.contains(it.key())) return path + "/" + it.key() + " missing";
-            if (auto d = firstDifference(it.value(), b.at(it.key()), path + "/" + it.key()); !d.empty()) return d;
+            if (!b.contains(it.key()))
+                return path + "/" + it.key() + " missing";
+            if (auto d = firstDifference(it.value(), b.at(it.key()), path + "/" + it.key()); !d.empty())
+                return d;
         }
         return "";
     }
     if (a.is_array()) {
-        if (a.size() != b.size()) return path + ": length " + std::to_string(a.size()) + " vs " + std::to_string(b.size());
+        if (a.size() != b.size())
+            return path + ": length " + std::to_string(a.size()) + " vs " + std::to_string(b.size());
         for (std::size_t i = 0; i < a.size(); ++i)
-            if (auto d = firstDifference(a[i], b[i], path + "/" + std::to_string(i)); !d.empty()) return d;
+            if (auto d = firstDifference(a[i], b[i], path + "/" + std::to_string(i)); !d.empty())
+                return d;
         return "";
     }
     return a == b ? "" : path + ": " + a.dump() + " != " + b.dump();
@@ -62,9 +71,12 @@ TEST(Robosub2026Rules, MatchesEveryRecordedCall) {
         Json out;
         bool threw = false;
         try {
-            if (name == "evaluate") out = impl->evaluate(in[0], in[1].get<robotics::session::Events>(), in[2]);
-            else if (name == "describe") out = impl->describe(in[0], in[1]);
-            else out = impl->feed(in[0], in[1].get<robotics::session::Events>(), in[2], in[3]);
+            if (name == "evaluate")
+                out = impl->evaluate(in[0], in[1].get<robotics::session::Events>(), in[2]);
+            else if (name == "describe")
+                out = impl->describe(in[0], in[1]);
+            else
+                out = impl->feed(in[0], in[1].get<robotics::session::Events>(), in[2], in[3]);
         } catch (const std::exception &) {
             threw = true;
         }

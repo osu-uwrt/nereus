@@ -7,6 +7,6 @@
 
 namespace robotics::session {
 // task_pack: resolved `tasks` pack document; snapshot/extra: TaskRuntime::snapshot()/describe().
-Json buildRunSnapshot(const Json &task_pack, const Json &snapshot, Json extra, std::int64_t now_ns,
-                      double adjustment, const std::string &message);
+Json buildRunSnapshot(const Json &task_pack, const Json &snapshot, Json extra, std::int64_t now_ns, double adjustment,
+                      const std::string &message);
 } // namespace robotics::session

@@ -13,7 +13,8 @@ const std::vector<std::string> kOrder{"VUS", "VUP", "HUS", "HUP", "HLS", "HLP", 
 TEST(HostThrusterVisuals, RpmIntegrationTimeoutAndGeometry) {
     ThrusterVisuals absent;
     ASSERT_TRUE(absent.rotors.empty() && absent.topic.empty());
-    ThrusterVisuals visuals(YAML::LoadFile(std::string(NEREUS_VIEWER_CONTENT) + "/talos_uwrt_thruster_visuals.yaml"), kOrder);
+    ThrusterVisuals visuals(YAML::LoadFile(std::string(NEREUS_VIEWER_CONTENT) + "/talos_uwrt_thruster_visuals.yaml"),
+                            kOrder);
     ASSERT_TRUE(visuals.rotors.size() == 8);
     ASSERT_TRUE(visuals.rotors[3].inputIndex == 3 && visuals.rotors[3].asset == "rotor_HUP");
     // Recorded expectations from Talos's signed forward/reverse calibration.
@@ -62,7 +63,7 @@ TEST(HostThrusterVisuals, RpmIntegrationTimeoutAndGeometry) {
     ASSERT_TRUE(visuals.receive(std::vector<float>(8, .005f), 2));
     visuals.advance(2.1);
     ASSERT_TRUE(near(visuals.rotors[0].angle, -1.0)); // Negligible residual force is idle.
-    visuals.advance(0); // A simulator clock reset clears old forces and phase.
+    visuals.advance(0);                               // A simulator clock reset clears old forces and phase.
     visuals.advance(.2);
     for (const auto &rotor : visuals.rotors)
         ASSERT_TRUE(near(rotor.angle, 0));
@@ -96,7 +97,8 @@ TEST(HostThrusterVisuals, RotorNamingAnUnknownThrusterIsRejected) {
 TEST(HostThrusterVisuals, ForceIndexFollowsBridgeOrder) {
     auto reordered = kOrder;
     std::swap(reordered[0], reordered[1]);
-    ThrusterVisuals visuals(YAML::LoadFile(std::string(NEREUS_VIEWER_CONTENT) + "/talos_uwrt_thruster_visuals.yaml"), reordered);
+    ThrusterVisuals visuals(YAML::LoadFile(std::string(NEREUS_VIEWER_CONTENT) + "/talos_uwrt_thruster_visuals.yaml"),
+                            reordered);
     ASSERT_TRUE(visuals.rotors[0].id == "VUS" && visuals.rotors[0].inputIndex == 1);
     ASSERT_TRUE(visuals.rotors[1].id == "VUP" && visuals.rotors[1].inputIndex == 0);
 }

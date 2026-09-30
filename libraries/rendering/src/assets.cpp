@@ -35,24 +35,21 @@ class DependencyIO final : public Assimp::DefaultIOSystem {
 };
 Eigen::Matrix4f matrix(const aiMatrix4x4 &m) {
     Eigen::Matrix4f result;
-    result << m.a1, m.a2, m.a3, m.a4, m.b1, m.b2, m.b3, m.b4, m.c1, m.c2, m.c3, m.c4, m.d1, m.d2,
-        m.d3, m.d4;
+    result << m.a1, m.a2, m.a3, m.a4, m.b1, m.b2, m.b3, m.b4, m.c1, m.c2, m.c3, m.c4, m.d1, m.d2, m.d3, m.d4;
     return result;
 }
 Eigen::Vector3f vector(const aiVector3D &v) {
     return {v.x, v.y, v.z};
 }
 Eigen::Vector2f panelUv(const Eigen::Vector3f &panel_position, float half_size) {
-    return {panel_position.y() / (2 * half_size) + 0.5f,
-            panel_position.z() / (2 * half_size) + 0.5f};
+    return {panel_position.y() / (2 * half_size) + 0.5f, panel_position.z() / (2 * half_size) + 0.5f};
 }
 } // namespace
 MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
     const auto fail = [&path](const std::string &message) -> void {
         throw std::runtime_error(path.string() + ": " + message);
     };
-    if (!limits.file_bytes || !limits.vertices || !limits.triangles || !limits.submeshes ||
-        !limits.nodes)
+    if (!limits.file_bytes || !limits.vertices || !limits.triangles || !limits.submeshes || !limits.nodes)
         throw std::invalid_argument("asset limits must be positive");
     std::error_code error;
     const auto bytes = std::filesystem::file_size(path, error);
@@ -62,9 +59,8 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
     auto *io = new DependencyIO;
     importer.SetIOHandler(io); // The importer owns the handler through scene extraction.
     importer.SetPropertyBool(AI_CONFIG_IMPORT_COLLADA_IGNORE_UP_DIRECTION, true);
-    const auto *scene =
-        importer.ReadFile(path.string(), aiProcess_Triangulate | aiProcess_GenSmoothNormals |
-                                             aiProcess_JoinIdenticalVertices);
+    const auto *scene = importer.ReadFile(path.string(), aiProcess_Triangulate | aiProcess_GenSmoothNormals |
+                                                             aiProcess_JoinIdenticalVertices);
     if (!scene || !scene->mRootNode)
         fail(importer.GetErrorString());
     MeshAsset result;
@@ -97,8 +93,7 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
                 continue;
             if (!input->HasPositions() || !input->HasNormals())
                 fail("mesh requires positions and normals");
-            if (input->mNumVertices > limits.vertices - vertices ||
-                input->mNumFaces > limits.triangles - triangles ||
+            if (input->mNumVertices > limits.vertices - vertices || input->mNumFaces > limits.triangles - triangles ||
                 result.submeshes.size() >= limits.submeshes)
                 fail("mesh allocation limit exceeded");
             vertices += input->mNumVertices;
@@ -116,8 +111,7 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
                 Eigen::Vector2f uv = Eigen::Vector2f::Zero();
                 if (input->HasTextureCoords(0))
                     uv = {input->mTextureCoords[0][k].x, input->mTextureCoords[0][k].y};
-                if (!position.allFinite() || !n.allFinite() || !std::isfinite(norm) || norm <= 0 ||
-                    !uv.allFinite())
+                if (!position.allFinite() || !n.allFinite() || !std::isfinite(norm) || norm <= 0 || !uv.allFinite())
                     fail("invalid transformed vertex");
                 mesh.vertices.push_back({position.head<3>(), n * (1.f / norm), uv});
             }
@@ -148,15 +142,13 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
             aiString texture;
             if (material->GetTexture(aiTextureType_DIFFUSE, 0, &texture) == AI_SUCCESS) {
                 const std::filesystem::path reference(texture.C_Str());
-                if (reference.empty() || reference.is_absolute() ||
-                    reference.string().front() == '*')
+                if (reference.empty() || reference.is_absolute() || reference.string().front() == '*')
                     fail("texture must be an external relative resource");
                 mesh.material.diffuse_texture = (path.parent_path() / reference).lexically_normal();
             }
             result.submeshes.push_back(std::move(mesh));
         }
-        if (node->mNumChildren > limits.nodes - nodes ||
-            pending.size() > limits.nodes - nodes - node->mNumChildren)
+        if (node->mNumChildren > limits.nodes - nodes || pending.size() > limits.nodes - nodes - node->mNumChildren)
             fail("node limit exceeded");
         // Reverse push preserves the original recursive depth-first draw order.
         for (unsigned k = node->mNumChildren; k > 0; --k)
@@ -168,14 +160,13 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
 }
 PerforatedMesh perforatePanel(const MeshAsset &mesh, const PanelCutouts &panel) {
     const float half = panel.half_size;
-    if (panel.faces_x.empty() || !std::all_of(panel.faces_x.begin(), panel.faces_x.end(),
-                                              [](float x) { return std::isfinite(x); }))
+    if (panel.faces_x.empty() ||
+        !std::all_of(panel.faces_x.begin(), panel.faces_x.end(), [](float x) { return std::isfinite(x); }))
         throw std::invalid_argument("panel faces must be non-empty and finite");
     if (!std::isfinite(half) || half <= 0)
         throw std::invalid_argument("panel half size must be finite and positive");
     if (!std::isfinite(panel.tolerance) || panel.tolerance < 0 || panel.tolerance >= half)
-        throw std::invalid_argument(
-            "panel tolerance must be finite, non-negative and below half size");
+        throw std::invalid_argument("panel tolerance must be finite, non-negative and below half size");
     if (panel.cutouts.empty() || panel.cutouts.size() > 4 ||
         !std::all_of(panel.cutouts.begin(), panel.cutouts.end(), [](const UvCutout &cutout) {
             return cutout.center.allFinite() && std::isfinite(cutout.radius) && cutout.radius > 0;
@@ -190,8 +181,7 @@ PerforatedMesh perforatePanel(const MeshAsset &mesh, const PanelCutouts &panel) 
     const auto toPanel = [&transform](const Eigen::Vector3f &p) -> Eigen::Vector3f {
         return (transform * Eigen::Vector4f(p.x(), p.y(), p.z(), 1)).head<3>();
     };
-    const auto faceOf = [&](const Submesh &part,
-                            std::size_t triangle) -> std::optional<std::size_t> {
+    const auto faceOf = [&](const Submesh &part, std::size_t triangle) -> std::optional<std::size_t> {
         Eigen::Vector3f corners[3];
         for (std::size_t k = 0; k < 3; ++k) {
             const auto index = part.indices[triangle * 3 + k];
@@ -202,8 +192,7 @@ PerforatedMesh perforatePanel(const MeshAsset &mesh, const PanelCutouts &panel) 
         for (std::size_t i = 0; i < panel.faces_x.size(); ++i) {
             const bool inside = std::all_of(corners, corners + 3, [&](const Eigen::Vector3f &c) {
                 return std::abs(c.x() - panel.faces_x[i]) <= panel.tolerance &&
-                       std::abs(c.y()) <= half + panel.tolerance &&
-                       std::abs(c.z()) <= half + panel.tolerance;
+                       std::abs(c.y()) <= half + panel.tolerance && std::abs(c.z()) <= half + panel.tolerance;
             });
             if (inside)
                 return i;
@@ -228,8 +217,7 @@ PerforatedMesh perforatePanel(const MeshAsset &mesh, const PanelCutouts &panel) 
         for (std::size_t t = 0; t < part.indices.size() / 3; ++t) {
             const auto face = faceOf(part, t);
             auto &target = face ? selected : remainder;
-            target.insert(target.end(), part.indices.begin() + t * 3,
-                          part.indices.begin() + t * 3 + 3);
+            target.insert(target.end(), part.indices.begin() + t * 3, part.indices.begin() + t * 3 + 3);
             if (face)
                 ++result.face_triangles[*face];
         }

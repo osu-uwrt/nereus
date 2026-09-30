@@ -22,20 +22,32 @@ using Json = nlohmann::json;
 // Field type as parse_type describes it: primitive name or 'pkg/Message', array kind.
 struct RosType {
     std::string base;
-    int length{-1};        // fixed array length, -1 when not a fixed array
-    bool sequence{false};  // unbounded or bounded sequence
-    bool isArray() const { return length >= 0 || sequence; }
-    bool isMessage() const { return base.find('/') != std::string::npos; }
-    RosType element() const { return RosType{base, -1, false}; }
+    int length{-1};       // fixed array length, -1 when not a fixed array
+    bool sequence{false}; // unbounded or bounded sequence
+    bool isArray() const {
+        return length >= 0 || sequence;
+    }
+    bool isMessage() const {
+        return base.find('/') != std::string::npos;
+    }
+    RosType element() const {
+        return RosType{base, -1, false};
+    }
 };
 
 class MessageType {
   public:
     // "pkg/msg/Name" or "pkg/Name"; cached for the process lifetime. Throws MappingError.
     static std::shared_ptr<const MessageType> get(const std::string &name);
-    const std::string &name() const { return name_; }
-    const introspection::MessageMembers *members() const { return members_; }
-    const rosidl_message_type_support_t *typeSupport() const { return type_support_; }
+    const std::string &name() const {
+        return name_;
+    }
+    const introspection::MessageMembers *members() const {
+        return members_;
+    }
+    const rosidl_message_type_support_t *typeSupport() const {
+        return type_support_;
+    }
 
   private:
     std::string name_;
@@ -59,10 +71,18 @@ class Message {
     ~Message();
     Message(const Message &) = delete;
     Message &operator=(const Message &) = delete;
-    void *data() { return data_; }
-    const void *data() const { return data_; }
-    const MessageType &type() const { return *type_; }
-    const std::shared_ptr<const MessageType> &typePtr() const { return type_; }
+    void *data() {
+        return data_;
+    }
+    const void *data() const {
+        return data_;
+    }
+    const MessageType &type() const {
+        return *type_;
+    }
+    const std::shared_ptr<const MessageType> &typePtr() const {
+        return type_;
+    }
 
   private:
     std::shared_ptr<const MessageType> type_;
@@ -80,13 +100,16 @@ struct Hop {
 struct FieldPath {
     std::vector<Hop> hops; // hops.back() is the addressed field (index applies to it)
     RosType type;          // type of the addressed value (after the index)
-    const introspection::MessageMember &member() const { return *hops.back().member; }
-    bool indexed() const { return hops.back().index >= 0; }
+    const introspection::MessageMember &member() const {
+        return *hops.back().member;
+    }
+    bool indexed() const {
+        return hops.back().index >= 0;
+    }
     std::string path;
 };
 // mapping.ros_field: throws MappingError with the same messages.
-FieldPath resolveField(const introspection::MessageMembers *owner, const std::string &path,
-                       bool writable = false);
+FieldPath resolveField(const introspection::MessageMembers *owner, const std::string &path, bool writable = false);
 // Address of the addressed field (or indexed element) inside `message`. When `readonly` a
 // sequence index beyond the size throws MappingError.
 void *locate(void *message, const FieldPath &path);

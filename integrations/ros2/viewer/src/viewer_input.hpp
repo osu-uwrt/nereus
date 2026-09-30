@@ -1,6 +1,6 @@
 #pragma once
-#include <glm/glm.hpp>
 #include <cmath>
+#include <glm/glm.hpp>
 namespace robotics::ros_viewer::host {
 // Camera-plane grab pan: a scene point at the focal depth follows the cursor.
 inline glm::vec3 orbitPan(const glm::mat4 &view, const glm::mat4 &projection, float distance, float height,

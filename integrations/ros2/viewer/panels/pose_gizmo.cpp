@@ -1,7 +1,7 @@
 #include "robotics/ros_viewer/panels/composition.hpp"
 #include "robotics/ros_viewer/panels/pose_math.hpp"
-#include <imgui.h>
 #include <glm/gtc/constants.hpp>
+#include <imgui.h>
 namespace robotics::ros_viewer::panels {
 namespace {
 class PoseGizmo final : public Overlay {
@@ -116,7 +116,7 @@ class PoseGizmo final : public Overlay {
         for (const auto &segment : rings) {
             float fraction;
             const auto distance = robotics::ros_viewer::segmentDistance(mouse, {segment.first.x, segment.first.y},
-                                                        {segment.second.x, segment.second.y}, fraction);
+                                                                        {segment.second.x, segment.second.y}, fraction);
             if (distance < best) {
                 best = distance;
                 hit = segment.handle;
@@ -126,7 +126,7 @@ class PoseGizmo final : public Overlay {
         for (const auto &segment : arrows) {
             float fraction;
             const auto distance = robotics::ros_viewer::segmentDistance(mouse, {segment.first.x, segment.first.y},
-                                                        {segment.second.x, segment.second.y}, fraction);
+                                                                        {segment.second.x, segment.second.y}, fraction);
             // Arrows take priority at crossings, matching their draw order.
             if (distance <= best + 1.f) {
                 best = distance;
@@ -179,8 +179,9 @@ class PoseGizmo final : public Overlay {
             return false;
         }
         // Keep cursor-to-world conversion stable while the Follow camera moves.
-        const auto ray = targetDrag >= 0 ? robotics::ros_viewer::screenRay(dragProjectionView, mouse - dragOrigin, dragSize)
-                                         : robotics::ros_viewer::screenRay(vp, mouse - view.origin, view.size);
+        const auto ray = targetDrag >= 0
+                             ? robotics::ros_viewer::screenRay(dragProjectionView, mouse - dragOrigin, dragSize)
+                             : robotics::ros_viewer::screenRay(vp, mouse - view.origin, view.size);
         bool consumed = targetDrag >= 0;
         if (targetDrag < 0 && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             if (hit >= 0) {
@@ -270,7 +271,8 @@ class PoseGizmo final : public Overlay {
                         nextAngles[targetDrag - 4] += dragAngle;
                         send(robotics::ros_viewer::rpyPose(glm::vec3(dragStart[3]), nextAngles));
                     }
-                } else if (targetDrag == 0 && robotics::ros_viewer::planeHit(ray, glm::vec3(dragStart[3]), dragNormal, point)) {
+                } else if (targetDrag == 0 &&
+                           robotics::ros_viewer::planeHit(ray, glm::vec3(dragStart[3]), dragNormal, point)) {
                     next[3] += glm::vec4(point - dragPoint, 0);
                     if (glm::length(glm::vec2(io.MouseDelta.x, io.MouseDelta.y)) > 0)
                         send(next);

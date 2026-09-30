@@ -30,8 +30,7 @@ NoiseParameters noisy() {
     parameters.walk_stddev.setConstant(0.01);
     return parameters;
 }
-void same(const std::vector<Sample<ImuReading>> &left,
-          const std::vector<Sample<ImuReading>> &right) {
+void same(const std::vector<Sample<ImuReading>> &left, const std::vector<Sample<ImuReading>> &right) {
     ASSERT_EQ(left.size(), right.size());
     for (std::size_t i = 0; i < left.size(); ++i) {
         EXPECT_EQ(left[i].header.acquired, right[i].header.acquired);
@@ -39,12 +38,9 @@ void same(const std::vector<Sample<ImuReading>> &left,
         EXPECT_EQ(left[i].header.sequence, right[i].header.sequence);
         ASSERT_TRUE(left[i].measurement.value);
         ASSERT_TRUE(right[i].measurement.value);
-        EXPECT_EQ(left[i].measurement.value->specific_force,
-                  right[i].measurement.value->specific_force);
-        EXPECT_EQ(left[i].measurement.value->angular_velocity,
-                  right[i].measurement.value->angular_velocity);
-        EXPECT_EQ(left[i].measurement.value->force_covariance,
-                  right[i].measurement.value->force_covariance);
+        EXPECT_EQ(left[i].measurement.value->specific_force, right[i].measurement.value->specific_force);
+        EXPECT_EQ(left[i].measurement.value->angular_velocity, right[i].measurement.value->angular_velocity);
+        EXPECT_EQ(left[i].measurement.value->force_covariance, right[i].measurement.value->force_covariance);
     }
 }
 // A model-owned payload verifies extension without modifying a core enum or hierarchy.
@@ -94,9 +90,7 @@ TEST(Runtime, PlacementDiscardsOldReadingsAndPreservesSensorPhaseAndNoise) {
     const auto actual = a->drain();
     auto expected = b->drain();
     expected.erase(std::remove_if(expected.begin(), expected.end(),
-                                  [acquired](const auto &sample) {
-                                      return sample.header.sequence < acquired;
-                                  }),
+                                  [acquired](const auto &sample) { return sample.header.sequence < acquired; }),
                    expected.end());
     ASSERT_FALSE(actual.empty());
     same(actual, expected);
@@ -156,10 +150,8 @@ TEST(Imu, ReportedGravityPreservesInertialAccelerationAndMountGeometry) {
     const auto actual = calibrated.sample(input, .01).value.value();
     const auto original = physical.sample(input, .01).value.value();
     const Eigen::Vector3d expected_correction =
-        mount.sensor_to_body.conjugate() *
-        (input.state.body.orientation.conjugate() * Eigen::Vector3d(0, 0, -.051195));
-    EXPECT_TRUE(
-        (actual.specific_force - original.specific_force).isApprox(expected_correction, 1e-11));
+        mount.sensor_to_body.conjugate() * (input.state.body.orientation.conjugate() * Eigen::Vector3d(0, 0, -.051195));
+    EXPECT_TRUE((actual.specific_force - original.specific_force).isApprox(expected_correction, 1e-11));
     EXPECT_EQ(actual.angular_velocity, original.angular_velocity);
     // Calibration follows environmental direction, not a hardcoded world Z axis.
     input = motion();
@@ -184,8 +176,7 @@ TEST(Imu, ReportedVariancesDoNotChangeNoiseHistoryOrReset) {
             EXPECT_EQ(a.specific_force, b.specific_force);
             EXPECT_EQ(a.angular_velocity, b.angular_velocity);
             EXPECT_EQ(a.force_covariance, Eigen::Matrix3d(reporting.force_variance->asDiagonal()));
-            EXPECT_EQ(a.angular_covariance,
-                      Eigen::Matrix3d(reporting.angular_variance->asDiagonal()));
+            EXPECT_EQ(a.angular_covariance, Eigen::Matrix3d(reporting.angular_variance->asDiagonal()));
             EXPECT_NE(a.force_covariance, b.force_covariance);
             if (replay == 0)
                 first.push_back(a.specific_force);
@@ -201,8 +192,8 @@ TEST(Imu, ReportedVariancesDoNotChangeNoiseHistoryOrReset) {
 
 TEST(Imu, RejectsInvalidReportingAndUndefinedGravityDirection) {
     ImuReporting reporting;
-    for (const double invalid : {0., -1., std::numeric_limits<double>::infinity(),
-                                 std::numeric_limits<double>::quiet_NaN()}) {
+    for (const double invalid :
+         {0., -1., std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()}) {
         reporting.gravity_magnitude = invalid;
         EXPECT_THROW((Imu({}, {}, {}, reporting)), std::invalid_argument);
     }
@@ -242,16 +233,14 @@ TEST(Attitude, UsesAbsoluteTimeAndOriginalWorldNoiseMountOrder) {
     input.state.body.orientation = Eigen::AngleAxisd(.4, Eigen::Vector3d::UnitY());
     input.acceleration_valid = false; // Attitude doesn't require acceleration.
     const auto random_rotation = noise.sample(motion(), .01).value->sensor_to_world;
-    const Eigen::Quaterniond expected = Eigen::AngleAxisd(-.72, parameters.heading_axis_world) *
-                                        random_rotation * input.state.body.orientation *
-                                        mount.sensor_to_body;
+    const Eigen::Quaterniond expected = Eigen::AngleAxisd(-.72, parameters.heading_axis_world) * random_rotation *
+                                        input.state.body.orientation * mount.sensor_to_body;
     const auto actual = model.sample(input, .01).value.value();
     EXPECT_LT(actual.sensor_to_world.angularDistance(expected), 1e-12);
     EXPECT_NEAR(actual.sensor_to_world.norm(), 1, 1e-15);
     EXPECT_EQ(actual.covariance, Eigen::Matrix3d(parameters.reported_variance->asDiagonal()));
     model.reset(7, "attitude");
-    EXPECT_EQ(model.sample(input, .04).value->sensor_to_world.coeffs(),
-              actual.sensor_to_world.coeffs());
+    EXPECT_EQ(model.sample(input, .04).value->sensor_to_world.coeffs(), actual.sensor_to_world.coeffs());
 }
 
 TEST(Attitude, IsotropicAngleNoiseHasDeclaredSmallAngleCovariance) {
@@ -309,21 +298,19 @@ TEST(Ahrs, CompositionKeepsIndependentNoiseAcrossUnavailableAcquisitionsAndReset
             ASSERT_TRUE(actual.value);
             EXPECT_EQ(actual.value->inertial.specific_force, inertial.value->specific_force);
             EXPECT_EQ(actual.value->inertial.angular_velocity, inertial.value->angular_velocity);
-            EXPECT_EQ(actual.value->attitude.sensor_to_world.coeffs(),
-                      orientation.value->sensor_to_world.coeffs());
+            EXPECT_EQ(actual.value->attitude.sensor_to_world.coeffs(), orientation.value->sensor_to_world.coeffs());
             if (replay == 0)
                 first.push_back(actual.value->attitude.sensor_to_world.coeffs());
             else
-                EXPECT_EQ(actual.value->attitude.sensor_to_world.coeffs(),
-                          first[i > 3 ? i - 1 : i]);
+                EXPECT_EQ(actual.value->attitude.sensor_to_world.coeffs(), first[i > 3 ? i - 1 : i]);
         }
     }
 }
 
 TEST(Attitude, RejectsInvalidParametersAndTimeOverflow) {
     AttitudeParameters p;
-    for (const double invalid : {-1., std::numeric_limits<double>::infinity(),
-                                 std::numeric_limits<double>::quiet_NaN(), 1e200}) {
+    for (const double invalid :
+         {-1., std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN(), 1e200}) {
         p.angle_stddev = invalid;
         EXPECT_THROW((Attitude({}, p)), std::invalid_argument);
     }
@@ -352,8 +339,7 @@ TEST(Fog, ProjectsSignedRatesAndCovarianceOntoConfiguredAxes) {
     mount.sensor_to_body = Eigen::AngleAxisd(std::acos(-1.0) / 2, Eigen::Vector3d::UnitZ());
     NoiseParameters noise;
     noise.white_stddev = {1, 2, 3};
-    Fog ideal(mount,
-              {Eigen::Vector3d::UnitX(), Eigen::Vector3d::UnitY(), -Eigen::Vector3d::UnitZ()});
+    Fog ideal(mount, {Eigen::Vector3d::UnitX(), Eigen::Vector3d::UnitY(), -Eigen::Vector3d::UnitZ()});
     auto input = motion();
     input.state.body.angular_velocity = {2, -3, 4};
     const auto result = ideal.sample(input, 0.01).value.value();
@@ -368,8 +354,7 @@ TEST(Fog, ProjectsSignedRatesAndCovarianceOntoConfiguredAxes) {
 TEST(Dvl, BottomVelocityUsesMountLeverArmAndSensorFrame) {
     DvlParameters parameters;
     parameters.mount.position_body.x() = 1;
-    parameters.mount.sensor_to_body =
-        Eigen::AngleAxisd(std::acos(-1.0) / 2, Eigen::Vector3d::UnitZ());
+    parameters.mount.sensor_to_body = Eigen::AngleAxisd(std::acos(-1.0) / 2, Eigen::Vector3d::UnitZ());
     Dvl dvl(parameters, [](const Eigen::Vector3d &origin, const Eigen::Vector3d &direction) {
         EXPECT_TRUE(origin.isApprox(Eigen::Vector3d(5, 6, -2), 1e-12));
         EXPECT_TRUE(direction.isApprox(-Eigen::Vector3d::UnitZ(), 1e-12));
@@ -403,8 +388,7 @@ TEST(Dvl, FinitePoolRangeAndMissingBottomHaveExplicitLockLoss) {
     auto inverted = motion();
     inverted.state.body.orientation = Eigen::AngleAxisd(std::acos(-1.0), Eigen::Vector3d::UnitX());
     EXPECT_EQ(locked.sample(inverted, 0.01).unavailable_reason, "no bottom intersection");
-    Dvl invalid(
-        {}, [](const auto &, const auto &) { return std::optional<BottomHit>{{-1, {0, 0, 0}}}; });
+    Dvl invalid({}, [](const auto &, const auto &) { return std::optional<BottomHit>{{-1, {0, 0, 0}}}; });
     EXPECT_THROW(invalid.sample(motion(), 0.01), std::runtime_error);
 }
 
@@ -722,8 +706,7 @@ TEST(Pressure, NoiseVarianceAndRuntimeResetAreReproducible) {
     runtime.reset(initial(), 42);
     EXPECT_FALSE(stream->latest());
     runtime.advance(5);
-    EXPECT_DOUBLE_EQ(stream->latest()->measurement.value->absolute_pressure,
-                     expected.absolute_pressure);
+    EXPECT_DOUBLE_EQ(stream->latest()->measurement.value->absolute_pressure, expected.absolute_pressure);
     EXPECT_EQ(stream->latest()->header.generation, 1U);
 }
 
@@ -784,11 +767,10 @@ TEST(Dvl, PlacedPoolPreservesFiniteRayQueriesAndWaterLevel) {
     const Eigen::Vector3d translation(-10, -12, 3);
     PoolBottom a(local), b(placed);
     for (const Eigen::Vector3d &origin :
-         {Eigen::Vector3d(2, 1, -2), Eigen::Vector3d(-1, 1, -2), Eigen::Vector3d(19, 5, -2),
-          Eigen::Vector3d(2, 1, 1), Eigen::Vector3d(2, 1, -5)}) {
+         {Eigen::Vector3d(2, 1, -2), Eigen::Vector3d(-1, 1, -2), Eigen::Vector3d(19, 5, -2), Eigen::Vector3d(2, 1, 1),
+          Eigen::Vector3d(2, 1, -5)}) {
         for (const Eigen::Vector3d &direction :
-             {Eigen::Vector3d(0, 0, -1), Eigen::Vector3d(0, 0, 1),
-              Eigen::Vector3d(1, 0, -1).normalized().eval()}) {
+             {Eigen::Vector3d(0, 0, -1), Eigen::Vector3d(0, 0, 1), Eigen::Vector3d(1, 0, -1).normalized().eval()}) {
             const auto first = a(origin, direction);
             const auto second = b(translation + rotation * origin, rotation * direction);
             ASSERT_EQ(first.has_value(), second.has_value());
@@ -799,8 +781,7 @@ TEST(Dvl, PlacedPoolPreservesFiniteRayQueriesAndWaterLevel) {
         }
     }
     HydrostaticPressure pressure_a(local.water_level), pressure_b(placed.water_level);
-    EXPECT_DOUBLE_EQ(*pressure_a({2, 1, -2}),
-                     *pressure_b(translation + rotation * Eigen::Vector3d(2, 1, -2)));
+    EXPECT_DOUBLE_EQ(*pressure_a({2, 1, -2}), *pressure_b(translation + rotation * Eigen::Vector3d(2, 1, -2)));
     placed.origin_xy_world.x() = std::numeric_limits<double>::infinity();
     EXPECT_THROW((PoolBottom(placed)), std::invalid_argument);
 }
@@ -813,11 +794,9 @@ TEST(Dvl, PlacedFloorIncludesBoundaryOriginsAndHitsWithoutExtendingItsFootprint)
         PoolBottom bottom(pool);
         const Eigen::Quaterniond rotation(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
         const Eigen::Vector3d translation(-10, -12, 0);
-        for (const Eigen::Vector3d &origin :
-             {Eigen::Vector3d(0, 5, -2), Eigen::Vector3d(5, 10, -2)})
+        for (const Eigen::Vector3d &origin : {Eigen::Vector3d(0, 5, -2), Eigen::Vector3d(5, 10, -2)})
             EXPECT_TRUE(bottom(translation + rotation * origin, -Eigen::Vector3d::UnitZ()));
-        EXPECT_FALSE(bottom(translation + rotation * Eigen::Vector3d(-1e-8, 5, -2),
-                            -Eigen::Vector3d::UnitZ()));
+        EXPECT_FALSE(bottom(translation + rotation * Eigen::Vector3d(-1e-8, 5, -2), -Eigen::Vector3d::UnitZ()));
         EXPECT_TRUE(bottom(translation + rotation * Eigen::Vector3d(5, 5, -2),
                            rotation * Eigen::Vector3d(0, 5, -3).normalized()));
         EXPECT_FALSE(bottom(translation + rotation * Eigen::Vector3d(5, 5, -2),
@@ -826,8 +805,7 @@ TEST(Dvl, PlacedFloorIncludesBoundaryOriginsAndHitsWithoutExtendingItsFootprint)
 }
 
 TEST(Fog, IndependentReportedVariancePreservesProjectionAndNoise) {
-    const std::vector<Eigen::Vector3d> axes{Eigen::Vector3d::UnitX(),
-                                            Eigen::Vector3d(1, 1, 0).normalized()};
+    const std::vector<Eigen::Vector3d> axes{Eigen::Vector3d::UnitX(), Eigen::Vector3d(1, 1, 0).normalized()};
     Fog derived({}, axes, noisy()), reported({}, axes, noisy(), Eigen::Vector3d(4, 9, 16));
     derived.reset(18, "fog");
     reported.reset(18, "fog");
@@ -879,8 +857,7 @@ TEST(ReferenceVelocity, InclinationGatePreservesNoiseHistoryAndReset) {
     continuous.sample(input, .01);
     input.state.body.orientation = Eigen::AngleAxisd(.399999, Eigen::Vector3d::UnitX());
     const auto expected = continuous.sample(input, .01).value.value();
-    EXPECT_EQ(gated.sample(input, .01).value->reference_relative_velocity,
-              expected.reference_relative_velocity);
+    EXPECT_EQ(gated.sample(input, .01).value->reference_relative_velocity, expected.reference_relative_velocity);
     gated.reset(7, "velocity");
     continuous.reset(7, "velocity");
     EXPECT_EQ(gated.sample(input, .01).value->reference_relative_velocity,
@@ -927,8 +904,7 @@ TEST(ReferenceVelocity, InclinationAcceptsRotatedAlignmentAndRejectsExteriorAngl
     ReferenceVelocity aligned(p);
     EXPECT_TRUE(aligned.sample(input, .01).value);
     input.state.body.orientation =
-        Eigen::AngleAxisd(1e-8, limit.reference_axis_world.unitOrthogonal()) *
-        input.state.body.orientation;
+        Eigen::AngleAxisd(1e-8, limit.reference_axis_world.unitOrthogonal()) * input.state.body.orientation;
     EXPECT_FALSE(aligned.sample(input, .01).value);
     p.mount = {};
     limit.reference_axis_world = -Eigen::Vector3d::UnitZ();

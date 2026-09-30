@@ -1,7 +1,7 @@
 #include "robotics/ros_viewer/panels/composition.hpp"
-#include <imgui.h>
-#include <filesystem>
 #include <cfloat>
+#include <filesystem>
+#include <imgui.h>
 namespace robotics::ros_viewer::panels {
 namespace {
 class AutonomyPanel final : public Panel {

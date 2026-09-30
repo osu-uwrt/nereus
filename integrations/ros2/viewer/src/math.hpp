@@ -1,16 +1,16 @@
 // Small glm/Eigen pose helpers shared by the host. Poses are column-major 4x4 glm matrices.
 #pragma once
 #include <Eigen/Core>
+#include <cmath>
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <yaml-cpp/yaml.h>
-#include <cmath>
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
+#include <yaml-cpp/yaml.h>
 
 namespace robotics::ros_viewer::host {
 // Translation then roll/pitch/yaw about X, Y, Z (yaw applied last).

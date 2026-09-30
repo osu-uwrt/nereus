@@ -22,23 +22,76 @@ std::string Spec::describe() const {
     }
     return result;
 }
-Spec scalarSpec() { return {Dtype::Float, {}}; }
-Spec integerSpec() { return {Dtype::Int, {}}; }
-Spec booleanSpec() { return {Dtype::Bool, {}}; }
-Spec stringSpec() { return {Dtype::String, {}}; }
-Spec timeSpec() { return {Dtype::Time, {}}; }
-Spec floatArray(std::vector<int> shape) { return {Dtype::Float, std::move(shape)}; }
-Spec vector3Spec() { return floatArray({3}); }
-Spec quaternionSpec() { return floatArray({4}); }
-Spec matrix3Spec() { return floatArray({3, 3}); }
+Spec scalarSpec() {
+    return {Dtype::Float, {}};
+}
+Spec integerSpec() {
+    return {Dtype::Int, {}};
+}
+Spec booleanSpec() {
+    return {Dtype::Bool, {}};
+}
+Spec stringSpec() {
+    return {Dtype::String, {}};
+}
+Spec timeSpec() {
+    return {Dtype::Time, {}};
+}
+Spec floatArray(std::vector<int> shape) {
+    return {Dtype::Float, std::move(shape)};
+}
+Spec vector3Spec() {
+    return floatArray({3});
+}
+Spec quaternionSpec() {
+    return floatArray({4});
+}
+Spec matrix3Spec() {
+    return floatArray({3, 3});
+}
 
-Value Value::real(double v) { Value r; r.kind = Kind::Float; r.f = v; return r; }
-Value Value::integer(std::int64_t v) { Value r; r.kind = Kind::Int; r.i = v; return r; }
-Value Value::boolean(bool v) { Value r; r.kind = Kind::Bool; r.b = v; return r; }
-Value Value::text(std::string v) { Value r; r.kind = Kind::String; r.s = std::move(v); return r; }
-Value Value::time(std::int64_t ns) { Value r; r.kind = Kind::Time; r.i = ns; return r; }
-Value Value::array(std::vector<double> v) { Value r; r.kind = Kind::Array; r.a = std::move(v); return r; }
-Value Value::map(std::map<std::string, Value> v) { Value r; r.kind = Kind::Map; r.m = std::move(v); return r; }
+Value Value::real(double v) {
+    Value r;
+    r.kind = Kind::Float;
+    r.f = v;
+    return r;
+}
+Value Value::integer(std::int64_t v) {
+    Value r;
+    r.kind = Kind::Int;
+    r.i = v;
+    return r;
+}
+Value Value::boolean(bool v) {
+    Value r;
+    r.kind = Kind::Bool;
+    r.b = v;
+    return r;
+}
+Value Value::text(std::string v) {
+    Value r;
+    r.kind = Kind::String;
+    r.s = std::move(v);
+    return r;
+}
+Value Value::time(std::int64_t ns) {
+    Value r;
+    r.kind = Kind::Time;
+    r.i = ns;
+    return r;
+}
+Value Value::array(std::vector<double> v) {
+    Value r;
+    r.kind = Kind::Array;
+    r.a = std::move(v);
+    return r;
+}
+Value Value::map(std::map<std::string, Value> v) {
+    Value r;
+    r.kind = Kind::Map;
+    r.m = std::move(v);
+    return r;
+}
 const Value &Value::at(const std::string &key) const {
     const auto found = m.find(key);
     if (kind != Kind::Map || found == m.end())
@@ -65,8 +118,12 @@ std::int64_t Value::asInt() const {
 }
 
 namespace {
-bool identStart(char c) { return std::isalpha(static_cast<unsigned char>(c)) || c == '_'; }
-bool identChar(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; }
+bool identStart(char c) {
+    return std::isalpha(static_cast<unsigned char>(c)) || c == '_';
+}
+bool identChar(char c) {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+}
 } // namespace
 
 std::vector<PathToken> parsePath(const std::string &path) {
@@ -123,10 +180,8 @@ SourceRef SourceRef::compile(const SpecTree &tree, const std::string &path, Spec
                 throw MappingError("native field " + repr(path) + " is not indexable");
             const int index = token.indexes[d], size = current.shape[0];
             if (size >= 0 && index >= size)
-                throw MappingError("index " + std::to_string(index) +
-                                   " out of range in native field " + repr(path));
-            offset = offset * static_cast<std::size_t>(size < 0 ? 0 : size) +
-                     static_cast<std::size_t>(index);
+                throw MappingError("index " + std::to_string(index) + " out of range in native field " + repr(path));
+            offset = offset * static_cast<std::size_t>(size < 0 ? 0 : size) + static_cast<std::size_t>(index);
             current.shape.erase(current.shape.begin());
         }
         for (std::size_t d = token.indexes.size(); d < shape.size(); ++d)
@@ -159,8 +214,7 @@ Value SourceRef::read(const Value &root) const {
         throw MappingError("native array is shorter than the mapped index");
     if (shape_.empty()) {
         const double v = node->a[offset_];
-        return dtype_ == Dtype::Int ? Value::integer(static_cast<std::int64_t>(v))
-                                    : Value::real(v);
+        return dtype_ == Dtype::Int ? Value::integer(static_cast<std::int64_t>(v)) : Value::real(v);
     }
     return Value::array(std::vector<double>(node->a.begin() + static_cast<std::ptrdiff_t>(offset_),
                                             node->a.begin() + static_cast<std::ptrdiff_t>(offset_ + count_)));

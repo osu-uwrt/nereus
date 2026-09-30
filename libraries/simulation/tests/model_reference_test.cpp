@@ -31,18 +31,15 @@ TEST(MarineDynamics, AddedMassReducesAcceleration) {
 
     Vector6d wrench = Vector6d::Zero();
     wrench.x() = 20.0;
-    EXPECT_NEAR(without_added_mass.acceleration(Vector6d::Zero(), Vector6d::Zero(), wrench).x(),
-                2.0, 1e-12);
-    EXPECT_NEAR(with_added_mass.acceleration(Vector6d::Zero(), Vector6d::Zero(), wrench).x(), 1.0,
-                1e-12);
+    EXPECT_NEAR(without_added_mass.acceleration(Vector6d::Zero(), Vector6d::Zero(), wrench).x(), 2.0, 1e-12);
+    EXPECT_NEAR(with_added_mass.acceleration(Vector6d::Zero(), Vector6d::Zero(), wrench).x(), 1.0, 1e-12);
 }
 
 TEST(MarineDynamics, RejectsNonPhysicalMass) {
     MarineDynamics dynamics;
     Matrix6d added_mass = Matrix6d::Zero();
     added_mass(0, 0) = -11.0;
-    EXPECT_THROW(dynamics.configure(10.0, Eigen::Matrix3d::Identity(), added_mass),
-                 std::invalid_argument);
+    EXPECT_THROW(dynamics.configure(10.0, Eigen::Matrix3d::Identity(), added_mass), std::invalid_argument);
 }
 
 #include "detail/thruster_dynamics.hpp"
@@ -69,8 +66,7 @@ TEST(MarineDynamics, CoordinateCurrentDerivativeHasNoRigidBodyInertiaTerm) {
     MarineDynamics d;
     d.configure(10., Eigen::Matrix3d::Identity(), Matrix6d::Zero());
     const Vector6d v = Vector6d::Random(), r = Vector6d::Random(), dc = Vector6d::Random();
-    EXPECT_TRUE(d.acceleration(v, r, Vector6d::Zero(), dc)
-                    .isApprox(d.acceleration(v, r, Vector6d::Zero()), 1e-12));
+    EXPECT_TRUE(d.acceleration(v, r, Vector6d::Zero(), dc).isApprox(d.acceleration(v, r, Vector6d::Zero()), 1e-12));
 }
 TEST(MarineDynamics, AddedMassCurrentDerivativeCoefficient) {
     MarineDynamics d;
@@ -79,8 +75,7 @@ TEST(MarineDynamics, AddedMassCurrentDerivativeCoefficient) {
     d.configure(10., Eigen::Matrix3d::Identity(), added);
     Vector6d dc = Vector6d::Zero();
     dc[0] = 3;
-    EXPECT_NEAR(d.acceleration(Vector6d::Zero(), Vector6d::Zero(), Vector6d::Zero(), dc)[0], 1.,
-                1e-12);
+    EXPECT_NEAR(d.acceleration(Vector6d::Zero(), Vector6d::Zero(), Vector6d::Zero(), dc)[0], 1., 1e-12);
 }
 TEST(MarineDynamics, CoriolisMatchesIndependentMomentumCrossProducts) {
     Matrix6d a = Matrix6d::Random();
@@ -93,8 +88,7 @@ TEST(MarineDynamics, CoriolisMatchesIndependentMomentumCrossProducts) {
 TEST(MarineDynamics, NeutralBodyFollowsUniformAcceleratingFluid) {
     auto d = neutralModel();
     const Eigen::Vector3d acceleration(.3, -.2, .1);
-    const auto dx =
-        d.derivative(restingState(), Vector6d::Zero(), Eigen::Vector3d::Zero(), acceleration);
+    const auto dx = d.derivative(restingState(), Vector6d::Zero(), Eigen::Vector3d::Zero(), acceleration);
     EXPECT_TRUE(dx.segment<3>(7).isApprox(acceleration, 1e-12));
     EXPECT_LT(dx.tail<3>().norm(), 1e-12);
 }
@@ -123,17 +117,16 @@ TEST(MarineDynamics, BuoyancyIncludesOrientationAndMovingWetCentroid) {
     d.configureHydrostatics(1000, .01, {0, 0, .05}, {.2, .4, .2});
     Eigen::Quaterniond roll(Eigen::AngleAxisd(.2, Eigen::Vector3d::UnitX()));
     EXPECT_LT(d.restoringWrench({0, 0, -2}, roll)[3], 0);
-    EXPECT_NEAR(d.restoringWrench({0, 0, -2}, Eigen::Quaterniond::Identity()).head<3>().norm(), 0,
-                1e-12);
+    EXPECT_NEAR(d.restoringWrench({0, 0, -2}, Eigen::Quaterniond::Identity()).head<3>().norm(), 0, 1e-12);
     EXPECT_NEAR(d.submergedFraction({0, 0, -.05}, Eigen::Quaterniond::Identity()), .5, 1e-12);
     EXPECT_DOUBLE_EQ(d.submergedFraction({0, 0, 2}, roll), 0.);
     EXPECT_NEAR(d.restoringWrench({0, 0, 2}, Eigen::Quaterniond::Identity())[2], -98.0665, 1e-10);
     Eigen::Vector3d wet;
     d.submergedFraction({0, 0, -.05}, Eigen::Quaterniond::Identity(), &wet);
     EXPECT_NEAR(wet.z(), .05 - 3 * .2 / 8., 1e-12); // half-ellipsoid centroid
-    EXPECT_NEAR(d.submergedFraction({0, 0, 0}, Eigen::Quaterniond(Eigen::AngleAxisd(
-                                                   M_PI / 2, Eigen::Vector3d::UnitY()))),
-                .5, 1e-12);
+    EXPECT_NEAR(
+        d.submergedFraction({0, 0, 0}, Eigen::Quaterniond(Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitY()))), .5,
+        1e-12);
 }
 TEST(MarineDynamics, UnforcedCoupledMotionConservesEnergy) {
     auto d = neutralModel();
@@ -169,13 +162,10 @@ TEST(MarineDynamics, RejectsNaNsNegativeAddedMassAndImpossibleInertia) {
     Matrix6d added = Matrix6d::Zero();
     added(0, 0) = -.01;
     EXPECT_THROW(d.configure(10., Eigen::Matrix3d::Identity(), added), std::invalid_argument);
-    EXPECT_THROW(d.configure(10., Eigen::Vector3d(1, 1, 3).asDiagonal(), Matrix6d::Zero()),
+    EXPECT_THROW(d.configure(10., Eigen::Vector3d(1, 1, 3).asDiagonal(), Matrix6d::Zero()), std::invalid_argument);
+    EXPECT_THROW(d.configure(std::numeric_limits<double>::quiet_NaN(), Eigen::Matrix3d::Identity(), Matrix6d::Zero()),
                  std::invalid_argument);
-    EXPECT_THROW(d.configure(std::numeric_limits<double>::quiet_NaN(), Eigen::Matrix3d::Identity(),
-                             Matrix6d::Zero()),
-                 std::invalid_argument);
-    EXPECT_THROW(d.configureDamping(Matrix6d::Identity(), -Vector6d::Ones()),
-                 std::invalid_argument);
+    EXPECT_THROW(d.configureDamping(Matrix6d::Identity(), -Vector6d::Ones()), std::invalid_argument);
 }
 TEST(Thrusters, ExactDelayAndLagIndependentOfStepPartition) {
     ThrusterParameters p;

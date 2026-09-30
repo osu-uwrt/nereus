@@ -23,12 +23,10 @@ class MarineDynamics {
 
     // tau includes applied propulsion, damping and restoring wrenches, at COM.
     // dc/dt is the BODY coordinate derivative of inertial water velocity.
-    Vector6d acceleration(const Vector6d &velocity, const Vector6d &relative_velocity,
-                          const Vector6d &body_wrench,
+    Vector6d acceleration(const Vector6d &velocity, const Vector6d &relative_velocity, const Vector6d &body_wrench,
                           const Vector6d &current_derivative = Vector6d::Zero()) const;
     Vector6d dampingWrench(const Vector6d &relative_velocity) const;
-    Vector6d restoringWrench(const Eigen::Vector3d &position,
-                             const Eigen::Quaterniond &orientation) const;
+    Vector6d restoringWrench(const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation) const;
     double submergedFraction(const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation,
                              Eigen::Vector3d *wet_center = nullptr) const;
     State13d derivative(const State13d &state, const Vector6d &propulsion,
@@ -63,7 +61,6 @@ class MarineDynamics {
     Vector6d quadratic_damping_ = Vector6d::Zero();
     Eigen::Vector3d damping_center_ = Eigen::Vector3d::Zero();
     Eigen::Vector3d cob_ = Eigen::Vector3d::Zero(), radii_{.175, .415, .275};
-    double vehicle_mass_ = 1., density_ = 998.2, volume_ = 0., gravity_ = 9.80665,
-           water_level_ = 0.;
+    double vehicle_mass_ = 1., density_ = 998.2, volume_ = 0., gravity_ = 9.80665, water_level_ = 0.;
 };
 } // namespace robotics::simulation::detail

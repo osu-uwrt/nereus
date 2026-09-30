@@ -1,13 +1,13 @@
 #include "window.hpp"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <algorithm>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
-#include <imgui_internal.h>
-#include <png.h>
-#include <algorithm>
 #include <cstdio>
+#include <imgui_internal.h>
 #include <iostream>
+#include <png.h>
 #include <stdexcept>
 
 namespace robotics::ros_viewer::host {

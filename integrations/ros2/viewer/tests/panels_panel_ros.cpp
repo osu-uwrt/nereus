@@ -1,23 +1,23 @@
 #include "robotics/ros_viewer/panels/composition.hpp"
+#include "robotics/ros_viewer/panels/pose_math.hpp"
 #include "robotics/ros_viewer/panels/ros_providers.hpp"
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
+#include <riptide_msgs2/action/execute_tree.hpp>
 #include <riptide_msgs2/msg/controller_command.hpp>
 #include <riptide_msgs2/msg/kill_switch_report.hpp>
-#include <riptide_msgs2/action/execute_tree.hpp>
 #include <riptide_msgs2/srv/list_trees.hpp>
 #include <std_srvs/srv/set_bool.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
-#include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/buffer.h>
-#include <tf2_ros/transform_listener.h>
 #include <tf2_ros/static_transform_broadcaster.h>
+#include <tf2_ros/transform_broadcaster.h>
+#include <tf2_ros/transform_listener.h>
 #include <thread>
-#include "robotics/ros_viewer/panels/pose_math.hpp"
 using namespace robotics::ros_viewer::panels;
+#include <cassert>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <cassert>
 #include <iostream>
 #include <limits>
 #include <unistd.h>
@@ -151,8 +151,8 @@ int main(int argc, char **argv) {
         auto edited = targetAngles;
         edited[i] += .2f;
         const auto actual = glm::mat4_cast(glm::quat(edited));
-        const auto expected =
-            glm::rotate(glm::mat4(1), .2f, robotics::ros_viewer::rpyAxis(targetAngles, i)) * glm::mat4_cast(glm::quat(targetAngles));
+        const auto expected = glm::rotate(glm::mat4(1), .2f, robotics::ros_viewer::rpyAxis(targetAngles, i)) *
+                              glm::mat4_cast(glm::quat(targetAngles));
         for (int c = 0; c < 4; ++c)
             assert(glm::length(actual[c] - expected[c]) < 1e-5);
     }

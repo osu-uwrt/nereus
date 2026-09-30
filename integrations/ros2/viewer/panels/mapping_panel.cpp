@@ -1,6 +1,6 @@
 #include "robotics/ros_viewer/panels/composition.hpp"
-#include <imgui.h>
 #include <cstdio>
+#include <imgui.h>
 namespace robotics::ros_viewer::panels {
 namespace {
 class MappingPanel final : public Panel {

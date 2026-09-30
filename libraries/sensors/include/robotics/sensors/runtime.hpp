@@ -67,8 +67,7 @@ template <class Model> class ScheduledSensor final : public ScheduledDevice {
   public:
     using Reading = typename Model::Reading;
     ScheduledSensor(Device config, Model model, std::uint64_t seed)
-        : config_(std::move(config)), model_(std::move(model)),
-          stream_(std::make_shared<SensorStream<Reading>>()) {
+        : config_(std::move(config)), model_(std::move(model)), stream_(std::make_shared<SensorStream<Reading>>()) {
         reset(seed);
     }
     ~ScheduledSensor() override {
@@ -111,20 +110,17 @@ template <class Model> class ScheduledSensor final : public ScheduledDevice {
         const auto elapsed = std::chrono::duration<double>(now - last_acquired_).count();
         auto measurement = model_.sample(motion, elapsed);
         if (measurement.value.has_value() == !measurement.unavailable_reason.empty()) {
-            throw std::logic_error("sensor must return either a value or an unavailable reason: " +
-                                   config_.id);
+            throw std::logic_error("sensor must return either a value or an unavailable reason: " + config_.id);
         }
-        Sample<Reading> sample{{config_.id, config_.frame, motion.state.generation,
-                                stream_->stats_.acquired, motion.state.tick, *next_due_, now,
-                                Nanoseconds{0}},
+        Sample<Reading> sample{{config_.id, config_.frame, motion.state.generation, stream_->stats_.acquired,
+                                motion.state.tick, *next_due_, now, Nanoseconds{0}},
                                std::move(measurement)};
         ++stream_->stats_.acquired;
         if (!sample.measurement.value) {
             ++stream_->stats_.unavailable;
         }
         last_acquired_ = now;
-        if (config_.period.count() >
-            std::numeric_limits<std::int64_t>::max() - next_due_->count()) {
+        if (config_.period.count() > std::numeric_limits<std::int64_t>::max() - next_due_->count()) {
             next_due_.reset();
         } else {
             *next_due_ += config_.period;
@@ -178,11 +174,9 @@ class Runtime {
     Runtime(const Runtime &) = delete;
     Runtime &operator=(const Runtime &) = delete;
 
-    template <class Model>
-    std::shared_ptr<SensorStream<typename Model::Reading>> add(Device device, Model model) {
+    template <class Model> std::shared_ptr<SensorStream<typename Model::Reading>> add(Device device, Model model) {
         validateDevice(device);
-        auto entry =
-            std::make_unique<detail::ScheduledSensor<Model>>(device, std::move(model), seed_);
+        auto entry = std::make_unique<detail::ScheduledSensor<Model>>(device, std::move(model), seed_);
         auto stream = entry->stream();
         // Roll back ID reservation if registration allocation fails.
         auto inserted = streams_.emplace(device.id, stream);
@@ -194,8 +188,7 @@ class Runtime {
         }
         return stream;
     }
-    template <class Reading>
-    std::shared_ptr<SensorStream<Reading>> stream(const std::string &id) const {
+    template <class Reading> std::shared_ptr<SensorStream<Reading>> stream(const std::string &id) const {
         const auto found = streams_.find(id);
         if (found == streams_.end()) {
             throw std::invalid_argument("unknown sensor: " + id);

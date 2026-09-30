@@ -26,9 +26,13 @@ class BridgeNode {
 
     // Steps until the duration (simulated ns) or shutdown; returns ticks run.
     std::int64_t run(std::optional<std::int64_t> duration_ns, int max_catchup_ticks = 20);
-    void requestStop() { stop_ = true; }
+    void requestStop() {
+        stop_ = true;
+    }
 
-    rclcpp::Node &node() { return *node_; }
+    rclcpp::Node &node() {
+        return *node_;
+    }
 
     // Stepping-loop cost: tick() wall time (step, publish, camera request) and achieved speed.
     struct Phase { // wall cost of one phase of the stepping loop
@@ -42,12 +46,18 @@ class BridgeNode {
     };
     struct Performance {
         std::int64_t ticks{0}, tick_ns_total{0}, tick_ns_max{0}, wall_ns{0}, sim_ns{0};
-        Phase drain, step, publish, cameras, oversleep; // oversleep: wake-up later than requested
-        std::int64_t max_behind_ns{0}, catchup_bursts{0};  // simulated time owed; iterations with >=5 ticks
-        double meanTickUs() const { return ticks ? tick_ns_total / 1e3 / static_cast<double>(ticks) : 0.0; }
-        double realTimeFactor() const { return wall_ns ? static_cast<double>(sim_ns) / static_cast<double>(wall_ns) : 0.0; }
+        Phase drain, step, publish, cameras, oversleep;   // oversleep: wake-up later than requested
+        std::int64_t max_behind_ns{0}, catchup_bursts{0}; // simulated time owed; iterations with >=5 ticks
+        double meanTickUs() const {
+            return ticks ? tick_ns_total / 1e3 / static_cast<double>(ticks) : 0.0;
+        }
+        double realTimeFactor() const {
+            return wall_ns ? static_cast<double>(sim_ns) / static_cast<double>(wall_ns) : 0.0;
+        }
     };
-    const Performance &performance() const { return performance_; }
+    const Performance &performance() const {
+        return performance_;
+    }
     // Publications skipped because the topic had no subscribers, per stream (plus "/clock", "/tf").
     std::map<std::string, std::int64_t> skippedPublications() const;
 

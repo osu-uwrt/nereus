@@ -224,8 +224,7 @@ TEST(Plant, CornerContactsDoNotAddKineticEnergy) {
     auto s = initial();
     s.position = {0.201, 0.201, -2};
     s.linear_velocity = {-1, -2, 0};
-    const Eigen::Matrix3d mass =
-        10 * Eigen::Matrix3d::Identity() + p.body.added_mass.topLeftCorner<3, 3>();
+    const Eigen::Matrix3d mass = 10 * Eigen::Matrix3d::Identity() + p.body.added_mass.topLeftCorner<3, 3>();
     const double before = 0.5 * s.linear_velocity.dot(mass * s.linear_velocity);
     Plant plant(p, s);
     const auto end = plant.advance(10);
@@ -311,8 +310,7 @@ TEST(Plant, ActuatorCalibrationOrdersDeadbandScaleSaturationAndEfficiency) {
     t.reverse_limit = 2;
     t.efficiency = .5;
     Plant plant(p, initial());
-    for (const auto &command :
-         std::vector<std::pair<double, double>>{{1.9, 0}, {2, 2}, {5, 4}, {-5, -1}}) {
+    for (const auto &command : std::vector<std::pair<double, double>>{{1.9, 0}, {2, 2}, {5, 4}, {-5, -1}}) {
         plant.command(force(command.first));
         EXPECT_DOUBLE_EQ(plant.advance().thruster_forces[0], command.second);
     }
@@ -393,8 +391,7 @@ TEST(Plant, PlacedSpherePoolMatchesTransformedCornerContactAndHydrostatics) {
     for (int i = 0; i < 200; ++i) {
         const auto x = a.advance(), y = b.advance();
         EXPECT_TRUE(y.body.position.isApprox(translation + rotation * x.body.position, 1e-11));
-        EXPECT_TRUE(
-            y.body.orientation.coeffs().isApprox((rotation * x.body.orientation).coeffs(), 1e-11));
+        EXPECT_TRUE(y.body.orientation.coeffs().isApprox((rotation * x.body.orientation).coeffs(), 1e-11));
         EXPECT_NEAR((y.body.linear_velocity - x.body.linear_velocity).norm(), 0, 1e-10);
         EXPECT_NEAR((y.body.angular_velocity - x.body.angular_velocity).norm(), 0, 1e-10);
         EXPECT_EQ(a.motion().acceleration_valid, b.motion().acceleration_valid);

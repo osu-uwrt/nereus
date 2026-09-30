@@ -1,9 +1,9 @@
 #pragma once
 
+#include <cmath>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <cmath>
 
 namespace robotics::ros_viewer {
 // RPY uses Rz(yaw) * Ry(pitch) * Rx(roll), matching the RViz command fields.

@@ -51,15 +51,13 @@ spatial::FixedFrames makeFrames(const Json &config) {
     return spatial::FixedFrames(at(config, "root").get<std::string>(), std::move(edges));
 }
 
-BoxProxy makeBox(const Json &config, const Eigen::Vector3d &position,
-                 const Eigen::Quaterniond &orientation) {
+BoxProxy makeBox(const Json &config, const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation) {
     BoxProxy box;
     box.id = at(config, "id").get<std::string>();
     box.size = vec3(at(config, "size_m"), "size_m");
     const spatial::Pose local{vec3(at(config, "center_m"), "center_m"),
-                              has(config, "orientation_wxyz")
-                                  ? quat(config.at("orientation_wxyz"), "orientation_wxyz")
-                                  : Eigen::Quaterniond::Identity()};
+                              has(config, "orientation_wxyz") ? quat(config.at("orientation_wxyz"), "orientation_wxyz")
+                                                              : Eigen::Quaterniond::Identity()};
     const auto pose = composeChecked({position, orientation}, local);
     box.center = pose.translation;
     box.orientation = pose.rotation;
@@ -192,11 +190,10 @@ void addSensor(sensors::Runtime &runtime, const Json &config, const spatial::Fix
         assignNumber(pressure.minimum_pressure, p, "minimum_pressure_pa");
         assignNumber(pressure.maximum_pressure, p, "maximum_pressure_pa");
         runtime.add(device, sensors::Pressure(pressure, sensors::HydrostaticPressure(
-                                                            pool.water_level, pool.water_density,
-                                                            surface_pressure)));
+                                                            pool.water_level, pool.water_density, surface_pressure)));
     } else {
-        throw std::invalid_argument("sensor " + repr(device.id) +
-                                    ": no native physics implementation for " + repr(kind));
+        throw std::invalid_argument("sensor " + repr(device.id) + ": no native physics implementation for " +
+                                    repr(kind));
     }
 }
 } // namespace
@@ -271,8 +268,8 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
         number("reverse_scale", t.reverse_scale);
         number("efficiency", t.efficiency);
         if (const Json *value = field("propeller_radius_m"))
-            t.propeller_radius = value->is_null() ? std::nullopt
-                                                  : std::optional<double>(num(*value, "propeller_radius_m"));
+            t.propeller_radius =
+                value->is_null() ? std::nullopt : std::optional<double>(num(*value, "propeller_radius_m"));
         parameters.thrusters.push_back(std::move(t));
     }
 
@@ -326,15 +323,14 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
     assignVec3(initial.angular_velocity, start, "angular_velocity_rad_s");
     const std::string initial_frame = at(start, "frame").get<std::string>();
     if (initial_frame != frames->root()) {
-        const auto com_pose = composeChecked({initial.position, initial.orientation},
-                                             inverseChecked(frames->fromRoot(initial_frame)));
+        const auto com_pose =
+            composeChecked({initial.position, initial.orientation}, inverseChecked(frames->fromRoot(initial_frame)));
         initial.position = com_pose.translation;
         initial.orientation = com_pose.rotation;
     }
 
     PackRuntime result;
-    result.runtime = std::make_unique<sensors::Runtime>(parameters, initial,
-                                                        at(scenario, "seed").get<std::uint64_t>());
+    result.runtime = std::make_unique<sensors::Runtime>(parameters, initial, at(scenario, "seed").get<std::uint64_t>());
     std::map<std::string, const Json *> configured;
     std::vector<std::string> order;
     for (const auto &entry : at(robot, "sensors")) {
@@ -342,9 +338,7 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
         configured[id] = &entry;
         order.push_back(id);
     }
-    const auto enabled = [](const Json &entry) {
-        return !has(entry, "enabled") || entry.at("enabled").get<bool>();
-    };
+    const auto enabled = [](const Json &entry) { return !has(entry, "enabled") || entry.at("enabled").get<bool>(); };
     std::vector<std::string> selected;
     if (sensor_ids) {
         selected = *sensor_ids;

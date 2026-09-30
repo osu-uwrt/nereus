@@ -1,8 +1,8 @@
 #include "robotics/sensors/runtime.hpp"
 
 namespace robotics::sensors {
-Runtime::Runtime(const simulation::PlantParameters &parameters,
-                 const simulation::BodyState &initial, std::uint64_t seed)
+Runtime::Runtime(const simulation::PlantParameters &parameters, const simulation::BodyState &initial,
+                 std::uint64_t seed)
     : plant_(parameters, initial), timestep_(parameters.timestep), seed_(seed) {}
 Runtime::~Runtime() = default;
 
@@ -17,12 +17,10 @@ void Runtime::validateDevice(const Device &device) const {
         throw std::logic_error("sensor registration is closed after first advancement");
     }
     if (device.id.empty() || device.frame.empty() || device.id.find('\0') != std::string::npos ||
-        device.frame.find('\0') != std::string::npos || streams_.count(device.id) ||
-        device.period < timestep_ || device.latency.count() < 0 || device.capacity == 0 ||
-        (device.overflow != OverflowPolicy::Fail &&
-         device.overflow != OverflowPolicy::DropOldest)) {
-        throw std::invalid_argument(
-            "invalid or duplicate sensor identity, period, latency, or capacity");
+        device.frame.find('\0') != std::string::npos || streams_.count(device.id) || device.period < timestep_ ||
+        device.latency.count() < 0 || device.capacity == 0 ||
+        (device.overflow != OverflowPolicy::Fail && device.overflow != OverflowPolicy::DropOldest)) {
+        throw std::invalid_argument("invalid or duplicate sensor identity, period, latency, or capacity");
     }
 }
 void Runtime::command(const Eigen::VectorXd &forces) {
@@ -39,8 +37,7 @@ simulation::Snapshot Runtime::observe() const {
 
 simulation::Snapshot Runtime::advance(std::uint64_t ticks) {
     requireHealthy();
-    const auto max_tick =
-        static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max() / timestep_.count());
+    const auto max_tick = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max() / timestep_.count());
     if (ticks > max_tick - plant_.observe().tick) {
         throw std::overflow_error("requested advance overflows simulation time");
     }

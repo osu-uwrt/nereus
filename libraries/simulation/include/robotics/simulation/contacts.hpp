@@ -16,10 +16,9 @@ struct BoxProxy {
 enum class ContactModel { Disabled, SpherePool, BoxScene };
 struct ContactParameters {
     ContactModel model{ContactModel::SpherePool};
-    std::vector<BoxProxy> body_boxes;  // Robot-owned, ordered compound proxies.
-    std::vector<BoxProxy> world_boxes; // World-owned, ordered static geometry.
-    double restitution{.1},
-        friction{.4}; // BoxScene coefficients; sphere model is frictionless/inelastic.
+    std::vector<BoxProxy> body_boxes;     // Robot-owned, ordered compound proxies.
+    std::vector<BoxProxy> world_boxes;    // World-owned, ordered static geometry.
+    double restitution{.1}, friction{.4}; // BoxScene coefficients; sphere model is frictionless/inelastic.
 };
 
 // Extra contact response owned outside the plant (e.g. a task's mesh scenery against the robot's

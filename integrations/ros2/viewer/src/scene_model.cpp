@@ -1,7 +1,7 @@
 #include "scene_model.hpp"
-#include <robotics/rendering/assets.hpp>
 #include <algorithm>
 #include <iostream>
+#include <robotics/rendering/assets.hpp>
 #include <set>
 
 namespace robotics::ros_viewer::host {
@@ -118,7 +118,7 @@ std::vector<glm::mat4> SceneModel::payloadMounts(const std::string &mechanism) c
     if (const auto *m = scenario_.mechanism(mechanism))
         for (const auto &slot : m->slotsInBase)
             result.push_back(slot * glm::scale(glm::mat4(1), glm::vec3(m->projectileLength, 2 * m->projectileRadius,
-                                                                        2 * m->projectileRadius)));
+                                                                       2 * m->projectileRadius)));
     return result;
 }
 
@@ -166,9 +166,8 @@ r::Scene SceneModel::build(const VisualState &state) const {
         instance.casts_shadow = false;
         const glm::vec3 color = i < state.lightColor.size() ? state.lightColor[i] : glm::vec3(0);
         instance.tint << color.x, color.y, color.z, 1.f;
-        instance.transform =
-            toEigen(state.body * scenario_.frames.relative(scenario_.baseId, light.frame) * light.mount *
-                    glm::scale(glm::mat4(1), light.size));
+        instance.transform = toEigen(state.body * scenario_.frames.relative(scenario_.baseId, light.frame) *
+                                     light.mount * glm::scale(glm::mat4(1), light.size));
         dynamic.push_back(std::move(instance));
     }
     if (!payloadMesh_.empty())

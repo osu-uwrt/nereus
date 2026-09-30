@@ -21,8 +21,7 @@ Eigen::Vector3d vector3(const Json &value) {
 std::vector<spatial::FixedFrame> edges(const Json &robot) {
     std::vector<spatial::FixedFrame> result;
     for (const auto &item : robot.at("frames").at("transforms"))
-        result.push_back({item.at("parent").get<std::string>(), item.at("child").get<std::string>(),
-                          placement(item)});
+        result.push_back({item.at("parent").get<std::string>(), item.at("child").get<std::string>(), placement(item)});
     return result;
 }
 
@@ -64,8 +63,8 @@ spatial::Pose placement(const Json &item) {
     spatial::Pose pose;
     pose.translation = vector3(item.at("position_m"));
     const auto &q = item.at("orientation_wxyz");
-    pose.rotation = Eigen::Quaterniond(q.at(0).get<double>(), q.at(1).get<double>(), q.at(2).get<double>(),
-                                       q.at(3).get<double>());
+    pose.rotation =
+        Eigen::Quaterniond(q.at(0).get<double>(), q.at(1).get<double>(), q.at(2).get<double>(), q.at(3).get<double>());
     spatial::validate(pose);
     return pose;
 }
@@ -147,7 +146,8 @@ r::Instance PackScene::instance(const std::string &role, const std::string &asse
 void PackScene::buildPool() {
     const auto &pool = resolved_.pool;
     // Interactive (non-strict) previews of hand-written documents may omit the type; packs never do.
-    const auto type = options_.strict ? pool.at("type").get<std::string>() : pool.value("type", std::string("rectangular_pool"));
+    const auto type =
+        options_.strict ? pool.at("type").get<std::string>() : pool.value("type", std::string("rectangular_pool"));
     if (type != "rectangular_pool")
         throw std::runtime_error("pool type '" + type + "' has no camera scene");
     const auto &p = pool.at("parameters");
@@ -159,8 +159,7 @@ void PackScene::buildPool() {
     geometry.water_level = static_cast<float>(p.at("water_level_m").get<double>() + at.at(2).get<double>());
     geometry.deck_height = p.at("deck_height_m").get<float>();
     const double yaw = placementJson.at("yaw_deg").get<double>();
-    geometry.local_to_world =
-        toMatrix(upright(Json::array({at.at(0), at.at(1), 0.0}), yaw)).cast<float>();
+    geometry.local_to_world = toMatrix(upright(Json::array({at.at(0), at.at(1), 0.0}), yaw)).cast<float>();
     static_ = r::makePoolScene(geometry);
     pool_instances_ = static_.instances.size();
     pool_record_ = {{"dimensions_m", {geometry.dimensions[0], geometry.dimensions[1], geometry.dimensions[2]}},
@@ -175,7 +174,8 @@ void PackScene::buildTasks() {
         placements[item.at("task").get<std::string>()] = item;
     for (const auto &task : resolved_.task_definitions) {
         const auto id = task.at("id").get<std::string>();
-        const auto world_task = upright(placements.at(id).at("position_m"), placements.at(id).at("yaw_deg").get<double>());
+        const auto world_task =
+            upright(placements.at(id).at("position_m"), placements.at(id).at("yaw_deg").get<double>());
         std::map<std::string, spatial::Pose> frames{{"task", spatial::Pose{}}};
         for (const auto &item : task.at("frames"))
             frames[item.at("id").get<std::string>()] = placement(item);
@@ -195,8 +195,8 @@ void PackScene::buildTasks() {
                     visual.prop = propId;
                     visual.asset = parameters.at("visual_asset").get<std::string>();
                     visual.mesh = mesh("tasks", visual.asset);
-                    visual.world_from_asset_at_reset = toMatrix(spatial::compose(
-                        world_task, frames.at(parameters.at("frame").get<std::string>())));
+                    visual.world_from_asset_at_reset =
+                        toMatrix(spatial::compose(world_task, frames.at(parameters.at("frame").get<std::string>())));
                     props_.push_back(std::move(visual));
                 } else {
                     unrendered_.push_back(id + "/" + propId);
@@ -240,7 +240,8 @@ void PackScene::buildTasks() {
                     warn(where + " visual '" + asset + "' has no readable asset");
                     continue;
                 }
-                const auto task_asset = spatial::compose(frames.at(visual.at("frame").get<std::string>()), placement(visual));
+                const auto task_asset =
+                    spatial::compose(frames.at(visual.at("frame").get<std::string>()), placement(visual));
                 if (panel) {
                     panel->asset_to_panel = toMatrix(task_asset).cast<float>();
                     try {
@@ -271,12 +272,14 @@ void PackScene::buildTasks() {
                 if (visual.contains("indicator")) {
                     // The tint follows the region's indicator: initial colour at reset, latched colour once latched.
                     const auto &indicator = visual.at("indicator");
-                    const auto &names = regions.at(indicator.at("region").get<std::string>()).at("parameters").at("indicator");
+                    const auto &names =
+                        regions.at(indicator.at("region").get<std::string>()).at("parameters").at("indicator");
                     IndicatorVisual follower;
                     follower.task = id;
                     follower.region = indicator.at("region").get<std::string>();
                     follower.instance = static_.instances.size();
-                    for (const auto &[state, target] : {std::pair{"initial", &follower.initial}, {"latched", &follower.latched}}) {
+                    for (const auto &[state, target] :
+                         {std::pair{"initial", &follower.initial}, {"latched", &follower.latched}}) {
                         const auto rgb = vector3(indicator.at("color_rgb").at(names.at(state).get<std::string>()));
                         *target = Eigen::Vector4f(float(rgb.x()), float(rgb.y()), float(rgb.z()), 1.f);
                     }
@@ -289,13 +292,16 @@ void PackScene::buildTasks() {
                 Json faces = Json::array(), triangles = Json::array();
                 for (std::size_t i = 0; i < counts.size(); ++i) {
                     if (counts[i] == 0 && options_.strict)
-                        throw std::runtime_error(where + ": no visual geometry on cutout face x=" +
-                                                 std::to_string(panel->faces_x[i]));
+                        throw std::runtime_error(
+                            where + ": no visual geometry on cutout face x=" + std::to_string(panel->faces_x[i]));
                     faces.push_back(panel->faces_x[i]);
                     triangles.push_back(counts[i]);
                 }
-                cutouts_.push_back({{"task", id}, {"prop", propId}, {"region", cutouts->at("region")},
-                                    {"faces_local_x_m", faces}, {"face_triangles", triangles}});
+                cutouts_.push_back({{"task", id},
+                                    {"prop", propId},
+                                    {"region", cutouts->at("region")},
+                                    {"faces_local_x_m", faces},
+                                    {"face_triangles", triangles}});
             }
         }
     }

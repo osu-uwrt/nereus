@@ -35,7 +35,7 @@ struct PayloadState {
 struct PayloadEnvironment {
     Eigen::Vector3d water_velocity{Eigen::Vector3d::Zero()}; // World m/s.
     double water_density{1000.0};                            // kg/m^3.
-    double water_level{0.0}; // World Z, metres; gravity is -Z, 9.80665 m/s^2.
+    double water_level{0.0};                                 // World Z, metres; gravity is -Z, 9.80665 m/s^2.
 };
 
 // Stateless, deterministic propagation. Owns a validated parameter copy; no clocks,
@@ -49,8 +49,7 @@ class PayloadDynamics {
     // dt must be finite and positive. Inputs are unchanged, including on failure.
     // Finned integration resolves angular damping with up to 100000 RK4 substeps;
     // larger requests are rejected. Orientation must be unit within 1e-6.
-    PayloadState advance(const PayloadState &state, const PayloadEnvironment &environment,
-                         double dt) const;
+    PayloadState advance(const PayloadState &state, const PayloadEnvironment &environment, double dt) const;
     double launch_speed(const PayloadEnvironment &environment) const;
     // Axis must be unit within 1e-6. Returns world-axis capsule support distances.
     Eigen::Vector3d support_extent(const Eigen::Vector3d &axis) const;

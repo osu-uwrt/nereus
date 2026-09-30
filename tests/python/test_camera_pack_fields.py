@@ -82,17 +82,30 @@ class TalosCameraFieldTests(unittest.TestCase):
             self.assertIn(visual["asset"], present)
             magnet = next(item for item in self.robot["mechanisms"] if item["type"] == "magnet")
             # The magnet mesh origin sits at the mechanism tip; every other visual is at its frame origin.
-            self.assertEqual(visual["position_m"],
-                             magnet["parameters"]["tip_position_m"] if visual["asset"] == "robot_magnet_mesh" else ORIGIN)
+            self.assertEqual(
+                visual["position_m"],
+                magnet["parameters"]["tip_position_m"]
+                if visual["asset"] == "robot_magnet_mesh"
+                else ORIGIN,
+            )
             self.assertEqual(visual["orientation_wxyz"], IDENTITY)
             placed.setdefault(visual["frame"], []).append(visual["asset"])
         rotors = [f"rotor_{item['id']}" for item in self.robot["thrusters"]]
         self.assertEqual(sorted(placed["cad"]), sorted(["body_mesh", *rotors]))
         claw = next(item for item in self.robot["mechanisms"] if item["type"] == "claw")
         self.assertEqual(claw["parameters"]["initial_state"], "closed")
-        self.assertEqual(sorted(placed[claw["frame"]]), sorted([
-            "claw_static_mesh", "claw_left_mesh", "claw_right_mesh",
-            "claw_left_pad_mesh", "claw_right_pad_mesh"]))
+        self.assertEqual(
+            sorted(placed[claw["frame"]]),
+            sorted(
+                [
+                    "claw_static_mesh",
+                    "claw_left_mesh",
+                    "claw_right_mesh",
+                    "claw_left_pad_mesh",
+                    "claw_right_pad_mesh",
+                ]
+            ),
+        )
         self.assertEqual(placed.pop("magnet_mount"), ["robot_magnet_mesh"])
         self.assertEqual(set(placed), {"cad", claw["frame"]})
 
@@ -104,7 +117,9 @@ class TalosCameraFieldTests(unittest.TestCase):
             parameters = camera["parameters"]
             with self.subTest(camera=camera["id"]):
                 self.assertTrue(camera["enabled"])
-                self.assertEqual(parameters["outputs"], ["rgb_left", "depth_left", "camera_info", "point_cloud"])
+                self.assertEqual(
+                    parameters["outputs"], ["rgb_left", "depth_left", "camera_info", "point_cloud"]
+                )
                 self.assertEqual(parameters["intrinsics_left"], parameters["intrinsics_right"])
                 right = transforms[parameters["right_frame"]]
                 self.assertEqual(right["parent"], camera["frame"])
@@ -119,8 +134,15 @@ class TalosCameraFieldTests(unittest.TestCase):
         self.assertEqual(optics["absorption_per_m_rgb"], [0.648, 0.145, 0.025])
         self.assertEqual(
             self.pool["lighting"],
-            {"profile": "outdoor", "direct_light": 1.0, "ambient_light": 0.8,
-             "sun_azimuth_deg": 225.0, "sun_elevation_deg": 55.0, "glare": 0.5})
+            {
+                "profile": "outdoor",
+                "direct_light": 1.0,
+                "ambient_light": 0.8,
+                "sun_azimuth_deg": 225.0,
+                "sun_elevation_deg": 55.0,
+                "glare": 0.5,
+            },
+        )
 
     def test_unedited_packs_save_byte_exact(self) -> None:
         for relative, name in (("robots/talos", "robot.yaml"), ("pools/robosub_2026", "pool.yaml")):
@@ -185,14 +207,26 @@ class GenericCameraFieldTests(unittest.TestCase):
     def test_visual_references_are_checked(self) -> None:
         cases = [
             ("asset: hull_mesh, frame", "asset: ghost, frame", "unknown asset 'ghost'"),
-            ("frame: base_link, position_m: [0, 0, 0]", "frame: nowhere, position_m: [0, 0, 0]",
-             "unknown frame 'nowhere'"),
-            ("frame: base_link, position_m: [0, 0, 0]", "frame: world, position_m: [0, 0, 0]",
-             "unknown frame 'world'"),
-            ("orientation_wxyz: [1, 0, 0, 0]}\ncollision_boxes",
-             "orientation_wxyz: [1, 0, 0, 0.1]}\ncollision_boxes", "must have unit norm"),
-            ("orientation_wxyz: [1, 0, 0, 0]}\ncollision_boxes",
-             "orientation_wxyz: [1, 0, 0, 0], scale: 2}\ncollision_boxes", "scale"),
+            (
+                "frame: base_link, position_m: [0, 0, 0]",
+                "frame: nowhere, position_m: [0, 0, 0]",
+                "unknown frame 'nowhere'",
+            ),
+            (
+                "frame: base_link, position_m: [0, 0, 0]",
+                "frame: world, position_m: [0, 0, 0]",
+                "unknown frame 'world'",
+            ),
+            (
+                "orientation_wxyz: [1, 0, 0, 0]}\ncollision_boxes",
+                "orientation_wxyz: [1, 0, 0, 0.1]}\ncollision_boxes",
+                "must have unit norm",
+            ),
+            (
+                "orientation_wxyz: [1, 0, 0, 0]}\ncollision_boxes",
+                "orientation_wxyz: [1, 0, 0, 0], scale: 2}\ncollision_boxes",
+                "scale",
+            ),
         ]
         for old, new, fragment in cases:
             with self.subTest(fragment=fragment):
@@ -204,12 +238,21 @@ class GenericCameraFieldTests(unittest.TestCase):
             ("    right_frame: cam_right\n", "", "right-eye outputs require right_frame"),
             ("    right_frame: cam_right\n", "    right_frame: ghost\n", "must be a child"),
             ("    right_frame: cam_right\n", "    right_frame: base_link\n", "must be a child"),
-            ("child: cam_right, position_m: [0.05, 0, 0]", "child: cam_right, position_m: [0.045, 0, 0]",
-             "must be at [baseline_m, 0, 0]"),
-            ("child: cam_right, position_m: [0.05, 0, 0]", "child: cam_right, position_m: [0.05, 0.001, 0]",
-             "must be at [baseline_m, 0, 0]"),
-            ("[0.05, 0, 0], orientation_wxyz: [1, 0, 0, 0]}",
-             "[0.05, 0, 0], orientation_wxyz: [0, 0, 0, 1]}", "identity orientation"),
+            (
+                "child: cam_right, position_m: [0.05, 0, 0]",
+                "child: cam_right, position_m: [0.045, 0, 0]",
+                "must be at [baseline_m, 0, 0]",
+            ),
+            (
+                "child: cam_right, position_m: [0.05, 0, 0]",
+                "child: cam_right, position_m: [0.05, 0.001, 0]",
+                "must be at [baseline_m, 0, 0]",
+            ),
+            (
+                "[0.05, 0, 0], orientation_wxyz: [1, 0, 0, 0]}",
+                "[0.05, 0, 0], orientation_wxyz: [0, 0, 0, 1]}",
+                "identity orientation",
+            ),
         ]
         for old, new, fragment in cases:
             with self.subTest(fragment=fragment):
@@ -226,8 +269,11 @@ class GenericCameraFieldTests(unittest.TestCase):
             ("max_range_m: 4.0", "max_range_m: 0.1", "min_range_m must be < max_range_m"),
             ("range_exponent: 2.0", "range_exponent: 4.5", "range_exponent"),
             ("patch_size_px: 8", "patch_size_px: 65", "patch_size_px"),
-            ("fx: 50.0, fy: 50.0, cx: 31.5, cy: 23.5}\n    outputs",
-             "fx: 0.0, fy: 50.0, cx: 31.5, cy: 23.5}\n    outputs", "fx"),
+            (
+                "fx: 50.0, fy: 50.0, cx: 31.5, cy: 23.5}\n    outputs",
+                "fx: 0.0, fy: 50.0, cx: 31.5, cy: 23.5}\n    outputs",
+                "fx",
+            ),
         ]
         for old, new, fragment in cases:
             with self.subTest(case=new):
@@ -238,8 +284,11 @@ class GenericCameraFieldTests(unittest.TestCase):
         cases = [
             ("tint_rgb: [0.025, 0.22, 0.29]", "tint_rgb: [0.025, 1.2, 0.29]", "tint_rgb"),
             ("tint_rgb: [0.025, 0.22, 0.29]", "tint_rgb: [0.025, 0.22]", "tint_rgb"),
-            ("absorption_per_m_rgb: [0.648, 0.145, 0.025]", "absorption_per_m_rgb: [5.1, 0.145, 0.025]",
-             "absorption_per_m_rgb"),
+            (
+                "absorption_per_m_rgb: [0.648, 0.145, 0.025]",
+                "absorption_per_m_rgb: [5.1, 0.145, 0.025]",
+                "absorption_per_m_rgb",
+            ),
             ("scattering: 0.458", "scattering: 5.5", "scattering"),
             ("distance_power: 0.40", "distance_power: 0.2", "distance_power"),
             ("distance_scale: 1.88", "distance_scale: 5.5", "distance_scale"),

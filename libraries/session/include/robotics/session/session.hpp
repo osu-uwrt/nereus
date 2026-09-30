@@ -4,10 +4,10 @@
 // in this fixed order per tick: plant step; mechanism actuation; payload propagation + task
 // judging; prop worlds; robot task observation. No wall time, ROS or rendering here.
 // Not thread safe: a transport serializes all calls on its stepping thread.
+#include <robotics/sensors/runtime.hpp>
 #include <robotics/session/mechanisms.hpp>
 #include <robotics/session/prop_world.hpp>
 #include <robotics/session/tasks.hpp>
-#include <robotics/sensors/runtime.hpp>
 #include <robotics/simulation/payload.hpp>
 #include <robotics/simulation/plant.hpp>
 
@@ -23,13 +23,12 @@ struct PackRuntime {
     std::unique_ptr<sensors::Runtime> runtime;
     simulation::PlantParameters parameters;
     std::shared_ptr<const spatial::FixedFrames> frames;
-    simulation::BodyState initial; // COM frame
+    simulation::BodyState initial;                            // COM frame
     std::vector<std::string> sensor_ids, deferred_sensor_ids; // executed / not executed
-    std::map<std::string, std::string> sensor_types;         // executed sensor id -> pack type
+    std::map<std::string, std::string> sensor_types;          // executed sensor id -> pack type
 };
 // sensor_ids: explicit selection (nullptr = every enabled non-camera sensor).
-PackRuntime createRuntime(const ResolvedScenario &scenario,
-                          const std::vector<std::string> *sensor_ids = nullptr);
+PackRuntime createRuntime(const ResolvedScenario &scenario, const std::vector<std::string> *sensor_ids = nullptr);
 
 struct Payload {
     int id{0};
@@ -89,11 +88,11 @@ class Session {
     CommandResult runStart(const Json &options = Json::object());
     CommandResult runStop();
     CommandResult runAdjust(double points);
-    void setRunMessage(const std::string &message); // e.g. "Command rejected: <reason>" from a transport
-    std::optional<Json> runSnapshot() const; // run_score document (old simulator format)
-    Json takeFeed();                         // task_events records since the last call
-    Json taskCounters() const;               // task_score document
-    Eigen::VectorXd thrusterForces() const;  // realized, native order
+    void setRunMessage(const std::string &message);                // e.g. "Command rejected: <reason>" from a transport
+    std::optional<Json> runSnapshot() const;                       // run_score document (old simulator format)
+    Json takeFeed();                                               // task_events records since the last call
+    Json taskCounters() const;                                     // task_score document
+    Eigen::VectorXd thrusterForces() const;                        // realized, native order
     std::map<std::string, std::array<double, 2>> clawJaws() const; // physical jaws
     const std::vector<Payload> &payloads() const;
     std::map<std::string, std::map<std::string, PropState>> props() const; // task -> props

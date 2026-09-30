@@ -103,12 +103,10 @@ class PackScene {
 
     // Static scene, robot visuals at world_from_root (with overrides), then the dynamic instances.
     // `latched` maps indicator region ids to their latch state (missing regions stay at the initial colour).
-    rendering::Scene compose(const Matrix4d &world_from_root,
-                             const std::vector<rendering::Instance> &dynamic = {},
+    rendering::Scene compose(const Matrix4d &world_from_root, const std::vector<rendering::Instance> &dynamic = {},
                              const std::vector<RobotOverride> &overrides = {},
                              const std::map<std::string, bool> &latched = {}) const;
-    rendering::Scene compose(const spatial::Pose &world_from_root,
-                             const std::vector<rendering::Instance> &dynamic = {},
+    rendering::Scene compose(const spatial::Pose &world_from_root, const std::vector<rendering::Instance> &dynamic = {},
                              const std::vector<RobotOverride> &overrides = {},
                              const std::map<std::string, bool> &latched = {}) const {
         return compose(toMatrix(world_from_root), dynamic, overrides, latched);
