@@ -100,6 +100,7 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
     const auto scenario = d["scenario"], robot = d["robot"], pool = d["pool"];
     s.id = scenario["id"].as<std::string>("scenario");
     s.robotId = robot["id"].as<std::string>("robot");
+    s.tasksId = d["tasks"]["id"].as<std::string>("tasks");
     s.ns = s.bridge["namespace"].as<std::string>("");
     s.baseId = robot["reference_frame"].as<std::string>("base_link");
     for (const auto &item : s.bridge["frame_names"])

@@ -1,5 +1,5 @@
 # Host configuration of nereus-viewer for the Talos + UWRT stack.
-# Everything the bridge does not describe in the scenario document lives here: window branding,
+# Everything the bridge does not describe in the scenario document lives here: window size,
 # camera card names, focus presets, landmark map, viewer-only robot visuals, topic names of the
 # visual-state streams, and the fallback task `ui` block (used until the task pack carries one).
 
@@ -7,10 +7,6 @@
 scenario_topic: /talos/simulator/scenario
 
 window: {width: 1480, height: 940}
-branding:
-  window_title: "Riptide | RoboSub Pool"
-  header: RIPTIDE
-  subtitle: ROBOSUB SIMULATION
 
 # Sibling documents (relative to this file).
 panels_config: talos_uwrt_panels.yaml

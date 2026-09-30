@@ -13,6 +13,7 @@
 #include <GLFW/glfw3.h>
 #include <algorithm>
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <cctype>
 #include <cmath>
 #include <deque>
 #include <fstream>
@@ -30,6 +31,21 @@ namespace fs = std::filesystem;
 namespace panels = nereus::ros_viewer::panels;
 
 const ImVec4 cyan(.32f, .86f, .82f, 1), muted(.47f, .57f, .64f, 1), white(.87f, .92f, .95f, 1);
+
+// "Talos · Robosub 2026" from the robot and task-pack ids (underscores become spaces, words capitalized).
+std::string scenarioLabel(const Scenario &scenario) {
+    std::string label = scenario.robotId + " \u00b7 " + scenario.tasksId;
+    bool word = true;
+    for (auto &c : label) {
+        if (c == '_')
+            c = ' ';
+        const bool letter = std::isalpha(static_cast<unsigned char>(c)) != 0;
+        if (letter && word)
+            c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        word = !letter && !std::isdigit(static_cast<unsigned char>(c));
+    }
+    return label;
+}
 ImU32 color(ImVec4 c) {
     return ImGui::ColorConvertFloat4ToU32(c);
 }
@@ -375,9 +391,9 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     ros_->setHonorDeleteAll(!opt_.keepDetections && lookup(config_, {"detections", "honor_delete_all"}).as<bool>(true));
     const int width = lookup(config_, {"window", "width"}).as<int>(1480),
               height = lookup(config_, {"window", "height"}).as<int>(940);
-    window_ = std::make_unique<Window>(
-        width, height, lookup(config_, {"branding", "window_title"}).as<std::string>("Robotics Pool Viewer"),
-        opt_.hidden, opt_.vsync);
+    window_ =
+        std::make_unique<Window>(width, height, lookup(config_, {"branding", "window_title"}).as<std::string>("Nereus"),
+                                 opt_.hidden, opt_.vsync);
     fs::path shaders = opt_.shaders;
 #ifdef NEREUS_RENDERING_SHADERS
     if (shaders.empty())
@@ -618,7 +634,7 @@ void App::loadScenario(const std::string &json) {
         if (scenario_->landmarks.count(name.as<std::string>()))
             demoNames_.push_back(name.as<std::string>());
     window_->setTitle(
-        lookup(config_, {"branding", "window_title"}).as<std::string>(scenario_->robotId + " | " + scenario_->poolId));
+        lookup(config_, {"branding", "window_title"}).as<std::string>("Nereus | " + scenarioLabel(*scenario_)));
     if (demoMode_) {
         const auto p = lookup(config_, {"preview", "pose"});
         body_ = p ? pose(vec3(p), {0, 0, p[5].as<float>(0)}) : pose({3, -2, -.75f}, {0, 0, -.14f});
@@ -1670,15 +1686,16 @@ void App::drawInterface(double time, float dt) {
     const float W = io.DisplaySize.x, H = io.DisplaySize.y;
     ImGui::SetNextWindowPos({0, 0});
     ImGui::SetNextWindowSize({W, H});
-    ImGui::Begin("Riptide", nullptr,
+    ImGui::Begin("Nereus", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar |
                      ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::SetScrollY(0);
-    const std::string headerTitle =
-        lookup(config_, {"branding", "header"}).as<std::string>(scenario_ ? scenario_->robotId : "");
-    const std::string headerSubtitle =
-        lookup(config_, {"branding", "subtitle"}).as<std::string>(scenario_ ? scenario_->id : "");
+    const std::string headerTitle = lookup(config_, {"branding", "header"}).as<std::string>("NEREUS");
+    std::string headerSubtitle = scenario_ ? scenarioLabel(*scenario_) : "";
+    std::transform(headerSubtitle.begin(), headerSubtitle.end(), headerSubtitle.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+    headerSubtitle = lookup(config_, {"branding", "subtitle"}).as<std::string>(headerSubtitle);
     ImGui::PushFont(window_->title);
     ImGui::TextUnformatted(headerTitle.c_str());
     ImGui::PopFont();

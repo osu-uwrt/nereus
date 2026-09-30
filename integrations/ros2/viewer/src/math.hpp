@@ -21,12 +21,14 @@ inline glm::mat4 pose(const glm::vec3 &p, const glm::vec3 &rpy = {}) {
 inline glm::mat4 poseQuat(const glm::vec3 &p, const glm::quat &q) {
     return glm::translate(glm::mat4(1), p) * glm::mat4_cast(glm::normalize(q));
 }
-// Non-throwing lookup through nested maps: a default (undefined-valued) node when any level is missing.
+// Non-throwing lookup through nested maps: an undefined node when any level is missing, so
+// `as<T>(fallback)` returns the fallback and the node tests false. (YAML::Node() is a defined null,
+// which as<std::string> turns into "null".)
 inline YAML::Node lookup(const YAML::Node &node, std::initializer_list<const char *> keys) {
     YAML::Node current = node;
     for (const char *key : keys) {
         if (!current.IsDefined() || !current.IsMap())
-            return YAML::Node();
+            return YAML::Node(YAML::NodeType::Undefined);
         YAML::Node next;
         for (const auto &entry : current)
             if (entry.first.Scalar() == key) {
@@ -34,7 +36,7 @@ inline YAML::Node lookup(const YAML::Node &node, std::initializer_list<const cha
                 break;
             }
         if (!next.IsDefined() || next.IsNull())
-            return YAML::Node();
+            return YAML::Node(YAML::NodeType::Undefined);
         current.reset(next);
     }
     return current;

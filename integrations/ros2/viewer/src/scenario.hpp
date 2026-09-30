@@ -55,7 +55,7 @@ struct Scenario {
     FrameGraph frames;
     glm::mat4 poolToWorld{1}, worldToPool{1};
     float poolLength = 50, poolWidth = 22.86f, poolDepth = 2.1336f, deckHeight = .305f, waterLevel = 0;
-    std::string poolId;
+    std::string poolId, tasksId;
     rendering::Appearance appearance;
     std::vector<SensorCamera> cameras;
     std::vector<RobotVisual> robotVisuals;
