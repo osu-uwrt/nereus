@@ -1,27 +1,25 @@
-# Pool pack for native navigation and offscreen-camera water/lighting appearance.
-# Pool-local frame: origin at the floor-plan corner on the water surface, +X along length,
-# +Y along width, +Z up; water surface z = water_level_m. No robot, task or course layout here:
-# the scenario places this pool in its world frame (original map_origin_pool).
-# Current vectors keep world axes after placement (native world_placement semantics).
+# RoboSub 2026 competition pool.
+# Pool frame: origin at a floor-plan corner on the water surface, +X along the length,
+# +Y along the width, +Z up. The scenario places the pool in the world.
+# Current vectors are in world axes.
 kind: pool
 id: robosub_2026
-description: Finite competition pool used by the original 2026 course (original id competition_pool).
-# Floor/wall/deck/lane appearance is generated geometry in the original renderer; no files.
+description: RoboSub 2026 competition pool.
 
 type: rectangular_pool
 parameters:
   length_m: 50.0
   width_m: 22.86
   depth_m: 2.1336
-  deck_height_m: 0.305288888      # above water; wall box height = depth + deck + 1 = 3.438888888
+  deck_height_m: 0.305288888   # above water
   water_level_m: 0.0
   water_density_kg_m3: 998.2
-  surface_pressure_pa: 101325     # platform default, not an original pressure-sensor model
+  surface_pressure_pa: 101325
   current_m_s: [0.0, 0.0, 0.0]
   current_oscillation_amplitude_m_s: [0.0, 0.0, 0.0]
   current_oscillation_frequency_hz: 0.1
 
-# Static contact boxes in pool-local coordinates (same as native competition_pool.yaml).
+# Static contact boxes in pool coordinates.
 collision_boxes:
 - {id: floor, size_m: [50.0, 22.86, 1], center_m: [25.0, 11.43, -2.6336], orientation_wxyz: [1, 0, 0, 0]}
 - {id: west_wall, size_m: [1, 24.86, 3.438888888], center_m: [-0.5, 11.43, -0.9141555559999999], orientation_wxyz: [1, 0, 0, 0]}
@@ -29,8 +27,7 @@ collision_boxes:
 - {id: south_wall, size_m: [50.0, 1, 3.438888888], center_m: [25.0, -0.5, -0.9141555559999999], orientation_wxyz: [1, 0, 0, 0]}
 - {id: north_wall, size_m: [50.0, 1, 3.438888888], center_m: [25.0, 23.36, -0.9141555559999999], orientation_wxyz: [1, 0, 0, 0]}
 
-# Sensor-affecting water appearance for offscreen cameras (step-3 exception). Not viewer UI.
-# cameras.yaml water.* values; tint is the Look default (renderer.hpp:70), not overridden by cameras.yaml.
+# Water colour and attenuation seen by the simulated cameras.
 water_optics:
   tint_rgb: [0.025, 0.22, 0.29]
   distance_scale: 1.88
@@ -39,10 +36,7 @@ water_optics:
   scattering: 0.458
   absorption_per_m_rgb: [0.648, 0.145, 0.025]
 
-# Sensor-affecting lighting for offscreen cameras; sensor images share this startup look (main.cpp:721).
-# profile: pool_viewer.launch.py:61 defaults lighting to outdoor and passes it as lighting.profile (:175);
-# zedfaker.launch.py does not override it, so the node default indoor (main.cpp:394) is not what ran.
-# Other values: main.cpp:398-402 parameter defaults, not overridden by cameras.yaml or the launch files.
+# Lighting seen by the simulated cameras.
 lighting:
   profile: outdoor
   direct_light: 1.0

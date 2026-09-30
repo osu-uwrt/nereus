@@ -1,17 +1,16 @@
-# Generic YAML ROS 2 bridge binding the Talos robot pack
-# to the unchanged UWRT stack. No user code. Field maps accept only {from}, {constant} or
-# {from, enum_map}; filters only field equality. Destination keys are ROS field paths on publish and
-# native argument names on subscribe; [i] indexes arrays. Native side: robot-pack ids and the native
-# reading fields of libraries/sensors/include/robotics/sensors/readings.hpp.
+# ROS 2 bridge between the Talos robot pack and the UWRT stack. Field maps accept only {from},
+# {constant} or {from, enum_map}; filters only field equality. Destination keys are ROS field paths
+# on publish and simulator argument names on subscribe; [i] indexes arrays. The simulator side uses
+# robot-pack ids and the reading fields in libraries/sensors/include/robotics/sensors/readings.hpp.
 kind: bridge
 id: uwrt_talos
 description: Talos <-> UWRT robot stack (controller, EKF, acoustics, perception, autonomy).
-requires_robot: talos      # data binding to robot-pack ids; no robot-name code switch
+requires_robot: talos   # binds to the robot pack's ids
 
-namespace: /talos          # relative names resolve here (controller topics are hardcoded /talos: T18)
-node_name: physics_simulator   # the original simulator node: /talos/physics_simulator hosts the real_time_factor parameter
+namespace: /talos   # relative names resolve here (the controller hardcodes /talos)
+node_name: physics_simulator   # hosts the real_time_factor parameter
 
-# Native frame id -> ROS frame name. Only frames used in headers/TF are listed.
+# Simulator frame id -> ROS frame name. Only frames used in headers/TF are listed.
 frame_names:
   world: map
   imu_mount: talos/imu_link
@@ -26,35 +25,34 @@ frame_names:
 
 clock:
   topic: /clock                          # rosgraph_msgs/msg/Clock
-  epoch: system_time_at_start            # original simNs starts at system time; avoids ROS time 0
-  rate_hz: 500                           # clock_publish_rate: every 2 ms physics step
-  reset_policy: preserve_ros_epoch_and_time   # ROS time never rewinds across resets (T12)
+  epoch: system_time_at_start   # starts at system time, so ROS time is never 0
+  rate_hz: 500   # every 2 ms physics step
+  reset_policy: preserve_ros_epoch_and_time   # ROS time never rewinds across resets
   real_time_factor: 1.0
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
 
 thrusters:
-  order: [VUS, VUP, HUS, HUP, HLS, HLP, VLS, VLP]   # talos.yaml thruster index 0..7 (controller wrench matrix)
+  order: [VUS, VUP, HUS, HUP, HLS, HLP, VLS, VLP]   # thruster index 0..7 of the controller's wrench matrix
   input_scales: [1, 1, 1, 1, 1, 1, 1, 1]
-  reject: [wrong_length, nonfinite]                 # whole message ignored (forceCallback)
+  reject: [wrong_length, nonfinite]   # the whole message is ignored
 
 tf:
   publish:
-  - {parent: map, child: simulator/talos/base_link, native: 'state:robot.reference_pose', rate_hz: 100}   # truth, STATE_PUB_TIME
-  # Navigation owns the camera links. The old camera faker supplied their optical
-  # joints when the ZED wrapper was absent; poses now come from robot-pack frames.
+  - {parent: map, child: simulator/talos/base_link, native: 'state:robot.reference_pose', rate_hz: 100}   # truth
+  # The navigation stack owns the camera links; the bridge adds their optical frames.
   static:
   - {parent: talos/ffc_camera_link, child: talos/ffc_left_camera_optical_frame, from_frame: ffc_mount, to_frame: ffc_left_optical}
   - {parent: talos/ffc_left_camera_optical_frame, child: talos/ffc_right_camera_optical_frame, from_frame: ffc_left_optical, to_frame: ffc_right_optical}
   - {parent: talos/dfc_camera_link, child: talos/dfc_left_camera_optical_frame, from_frame: dfc_mount, to_frame: dfc_left_optical}
   - {parent: talos/dfc_left_camera_optical_frame, child: talos/dfc_right_camera_optical_frame, from_frame: dfc_left_optical, to_frame: dfc_right_optical}
-  # Simulator-truth tree under the published truth base (original physics_simulator/pool_viewer
-  # simulator/talos/* frames); mirrors the robot pack so tools can compare truth with the estimate.
+  # Simulator-truth tree under the published truth base; mirrors the robot pack so tools can
+  # compare truth with the estimate.
   - {parent: simulator/talos/base_link, child: simulator/talos/origin, from_frame: base_link, to_frame: cad, truth: true}
   - {parent: simulator/talos/base_link, child: simulator/talos/ffc_camera_link, from_frame: base_link, to_frame: ffc_mount, truth: true}
   - {parent: simulator/talos/ffc_camera_link, child: simulator/talos/ffc_left_camera_optical_frame, from_frame: ffc_mount, to_frame: ffc_left_optical, truth: true}
   - {parent: simulator/talos/base_link, child: simulator/talos/dfc_camera_link, from_frame: base_link, to_frame: dfc_mount, truth: true}
   - {parent: simulator/talos/dfc_camera_link, child: simulator/talos/dfc_left_camera_optical_frame, from_frame: dfc_mount, to_frame: dfc_left_optical, truth: true}
-  # Transforms the bridge only reads live. Owners are external; the bridge never republishes them.
+  # Transforms the bridge only reads; their owners are external and the bridge never republishes them.
   lookup:
   - {parent: world, child: map}    # riptide_mapping2 world_to_map (identity start; XY/yaw free)
   - {parent: world, child: odom}   # riptide_hardware2 navigation.launch.py static world->odom
@@ -68,12 +66,12 @@ kill:
 reset:
   robot_service: reset_sim_to_start      # plant to start pose; tasks untouched
   tasks_service: reset_tasks             # tasks + reload + disarm
-  full_service: reset_scenario           # whole scenario; no original equivalent
+  full_service: reset_scenario   # whole scenario
 
 placement:
   set_service: set_sim_pose
   sync_service: sync_sim_to_estimate
-  estimator_alignment:                   # physics_simulator.cpp alignEkf; never during a run
+  estimator_alignment:   # never during a run
     client: /talos/set_pose
     service_type: robot_localization/srv/SetPose
     triggers: [startup, placement, reset_to_start, full_reset]
@@ -117,9 +115,9 @@ streams:
     orientation_x: {from: pose.pose.orientation.x}
     orientation_y: {from: pose.pose.orientation.y}
     orientation_z: {from: pose.pose.orientation.z}
-# Topic-form actuator commands (firmware interface). riptide_hardware2's
+# Topic-form actuator commands (the firmware interface). riptide_hardware2's
 # actuator_service_translator (launched with autonomy) forwards the services here and
-# waits for state/actuator/cmd_status; the original simulator accepted both forms.
+# waits for state/actuator/cmd_status.
 - id: torpedo_topic
   direction: subscribe
   topic: command/actuator/torpedo
@@ -170,7 +168,6 @@ streams:
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
   fields: {open: {from: data}}
   reply_stream: actuator_cmd_status
-# ---------------- simulator -> ROS: EKF inputs (talos_ekf.yaml) ----------------
 - id: claw_timed_move
   direction: subscribe
   topic: command/actuator/claw_move_s    # RepairCompTree PublishFloat32
@@ -182,6 +179,7 @@ streams:
   fields: {signed_duration_s: {from: data}}   # sign/zero semantics owned by the claw type
   reply_stream: actuator_cmd_status
 
+# ---------------- simulator -> ROS: navigation sensors (EKF inputs) ----------------
 - id: imu
   direction: publish
   topic: vectornav/imu
@@ -246,7 +244,7 @@ streams:
   direction: publish
   topic: state/kill                      # DoTask + WaitForKillSwitch
   message_type: std_msgs/msg/Bool
-  native: 'event:robot.kill_changed'     # once per accepted software_kill message (original)
+  native: 'event:robot.kill_changed'   # once per accepted software_kill message
   frame_id: ''
   rate_hz: 0
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
@@ -281,19 +279,18 @@ streams:
     esc_telemetry[1].thruster_ready: {constant: true}
     esc_telemetry[2].thruster_ready: {constant: true}
     esc_telemetry[3].thruster_ready: {constant: true}
-# ---------------- simulator -> ROS: cameras (step 3; yolo_orientation.py inputs) ----------------
 - id: actuator_status
   direction: publish
   topic: state/actuator/status
   message_type: riptide_msgs2/msg/ActuatorStatus
   native: 'state:mechanisms'
   frame_id: ''
-  rate_hz: 50                            # original 0.02 s timer
+  rate_hz: 50
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
   fields:
     actuators_armed: {from: armed}
     claw_state: {from: claw.state, enum_map: {disarmed: 1, opening: 6, closing: 7, opened: 3, closed: 4}}
-    rack_state: {constant: 2}            # RACK_UNKNOWN, original constant
+    rack_state: {constant: 2}   # RACK_UNKNOWN
     torpedo_state: {from: torpedo_launcher.state, enum_map: {disarmed: 1, busy: 4, loaded: 3, empty: 5}}
     torpedo_available_count: {from: torpedo_launcher.available}
     dropper_state: {from: dropper.state, enum_map: {disarmed: 1, busy: 3, loaded: 2, empty: 4}}
@@ -317,6 +314,7 @@ streams:
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
   fields: {data: {from: accepted}}
 
+# ---------------- simulator -> ROS: cameras ----------------
 - id: ffc_rgb_compressed
   direction: publish
   topic: ffc/zed_node/rgb/image_rect_color/compressed
@@ -325,7 +323,7 @@ streams:
   frame_id: talos/ffc_left_camera_optical_frame
   rate_hz: 15
   qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
-  # O5 (camera_faker main.cpp:1102-1155, camera_processor.cpp:15): format 'rgb8; jpeg compressed bgr8', quality 93
+  # rgb8 frames, published JPEG-compressed as bgr8 at quality 93
   image: {compression: jpeg, quality: 93, source_encoding: rgb8, compressed_encoding: bgr8}
   fields: {header.stamp: {from: sample.time}}
 - id: ffc_camera_info
@@ -336,8 +334,7 @@ streams:
   frame_id: talos/ffc_left_camera_optical_frame
   rate_hz: 15
   qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
-  # Rectified output (O5): zero distortion, identity R, P = [fx,0,cx,0, 0,fy,cy,0, 0,0,1,0].
-  # Raw charuco distortion in the robot pack is calibration metadata and is never published here.
+  # Rectified output: zero distortion, identity R, P = [fx,0,cx,0, 0,fy,cy,0, 0,0,1,0].
   fields:
     header.stamp: {from: sample.time}
     width: {from: info.width}
@@ -355,7 +352,7 @@ streams:
   frame_id: talos/ffc_left_camera_optical_frame
   rate_hz: 15
   qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
-  image: {encoding: 32FC1}               # metres, NaN invalid (O5 resolved)
+  image: {encoding: 32FC1}   # metres, NaN where invalid
   fields: {header.stamp: {from: sample.time}}
 - id: ffc_point_cloud
   direction: publish
@@ -363,9 +360,9 @@ streams:
   message_type: sensor_msgs/msg/PointCloud2
   native: 'sensor:ffc.point_cloud'
   frame_id: talos/ffc_left_camera_optical_frame
-  rate_hz: 5                             # every 3rd 15 Hz capture (original camera_faker point_cloud.rate 5)
+  rate_hz: 5   # every 3rd 15 Hz capture
   qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
-  # Original point_cloud.stride 8: organized PointXYZRGB grid (point_step 32), NaN where depth is invalid.
+  # Organized PointXYZRGB grid (stride 8, point_step 32), NaN where depth is invalid.
   point_cloud: {stride: 8}
   fields: {header.stamp: {from: sample.time}}
 - id: dfc_rgb_compressed
@@ -413,9 +410,9 @@ streams:
   message_type: sensor_msgs/msg/PointCloud2
   native: 'sensor:dfc.point_cloud'
   frame_id: talos/dfc_left_camera_optical_frame
-  rate_hz: 5                             # every 3rd 15 Hz capture (original camera_faker point_cloud.rate 5)
+  rate_hz: 5   # every 3rd 15 Hz capture
   qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
-  # Original point_cloud.stride 8: organized PointXYZRGB grid (point_step 32), NaN where depth is invalid.
+  # Organized PointXYZRGB grid (stride 8, point_step 32), NaN where depth is invalid.
   point_cloud: {stride: 8}
   fields: {header.stamp: {from: sample.time}}
 - id: ground_truth
@@ -434,10 +431,10 @@ streams:
     pose.pose.orientation.x: {from: 'reference_pose.orientation_wxyz[1]'}
     pose.pose.orientation.y: {from: 'reference_pose.orientation_wxyz[2]'}
     pose.pose.orientation.z: {from: 'reference_pose.orientation_wxyz[3]'}
-    twist.twist.linear: {from: reference_body_velocity}     # body axes incl. w x r (original)
+    twist.twist.linear: {from: reference_body_velocity}   # body axes, including w x r
     twist.twist.angular: {from: body_angular_velocity}
 
-# ---------------- viewer/operator interfaces of the original simulator (pool_viewer, viewer_panels) ----------------
+# ---------------- viewer and operator interface ----------------
 # Run control. simulator/run_command: {"action": start|stop|adjustment, ...run options | points}; the
 # std_msgs/Empty topic simulator/reset_tasks is the same reset as the Trigger service of that name.
 - id: run_command
@@ -465,7 +462,7 @@ streams:
   native: 'state:run'
   format: json
   frame_id: ''
-  rate_hz: 50                           # original 0.02 s publish timer
+  rate_hz: 50
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
   fields: {}
 - id: task_score
@@ -496,7 +493,7 @@ streams:
   message_type: std_msgs/msg/Float32MultiArray
   native: 'state:thrusters'
   frame_id: ''
-  rate_hz: 100                          # STATE_PUB_TIME
+  rate_hz: 100
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
   fields: {data: {from: forces_n}}
 - id: claw_joints
@@ -609,7 +606,7 @@ services:
   request: {}
   response: {success: {from: accepted}, message: {from: message}}
 - id: reload
-  service: command/actuator/notify_reload   # ReloadActuators; original also disarms
+  service: command/actuator/notify_reload   # ReloadActuators; also disarms
   service_type: std_srvs/srv/Trigger
   action: 'command:mechanisms.reload_all'
   request: {}
@@ -627,10 +624,10 @@ services:
   request: {}
   response: {success: {from: accepted}, message: {from: message}}
 - id: reset_scenario
-  service: simulator/reset_scenario      # new name; the original had no full-reset service
+  service: simulator/reset_scenario
   service_type: std_srvs/srv/Trigger
   action: 'command:scenario.reset'       # plant, sensors, mechanisms, contacts, tasks, scores
   request: {}
   response: {success: {from: accepted}, message: {from: message}}
 
-converters: []   # none required; every candidate is evaluated in exceptions.yaml
+converters: []

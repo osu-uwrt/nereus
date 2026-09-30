@@ -1,13 +1,11 @@
-# Task include file (kind task): NewTableTree object sorting. Task-local frame = original mapping
-# `table` (table top plane, +Z up); the scenario places it. Physics: prop_world.py (PyBullet CPU
-# rigid bodies, opposing-jaw finite-force grasp) per claw_world.py; source config:
-# talos_tasks.yaml claw.props / table_collision and mapping.yaml table children.
-# Events emitted by the prop world (task id table); scoring is stateful and stays with the pack hook.
+# Table: sort the objects into the baskets with the claw.
+# Task frame: the table top, +Z up. Props are rigid bodies grasped between the claw's jaws; the
+# prop world emits the events and the hook scores them.
 kind: task
 id: table
 description: Table with four grabbable props and two baskets (helmet, warning); grasp, carry and drop.
 
-# Original mapping frames (parent table_frame, yaw in source degrees). Basket frames are mesh origins.
+# Basket frames are their mesh origins.
 frames:
 - {id: helmet_basket, position_m: [0.40168, 0, 0.021457], orientation_wxyz: [1, 0, 0, 0]}
 - {id: warning_basket, position_m: [-0.40168, 0, 0.021457], orientation_wxyz: [1, 0, 0, 0]}
@@ -20,11 +18,11 @@ props:
 - id: table_structure
   type: static_body
   parameters:
-    # Solid backing shared by vehicle and prop worlds (talos_tasks.yaml table_collision); the
-    # triangle meshes supply legs, rims and basket walls.
+    # Solid table top shared by the robot and the props; the triangle meshes add the legs, rims and
+    # basket walls.
     collision_boxes:
     - {id: slab, size_m: [0.635, 0.635, 0.01905], center_m: [0, 0, -0.009525], orientation_wxyz: [1, 0, 0, 0]}
-    visuals:   # riptide_meshes table, table_basket_helmet, table_basket_warning (origins match the collision meshes)
+    visuals:   # table and basket meshes (origins match the collision meshes)
     - {asset: table_visual, frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
     - {asset: basket_helmet_visual, frame: helmet_basket, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
     - {asset: basket_warning_visual, frame: warning_basket, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
@@ -116,8 +114,8 @@ props:
     claw_mechanism_type: claw
 
 regions:
-# Basket containment (claw_world.py basket_destination): |local xy| + prop extent < [0.087, 0.130],
-# -0.001 < local z < 0.077 in the basket frame, and contact with the basket or a stacked prop inside.
+# A prop is in a basket when |local xy| + prop extent < [0.087, 0.130], -0.001 < local z < 0.077, and it
+# touches the basket or a prop already inside.
 - id: helmet_basket
   type: box
   parameters: {frame: helmet_basket, half_extents_xy_m: [0.087, 0.13], z_range_m: [-0.001, 0.077], support_mesh: helmet_basket}
@@ -139,5 +137,5 @@ events:
   type: drop_into
   parameters: {outcome: elsewhere, regions: [helmet_basket, warning_basket], surfaces: {floor: floor, support: table}, emits: [prop_id]}
 
-# Object-drop 200/object, basket 700 correct / 500 other, basket-count turns: pack hook.
+# Drop 200/object, basket 700 correct / 500 other, basket-count turns: scored by the hook.
 scoring: []

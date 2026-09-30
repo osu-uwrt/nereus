@@ -13,11 +13,11 @@ assets:
 - {id: rotor_HLP, path: assets/visual/rotors/HLP.glb}
 - {id: rotor_VLS, path: assets/visual/rotors/VLS.glb}
 - {id: rotor_VLP, path: assets/visual/rotors/VLP.glb}
-- {id: claw_static_mesh, path: assets/visual/claw/assembly_static.glb}   # DFC view? (O7)
+- {id: claw_static_mesh, path: assets/visual/claw/assembly_static.glb}
 - {id: claw_left_mesh, path: assets/visual/claw/assembly_left.glb}
 - {id: claw_right_mesh, path: assets/visual/claw/assembly_right.glb}
-- {id: claw_left_pad_mesh, path: assets/visual/claw/gripper.glb}   # left pad (renderer.cpp:491 loads clawAsset)
-- {id: claw_right_pad_mesh, path: assets/visual/claw/gripper_right.glb}   # right pad (renderer.cpp:492-493)
+- {id: claw_left_pad_mesh, path: assets/visual/claw/gripper.glb}   # left pad
+- {id: claw_right_pad_mesh, path: assets/visual/claw/gripper_right.glb}   # right pad
 - {id: launcher_mesh, path: assets/visual/payloads/launcher.glb}
 - {id: projectile_mesh, path: assets/visual/payloads/projectile.glb}
 - {id: claw_pad_left, path: assets/collision/claw_pad.obj}
@@ -50,10 +50,10 @@ body:
     buoyancy_radii_m: [0.175, 0.415, 0.275]
     command_timeout_s: 0.5   # thrusters coast to zero if no command within this window
 
-# Frame reported as "the vehicle pose" to tasks, bridge and placement (original truth/EKF use base_link).
+# Frame reported as the vehicle pose to tasks, the bridge and placement.
 reference_frame: base_link
 
-# Rigid frame tree rooted at the physics COM. CAD = original "farthest-port screw" origin.
+# Rigid frame tree rooted at the centre of mass. `cad` is the CAD model origin.
 frames:
   root: com
   transforms:
@@ -79,29 +79,20 @@ frames:
   - {parent: cad, child: hitch_mount, position_m: [0.0, 0.0, 0.0], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
   - {parent: cad, child: ffc_mount, position_m: [-0.0195, -0.0889, 0.02], orientation_wxyz: [0.9996750202077826, -0.004998416754581291, 0.024997083447914372, 0.00012498645879513106]}
   - {parent: cad, child: dfc_mount, position_m: [-0.24347, -0.065568, -0.15943], orientation_wxyz: [0.5199427952056352, 0.5095974583371051, 0.48959879164377196, -0.4798572114609425]}
-  # NEW (not in native pack). Claw pinch reference from talos_tasks.yaml claw.pose; it differs from
-  # claw_mount (talos.yaml claw.pose) by [-0.00544, 0.000362, -0.04524] m. See trap T6.
+  # Claw pinch point (claw meshes and grasping are placed here).
   - {parent: cad, child: claw_pinch, position_m: [0.1845620038521386, 0.034362, -0.4164364383477267], orientation_wxyz: [1, 0, 0, 0]}
-  # NEW. Hydrophones, talos.yaml acoustics.{port,starboard}.pose (rpy all zero).
+  # Hydrophones.
   - {parent: cad, child: hydrophone_port, position_m: [-0.305, 0.325, -0.075], orientation_wxyz: [1, 0, 0, 0]}
   - {parent: cad, child: hydrophone_starboard, position_m: [-0.315, -0.325, -0.075], orientation_wxyz: [1, 0, 0, 0]}
-  # NEW. Camera optical frames: original fixed rotation rpy(-pi/2, 0, -pi/2) under each camera link
-  # (physics_simulator.cpp publishState, camera_faker main.cpp). Right optical frame = left + rectified
-  # baseline along optical +X (ZED convention; open question O6); value equals sensors ffc/dfc baseline_m.
+  # Camera optical frames (z forward, x right, y down) under each camera mount. The right optical
+  # frame sits one rectified baseline along optical +X.
   - {parent: ffc_mount, child: ffc_left_optical, position_m: [0, 0, 0], orientation_wxyz: [0.5, -0.5, 0.5, -0.5]}
-  - {parent: ffc_left_optical, child: ffc_right_optical, position_m: [0.04975591649077412, 0, 0], orientation_wxyz: [1, 0, 0, 0]}   # = rectified baseline_m (ffc)
+  - {parent: ffc_left_optical, child: ffc_right_optical, position_m: [0.04975591649077412, 0, 0], orientation_wxyz: [1, 0, 0, 0]}   # rectified baseline (ffc)
   - {parent: dfc_mount, child: dfc_left_optical, position_m: [0, 0, 0], orientation_wxyz: [0.5, -0.5, 0.5, -0.5]}
-  - {parent: dfc_left_optical, child: dfc_right_optical, position_m: [0.05030758651145167, 0, 0], orientation_wxyz: [1, 0, 0, 0]}   # = rectified baseline_m (dfc)
+  - {parent: dfc_left_optical, child: dfc_right_optical, position_m: [0.05030758651145167, 0, 0], orientation_wxyz: [1, 0, 0, 0]}   # rectified baseline (dfc)
 
-# Offscreen-camera meshes at their initial (reset) configuration; no animation state here.
-#  - Body and rotors: camera_faker main.cpp:661-663 draws robot objects at body * modelOffset * robotMount, where
-#    modelOffset = baseToOrigin (camera.hpp:33-35, the `cad` frame) and a rotor's robotMount is its spin about its
-#    pivot (thruster_visuals.hpp:15-19), identity at angle 0. Vertices are authored in the CAD origin.
-#  - Claw: renderer.cpp:488-501 loads the five claw meshes at identity; renderer.cpp:652-663 clawPose draws
-#    mount * translate(0, +left | -right, 0), with mount = task claw.pose when present (main.cpp:493-494;
-#    talos_tasks.yaml claw.pose = frame claw_pinch). Jaw joints start at 0 (main.cpp:496, 869) and 0 is closed:
-#    claw_world.py q = 0 at reset, gap = min_gap (_reset_bodies, command: target 0 closes). So every claw mesh
-#    is at identity in claw_pinch. Carriers/pads opening travel belongs to the mechanism runtime.
+# Meshes drawn on the robot. Body and rotors are authored in the `cad` frame; claw meshes sit at the
+# pinch point with the jaws closed (the claw mechanism animates them).
 visuals:
 - {asset: body_mesh, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
 - {asset: rotor_VUS, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
@@ -117,19 +108,19 @@ visuals:
 - {asset: claw_right_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
 - {asset: claw_left_pad_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
 - {asset: claw_right_pad_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-# Magnet stick and disk tip: the mesh origin sits at magnet.tip_position_m (talos_tasks.yaml magnet_lights.robot_tip_offset).
+# Magnet stick; its mesh origin is the magnet tip.
 - {asset: robot_magnet_mesh, frame: magnet_mount, position_m: [0, 0, 0.05], orientation_wxyz: [1, 0, 0, 0]}
 
-# Effective original physics proxies (talos.urdf box origins are COM-relative).
+# Contact boxes (centres relative to the centre of mass).
 collision_boxes:
 - {id: hull_0, size_m: [0.35, 0.83, 0.55], center_m: [0.0, 0.0, 0.07], orientation_wxyz: [1, 0, 0, 0]}
-- {id: hull_1, size_m: [0.2, 0.05, 0.05], center_m: [0.23, -0.2, -0.1], orientation_wxyz: [1, 0, 0, 0]}   # "poker" proxy
+- {id: hull_1, size_m: [0.2, 0.05, 0.05], center_m: [0.23, -0.2, -0.1], orientation_wxyz: [1, 0, 0, 0]}   # poker
 
-# Ordered list; order is the native actuator index. Bridge maps ROS array order separately.
-# position_m/direction are COM-relative (native importer output).
+# Thruster order is the actuator index; the bridge maps ROS array order separately.
+# position_m and direction are relative to the centre of mass.
 thrusters:
 # All eight share: delay 0.1 s, rise 0.08 s, fall 0.06 s, slew 300 N/s, +/-28 N, deadband 0,
-# scales 1, efficiency 1, propeller radius 0.05 m (hydrodynamics.yaml thruster_dynamics).
+# scales 1, efficiency 1, propeller radius 0.05 m.
 - {id: VUS, type: lagged_force, position_m: [0.022999999999999993, -0.409, 0.29], direction: [1.0, 0.0, 0.0], parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
 - {id: VUP, type: lagged_force, position_m: [0.022999999999999993, 0.398, 0.29], direction: [1.0, 0.0, 0.0], parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
 - {id: HUS, type: lagged_force, position_m: [0.016999999999999987, -0.3, 0.189], direction: [-0.00014407603503774347, 0.7073882544949859, 0.7068251811053661], parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
@@ -139,25 +130,24 @@ thrusters:
 - {id: VLS, type: lagged_force, position_m: [0.022999999999999993, -0.412, -0.196], direction: [1.0, 0.0, 0.0], parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
 - {id: VLP, type: lagged_force, position_m: [0.022999999999999993, 0.4, -0.196], direction: [1.0, 0.0, 0.0], parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
 
-# Robot-level safety state. Original: physics_simulator.cpp enabled=false at startup; kill clears
-# thruster queues (stopThrusters) and task node disarms actuators (mechanisms.py kill()).
+# Start killed. Kill clears queued thruster commands and disarms the mechanisms.
 safety:
   initially_killed: true
-  kill_stops_thrusters: true          # queued commands cleared, realized force coasts down
-  commands_while_killed: zero_force   # original forceCallback queues a zero vector when disabled
+  kill_stops_thrusters: true   # queued commands cleared, realized force coasts down
+  commands_while_killed: zero_force   # thruster commands received while killed are zero
   kill_disarms_mechanisms: true
-  arming:                             # one shared armed flag (mechanisms.py)
+  arming:   # one armed flag shared by these mechanisms
     initially_armed: false
     arm_rejected_while_killed: true
     applies_to: [torpedo_launcher, dropper, claw]
 
-# Sensors inline the native model parameters (no external profile refs). period_ns on the 2 ms lattice.
+# Sensor periods land on the 2 ms physics step.
 sensors:
 - id: imu
   type: ahrs
   frame: imu_mount
   mount_frame: imu_mount
-  period_ns: 20000000        # 50 Hz, simulator.yaml sensor_properties.imu_rate
+  period_ns: 20000000   # 50 Hz
   latency_ns: 0
   parameters:
     inertial:
@@ -169,13 +159,13 @@ sensors:
         angular_variance: [0.01, 0.01, 0.01]
     attitude:
       angle_stddev_rad: 0.008726646259971648   # 0.5 deg random-axis scalar angle
-      heading_drift_rad_s: 0.0                 # sensors.yaml imu_yaw_drift 0 overrides talos.yaml 1.5 deg/min
+      heading_drift_rad_s: 0.0
       reported_variance: [5.0e-05, 1.0e-05, 0.01]
 - id: fog
   type: fog
   frame: fog_mount
   mount_frame: fog_mount
-  period_ns: 2000000         # 500 Hz gyro_rate
+  period_ns: 2000000   # 500 Hz
   latency_ns: 0
   parameters:
     axes: [[0, 0, 1]]
@@ -185,13 +175,13 @@ sensors:
   type: reference_velocity
   frame: dvl_mount
   mount_frame: dvl_mount
-  period_ns: 125000000       # 8 Hz; lattice rounds to 126/250/376 ms (native doc)
+  period_ns: 125000000   # 8 Hz; the 2 ms step rounds this to 126/250/376 ms
   latency_ns: 0
   parameters:
     reference_velocity_world_m_s: [0, 0, 0]
     velocity_noise: {white_stddev: [0.001, 0.001, 0.001]}
     reported_variance: [1.0e-06, 1.0e-06, 1.0e-06]
-    # dvl_max_tilt default 0 => never loses lock; no range product (original default).
+    # Never loses bottom lock; no range output.
 - id: depth
   type: reference_altitude
   frame: world
@@ -203,51 +193,36 @@ sensors:
     noise: {white_stddev: 0.01}
     reported_variance: 0.0001
 - id: ffc
-  type: stereo_camera          # Stage 3; offscreen renderer-owned acquisition
+  type: stereo_camera
   frame: ffc_left_optical
   mount_frame: ffc_mount
-  enabled: true                # offscreen acquisition, independent of viewer subscriptions
-  period_ns: 66666667          # grab_frame_rate 15 Hz (ffc_config.yaml); lattice rounds to 66/134 ms
+  enabled: true   # renders even when no viewer is subscribed
+  period_ns: 66666667   # 15 Hz
   latency_ns: 0
   parameters:
-    # Rectified stereo parameters (calibration tirpak_ffc_charuco_3.yaml, Size 1920x1200 == resolution_px, no scaling).
-    # Method: cv2.stereoRectify(K_LEFT, D_LEFT, K_RIGHT, D_RIGHT, Size, R, T, CALIB_ZERO_DISPARITY, alpha 0), as
-    # camera_faker camera.hpp:131 (call) and 145-148 (fx,fy,cx,cy = P[0,0],P[1,1],P[0,2],P[1,2]); OpenCV 4.10.0.
-    # P1 and P2 share fx,fy,cx,cy, so both intrinsics_* are the rectified values. Baseline = -P2[0,3]/P2[0,0]
-    # = 49.75591649077412 mm (calibration T is in mm, |T| = 49.7559 mm); talos.yaml nominal baseline was 0.050 m.
-    # Published CameraInfo uses these rectified values with zero distortion.
-    # Raw K_LEFT  = fx 1701.5228274850651, fy 1702.38974652801, cx 935.1500437132862, cy 579.3540600385955
-    # Raw K_RIGHT = fx 1698.3287694267367, fy 1699.664166238939, cx 944.3162080348961, cy 590.0641457266676
-    # Raw D_RIGHT = [0.2759779552328478, -0.008533485244699875, 0.0, 0.0, -0.868687260703704]
+    # Rectified stereo calibration (1920x1200): both eyes share the rectified intrinsics, and published
+    # CameraInfo uses them with zero distortion. baseline_m = -P2[0,3]/P2[0,0] from cv2.stereoRectify.
     baseline_m: 0.04975591649077412
-    right_frame: ffc_right_optical   # right-eye outputs are supported but not listed: the original published left only
-    resolution_px: [1920, 1200]      # HD1200 grab_resolution
+    right_frame: ffc_right_optical   # right-eye outputs are available; add them to `outputs` to publish
+    resolution_px: [1920, 1200]
     intrinsics_left: {fx: 1863.9341697853888, fy: 1863.9341697853888, cx: 955.8471374511719, cy: 584.7962646484375}
     intrinsics_right: {fx: 1863.9341697853888, fy: 1863.9341697853888, cx: 955.8471374511719, cy: 584.7962646484375}
     outputs: [rgb_left, depth_left, camera_info, point_cloud]
     depth:
       min_range_m: 0.15
-      max_range_m: 4.0         # ffc_config depth.max_depth and cameras.yaml depth_model.max_range
+      max_range_m: 4.0
       noise: {base_sigma_m: 0.002, range_coefficient: 0.0015, range_exponent: 2.0, bias_m: 0.0,
               dropout: 0.005, range_dropout: 0.10, edge_dropout: 0.20, outliers: 0.002,
-              correlation: 0.5, patch_size_px: 8}   # camera_faker/config/cameras.yaml depth_model
+              correlation: 0.5, patch_size_px: 8}
 - id: dfc
   type: stereo_camera
   frame: dfc_left_optical
   mount_frame: dfc_mount
-  enabled: true                # offscreen acquisition, independent of viewer subscriptions
-  period_ns: 66666667          # 15 Hz
+  enabled: true   # renders even when no viewer is subscribed
+  period_ns: 66666667   # 15 Hz
   latency_ns: 0
   parameters:
-    # Rectified stereo parameters (calibration dfc_charuco_test.yaml, Size 1920x1200 == resolution_px, no scaling).
-    # Method: cv2.stereoRectify(K_LEFT, D_LEFT, K_RIGHT, D_RIGHT, Size, R, T, CALIB_ZERO_DISPARITY, alpha 0), as
-    # camera_faker camera.hpp:131 (call) and 145-148 (fx,fy,cx,cy = P[0,0],P[1,1],P[0,2],P[1,2]); OpenCV 4.10.0.
-    # P1 and P2 share fx,fy,cx,cy, so both intrinsics_* are the rectified values. Baseline = -P2[0,3]/P2[0,0]
-    # = 50.30758651145167 mm (calibration T is in mm, |T| = 50.3076 mm); talos.yaml nominal baseline was 0.045 m.
-    # Published CameraInfo uses these rectified values with zero distortion.
-    # Raw K_LEFT  = fx 1708.5053974906311, fy 1678.9579416970594, cx 955.8252400838678, cy 616.5398589377248
-    # Raw K_RIGHT = fx 1714.2065310272428, fy 1680.0645526326848, cx 964.2105180096831, cy 594.2566643655323
-    # Raw D_RIGHT = [0.2358914896564815, -0.11300807135219121, -0.0010622670919948295, 0.00937432162663741, 0.0]
+    # Rectified stereo calibration (1920x1200), as for ffc.
     baseline_m: 0.05030758651145167
     right_frame: dfc_right_optical
     resolution_px: [1920, 1200]
@@ -256,24 +231,23 @@ sensors:
     outputs: [rgb_left, depth_left, camera_info, point_cloud]
     depth:
       min_range_m: 0.15
-      max_range_m: 4.0         # dfc_config has no max_depth; camera_faker shared depth_model max_range
+      max_range_m: 4.0
       noise: {base_sigma_m: 0.002, range_coefficient: 0.0015, range_exponent: 2.0, bias_m: 0.0,
               dropout: 0.005, range_dropout: 0.10, edge_dropout: 0.20, outliers: 0.002,
               correlation: 0.5, patch_size_px: 8}
 
-# Payload/claw physical parameters: talos_tasks.yaml (== robots/talos/config/equipment.yaml values).
+# Payloads, claw and magnet.
 mechanisms:
 - id: torpedo_launcher
   type: launcher
   frame: torpedoes_mount
   parameters:
-    # Slot pose in torpedoes_mount = T(0, -/+ baseline/2, 0) * slot_offset; baseline 0.0365125 m
-    # (talos.yaml torpedoes.baseline). Precomputed here; nose = slot +X. Fire order slot_0, slot_1.
+    # Slot poses in torpedoes_mount; the nose is slot +X. Fires slot_0 then slot_1.
     slots:
     - {id: slot_0, position_m: [0.01594921, -0.02560642, -0.0218555], orientation_wxyz: [1, 0, 0, 0]}
     - {id: slot_1, position_m: [0.01594921, 0.00939685, -0.0218555], orientation_wxyz: [1, 0, 0, 0]}
     projectile:
-      model: finned_rigid_body       # original advance_rotating (payload_model.py)
+      model: finned_rigid_body   # rotates under drag and buoyancy
       length_m: 0.08299993
       radius_m: 0.013
       mass_kg: 0.01222
@@ -286,22 +260,21 @@ mechanisms:
       center_of_drag_m: -0.025
       angular_damping_n_m_s: 0.01
       neutral_buoyancy: false
-      max_age_s: 30                  # task_simulator step(): timeout miss
-    launch: {spring_energy_j: 0.047}   # v = sqrt(2E/(m+added_mass)) + vehicle point velocity
+      max_age_s: 30   # removed (a miss) after this long
+    launch: {spring_energy_j: 0.047}   # launch speed = sqrt(2E / (mass + added mass)) + vehicle velocity
     cooldown_s: 0.5
-    cooldown_group: payload_release  # original single busy_until shared by torpedo AND dropper (T4)
+    cooldown_group: payload_release   # torpedoes and droppers share one cooldown
     capacity: 2
 - id: dropper
   type: dropper
   frame: droppers_mount
   parameters:
-    # Centers in droppers_mount; source rpy [0, pi/2, 0] = quaternion [cos(pi/4), 0, sin(pi/4), 0]
-    # points the nose (+X) down. No baseline term (T5).
+    # Slot poses in droppers_mount; rotated so the nose (+X) points down.
     slots:
     - {id: slot_0, position_m: [-0.04337956, -0.01560642, -0.12296563], orientation_wxyz: [0.7071067811865476, 0, 0.7071067811865476, 0]}
     - {id: slot_1, position_m: [-0.04337956, 0.01939685, -0.12296563], orientation_wxyz: [0.7071067811865476, 0, 0.7071067811865476, 0]}
     projectile:
-      model: fixed_axis_body         # original advance(): no COM/COB offsets => non-rotating integrator
+      model: fixed_axis_body   # keeps its orientation (no rotation)
       length_m: 0.08299993
       radius_m: 0.013
       mass_kg: 0.01488
@@ -322,24 +295,23 @@ mechanisms:
     min_gap_m: 0.0012
     max_gap_m: 0.14
     jaw_speed_m_s: 0.033             # per jaw
-    completion_tolerance_m: 0.002   # original claw status: per-jaw remaining travel
+    completion_tolerance_m: 0.002   # per-jaw remaining travel that counts as done
     hold_force_n: 12.0
     friction: 1.2
     contact_margin_m: 0.001
     grasp_dwell_s: 0.04
     slip_distance_m: 0.025
-    pads: {left: claw_pad_left, right: claw_pad_right}   # asset ids (convex contact representation)
-    timed_command: signed_duration   # >0 open for |d| s, <0 close for |d| s, 0 stop (mechanisms.py claw_timed)
-    initial_state: closed            # claw_world.py _reset_bodies: q=0, target=0 => gap = min_gap
-    # Original props/pads run in a private PyBullet world (claw_world.py); see trap T9.
+    pads: {left: claw_pad_left, right: claw_pad_right}   # asset ids of the convex pad contact shapes
+    timed_command: signed_duration   # >0 opens for |d| s, <0 closes for |d| s, 0 stops
+    initial_state: closed   # jaws at min_gap_m
 - id: magnet
   type: magnet
   frame: magnet_mount
   parameters:
-    tip_position_m: [0, 0, 0.05]     # talos_tasks.yaml magnet_lights.robot_tip_offset, in magnet_mount
+    tip_position_m: [0, 0, 0.05]   # in magnet_mount
     actuated: false                  # passive; proximity is judged by the task pack
 
-# Geometry the task pack uses for pass-through/breach/surface tests (task_simulator CourseJudge):
+# Points the tasks test for gate passes, breaching and surfacing:
 # all 8 corners of every collision box, plus the magnet tip point.
 scoring_envelope:
   collision_boxes: [hull_0, hull_1]

@@ -1,24 +1,21 @@
-# Task include file (kind task), referenced from tasks.yaml; scoring is not yet executed.
-# Task-local frame: board centre, +X out of the printed face toward the approach side, +Z up.
-# Geometry: torpedo.urdf (robot proxy) and talos_tasks.yaml torpedo panel/holes (projectile hits,
-# shared with the shader cutouts). Logic: payload_model.torpedo_contact.
+# Torpedo board.
+# Task frame: board centre, +X out of the printed face toward the approach side, +Z up.
 kind: task
 id: torpedo
 description: Perforated torpedo board with two fire and two blood openings.
 
-frames: []   # hole centres are panel data; mapping *_hole_* poses are robot priors only (T7)
+frames: []   # hole centres are panel data (holes below)
 
 props:
 - id: board
   type: static_body
   parameters:
-    # Robot contact proxy only. Projectiles never collide with this box (T8).
+    # Robot contact box only; projectiles never collide with it.
     collision_boxes:
     - {id: board_proxy, size_m: [0.05, 1.2, 1.2], center_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
     visuals:
     - {asset: torpedo_mesh, frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-    # Identical four circular cutouts in RGB and depth on the front face and the backing near
-    # local x = -0.004 m (VISUAL_CONTENT_CONVERSION.md); holes come from region panel. Step 3.
+    # The same four circular cutouts are cut through the board in the camera images.
     cutouts: {region: panel, faces_local_x_m: [0.0, -0.004]}
 
 regions:
@@ -30,7 +27,7 @@ regions:
     # Centre (y, z) = (uv - 0.5) * 2 * half_size; radius = radius_uv * 2 * half_size.
     # u -> +Y (right when viewed from +X), v -> +Z. Inner ring edges of Task4_ver1_Fixed.png.
     holes:
-    # class/size are explicit metadata for the hook (original inferred size from the id suffix).
+    # class and size are read by the scoring hook
     - {id: fire_large, class: fire, size: large, uv: [0.16142625, 0.58890478], radius_uv: 0.10469}
     - {id: fire_small, class: fire, size: small, uv: [0.51378955, 0.81221886], radius_uv: 0.08365}
     - {id: blood_large, class: blood, size: large, uv: [0.85499477, 0.14589262], radius_uv: 0.10469}
@@ -47,10 +44,10 @@ events:
   type: hit
   parameters: {region: panel, projectile_mechanism_type: launcher, outcome: blocked, stop_projectile: true,
                emits: [projectile_id, hit_point_local]}
-- id: board_contact                      # robot touches proxy; informational
+- id: board_contact   # informational
   type: contact
   parameters: {prop: board, with: robot}
 
-# Per-shot, distance, sequence and role/class scoring is stateful: owned by the pack hook, which
-# derives release distance from the runtime mechanism fired event (|local X of projectile tip|).
+# Per-shot, distance, sequence and role/class points: scored by the hook, which takes the release
+# distance from the launcher's fired event (|local X of the projectile tip|).
 scoring: []

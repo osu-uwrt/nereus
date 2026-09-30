@@ -1,15 +1,9 @@
-# Task pack = task include files + run rules + assets; runtime scoring is executed by nereus.task_runtime + hooks/rules_2026.py.
-# No course layout (scenario-owned) and no robot names (capabilities by mechanism type only).
+# RoboSub 2026 tasks: task files, assets, run options and scoring (hooks/rules_2026.py).
+# The scenario places the tasks; robot requirements are by mechanism type, never robot id.
 kind: tasks
 id: robosub_2026
 description: RoboSub 2026 course tasks and scoring (Survey & Repair / Search & Rescue roles).
-# Step-3 camera assets for defined tasks; copied byte-for-byte (cp) from riptide_gui riptide_meshes/meshes/.
-# Verified at copy time (2026-09-29): riptide_gui HEAD == 907c9ded53b0cd6fe7461d8d80c40a4fa9fbc4fc and
-# `git status --porcelain` clean for meshes/{gate,gate_repair,gate_rescue,torpedo}. Step-4 additions
-# (slalom, bin, bin_magnet, bin_vinyl, octagon_*) were copied the same way and verified at the same HEAD;
-# slalom/old.dae is not used by the original markers and is not copied. DAE texture <init_from>
-# basenames resolve next to each model.dae (gate has no textures). Import rules to keep:
-# Assimp Collada IGNORE_UP_DIRECTION=true, node hierarchy, white texture tint, pack-relative textures.
+# Task meshes and textures. DAE textures resolve next to each model.dae.
 assets:
 - {id: gate_mesh, path: assets/gate/model.dae}
 - {id: gate_repair_mesh, path: assets/gate_repair/model.dae}
@@ -18,7 +12,7 @@ assets:
 - {id: gate_rescue_texture, path: assets/gate_rescue/Task1_SearchRescue_Fixed.png}
 - {id: torpedo_mesh, path: assets/torpedo/model.dae}
 - {id: torpedo_texture, path: assets/torpedo/Task4_ver1_Fixed.png}
-# Step-4 table collision meshes (PyBullet CPU prop world); copied byte-for-byte with cp.
+# Table collision meshes (prop physics).
 - {id: table_mesh, path: assets/table/table.obj}
 - {id: basket_helmet_mesh, path: assets/table/table_basket_helmet.obj}
 - {id: basket_warning_mesh, path: assets/table/table_basket_warning.obj}
@@ -42,16 +36,15 @@ assets:
 - {id: octagon_sos_mesh, path: assets/octagon_sos/model.dae}
 - {id: octagon_sos_texture, path: assets/octagon_sos/Task5_Rescue_Fixed.png}
 
-# Table display meshes (viewer, cameras) from riptide_gui riptide_meshes/meshes/. DAE texture <init_from>
-# basenames resolve next to each model.dae. Origins match the .obj collision assets of the same name.
+# Table display meshes; origins match the .obj collision meshes of the same name.
 - {id: table_visual, path: assets/visual/table/model.dae}
 - {id: basket_helmet_visual_task5_redcross_fixed, path: assets/visual/table_basket_helmet/Task5_RedCross_Fixed.png}
 - {id: basket_helmet_visual, path: assets/visual/table_basket_helmet/model.dae}
 - {id: basket_warning_visual_task5_warning_fixed, path: assets/visual/table_basket_warning/Task5_Warning_Fixed.png}
 - {id: basket_warning_visual, path: assets/visual/table_basket_warning/model.dae}
 - {id: pill_visual_task5_pill_fixed, path: assets/visual/table_pill/Task5_Pill_Fixed.png}
-# pill/nut_and_bolt: the upstream exports assigned every triangle to the vinyl material, the body faces at UV (0,0)
-# (a transparent texel). Repaired copies: those 260 triangles moved to the file's own dark-plastic Material.006.
+# pill and nut_and_bolt: body faces use the dark-plastic Material.006 (the upstream export put them on
+# the vinyl material, which rendered transparent).
 - {id: pill_visual, path: assets/visual/table_pill/model.dae}
 - {id: bandage_visual_task5_bandaid_fixed, path: assets/visual/table_bandage/Task5_BandAid_Fixed.png}
 - {id: bandage_visual, path: assets/visual/table_bandage/model.dae}
@@ -60,8 +53,7 @@ assets:
 - {id: plug_visual_task5_electric_fixed, path: assets/visual/table_plug/Task5_Electric_Fixed.png}
 - {id: plug_visual, path: assets/visual/table_plug/model.dae}
 
-# Procedural course geometry of the original renderer (crate lattice/liner, octagon PVC + hangers) as GLB, plus the
-# magnet-light housing parts copied byte-for-byte (cp) from riptide_simulator camera_faker/models/magnet_lights/.
+# Generated course geometry (tools/generate_course_geometry.py) and the magnet-light housing parts.
 - {id: crate_lattice_mesh, path: assets/course/crate_lattice.glb}
 - {id: crate_liner_mesh, path: assets/course/crate_liner.glb}
 - {id: octagon_ring_mesh, path: assets/course/octagon_ring.glb}
@@ -69,16 +61,16 @@ assets:
 - {id: magnet_cover_mesh, path: assets/course/magnet_lights/cover.glb}
 - {id: magnet_leds_mesh, path: assets/course/magnet_lights/leds.glb}
 
-tasks: [gate.yaml, torpedo.yaml, table.yaml, slalom.yaml, bins.yaml, surface.yaml]   # pack-relative task include files (kind task)
+tasks: [gate.yaml, torpedo.yaml, table.yaml, slalom.yaml, bins.yaml, surface.yaml]   # task files (kind task)
 
-# Robot capabilities by mechanism TYPE (never robot id); checked at scenario resolution.
+# Mechanisms a robot needs for each task; checked when a scenario is resolved.
 requires:
 - {task: torpedo, mechanism_type: launcher, min_count: 1}
 - {task: bins, mechanism_type: dropper, min_count: 1}
 - {task: bins, mechanism_type: magnet, min_count: 1}
 - {task: table, mechanism_type: claw, min_count: 1}
 
-# Run options (competition.yaml ui.run_options defaults; pinger_select run command).
+# Run options and their defaults.
 run_options:
 - {key: role, type: choice, choices: [repair, rescue], default: repair}
 - {key: heading_coin, type: bool, default: true}
@@ -86,29 +78,28 @@ run_options:
 - {key: pinger_task, type: choice, choices: [none, deploy, restore], default: none}
 - {key: pinger_random, type: bool, default: false}
 
-# Exact 2026 stateful rules (RunScore + CourseJudge). Declaration only; body is step 4.
-# Pure function of (immutable run state, ordered events since last call) -> (score row changes,
-# new events). No runtime object, no stepping, no ROS. validate never imports it.
+# Scoring rules: a pure function of (run state, events since the last call) -> (score row changes,
+# new events). Validation never imports it.
 scoring_hooks:
-- module: hooks.rules_2026            # pack-relative hooks/rules_2026.py
+- module: hooks.rules_2026   # hooks/rules_2026.py
   function: evaluate
-  rules: robosub_2026                  # compiled C++ Rules name (the Python runtime uses module/function)
-  status_function: describe            # extra run-score fields (role, gate_passed, basket_count, ...)
-  feed_function: feed                  # operator event feed (old simulator/task_events kinds and results)
+  rules: robosub_2026   # compiled C++ rules name (the Python runtime uses module/function)
+  status_function: describe   # extra run-status fields (role, gate_passed, basket_count, ...)
+  feed_function: feed   # operator event feed
   parameters:
     roles:
       repair: {target_class: fire, facing_icons: [compass, hammer_and_wrench]}
       rescue: {target_class: blood, facing_icons: [buoy, sos]}
-    award_policy: max_per_row              # RunScore.award: a row only increases
-    eligibility: gate_passed_and_not_ended # except the gate row and shot registration
+    award_policy: max_per_row   # a row's score only increases
+    eligibility: gate_passed_and_not_ended   # every row but the gate needs the gate passed first
     gate:
-      role_reference_frame: gate_repair    # repair iff crossing y has the sign of this frame's y
+      role_reference_frame: gate_repair   # repair iff the crossing is on this frame's side
       style: {quarter_rad: 1.5707963267948966, epsilon_rad: 1.0e-6, max_quarters: 8, roll_pitch_first: true}
     torpedo:
-      good_results: [success, wrong_target]  # both count for per-shot points
-      sequence_order: [large, small]         # launch order, both correct class
+      good_results: [success, wrong_target]   # both count for per-shot points
+      sequence_order: [large, small]   # launch order, both at the correct class
       release_distance: {task: torpedo, measure: abs_local_x_of_projectile_tip}
-    points:   # config/scoring.yaml, verbatim
+    points:   # RoboSub 2026 points
       pinger_first: 500
       pinger_second: 1500
       gate: 100
@@ -142,17 +133,17 @@ scoring_hooks:
       style_rp: 200
       style_yaw: 100
       max_style_quarters: 8
-    feed:                                  # simulator/task_events vocabulary of the original task node
+    feed:   # event kinds of the simulator/task_events feed
       kinds: {launcher: torpedo, dropper: dropper, claw: claw}
       magnet_kind: magnet
       basket_names: {helmet_basket: helmet, warning_basket: warning}
     slalom: {rows: [slalom_front, slalom_middle, slalom_back]}   # region ids double as score rows
-    bins: {mechanism_type: dropper}       # only dropper landings inside a crate score (T15)
-    table: {baskets: [helmet_basket, warning_basket]}   # box region ids   # prop-world events, see the hook header
-    # The simulator tolerances (breach margin, surface/facing/turn dwells and tolerances) are geometry
-    # timing owned by the surface/turn_zone regions of surface.yaml; the hook only sees their events.
+    bins: {mechanism_type: dropper}   # only dropper landings inside a crate score
+    table: {baskets: [helmet_basket, warning_basket]}   # box region ids
+    # Breach margin and surface/facing/turn dwells belong to the surface regions in surface.yaml;
+    # the hook only sees their events.
 
-# Scorecard rows in the fixed order and with the labels of the original RunScore (scoring.py LABELS).
+# Scorecard rows, in order.
 score_rows:
 - {key: gate, label: Gate passage / heading / role / style}
 - {key: slalom_front, label: Slalom row 1}
@@ -173,7 +164,7 @@ score_rows:
 - {key: pinger_first, label: "Random pinger: first task"}
 - {key: pinger_second, label: "Random pinger: second task"}
 
-# Payload/claw outcome counters published as simulator/task_score (original key set).
+# Payload/claw outcome counters published on simulator/task_score.
 outcome_counters: [success, wrong_target, blocked, miss]
 
 run_messages:
@@ -182,8 +173,7 @@ run_messages:
   adjustment: Manual adjustment updated
   reset: Tasks and run reset
 
-# Operator/viewer presentation: verbatim `ui` of riptide_simulator c_simulator/tasks/2026/competition.yaml
-# (plus the empty `actions` list the original viewer schema supports).
+# Operator scorecard in the viewer.
 ui:
   title: RoboSub 2026 scorecard
   run_options:
