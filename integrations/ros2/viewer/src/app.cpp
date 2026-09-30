@@ -1269,10 +1269,21 @@ void App::drawCourseMap(float width, float height, bool interactive) {
     d->AddRectFilled(a, {a.x + width, a.y + height}, IM_COL32(9, 24, 32, 255), 5);
     d->PushClipRect(a, {a.x + width, a.y + height}, true);
     d->AddRectFilled(poolXY({0, poolWidth}), poolXY({length, 0}), IM_COL32(13, 40, 50, 255));
-    for (int i = 0; i <= length; i += 5)
-        d->AddLine(poolXY({float(i), 0}), poolXY({float(i), poolWidth}), IM_COL32(35, 64, 74, 255));
-    for (int i = 0; i <= poolWidth; i += 5)
-        d->AddLine(poolXY({0, float(i)}), poolXY({length, float(i)}), IM_COL32(35, 64, 74, 255));
+    // The pool's floor markings when it declares any, else a 5 m grid for scale.
+    bool marked = false;
+    if (model_)
+        for (const auto &stripe : model_->pack().poolStripes())
+            if (stripe.side == rendering::PoolSide::Floor) {
+                d->AddLine(poolXY({stripe.from.x(), stripe.from.y()}), poolXY({stripe.to.x(), stripe.to.y()}),
+                           IM_COL32(48, 88, 100, 255), std::max(1.f, stripe.width * scale));
+                marked = true;
+            }
+    if (!marked) {
+        for (int i = 0; i <= length; i += 5)
+            d->AddLine(poolXY({float(i), 0}), poolXY({float(i), poolWidth}), IM_COL32(35, 64, 74, 255));
+        for (int i = 0; i <= poolWidth; i += 5)
+            d->AddLine(poolXY({0, float(i)}), poolXY({length, float(i)}), IM_COL32(35, 64, 74, 255));
+    }
     d->AddRect(poolXY({0, poolWidth}), poolXY({length, 0}), IM_COL32(94, 154, 166, 255), 0, 0, 2);
     for (std::size_t i = 1; i < trail_.size(); ++i)
         d->AddLine(xy(trail_[i - 1]), xy(trail_[i]), IM_COL32(53, 134, 143, 200), 1.5f);

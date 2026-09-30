@@ -292,6 +292,60 @@ class TaskRejectionTests(PackRejectionCase):
         self.assert_resolve_rejects("from_side and to_side must differ")
 
 
+class PoolMarkingTests(PackRejectionCase):
+    """The fixture pool is 10 m x 5 m x 3 m deep with a 0.3 m deck."""
+
+    COLLISION = "collision_boxes:\n"
+
+    def add_markings(self, markings: str) -> None:
+        self.edit("pool/pool.yaml", self.COLLISION, f"markings:\n{markings}{self.COLLISION}")
+
+    def test_irregular_lines_grid_and_finish_load(self) -> None:
+        self.add_markings(
+            "  width_m: 0.2\n"
+            "  lane_grid: {along_x: {count: 2, spacing_m: 1.5, first_m: 0.5}, inset_m: 1, ends: t}\n"
+            "  lines:\n"
+            "  - {from: [1, 1], to: [9, 4], ends: [t, none], color_rgb: [1, 0, 0]}\n"
+            "  wall_lines:\n"
+            "  - {wall: y_max, from: [2, -3], to: [2, 0.3]}\n"
+        )
+        self.edit(
+            "pool/pool.yaml",
+            self.COLLISION,
+            "surface: {tile_size_m: 0, waterline_band_m: [0, 0]}\n" + self.COLLISION,
+        )
+        load_pack(self.root / "pool")
+        resolve_scenario(self.scenario)
+
+    def test_floor_line_outside_the_pool(self) -> None:
+        self.add_markings("  lines: [{from: [1, 1], to: [11, 1]}]\n")
+        self.assert_load_rejects("pool", "/markings/lines/0/to: x 11 m is outside 0..10 m")
+
+    def test_zero_length_line(self) -> None:
+        self.add_markings("  lines: [{from: [1, 1], to: [1, 1]}]\n")
+        self.assert_load_rejects("pool", "/markings/lines/0: from and to must differ")
+
+    def test_wall_line_above_the_deck(self) -> None:
+        self.add_markings("  wall_lines: [{wall: x_min, from: [1, -3], to: [1, 0.5]}]\n")
+        self.assert_load_rejects("pool", "/markings/wall_lines/0/to: z 0.5 m is outside -3..0.3 m")
+
+    def test_lane_grid_wider_than_the_pool(self) -> None:
+        self.add_markings("  lane_grid: {along_x: {count: 4, spacing_m: 2}}\n")
+        self.assert_load_rejects("pool", "/markings/lane_grid/along_x: lines at -0.5..5.5 m")
+
+    def test_lane_grid_inset_leaves_no_line(self) -> None:
+        self.add_markings("  lane_grid: {along_y: {count: 2, spacing_m: 2}, inset_m: 2.5}\n")
+        self.assert_load_rejects("pool", "inset_m 2.5 leaves no line on a 5 m floor")
+
+    def test_lane_grid_needs_a_family(self) -> None:
+        self.add_markings("  lane_grid: {inset_m: 1}\n")
+        self.assert_load_rejects("pool", "/markings/lane_grid")
+
+    def test_unknown_end_style(self) -> None:
+        self.add_markings("  ends: arrow\n")
+        self.assert_load_rejects("pool", "/markings/ends")
+
+
 class FolderRejectionTests(PackRejectionCase):
     def test_folder_with_two_canonical_files(self) -> None:
         (self.root / "robot" / "pool.yaml").write_text(POOL, encoding="utf-8")

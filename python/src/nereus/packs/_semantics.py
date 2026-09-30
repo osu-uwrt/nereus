@@ -252,11 +252,66 @@ def robot(data: dict[str, Any]) -> list[str]:
 # ------------------------------------------------------------------ pool
 
 
+POOL_EDGE_TOLERANCE = 1e-6  # m: stripe ends may sit exactly on a pool edge
+
+
 def pool(data: dict[str, Any]) -> list[str]:
     problems: list[str] = []
     duplicates((item["id"] for item in data["collision_boxes"]), "collision box", problems)
     _quaternions(data, "", problems)
+    if "markings" in data:
+        _pool_markings(data["markings"], data["parameters"], problems)
     return problems
+
+
+def _pool_markings(
+    markings: dict[str, Any], parameters: dict[str, Any], problems: list[str]
+) -> None:
+    """Every stripe lies on the surface it is painted on (T bars may overhang)."""
+    length, width = parameters["length_m"], parameters["width_m"]
+    depth, deck = parameters["depth_m"], parameters["deck_height_m"]
+    grid = markings.get("lane_grid")
+    if grid is not None:
+        inset = grid.get("inset_m", 0.0)
+        for key, extent, span in (("along_x", width, length), ("along_y", length, width)):
+            family = grid.get(key)
+            if family is None:
+                continue
+            where = f"/markings/lane_grid/{key}"
+            if 2 * inset >= span:
+                problems.append(f"{where}: inset_m {inset:g} leaves no line on a {span:g} m floor")
+            count, spacing = family["count"], family["spacing_m"]
+            first = family.get("first_m", (extent - (count - 1) * spacing) / 2)
+            last = first + (count - 1) * spacing
+            if not (_between(first, 0, extent) and _between(last, 0, extent)):
+                problems.append(
+                    f"{where}: lines at {first:g}..{last:g} m fall outside the pool (0..{extent:g} m)"
+                )
+    for index, line in enumerate(markings.get("lines", [])):
+        _stripe(line, f"/markings/lines/{index}", ("x", 0, length), ("y", 0, width), problems)
+    for index, line in enumerate(markings.get("wall_lines", [])):
+        along = width if line["wall"] in ("x_min", "x_max") else length
+        where = f"/markings/wall_lines/{index}"
+        _stripe(line, where, ("along the wall", 0, along), ("z", -depth, deck), problems)
+
+
+def _between(value: float, low: float, high: float) -> bool:
+    return low - POOL_EDGE_TOLERANCE <= value <= high + POOL_EDGE_TOLERANCE
+
+
+def _stripe(
+    line: dict[str, Any],
+    where: str,
+    first: tuple[str, float, float],
+    second: tuple[str, float, float],
+    problems: list[str],
+) -> None:
+    if line["from"] == line["to"]:
+        problems.append(f"{where}: from and to must differ")
+    for end in ("from", "to"):
+        for value, (axis, low, high) in zip(line[end], (first, second)):
+            if not _between(value, low, high):
+                problems.append(f"{where}/{end}: {axis} {value:g} m is outside {low:g}..{high:g} m")
 
 
 # ------------------------------------------------------------------ tasks

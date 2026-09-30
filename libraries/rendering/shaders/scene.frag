@@ -12,7 +12,9 @@ uniform float time,caustics,directLight,ambientLight;
 uniform float ledRadiance;
 uniform vec3 waterTint,waterAbsorption;
 uniform float waterLevel;
-uniform vec3 poolSize;
+uniform float tileSize;
+uniform vec2 waterlineBand;
+uniform vec3 waterlineColor;
 uniform float waterScattering,waterDistanceScale,waterDistancePower,waterClearDistance;
 uniform int outdoor;
 uniform int waterEnabled;
@@ -26,12 +28,6 @@ float grid(vec2 p,float spacing,float thickness){
   // Fade subpixel grout to its area average instead of aliasing against the wall.
   vec2 filtered=mix(edge,vec2(1.-2.*thickness/spacing),smoothstep(spacing*.2,spacing*.9,footprint));
   return filtered.x*filtered.y;
-}
-float stripe(float p,float start,int count){
-  float cell=round((p-start)/2.7432);
-  if(cell<0 || cell>float(count-1))return 0.;
-  float d=abs(p-(start+cell*2.7432));
-  return 1-smoothstep(.127,.127+fwidth(p),d);
 }
 float visibility(vec3 n,vec3 l){
   if(useShadow==0)return 1.;
@@ -56,36 +52,25 @@ float caustic(vec2 p){
   return pow(max(0.,1.-abs(a)*.68),12.)*.65+pow(max(0.,1.-abs(b)*.75),14.)*.45;
 }
 void main(){
+  // Marking decals: UVs are +-1 at the painted edge; fade over one pixel (derivatives before any discard).
+  vec2 edge=(1.-abs(texcoord))/max(fwidth(texcoord),vec2(1e-6));
+  float coverage=material==7?clamp(edge.x+.5,0.,1.)*clamp(edge.y+.5,0.,1.):1.;
   float worldZ=waterEnabled==1?world.z-waterLevel:1.,eyeZ=waterEnabled==1?eye.z-waterLevel:1.;
   for(int i=0;i<holeCount;i++)if(distance(texcoord,holes[i].xy)<holes[i].z)discard;
   if(clipWater==1 && worldZ<0.015)discard;
   vec4 sampled=hasTexture==1?texture(albedo,texcoord):vec4(1);
-  if(sampled.a<.4)discard;
+  if(sampled.a<.4 || coverage<.004)discard;
   vec3 base=sampled.rgb*tint.rgb;
   vec3 n=normalize(norm);if(!gl_FrontFacing)n=-n;
   vec3 pn=normalize(poolNormal);
   if(material==1){
     vec2 tile=abs(pn.z)>.5?poolPosition.xy:(abs(pn.x)>.5?poolPosition.yz:poolPosition.xz);
-    float g=grid(tile,.1524,.0025);
-    base*=mix(.63,1.,g)*(1.+(hash(floor(tile/.1524))-.5)*.035*(1.-smoothstep(.02,.10,max(fwidth(tile.x),fwidth(tile.y)))));
-    float lane=0;
-    if(abs(pn.z)>.5){
-      float s1=stripe(poolPosition.y,(poolSize.y-7.*2.7432)/2.,8);
-      float s2=stripe(poolPosition.x,(poolSize.x-16.*2.7432)/2.,17);
-      lane=max(s1*step(2.,poolPosition.x)*step(poolPosition.x,(poolSize.x-2.)),s2*step(2.,poolPosition.y)*step(poolPosition.y,(poolSize.y-2.)));
-      // T-shaped lane ends, with the same metre-wide heads as the original scene.
-      float endX=min(abs(poolPosition.x-2.),abs(poolPosition.x-(poolSize.x-2.)));
-      float endY=min(abs(poolPosition.y-2.),abs(poolPosition.y-(poolSize.y-2.)));
-      float nearY=abs(mod(poolPosition.y-(poolSize.y-7.*2.7432)/2.+1.3716,2.7432)-1.3716);
-      float nearX=abs(mod(poolPosition.x-(poolSize.x-16.*2.7432)/2.+1.3716,2.7432)-1.3716);
-      lane=max(lane,(1-smoothstep(.12,.14,endX))*step(nearY,.5));
-      lane=max(lane,(1-smoothstep(.12,.14,endY))*step(nearX,.5));
-    }else{
-      float line=abs(pn.x)>.5?stripe(poolPosition.y,(poolSize.y-7.*2.7432)/2.,8):stripe(poolPosition.x,(poolSize.x-16.*2.7432)/2.,17);
-      lane=line*step(poolPosition.z,waterLevel);
-      base=mix(base,vec3(.065,.20,.27),step(-.13,poolPosition.z)*step(poolPosition.z,.04));
+    if(tileSize>0.){
+      float g=grid(tile,tileSize,.0025);
+      base*=mix(.63,1.,g)*(1.+(hash(floor(tile/tileSize))-.5)*.035*(1.-smoothstep(.02,.10,max(fwidth(tile.x),fwidth(tile.y)))));
     }
-    base=mix(base,vec3(.035,.07,.09),lane*.91);
+    float z=poolPosition.z-waterLevel;
+    if(abs(pn.z)<=.5)base=mix(base,waterlineColor,step(waterlineBand.x,z)*step(z,waterlineBand.y));
   } else if(material==2){
     vec2 tile=abs(pn.z)>.5?poolPosition.xy:poolPosition.xz;
     base*=mix(.8,1.,grid(tile,.6,.004));
@@ -99,8 +84,8 @@ void main(){
   float nl=max(dot(n,l),0.),nh=max(dot(n,h),0.);
   float vis=visibility(n,l);
   vec3 ambient=mix(vec3(.24,.32,.37),vec3(.48,.55,.56),clamp(n.z*.5+.5,0.,1.));
-  float rough=material==5?.06:(material==1?.26:.54);
-  float spec=pow(nh,mix(85.,14.,rough))*(material==5?1.4:(material==1?.17:.055));
+  float rough=material==5?.06:(material==1 || material==7?.26:.54);
+  float spec=pow(nh,mix(85.,14.,rough))*(material==5?1.4:(material==1 || material==7?.17:.055));
   vec3 lighting=base*(ambient*ambientLight+(outdoor==1?vec3(1.15,1.08,.95):vec3(.92,1.01,1.08))*nl*vis*directLight)+spec*vis*directLight;
   if(worldZ<0){
     lighting*=vec3(.84,.97,1.04);
@@ -122,6 +107,6 @@ void main(){
   vec3 attenuation=exp(-opticalDistance*waterAbsorption)*transmission;
   vec3 scatter=waterTint*(.2+.5*ambientLight+.3*directLight);
   lighting=lighting*attenuation+scatter*(1.-transmission);
-  float alpha=material==5 ? clamp(tint.a+pow(1.-abs(dot(n,v)),5.)*.55+spec*.15,0.,.85) : 1.;
+  float alpha=material==5 ? clamp(tint.a+pow(1.-abs(dot(n,v)),5.)*.55+spec*.15,0.,.85) : coverage;
   frag=vec4(lighting,alpha);
 }

@@ -31,6 +31,9 @@ Matrix4d toMatrix(const spatial::Pose &);
 spatial::Pose placement(const session::Json &item);
 // Upright pose: position_m and yaw_deg about +Z.
 spatial::Pose upright(const session::Json &position_m, double yaw_deg);
+// Painted stripes of a pool pack's `markings` (pool-local): lane_grid along_x then along_y lines and their
+// wall continuations, then `lines`, then `wall_lines`; each T end follows its stripe as a separate bar.
+std::vector<rendering::PoolStripe> poolStripes(const session::Json &pool);
 
 struct RobotVisual {
     std::string asset, frame;
@@ -75,6 +78,18 @@ class PackScene {
     // The first poolInstanceCount() instances of staticScene() are the pool (floor, 4 walls, ...).
     std::size_t poolInstanceCount() const {
         return pool_instances_;
+    }
+    // staticScene() indices of the floor (with its stripes) and of the walls, decks and coping (with the
+    // wall stripes), for views that hide either.
+    const std::vector<std::size_t> &poolFloorInstances() const {
+        return pool_floor_;
+    }
+    const std::vector<std::size_t> &poolWallInstances() const {
+        return pool_walls_;
+    }
+    // The pool's painted stripes (see poolStripes()).
+    const std::vector<rendering::PoolStripe> &poolStripes() const {
+        return pool_stripes_;
     }
     const std::string &rootFrame() const {
         return frames_.root();
@@ -128,6 +143,8 @@ class PackScene {
     rendering::Appearance appearance_;
     rendering::Scene static_;
     std::size_t pool_instances_ = 0;
+    std::vector<std::size_t> pool_floor_, pool_walls_;
+    std::vector<rendering::PoolStripe> pool_stripes_;
     std::vector<RobotVisual> robot_;
     std::vector<PropVisual> props_;
     std::vector<IndicatorVisual> indicators_;

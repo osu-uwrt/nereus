@@ -216,12 +216,11 @@ r::Scene SceneModel::build(const VisualState &state) const {
     if (!state.showCourse) // task visuals follow the pool instances in the static scene
         for (std::size_t i = pack_->poolInstanceCount(); i < pack_->staticScene().instances.size(); ++i)
             scene.instances[i].visible = false;
-    // Pool instance order (rendering/scene.hpp): floor, four walls, four decks, four coping strips.
-    const std::size_t pool = std::min(pack_->poolInstanceCount(), scene.instances.size());
-    if (!state.showFloor && pool > 0)
-        scene.instances[0].visible = false;
+    if (!state.showFloor)
+        for (const auto i : pack_->poolFloorInstances())
+            scene.instances[i].visible = false;
     if (!state.showWalls)
-        for (std::size_t i = 1; i <= 12 && i < pool; ++i)
+        for (const auto i : pack_->poolWallInstances())
             scene.instances[i].visible = false;
     return scene;
 }

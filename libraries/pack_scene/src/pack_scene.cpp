@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <nereus/pack_scene/pack_scene.hpp>
 
@@ -23,6 +24,58 @@ std::vector<spatial::FixedFrame> edges(const Json &robot) {
     for (const auto &item : robot.at("frames").at("transforms"))
         result.push_back({item.at("parent").get<std::string>(), item.at("child").get<std::string>(), placement(item)});
     return result;
+}
+
+Eigen::Vector3f rgb(const Json &value) {
+    return vector3(value).cast<float>();
+}
+Eigen::Vector2f vector2(const Json &value) {
+    return {value.at(0).get<float>(), value.at(1).get<float>()};
+}
+
+// Stripe style shared down the markings tree: markings -> lane_grid or line.
+struct StripeStyle {
+    float width = .254f, t_length = 1;
+    Eigen::Vector3f color = {.093f, .14f, .16f};
+    std::array<bool, 2> t_ends = {false, false};
+};
+StripeStyle styled(const Json &item, StripeStyle style) {
+    style.width = item.value("width_m", style.width);
+    style.t_length = item.value("t_length_m", style.t_length);
+    if (item.contains("color_rgb"))
+        style.color = rgb(item.at("color_rgb"));
+    if (item.contains("ends")) {
+        const auto &ends = item.at("ends");
+        if (ends.is_string())
+            style.t_ends.fill(ends.get<std::string>() == "t");
+        else
+            for (std::size_t i = 0; i < 2; ++i)
+                style.t_ends[i] = ends.at(i).get<std::string>() == "t";
+    }
+    return style;
+}
+// The stripe, then a bar across each T end (centred on the end, same width and colour).
+void addStripe(std::vector<r::PoolStripe> &out, r::PoolSide side, Eigen::Vector2f from, Eigen::Vector2f to,
+               const StripeStyle &style) {
+    out.push_back({side, from, to, style.width, style.color});
+    const Eigen::Vector2f along = (to - from).normalized(), across(-along.y(), along.x());
+    for (std::size_t i = 0; i < 2; ++i)
+        if (style.t_ends[i]) {
+            const Eigen::Vector2f end = i == 0 ? from : to;
+            out.push_back(
+                {side, end - across * style.t_length / 2, end + across * style.t_length / 2, style.width, style.color});
+        }
+}
+r::PoolSide wallSide(const std::string &wall) {
+    if (wall == "x_min")
+        return r::PoolSide::XMin;
+    if (wall == "x_max")
+        return r::PoolSide::XMax;
+    if (wall == "y_min")
+        return r::PoolSide::YMin;
+    if (wall == "y_max")
+        return r::PoolSide::YMax;
+    throw std::runtime_error("unknown pool wall '" + wall + "'");
 }
 
 rendering::Appearance appearanceFrom(const Json &pool, bool strict) {
@@ -51,6 +104,56 @@ rendering::Appearance appearanceFrom(const Json &pool, bool strict) {
     return appearance;
 }
 } // namespace
+
+std::vector<r::PoolStripe> poolStripes(const Json &pool) {
+    std::vector<r::PoolStripe> out;
+    if (!pool.contains("markings"))
+        return out;
+    const auto &markings = pool.at("markings");
+    const auto &p = pool.at("parameters");
+    const float length = p.at("length_m").get<float>(), width = p.at("width_m").get<float>(),
+                depth = p.at("depth_m").get<float>();
+    const StripeStyle base = styled(markings, {});
+    if (markings.contains("lane_grid")) {
+        const auto &grid = markings.at("lane_grid");
+        const StripeStyle style = styled(grid, base);
+        StripeStyle wall = style;
+        wall.t_ends = {false, false};
+        const float inset = grid.value("inset_m", 0.f);
+        const bool onWalls = grid.value("on_walls", false);
+        // along_x lines are parallel to +x and spaced across y; along_y the other way round.
+        for (const bool alongX : {true, false}) {
+            const char *key = alongX ? "along_x" : "along_y";
+            if (!grid.contains(key))
+                continue;
+            const auto &family = grid.at(key);
+            const int count = family.at("count").get<int>();
+            const float spacing = family.at("spacing_m").get<float>(), extent = alongX ? width : length,
+                        span = alongX ? length : width;
+            const float first = family.value("first_m", (extent - float(count - 1) * spacing) / 2);
+            for (int i = 0; i < count; ++i) {
+                const float at = first + float(i) * spacing;
+                if (alongX)
+                    addStripe(out, r::PoolSide::Floor, {inset, at}, {span - inset, at}, style);
+                else
+                    addStripe(out, r::PoolSide::Floor, {at, inset}, {at, span - inset}, style);
+            }
+            if (onWalls)
+                for (const auto side : alongX ? std::array{r::PoolSide::XMin, r::PoolSide::XMax}
+                                              : std::array{r::PoolSide::YMin, r::PoolSide::YMax})
+                    for (int i = 0; i < count; ++i) {
+                        const float at = first + float(i) * spacing;
+                        addStripe(out, side, {at, -depth}, {at, 0}, wall);
+                    }
+        }
+    }
+    for (const auto &line : markings.value("lines", Json::array()))
+        addStripe(out, r::PoolSide::Floor, vector2(line.at("from")), vector2(line.at("to")), styled(line, base));
+    for (const auto &line : markings.value("wall_lines", Json::array()))
+        addStripe(out, wallSide(line.at("wall").get<std::string>()), vector2(line.at("from")), vector2(line.at("to")),
+                  styled(line, base));
+    return out;
+}
 
 Matrix4d toMatrix(const spatial::Pose &pose) {
     Matrix4d result = Matrix4d::Identity();
@@ -160,11 +263,35 @@ void PackScene::buildPool() {
     geometry.deck_height = p.at("deck_height_m").get<float>();
     const double yaw = placementJson.at("yaw_deg").get<double>();
     geometry.local_to_world = toMatrix(upright(Json::array({at.at(0), at.at(1), 0.0}), yaw)).cast<float>();
+    if (pool.contains("surface")) {
+        const auto &surface = pool.at("surface");
+        if (surface.contains("tile_rgb"))
+            geometry.tile_color = rgb(surface.at("tile_rgb"));
+        geometry.tile_size = surface.value("tile_size_m", geometry.tile_size);
+        if (surface.contains("waterline_rgb"))
+            geometry.waterline_color = rgb(surface.at("waterline_rgb"));
+        if (surface.contains("waterline_band_m"))
+            geometry.waterline_band = vector2(surface.at("waterline_band_m"));
+    }
+    geometry.markings = pack_scene::poolStripes(pool);
     static_ = r::makePoolScene(geometry);
     pool_instances_ = static_.instances.size();
+    // makePoolScene order: floor, 4 walls, 4 decks, 4 coping strips, floor stripes?, wall stripes?
+    pool_stripes_ = geometry.markings;
+    pool_floor_ = {0};
+    pool_walls_.clear();
+    for (std::size_t i = 1; i <= 12; ++i)
+        pool_walls_.push_back(i);
+    std::size_t next = 13;
+    const auto onFloor = [](const r::PoolStripe &stripe) { return stripe.side == r::PoolSide::Floor; };
+    if (std::any_of(pool_stripes_.begin(), pool_stripes_.end(), onFloor))
+        pool_floor_.push_back(next++);
+    if (!std::all_of(pool_stripes_.begin(), pool_stripes_.end(), onFloor))
+        pool_walls_.push_back(next++);
     pool_record_ = {{"dimensions_m", {geometry.dimensions[0], geometry.dimensions[1], geometry.dimensions[2]}},
                     {"water_level_world_m", geometry.water_level},
                     {"deck_height_m", geometry.deck_height},
+                    {"stripes", pool_stripes_.size()},
                     {"placement", {{"position_m", at}, {"yaw_deg", yaw}}}};
 }
 

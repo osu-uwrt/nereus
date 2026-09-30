@@ -539,6 +539,9 @@ struct Renderer::Resources {
     glm::mat4 lightMatrix{1}, poolToMap{1}, mapToPool{1};
     glm::vec3 poolSize{1}, center{0};
     float waterLevel = 0, ledRadiance = 60;
+    float tileSize = .1524f;
+    glm::vec2 waterlineBand{-.13f, .04f};
+    glm::vec3 waterlineColor{.065f, .20f, .27f};
     bool hasWater = false, frame_valid = false;
     GLint maximum_texture = 0, clip_distances = 0;
     Object water;
@@ -633,7 +636,7 @@ struct Renderer::Resources {
     Object instance(const Instance &input) {
         if (!input.mesh || input.mesh->submeshes.empty() || !affine(input.transform) || !input.tint.allFinite() ||
             (input.tint.array() < 0).any() || input.tint.w() > 1 || !std::isfinite(input.radiance) ||
-            input.radiance < 0 || static_cast<int>(input.material) < 0 || static_cast<int>(input.material) > 6)
+            input.radiance < 0 || static_cast<int>(input.material) < 0 || static_cast<int>(input.material) > 7)
             throw std::invalid_argument("invalid render instance");
         auto found = cache.find(input.mesh.get());
         if (found == cache.end()) {
@@ -705,7 +708,9 @@ void Renderer::Resources::drawScene(const InternalView &camera, const Look &look
     uniform(sceneProgram, "projection", camera.projection);
     uniform(sceneProgram, "eye", camera.eye);
     uniform(sceneProgram, "waterLevel", waterLevel);
-    uniform(sceneProgram, "poolSize", glm::vec3(poolSize.x, poolSize.y, poolSize.z));
+    uniform(sceneProgram, "tileSize", tileSize);
+    glUniform2fv(glGetUniformLocation(sceneProgram, "waterlineBand"), 1, glm::value_ptr(waterlineBand));
+    uniform(sceneProgram, "waterlineColor", waterlineColor);
     uniform(sceneProgram, "lightMatrix", lightMatrix);
     uniform(sceneProgram, "mapToPool", mapToPool);
     uniform(sceneProgram, "time", time);
@@ -730,6 +735,9 @@ void Renderer::Resources::drawScene(const InternalView &camera, const Look &look
     const auto viewProjection = camera.projection * camera.view;
     // Clear polycarbonate is blended after opaque electronics and LED lenses.
     // It writes the front-cover depth, so RGB/depth still describe one enclosure.
+    // Marking decals are drawn in scene order with the opaque pass, blended and without depth writes, so
+    // they cover only the surfaces already drawn (the pool) and anything drawn later in front of those
+    // surfaces covers them.
     for (int transparent = 0; transparent < 2; ++transparent) {
         if (transparent) {
             glEnable(GL_BLEND);
@@ -760,7 +768,19 @@ void Renderer::Resources::drawScene(const InternalView &camera, const Look &look
                 if (!m->holes.empty())
                     glUniform3fv(glGetUniformLocation(sceneProgram, "holes"), static_cast<GLsizei>(m->holes.size()),
                                  glm::value_ptr(m->holes[0]));
+                if (material == 7) {
+                    glEnable(GL_BLEND);
+                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                    glEnable(GL_POLYGON_OFFSET_FILL);
+                    glPolygonOffset(-1.f, -4.f);
+                    glDepthMask(GL_FALSE);
+                }
                 m->draw();
+                if (material == 7) {
+                    glDisable(GL_BLEND);
+                    glDisable(GL_POLYGON_OFFSET_FILL);
+                    glDepthMask(GL_TRUE);
+                }
             }
         }
     }
@@ -994,6 +1014,9 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
     r.mapToPool = glm::mat4(1);
     r.poolSize = glm::vec3(1);
     r.waterLevel = 0;
+    r.tileSize = .1524f;
+    r.waterlineBand = {-.13f, .04f};
+    r.waterlineColor = {.065f, .20f, .27f};
     if (scene.water) {
         const auto &water = *scene.water;
         // Reuse pool frame validation; do not allocate pool geometry to validate.
@@ -1020,6 +1043,12 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
             throw std::invalid_argument("water surface requires one submesh");
         r.poolSize = vector(water.dimensions);
         r.waterLevel = water.level;
+        if (!std::isfinite(water.tile_size) || water.tile_size < 0 || !water.waterline_band.allFinite() ||
+            !water.waterline_color.allFinite())
+            throw std::invalid_argument("invalid pool finish");
+        r.tileSize = water.tile_size;
+        r.waterlineBand = {water.waterline_band.x(), water.waterline_band.y()};
+        r.waterlineColor = vector(water.waterline_color);
         r.poolToMap = matrix(m);
         r.mapToPool = glm::inverse(r.poolToMap);
     }

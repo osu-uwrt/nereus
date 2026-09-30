@@ -44,6 +44,36 @@ lighting:
 
 The robot collides with `collision_boxes`; the viewer draws the floor, walls, deck and coping from `parameters`.
 
+### Lane lines and finish
+
+Painted lines are data, not part of the renderer: a pool without `markings` has a plain tiled floor. Everything
+is in the pool frame, in metres. Floor stripes go `from`/`to` `[x, y]`; wall stripes go `from`/`to`
+`[coordinate along the wall, z relative to the water surface]` on wall `x_min`, `x_max`, `y_min` or `y_max`.
+The same stripes appear in the viewer, the simulated cameras and the course map.
+
+```yaml
+markings:
+  color_rgb: [0.093, 0.14, 0.16]   # defaults for every stripe below
+  width_m: 0.254
+  lane_grid:                       # optional: evenly spaced lines
+    along_x: {count: 8, spacing_m: 2.7432}               # parallel to +x, centred across the width
+    along_y: {count: 17, spacing_m: 2.7432, first_m: 3}  # parallel to +y, first line at x = 3
+    inset_m: 2.0                   # stop short of the end walls
+    ends: t                        # a bar across both ends (t_length_m, default 1 m)
+    on_walls: true                 # continue each line up both end walls to the surface
+  lines:                           # any other floor stripe, at any angle
+  - {from: [4, 2], to: [12, 5], ends: [t, none], width_m: 0.3, color_rgb: [0.6, 0.1, 0.1]}
+  wall_lines:
+  - {wall: y_max, from: [10, -1.8], to: [10, -0.6], ends: t}
+surface:                           # optional; these are the defaults
+  tile_rgb: [0.68, 0.85, 0.87]
+  tile_size_m: 0.1524              # grout pitch, 0 for a plain liner
+  waterline_rgb: [0.065, 0.2, 0.27]
+  waterline_band_m: [-0.13, 0.04]  # wall band around the waterline; [0, 0] for none
+```
+
+Validation rejects stripes that leave the surface they are painted on (T bars may overhang).
+
 ## Scenario
 
 ```yaml

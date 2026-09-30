@@ -27,6 +27,19 @@ collision_boxes:
 - {id: south_wall, size_m: [50.0, 1, 3.438888888], center_m: [25.0, -0.5, -0.9141555559999999], orientation_wxyz: [1, 0, 0, 0]}
 - {id: north_wall, size_m: [50.0, 1, 3.438888888], center_m: [25.0, 23.36, -0.9141555559999999], orientation_wxyz: [1, 0, 0, 0]}
 
+# Lane lines on the floor and up the end walls (viewer, cameras and course map). 9 ft apart, 10 in wide,
+# stopping 2 m short of the walls with 1 m T ends. The colour is the dark line tile seen through the finish.
+markings:
+  color_rgb: [0.093, 0.14, 0.16]
+  width_m: 0.254
+  lane_grid:
+    along_x: {count: 8, spacing_m: 2.7432}
+    along_y: {count: 17, spacing_m: 2.7432}
+    inset_m: 2.0
+    ends: t
+    t_length_m: 1.0
+    on_walls: true
+
 # Water colour and attenuation seen by the simulated cameras.
 water_optics:
   tint_rgb: [0.025, 0.22, 0.29]

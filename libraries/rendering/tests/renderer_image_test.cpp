@@ -117,6 +117,21 @@ r::View view(float distance = 1.2f, float aspect = 1.f) {
     return v;
 }
 
+// Camera at `eye` looking straight down; image up is world +X, image right is world -Y.
+r::View lookDown(const Eigen::Vector3f &eye) {
+    r::View v = view();
+    const Eigen::Vector3f forward(0, 0, -1), right(0, -1, 0), up(1, 0, 0);
+    v.view.setIdentity();
+    v.view.block<1, 3>(0, 0) = right.transpose();
+    v.view.block<1, 3>(1, 0) = up.transpose();
+    v.view.block<1, 3>(2, 0) = -forward.transpose();
+    v.view(0, 3) = -right.dot(eye);
+    v.view(1, 3) = -up.dot(eye);
+    v.view(2, 3) = forward.dot(eye);
+    v.eye = eye;
+    return v;
+}
+
 r::Scene scene(std::shared_ptr<const r::MeshAsset> mesh) {
     r::Scene s;
     r::Instance instance;
@@ -226,6 +241,45 @@ TEST_F(RendererImage, UvCutoutsRemoveColorAndDepthUsingTheUnchangedShaders) {
     auto shadowed = plain();
     shadowed.shadows = true;
     EXPECT_NO_THROW(renderer->draw(scene(quad({}, {{{.5f, .5f}, .2f}})), view(), shadowed, 0, 32, 32));
+}
+
+TEST_F(RendererImage, PoolStripesArePaintedFromDataNotTheShader) {
+    // 4 m square pool, 2 m deep; the camera is 1 m under water looking down at the floor centre.
+    r::PoolGeometry pool;
+    pool.dimensions = {4, 4, 2};
+    const auto floorAt = [&](int column, int row) {
+        renderer->draw(r::makePoolScene(pool), lookDown({2, 2, -1}), plain(), 0, 64, 64);
+        const auto image = renderer->captureImage(true, false);
+        const auto i = 3 * index(image, column, row);
+        return image.rgb[i] + image.rgb[i + 1] + image.rgb[i + 2];
+    };
+    const int bare = floorAt(32, 32);
+    EXPECT_NEAR(bare, floorAt(10, 32), 30) << "no markings: the floor is plain tile everywhere";
+    // A 0.3 m stripe along x through the centre: an image column (image right is world -Y).
+    pool.markings.push_back({r::PoolSide::Floor, {1, 2}, {3, 2}, .3f, {0, 0, 0}});
+    EXPECT_LT(floorAt(32, 32), bare / 2) << "stripe centre is dark";
+    EXPECT_NEAR(floorAt(10, 32), bare, 30) << "0.47 m off the stripe the floor is unchanged";
+    // A white card lying 1 mm above the floor over the stripe (like the calibration board on a wall line)
+    // covers the stripe even though the decal sits 2 mm off the floor.
+    auto card = std::make_shared<r::MeshAsset>();
+    r::Submesh face;
+    for (const auto &c : {Eigen::Vector2f(-.2f, -.2f), Eigen::Vector2f(.2f, -.2f), Eigen::Vector2f(.2f, .2f),
+                          Eigen::Vector2f(-.2f, .2f)})
+        face.vertices.push_back({{2 + c.x(), 2 + c.y(), -2 + .001f}, {0, 0, 1}, {0, 0}});
+    face.indices = {0, 1, 2, 0, 2, 3};
+    card->submeshes.push_back(face);
+    card->minimum = {1.8f, 1.8f, -2};
+    card->maximum = {2.2f, 2.2f, -2};
+    auto covered = r::makePoolScene(pool);
+    r::Instance instance;
+    instance.mesh = card;
+    covered.instances.push_back(instance);
+    renderer->draw(covered, lookDown({2, 2, -1}), plain(), 0, 64, 64);
+    const auto image = renderer->captureImage(true, false);
+    const auto i = 3 * index(image, 32, 32);
+    EXPECT_GT(image.rgb[i] + image.rgb[i + 1] + image.rgb[i + 2], bare) << "the card, not the stripe";
+    pool.markings.push_back({r::PoolSide::Floor, {2, 2}, {2, 2}, .3f, {0, 0, 0}});
+    EXPECT_THROW(r::makePoolScene(pool), std::invalid_argument) << "zero-length stripe";
 }
 
 TEST_F(RendererImage, TransparentTexelsBelowTheOriginalThresholdAreDiscarded) {

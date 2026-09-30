@@ -27,7 +27,7 @@ std::size_t texturedWith(const r::Scene &scene, const std::string &name) {
 
 TEST(PackScene, ComposesPoolTasksAndRobot) {
     ps::PackScene pack(talos());
-    EXPECT_EQ(pack.poolInstanceCount(), 13u); // floor, 4 walls, 4 decks, 4 coping strips
+    EXPECT_EQ(pack.poolInstanceCount(), 15u); // floor, 4 walls, 4 decks, 4 coping strips, floor/wall stripes
     EXPECT_GT(pack.staticScene().instances.size(), pack.poolInstanceCount());
     EXPECT_TRUE(pack.staticScene().water.has_value());
     EXPECT_EQ(pack.rootFrame(), "com");
@@ -148,4 +148,62 @@ TEST(PackScene, TableTokenBodiesAreUntexturedDarkPlastic) {
         EXPECT_EQ(body, 260u) << asset;
         EXPECT_EQ(top, 36u) << asset;
     }
+}
+
+TEST(PackScene, RoboSubLaneGridExpandsToStripesOnFloorAndEndWalls) {
+    ps::PackScene pack(talos());
+    const auto &stripes = pack.poolStripes();
+    std::size_t floor = 0, walls = 0;
+    for (const auto &stripe : stripes)
+        (stripe.side == r::PoolSide::Floor ? floor : walls)++;
+    EXPECT_EQ(floor, (8u + 17u) * 3); // each line plus a T bar at both ends
+    EXPECT_EQ(walls, (8u + 17u) * 2); // each line continues up both end walls
+    // First along_x line: centred across the 22.86 m width, stopping 2 m short of the 50 m walls.
+    EXPECT_NEAR(stripes[0].from.x(), 2, 1e-5);
+    EXPECT_NEAR(stripes[0].to.x(), 48, 1e-5);
+    EXPECT_NEAR(stripes[0].from.y(), (22.86 - 7 * 2.7432) / 2, 1e-5);
+    EXPECT_NEAR(stripes[0].width, .254, 1e-6);
+    // Its T bar at x = 2: 1 m across the line.
+    EXPECT_NEAR(stripes[1].from.x(), 2, 1e-5);
+    EXPECT_NEAR((stripes[1].to - stripes[1].from).norm(), 1, 1e-5);
+    EXPECT_EQ(pack.poolFloorInstances(), (std::vector<std::size_t>{0, 13}));
+    EXPECT_EQ(pack.poolWallInstances().back(), 14u);
+    EXPECT_EQ(pack.poolWallInstances().size(), 13u);
+    EXPECT_EQ(pack.describe().at("pool").at("stripes").get<std::size_t>(), stripes.size());
+}
+
+TEST(PackScene, IrregularLinesKeepTheirPlacementAndStyleOverrides) {
+    const auto pool = rs::Json::parse(R"({
+        "parameters": {"length_m": 25, "width_m": 12, "depth_m": 2},
+        "markings": {
+            "color_rgb": [0.1, 0.1, 0.1], "width_m": 0.2,
+            "lane_grid": {"along_y": {"count": 2, "spacing_m": 3, "first_m": 4}},
+            "lines": [
+                {"from": [1, 1], "to": [7, 4], "ends": ["t", "none"], "t_length_m": 0.5},
+                {"from": [10, 2.5], "to": [20, 2.5], "width_m": 0.4, "color_rgb": [1, 0, 0]}
+            ],
+            "wall_lines": [{"wall": "y_max", "from": [6, -2], "to": [6, -0.5], "ends": "t"}]
+        }
+    })");
+    const auto stripes = ps::poolStripes(pool);
+    ASSERT_EQ(stripes.size(), 2u + 2u + 1u + 3u);
+    // Grid lines start at first_m, not centred.
+    EXPECT_FLOAT_EQ(stripes[0].from.x(), 4);
+    EXPECT_FLOAT_EQ(stripes[1].from.x(), 7);
+    EXPECT_FLOAT_EQ(stripes[0].to.y(), 12);
+    // A diagonal line with a T only at `from`, perpendicular to the line.
+    const auto &diagonal = stripes[2], &bar = stripes[3];
+    EXPECT_EQ(bar.from + bar.to, 2 * diagonal.from);
+    EXPECT_NEAR((bar.to - bar.from).dot(diagonal.to - diagonal.from), 0, 1e-5);
+    EXPECT_NEAR((bar.to - bar.from).norm(), .5, 1e-6);
+    EXPECT_FLOAT_EQ(bar.width, .2f);
+    // Per-line overrides.
+    EXPECT_FLOAT_EQ(stripes[4].width, .4f);
+    EXPECT_EQ(stripes[4].color, Eigen::Vector3f(1, 0, 0));
+    EXPECT_EQ(stripes[0].color, Eigen::Vector3f(.1f, .1f, .1f));
+    // A wall stripe with T ends at both ends.
+    EXPECT_EQ(stripes[5].side, r::PoolSide::YMax);
+    EXPECT_EQ(stripes[6].side, r::PoolSide::YMax);
+    EXPECT_EQ(stripes[7].side, r::PoolSide::YMax);
+    EXPECT_TRUE(ps::poolStripes(rs::Json::parse(R"({"parameters": {}})")).empty());
 }

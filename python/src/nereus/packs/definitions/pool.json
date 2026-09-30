@@ -33,6 +33,12 @@
     "lighting": {
       "$ref": "types.schema.json#/$defs/lighting"
     },
+    "surface": {
+      "$ref": "#/$defs/surface"
+    },
+    "markings": {
+      "$ref": "#/$defs/markings"
+    },
     "metadata": {
       "type": "object",
       "description": "Free non-executable annotations preserved verbatim by load/save; never interpreted."
@@ -46,5 +52,258 @@
     "collision_boxes"
   ],
   "additionalProperties": false,
-  "x-typed": "pool"
+  "x-typed": "pool",
+  "$defs": {
+    "rgb": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "Linear RGB in 0..1."
+    },
+    "vector2": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "stripe_ends": {
+      "oneOf": [
+        {
+          "enum": [
+            "none",
+            "t"
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "enum": [
+              "none",
+              "t"
+            ]
+          },
+          "minItems": 2,
+          "maxItems": 2
+        }
+      ],
+      "description": "'t' puts a bar across the end; one value for both ends or [from, to]."
+    },
+    "surface": {
+      "type": "object",
+      "properties": {
+        "tile_rgb": {
+          "$ref": "#/$defs/rgb"
+        },
+        "tile_size_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Tile pitch drawn as grout lines; 0 draws a plain surface."
+        },
+        "waterline_rgb": {
+          "$ref": "#/$defs/rgb"
+        },
+        "waterline_band_m": {
+          "$ref": "#/$defs/vector2",
+          "description": "[bottom, top] of the wall band around the waterline, m relative to the water surface; an empty band draws none."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Floor and wall finish seen by the viewer and cameras. Omitted values: tile_rgb [0.68, 0.85, 0.87], tile_size_m 0.1524, waterline_rgb [0.065, 0.2, 0.27], waterline_band_m [-0.13, 0.04]."
+    },
+    "markings": {
+      "type": "object",
+      "properties": {
+        "width_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Stripe width in m."
+        },
+        "color_rgb": {
+          "$ref": "#/$defs/rgb"
+        },
+        "ends": {
+          "$ref": "#/$defs/stripe_ends"
+        },
+        "t_length_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Length of the bar across a T end, in m."
+        },
+        "lane_grid": {
+          "$ref": "#/$defs/lane_grid"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/floor_line"
+          },
+          "description": "Floor stripes from/to pool-local [x, y] in m."
+        },
+        "wall_lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/wall_line"
+          },
+          "description": "Wall stripes from/to [coordinate along the wall, z relative to the water surface] in m."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Painted stripes drawn on the floor and walls (and on the viewer's course map). width_m, color_rgb, ends and t_length_m set the defaults for every stripe below; a lane grid or line overrides them. Omitted: width_m 0.254, color_rgb [0.093, 0.14, 0.16], ends 'none', t_length_m 1.0."
+    },
+    "lane_family": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "spacing_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "first_m": {
+          "type": "number",
+          "description": "Position of the first line; omitted, the family is centred."
+        }
+      },
+      "required": [
+        "count",
+        "spacing_m"
+      ],
+      "additionalProperties": false
+    },
+    "lane_grid": {
+      "type": "object",
+      "properties": {
+        "width_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Stripe width in m."
+        },
+        "color_rgb": {
+          "$ref": "#/$defs/rgb"
+        },
+        "ends": {
+          "$ref": "#/$defs/stripe_ends"
+        },
+        "t_length_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Length of the bar across a T end, in m."
+        },
+        "along_x": {
+          "$ref": "#/$defs/lane_family",
+          "description": "Lines parallel to +x, spaced across y."
+        },
+        "along_y": {
+          "$ref": "#/$defs/lane_family",
+          "description": "Lines parallel to +y, spaced across x."
+        },
+        "inset_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Lines stop this far from the end walls (default 0)."
+        },
+        "on_walls": {
+          "type": "boolean",
+          "description": "Continue each line up both end walls, floor to water surface (default false)."
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "along_x"
+          ]
+        },
+        {
+          "required": [
+            "along_y"
+          ]
+        }
+      ],
+      "additionalProperties": false,
+      "description": "Evenly spaced lane lines; list irregular lines in `lines` instead or as well."
+    },
+    "floor_line": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/vector2"
+        },
+        "to": {
+          "$ref": "#/$defs/vector2"
+        },
+        "width_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Stripe width in m."
+        },
+        "color_rgb": {
+          "$ref": "#/$defs/rgb"
+        },
+        "ends": {
+          "$ref": "#/$defs/stripe_ends"
+        },
+        "t_length_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Length of the bar across a T end, in m."
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "additionalProperties": false
+    },
+    "wall_line": {
+      "type": "object",
+      "properties": {
+        "wall": {
+          "enum": [
+            "x_min",
+            "x_max",
+            "y_min",
+            "y_max"
+          ],
+          "description": "The wall at x = 0, x = length, y = 0 or y = width."
+        },
+        "from": {
+          "$ref": "#/$defs/vector2"
+        },
+        "to": {
+          "$ref": "#/$defs/vector2"
+        },
+        "width_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Stripe width in m."
+        },
+        "color_rgb": {
+          "$ref": "#/$defs/rgb"
+        },
+        "ends": {
+          "$ref": "#/$defs/stripe_ends"
+        },
+        "t_length_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Length of the bar across a T end, in m."
+        }
+      },
+      "required": [
+        "wall",
+        "from",
+        "to"
+      ],
+      "additionalProperties": false
+    }
+  }
 }
