@@ -1,7 +1,9 @@
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panels/ros_providers.hpp"
 #include <cassert>
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON
 #include <chameleon_tf_msgs/action/model_frame.hpp>
+#endif
 #include <functional>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -21,8 +23,10 @@
 #include <visualization_msgs/msg/marker_array.hpp>
 using namespace nereus::ros_viewer::panels;
 using namespace std::chrono_literals;
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON // the tag-calibration action is optional
 using Cal = chameleon_tf_msgs::action::ModelFrame;
 using Goal = rclcpp_action::ServerGoalHandle<Cal>;
+#endif
 using Target = riptide_msgs2::srv::MappingTarget;
 using Reset = std_srvs::srv::Trigger;
 int main(int argc, char **argv) {
@@ -169,8 +173,9 @@ ui:
     std::shared_ptr<rmw_request_id_t> resetHeader;
     auto resetService = node->create_service<Reset>(
         "reset", [&](std::shared_ptr<rmw_request_id_t> header, Reset::Request::SharedPtr) { resetHeader = header; });
-    std::shared_ptr<Goal> goal;
     int calCount = 0;
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON
+    std::shared_ptr<Goal> goal;
     bool reject = false;
     auto server = rclcpp_action::create_server<Cal>(
         node, "calibration",
@@ -182,6 +187,7 @@ ui:
             goal = accepted;
             ++calCount;
         });
+#endif
     ros.start();
     auto spin = [&](double seconds, bool publish = true) {
         auto end = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
@@ -192,15 +198,21 @@ ui:
                 scorePub->publish(scoreMsg);
             }
             rclcpp::spin_some(node);
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON
             if (goal && goal->is_canceling()) {
                 goal->canceled(std::make_shared<Cal::Result>());
                 goal.reset();
             }
+#endif
             std::this_thread::sleep_for(5ms);
         }
     };
     spin(1.2);
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON
     assert(mapping->state().fresh && mapping->state().calibrationReady);
+#else
+    assert(mapping->state().fresh);
+#endif
     assert(run->state().fresh && actuators->state().fresh);
     assert(calCount == 0 && armCount == 0 && fireCount == 0 && resetCount == 0 && runCommands.empty());
     assert(simulation->state().connected && simulation->state().rate == 1 && speedRequests == 0);
@@ -288,6 +300,7 @@ ui:
     assert(targetCount == 1 && targetRequest.target_info.target_object == "new_target" &&
            !targetRequest.target_info.lock_map);
     assert(mapping->state().target == "observed" && mapping->state().locked); // request never fabricates observed state
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON
     mapping->calibrate("test_world", "test_tag", 17);
     spin(.15);
     assert(goal && goal->get_goal()->samples == 17 && goal->get_goal()->monitor_child == "test_tag");
@@ -311,6 +324,7 @@ ui:
     spin(.2);
     assert(!mapping->state().calibrating && mapping->state().calibrationMessage == "Calibration rejected");
     reject = false;
+#endif
     mapping->reset();
     spin(.1);
     assert(resetHeader);

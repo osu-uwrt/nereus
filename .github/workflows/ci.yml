@@ -49,11 +49,12 @@ jobs:
             libbullet-dev libassimp-dev libglfw3-dev libglew-dev libegl-dev libgl1-mesa-dev libpng-dev \
             libjpeg-dev libopencv-dev xvfb xauth python3-pip ros-humble-robot-localization
           python3 -m pip install numpy "ruamel.yaml>=0.18,<0.20" "jsonschema>=4.21,<5" "referencing>=0.34,<1" pytest
-      - name: Build riptide_msgs2
+      - name: Build riptide_msgs2 and chameleon_tf_msgs
         run: |
           git clone --depth 1 https://github.com/osu-uwrt/riptide_core /tmp/ws/src/riptide_core
+          git clone --depth 1 https://github.com/coalman321/chameleon_tf /tmp/ws/src/chameleon_tf
           . /opt/ros/humble/setup.sh
-          cd /tmp/ws && colcon build --packages-select riptide_msgs2
+          cd /tmp/ws && colcon build --packages-select riptide_msgs2 chameleon_tf_msgs
       - name: Validate packs
         run: PYTHONPATH=python/src python3 -m nereus.packs validate content/packs/scenarios/talos_uwrt
       - name: Build
