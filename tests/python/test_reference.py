@@ -10,10 +10,10 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-import robotics_platform as rp
+import nereus as rp
 
 
-@unittest.skipUnless(os.environ.get("RP_REFERENCE_RUNNER"), "C++ runner not supplied")
+@unittest.skipUnless(os.environ.get("NEREUS_REFERENCE_RUNNER"), "C++ runner not supplied")
 class ReferenceTests(unittest.TestCase):
     def test_complete_profile_matches_cpp_trajectory_and_sensor_fields(self) -> None:
         scenario_path = rp.example_scenario()
@@ -21,7 +21,7 @@ class ReferenceTests(unittest.TestCase):
             samples_path = Path(directory) / "sensors.csv"
             native = subprocess.run(
                 [
-                    os.environ["RP_REFERENCE_RUNNER"],
+                    os.environ["NEREUS_REFERENCE_RUNNER"],
                     str(scenario_path),
                     "--sensors",
                     str(samples_path),

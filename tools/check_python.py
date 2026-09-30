@@ -48,7 +48,7 @@ def main() -> None:
         cwd=ROOT,
         env=env,
     )
-    with tempfile.TemporaryDirectory(prefix="robotics-python-") as directory:
+    with tempfile.TemporaryDirectory(prefix="nereus-python-") as directory:
         temp = Path(directory)
         artifacts = temp / "artifacts"
         run(
@@ -67,7 +67,7 @@ def main() -> None:
         build = temp / "native-build"
         settings = [f"-Cbuild-dir={build}", "-Ccmake.define.CMAKE_EXPORT_COMPILE_COMMANDS=ON"]
         if args.sanitizers:
-            settings += ["-Ccmake.define.RP_ENABLE_SANITIZERS=ON", "-Ccmake.build-type=Debug"]
+            settings += ["-Ccmake.define.NEREUS_ENABLE_SANITIZERS=ON", "-Ccmake.build-type=Debug"]
         run(
             [
                 interpreter,
@@ -99,7 +99,7 @@ def main() -> None:
         run([python, "-m", "pip", "install", wheel], cwd=temp, env=env)
         runtime_env = dict(env)
         if args.reference_runner:
-            runtime_env["RP_REFERENCE_RUNNER"] = str(args.reference_runner.resolve(strict=True))
+            runtime_env["NEREUS_REFERENCE_RUNNER"] = str(args.reference_runner.resolve(strict=True))
         if args.sanitizers:
             # CPython isn't an ASan executable. Preload the sanitizer and C++ runtime
             # before importing the extension so exception interception is available.

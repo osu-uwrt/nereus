@@ -252,11 +252,11 @@ class TorpedoScoringTests(unittest.TestCase):
         self.assertEqual(emitted(together), emitted(separate))
 
 
-@unittest.skipUnless(os.environ.get("RP_SCORING_REFERENCE"),
-                     "set RP_SCORING_REFERENCE to original behavior/scoring.py")
+@unittest.skipUnless(os.environ.get("NEREUS_SCORING_REFERENCE"),
+                     "set NEREUS_SCORING_REFERENCE to original behavior/scoring.py")
 class OriginalScoringReferenceTests(unittest.TestCase):
     def test_torpedo_release_result_and_bonus_ledger_matches_original(self):
-        original = module_at(Path(os.environ["RP_SCORING_REFERENCE"]), "original_shot_reference")
+        original = module_at(Path(os.environ["NEREUS_SCORING_REFERENCE"]), "original_shot_reference")
         traces = [
             [crossing(), release(1, .3048), release(2, .4572),
              hit(2, size="small"), hit(1), hit(1, outcome="blocked"), release(3), hit(3)],
@@ -292,7 +292,7 @@ class OriginalScoringReferenceTests(unittest.TestCase):
                                          (intended, row, event))
 
     def test_gate_home_and_style_match_unchanged_runscore_and_coursejudge(self):
-        original = module_at(Path(os.environ["RP_SCORING_REFERENCE"]), "original_score_reference")
+        original = module_at(Path(os.environ["NEREUS_SCORING_REFERENCE"]), "original_score_reference")
         import numpy as np
 
         q = math.pi / 2

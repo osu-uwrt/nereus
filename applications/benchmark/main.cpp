@@ -67,7 +67,7 @@ void measure(const Scenario &scenario, int iterations, bool sensors) {
 int main(int argc, char **argv) {
     try {
         if (argc == 2 && std::string(argv[1]) == "--help") {
-            std::cout << "robotics-benchmark SCENARIO.yaml [ITERATIONS=20]\n"
+            std::cout << "nereus-benchmark SCENARIO.yaml [ITERATIONS=20]\n"
                          "Three warmup runs; plant then plant+sensors; no IO/graphics in measured "
                          "steps.\n";
             return 0;
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
         measure(scenario, iterations, true);
         return 0;
     } catch (const std::exception &error) {
-        std::cerr << "robotics-benchmark: " << error.what() << '\n';
+        std::cerr << "nereus-benchmark: " << error.what() << '\n';
         return 1;
     }
 }

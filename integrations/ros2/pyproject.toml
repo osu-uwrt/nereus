@@ -3,15 +3,15 @@ requires = ["setuptools>=65,<81"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "robotics-platform-ros"
+name = "nereus-ros"
 version = "0.1.0"
-description = "Optional ROS 2 transport for data-configured robotics-platform simulations"
+description = "Optional ROS 2 transport for data-configured nereus simulations"
 requires-python = ">=3.10"
 classifiers = ["Private :: Do Not Upload", "Programming Language :: Python :: 3"]
-dependencies = ["robotics-platform==0.1.0"]
+dependencies = ["nereus==0.1.0"]
 
 [project.scripts]
-robotics-platform-ros = "robotics_platform_ros.__main__:main"
+nereus-ros = "nereus_ros.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["python"]

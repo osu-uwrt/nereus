@@ -32,9 +32,9 @@ std::filesystem::path ResolvedScenario::asset(const std::string &role, const std
 }
 
 ResolvedScenario parseResolvedScenario(const Json &document) {
-    if (!document.is_object() || member(document, "format") != "robotics_platform.resolved_scenario")
+    if (!document.is_object() || member(document, "format") != "nereus.resolved_scenario")
         throw std::runtime_error("resolved scenario: unexpected format (write it with "
-                                 "`python -m robotics_platform.packs resolve`)");
+                                 "`python -m nereus.packs resolve`)");
     ResolvedScenario result;
     result.scenario = member(document, "scenario");
     result.robot = member(document, "robot");

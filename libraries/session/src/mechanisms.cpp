@@ -1,4 +1,4 @@
-// Port of python/src/robotics_platform/mechanisms.py (same validation, messages and semantics).
+// Port of python/src/nereus/mechanisms.py (same validation, messages and semantics).
 #include <robotics/session/mechanisms.hpp>
 
 #include "json_util.hpp"

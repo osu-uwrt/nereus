@@ -1,4 +1,4 @@
-# Robotics Platform
+# Nereus
 
 A config-driven underwater robot simulator and operator interface, built to test a real ROS 2 robot stack
 unchanged. Describe your robot, pool, course and ROS topics in YAML; the simulator publishes what your robot's
@@ -7,10 +7,10 @@ the real robot.
 
 ![Pool viewer on the RoboSub 2026 course](docs/images/viewer.jpg)
 
-- **Simulator** (`robotics-sim-ros`): 6-DOF marine dynamics, delayed thrusters, IMU/FOG/DVL/depth, stereo
+- **Simulator** (`nereus-sim`): 6-DOF marine dynamics, delayed thrusters, IMU/FOG/DVL/depth, stereo
   cameras with depth and point clouds, claw/launcher/dropper/magnet mechanisms, contact props (Bullet), task
   scoring. C++, runs at real time with cameras.
-- **Pool viewer** (`robotics-pool-viewer`): 3D scene, camera cards, motion control, autonomy, mapping,
+- **Pool viewer** (`nereus-viewer`): 3D scene, camera cards, motion control, autonomy, mapping,
   detections and point clouds, run scorecard. Works against the simulator or a real robot.
 - **Packs**: all robot/pool/course/bridge data lives in `content/packs/`; nothing about your robot is in code.
 
@@ -48,7 +48,7 @@ ros2 launch integrations/uwrt/launch/robot.launch.py
 ```
 
 The launch files use your shell's RMW; UWRT runs Zenoh (`ros2 run rmw_zenoh_cpp rmw_zenohd`). Run records
-(resolved scenario, performance, task events) go to `/tmp/robotics_sim/<timestamp>/`. A run waits for **Start
+(resolved scenario, performance, task events) go to `/tmp/nereus_sim/<timestamp>/`. A run waits for **Start
 run** in the viewer before scoring.
 
 ## How it fits together
@@ -59,9 +59,9 @@ content/packs/scenarios/<name>/scenario.yaml   picks a robot, pool, tasks and br
    ├── pools/<pool>/pool.yaml        pool size, walls, water, lighting
    ├── tasks/<set>/tasks.yaml        task files, scoring rules, scorecard UI
    └── bridges/<bridge>/bridge.yaml  ROS topics, services, TF and message field mapping
-        │  python -m robotics_platform.packs resolve   (validates, writes one resolved.json)
+        │  python -m nereus.packs resolve   (validates, writes one resolved.json)
         ▼
-robotics-sim-ros resolved.json  ◄── ROS 2 ──►  your robot stack   ◄── ROS 2 ──►  robotics-pool-viewer
+nereus-sim resolved.json  ◄── ROS 2 ──►  your robot stack   ◄── ROS 2 ──►  nereus-viewer
 ```
 
 | Folder | Contents |
@@ -85,7 +85,7 @@ robotics-sim-ros resolved.json  ◄── ROS 2 ──►  your robot stack   �
 Check a pack after editing:
 
 ```sh
-PYTHONPATH=python/src python3 -m robotics_platform.packs validate content/packs/scenarios/talos_uwrt
+PYTHONPATH=python/src python3 -m nereus.packs validate content/packs/scenarios/talos_uwrt
 ```
 
 ## Tests

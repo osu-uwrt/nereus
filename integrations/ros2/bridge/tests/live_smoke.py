@@ -1,9 +1,9 @@
-"""Live FastDDS smoke: run the Python bridge and robotics-sim-ros the same way on private ROS
+"""Live FastDDS smoke: run the Python bridge and nereus-sim the same way on private ROS
 domains, then compare their topic lists/types, sample messages, service replies and parameter.
 
-    live_smoke.py <robotics-sim-ros binary> <resolved.json> <scenario pack dir>
+    live_smoke.py <nereus-sim binary> <resolved.json> <scenario pack dir>
 
-Needs a sourced ROS 2 (Humble) with riptide_msgs2 and a python3 that can import robotics_platform.
+Needs a sourced ROS 2 (Humble) with riptide_msgs2 and a python3 that can import nereus.
 Exit status 0 when both bridges agree. Values that depend on noise or wall time are compared
 structurally (fields, frames, sizes); deterministic ones (actuator status, service replies) exactly.
 """
@@ -121,7 +121,7 @@ def main() -> int:
     run_bridge([binary, resolved, "--output", str(work / "cpp_run"), "--no-cameras"], 91, {}, cpp)
     python_path = os.pathsep.join([str(ROOT / "integrations/ros2/python"), str(ROOT / "python/src"),
                                    os.environ.get("PYTHONPATH", "")])
-    run_bridge(["/usr/bin/python3", "-m", "robotics_platform_ros", scenario, "--output", str(work / "py_run"),
+    run_bridge(["/usr/bin/python3", "-m", "nereus_ros", scenario, "--output", str(work / "py_run"),
                 "--no-cameras"], 92, {"PYTHONPATH": python_path}, py)
     a, b = json.loads(cpp.read_text()), json.loads(py.read_text())
     problems = []

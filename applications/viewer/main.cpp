@@ -1,5 +1,5 @@
 #include "interface.hpp"
-#ifdef RP_VIEWER_SCENES
+#ifdef NEREUS_VIEWER_SCENES
 #include "scene_view.hpp"
 #endif
 
@@ -28,13 +28,13 @@ int main(int argc, char **argv) {
         for (int i = 1; i < argc; ++i) {
             const std::string argument(argv[i]);
             if (argument == "--help") {
-                std::cout << "robotics-viewer [WORKSPACE.yaml] [--hidden --frames N] [--time-ns N] "
+                std::cout << "nereus-desktop [WORKSPACE.yaml] [--hidden --frames N] [--time-ns N] "
                              "[--screenshot OUTPUT.ppm]\n";
                 std::cout << "Optional scene build: --scene SCENE.yaml --shaders DIRECTORY\n";
                 return 0;
             }
             if ((argument == "--shaders" || argument == "--scene") && i + 1 < argc) {
-#ifdef RP_VIEWER_SCENES
+#ifdef NEREUS_VIEWER_SCENES
                 if (argument == "--shaders")
                     shaders = argv[++i];
                 else
@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
             throw std::invalid_argument("--hidden/--screenshot require a positive --frames count");
         robotics::viewer::Desktop desktop(hidden);
         robotics::viewer::SceneDraw scene_draw;
-#ifdef RP_VIEWER_SCENES
+#ifdef NEREUS_VIEWER_SCENES
         scene_draw = robotics::viewer::sceneDrawer(shaders);
 #endif
         robotics::viewer::Interface interface(workspace, std::move(scene_draw), scene);
@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
         }
         return 0;
     } catch (const std::exception &error) {
-        std::cerr << "robotics-viewer: " << error.what() << '\n';
+        std::cerr << "nereus-desktop: " << error.what() << '\n';
         return 1;
     }
 }

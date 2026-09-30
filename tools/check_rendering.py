@@ -70,13 +70,13 @@ def main():
         for path in installed.rglob("*.cmake"):
             text = path.read_text()
             forbidden = [str(source), str(ROOT)]
-            if path.name.startswith("RoboticsPlatformTargets"):
+            if path.name.startswith("NereusTargets"):
                 forbidden += [
                     "glfw",
-                    "rp_simulation",
-                    "rp_config",
+                    "nereus_simulation",
+                    "nereus_config",
                     "yaml-cpp",
-                    "rp_visualization",
+                    "nereus_visualization",
                     "imgui",
                 ]
             if any(token in text for token in forbidden):
@@ -97,9 +97,9 @@ def main():
         run([cmake, "--build", temp / "consumer-build", "--parallel", "2"], env=env)
         run([temp / "consumer-build/scene_demo"], cwd=temp, env=env)
         capture = ROOT / "build" / args.preset / "captures"
-        data = installed / "share/robotics_platform"
+        data = installed / "share/nereus"
         command = [
-            installed / "bin/robotics-render-capture",
+            installed / "bin/nereus-render-capture",
             data / "shaders",
             data / "visuals/talos",
             capture,

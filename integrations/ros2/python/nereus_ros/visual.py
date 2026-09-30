@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from robotics_platform import _native as native
+from nereus import _native as native
 
 from . import mapping
 

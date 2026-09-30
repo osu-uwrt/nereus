@@ -5,7 +5,7 @@
 ```sh
 cmake --build --preset ros-viewer -j4
 ctest --test-dir build/ros-viewer -LE live -R <area>      # the tests for what you touched
-PYTHONPATH=python/src python3 -m robotics_platform.packs validate content/packs/scenarios/talos_uwrt
+PYTHONPATH=python/src python3 -m nereus.packs validate content/packs/scenarios/talos_uwrt
 ```
 
 Run the full suites (`ctest ... -LE live -j2`, `pytest` in `tests/python`) for changes to the simulation,

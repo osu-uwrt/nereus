@@ -10,7 +10,7 @@ namespace r = robotics::rendering;
 
 namespace {
 const rs::ResolvedScenario &talos() {
-    static const auto resolved = rs::loadResolvedScenario(RP_RESOLVED_TALOS);
+    static const auto resolved = rs::loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     return resolved;
 }
 std::size_t texturedWith(const r::Scene &scene, const std::string &name) {

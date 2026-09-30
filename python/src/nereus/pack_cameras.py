@@ -4,7 +4,7 @@ Standalone: needs only the optional camera extension (no simulation runtime, no 
 Robot poses are the robot frame root (``robot.frames.root``) in the scenario world frame;
 camera eyes follow the robot pack's frame tree. Scene content, appearance, calibration and
 noise come only from pack data; unsupported content is rejected rather than skipped.
-Pose validation, composition and frame resolution are the native rp_spatial ones.
+Pose validation, composition and frame resolution are the native nereus_spatial ones.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ NEAR_PLANE_M = 0.05  # original camera_faker clipping planes
 FAR_PLANE_M = 100.0
 DEFAULT_JPEG_QUALITY = 93  # unused unless JPEG is requested
 PANEL_TOLERANCE_M = 5e-4  # declared panel faces are sub-millimetre data
-SEED_POLICY = ("uint32 = first 4 bytes, big-endian, of sha256(b'robotics_platform.camera.v1'"
+SEED_POLICY = ("uint32 = first 4 bytes, big-endian, of sha256(b'nereus.camera.v1'"
                " NUL decimal(scenario seed) NUL sensor id NUL eye)")
 EYES = ("left", "right")
 _NOISE = {  # pack depth.noise key -> native DepthNoise attribute
@@ -52,7 +52,7 @@ class CameraCapture:
 
 def derive_seed(seed: int, sensor_id: str, eye: str) -> int:
     """Stable 32-bit processor seed; independent of process hashing and camera order."""
-    text = b"\0".join([b"robotics_platform.camera.v1", str(seed).encode(), sensor_id.encode(),
+    text = b"\0".join([b"nereus.camera.v1", str(seed).encode(), sensor_id.encode(),
                        eye.encode()])
     return int.from_bytes(hashlib.sha256(text).digest()[:4], "big")
 

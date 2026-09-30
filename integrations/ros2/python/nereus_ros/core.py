@@ -16,10 +16,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from robotics_platform import _native as native
-from robotics_platform.mechanisms import CommandResult
-from robotics_platform.pack_runtime import PackRuntime
-from robotics_platform.session import Session
+from nereus import _native as native
+from nereus.mechanisms import CommandResult
+from nereus.pack_runtime import PackRuntime
+from nereus.session import Session
 
 from . import mapping, visual
 from .mapping import (

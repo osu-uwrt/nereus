@@ -1,7 +1,7 @@
-// CameraSink over robotics::session_cameras::SessionCameras (built when RP_BUILD_SESSION_CAMERAS
+// CameraSink over robotics::session_cameras::SessionCameras (built when NEREUS_BUILD_SESSION_CAMERAS
 // is on). Ports camera_bridge.py's stream compilation and images.py's message formatting; the
 // scheduling, bounded workers, stale discard and seed reset live in SessionCameras.
-#ifdef RP_BRIDGE_CAMERAS
+#ifdef NEREUS_BRIDGE_CAMERAS
 #include "camera_sink.hpp"
 #include "mapping.hpp"
 #include "session_port.hpp"

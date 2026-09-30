@@ -14,7 +14,7 @@ using namespace std::chrono_literals;
 
 namespace {
 const rs::ResolvedScenario &talos() {
-    static const auto resolved = rs::loadResolvedScenario(RP_RESOLVED_TALOS);
+    static const auto resolved = rs::loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     return resolved;
 }
 
@@ -66,10 +66,10 @@ TEST(SessionCamerasSeeds, Sha256AndDerivation) {
     const auto two = sc::sha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq");
     EXPECT_EQ(two[0], 0x24);
     EXPECT_EQ(two[31], 0xc1); // 248d6a61...19db06c1
-    // Values from python/src/robotics_platform/pack_cameras.py derive_seed.
-    EXPECT_EQ(sc::deriveSeed(0, "front", "left"), 927953110u);
-    EXPECT_EQ(sc::deriveSeed(12345, "front", "right"), 1479638767u);
-    EXPECT_EQ(sc::deriveSeed(18446744073709551615ull, "a", "left"), 245744339u);
+    // Values from python/src/nereus/pack_cameras.py derive_seed.
+    EXPECT_EQ(sc::deriveSeed(0, "front", "left"), 3562221999u);
+    EXPECT_EQ(sc::deriveSeed(12345, "front", "right"), 737816300u);
+    EXPECT_EQ(sc::deriveSeed(18446744073709551615ull, "a", "left"), 1862611008u);
 }
 
 TEST(SessionCameras, ConfigurationFromPack) {

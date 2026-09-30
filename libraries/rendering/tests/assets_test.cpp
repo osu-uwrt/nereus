@@ -7,7 +7,7 @@
 
 using namespace robotics::rendering;
 TEST(MeshAssets, OriginalTalosBodyAndRotorsKeepTriangleCountsAndTransparency) {
-    const std::filesystem::path root = std::filesystem::path(RP_VISUAL_CONTENT) / "talos";
+    const std::filesystem::path root = std::filesystem::path(NEREUS_VISUAL_CONTENT) / "talos";
     const auto body = loadMesh(root / "Talos3_body.glb");
     std::size_t triangles = 0, transparent = 0;
     for (const auto &part : body.submeshes) {
@@ -27,9 +27,9 @@ TEST(MeshAssets, OriginalTalosBodyAndRotorsKeepTriangleCountsAndTransparency) {
 }
 TEST(MeshAssets, RejectsMissingMalformedAndOversizedAssets) {
     EXPECT_THROW(loadMesh("/does/not/exist.glb"), std::runtime_error);
-    EXPECT_THROW(loadMesh(std::filesystem::path(RP_VISUAL_CONTENT) / "talos/inventory.json"),
+    EXPECT_THROW(loadMesh(std::filesystem::path(NEREUS_VISUAL_CONTENT) / "talos/inventory.json"),
                  std::runtime_error);
-    const auto body = std::filesystem::path(RP_VISUAL_CONTENT) / "talos/Talos3_body.glb";
+    const auto body = std::filesystem::path(NEREUS_VISUAL_CONTENT) / "talos/Talos3_body.glb";
     AssetLimits limits;
     limits.file_bytes = 1;
     EXPECT_THROW(loadMesh(body, limits), std::runtime_error);
@@ -41,7 +41,7 @@ TEST(MeshAssets, RejectsMissingMalformedAndOversizedAssets) {
 }
 
 TEST(MeshAssets, NestedTransformsUseAuthoredAxesAndInverseTransposeNormals) {
-    const auto asset = loadMesh(std::filesystem::path(RP_ASSET_FIXTURES) / "nested_mesh.gltf");
+    const auto asset = loadMesh(std::filesystem::path(NEREUS_ASSET_FIXTURES) / "nested_mesh.gltf");
     ASSERT_EQ(asset.submeshes.size(), 2U);
     const auto &part = asset.submeshes[0];
     ASSERT_EQ(part.vertices.size(), 3U);
@@ -60,12 +60,12 @@ TEST(MeshAssets, NestedTransformsUseAuthoredAxesAndInverseTransposeNormals) {
     EXPECT_TRUE(asset.maximum.isApprox(Eigen::Vector3f(4, 13, 7), 1e-6f));
     AssetLimits limits;
     limits.nodes = 1;
-    EXPECT_THROW(loadMesh(std::filesystem::path(RP_ASSET_FIXTURES) / "nested_mesh.gltf", limits),
+    EXPECT_THROW(loadMesh(std::filesystem::path(NEREUS_ASSET_FIXTURES) / "nested_mesh.gltf", limits),
                  std::runtime_error);
 }
 
 TEST(MeshAssets, EveryOriginalSubmeshKeepsOrderTopologyMaterialsAndVertexStatistics) {
-    std::ifstream reference(std::filesystem::path(RP_ASSET_FIXTURES) / "legacy_mesh_assets.csv");
+    std::ifstream reference(std::filesystem::path(NEREUS_ASSET_FIXTURES) / "legacy_mesh_assets.csv");
     ASSERT_TRUE(reference);
     std::string line, previous;
     ASSERT_TRUE(std::getline(reference, line));
@@ -82,7 +82,7 @@ TEST(MeshAssets, EveryOriginalSubmeshKeepsOrderTopologyMaterialsAndVertexStatist
             if (!previous.empty()) {
                 EXPECT_EQ(part_count, asset.submeshes.size());
             }
-            const auto root = std::filesystem::path(RP_VISUAL_CONTENT) / "talos";
+            const auto root = std::filesystem::path(NEREUS_VISUAL_CONTENT) / "talos";
             asset = loadMesh(fields[0] == "Talos3_body.glb" ? root / fields[0]
                                                             : root / "rotors" / fields[0]);
             previous = fields[0];
@@ -335,7 +335,7 @@ TEST(PerforatePanel, RejectsInvalidParameters) {
 }
 
 TEST(PerforatePanel, RobosubTorpedoSeparatesFrameBackingAndTexturedFront) {
-    const auto path = std::filesystem::path(RP_VISUAL_CONTENT).parent_path() /
+    const auto path = std::filesystem::path(NEREUS_VISUAL_CONTENT).parent_path() /
                       "packs/tasks/robosub_2026/assets/torpedo/model.dae";
     const auto source = loadMesh(path);
     PanelCutouts panel;

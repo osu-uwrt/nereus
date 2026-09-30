@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-import robotics_platform as rp
+import nereus as rp
 
 
 def initial() -> rp.BodyState:

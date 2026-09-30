@@ -8,8 +8,8 @@ import unittest
 from typing import Any
 
 try:
-    from robotics_platform_ros.core import BridgeError
-    from robotics_platform_ros.mapping import (
+    from nereus_ros.core import BridgeError
+    from nereus_ros.mapping import (
         SCALAR,
         MappingError,
         compile_reader,

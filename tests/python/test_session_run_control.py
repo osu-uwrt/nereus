@@ -10,9 +10,9 @@ import math
 import unittest
 from pathlib import Path
 
-from robotics_platform.pack_runtime import create_runtime
-from robotics_platform.packs import resolve_scenario
-from robotics_platform.session import Session
+from nereus.pack_runtime import create_runtime
+from nereus.packs import resolve_scenario
+from nereus.session import Session
 
 ROOT = Path(__file__).resolve().parents[2]
 SCENARIO = ROOT / "content/packs/scenarios/talos_uwrt"

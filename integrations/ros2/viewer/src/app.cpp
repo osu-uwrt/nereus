@@ -47,8 +47,8 @@ std::string trimSlashes(std::string s) {
     return s;
 }
 fs::path contentDirectory() {
-#ifdef RP_VIEWER_CONTENT
-    return RP_VIEWER_CONTENT;
+#ifdef NEREUS_VIEWER_CONTENT
+    return NEREUS_VIEWER_CONTENT;
 #else
     return fs::current_path();
 #endif
@@ -355,7 +355,7 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
             (!opt_.poseSource.empty() ? opt_.poseSource : lookup(config_, {"pose", "source"}).as<std::string>("auto")) ==
             "estimate";
         const bool simTime = opt_.useSimTime.value_or(!estimateOnly);
-        node_ = std::make_shared<rclcpp::Node>("robotics_pool_viewer",
+        node_ = std::make_shared<rclcpp::Node>("nereus_viewer",
                                                rclcpp::NodeOptions().parameter_overrides(
                                                    {rclcpp::Parameter("use_sim_time", simTime)}));
     }
@@ -378,12 +378,12 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
                                        lookup(config_, {"branding", "window_title"}).as<std::string>("Robotics Pool Viewer"),
                                        opt_.hidden, opt_.vsync);
     fs::path shaders = opt_.shaders;
-#ifdef RP_RENDERING_SHADERS
+#ifdef NEREUS_RENDERING_SHADERS
     if (shaders.empty())
-        shaders = RP_RENDERING_SHADERS;
+        shaders = NEREUS_RENDERING_SHADERS;
 #endif
     if (shaders.empty())
-        shaders = fs::canonical("/proc/self/exe").parent_path().parent_path() / "share/robotics_platform/shaders";
+        shaders = fs::canonical("/proc/self/exe").parent_path().parent_path() / "share/nereus/shaders";
     renderer_ = std::make_unique<rendering::Renderer>(shaders);
     glGenFramebuffers(1, &readFbo_);
     glGenFramebuffers(1, &drawFbo_);
@@ -577,7 +577,7 @@ void App::loadScenario(const std::string &json) {
             lights_ = StatusLights(YAML::LoadFile(lightsPath.string()));
     } catch (const std::exception &error) {
         lights_ = {};
-        std::cerr << "robotics-pool-viewer: status lights disabled: " << error.what() << '\n';
+        std::cerr << "nereus-viewer: status lights disabled: " << error.what() << '\n';
     }
     const auto thrusterPath = resolve("thruster_visuals_config", "talos_uwrt_thruster_visuals.yaml");
     try {
@@ -585,7 +585,7 @@ void App::loadScenario(const std::string &json) {
             thrusters_ = ThrusterVisuals(YAML::LoadFile(thrusterPath.string()), scenario_->thrusterOrder);
     } catch (const std::exception &error) {
         thrusters_ = {};
-        std::cerr << "robotics-pool-viewer: thruster animation disabled: " << error.what() << '\n';
+        std::cerr << "nereus-viewer: thruster animation disabled: " << error.what() << '\n';
     }
     SceneModelOptions options;
     options.config = config_;
@@ -641,7 +641,7 @@ void App::buildPanels() {
                                        : opt_.panelsPath;
     const bool haveConfig = configured != "none" && fs::exists(configured);
     if (!haveConfig && configured != "none")
-        std::cerr << "robotics-pool-viewer: panel composition " << configured << " not found; panels disabled\n";
+        std::cerr << "nereus-viewer: panel composition " << configured << " not found; panels disabled\n";
     panels::registerPanels(registry_);
     registerHostItems();
     panelRos_.registerFactories(registry_);
@@ -799,7 +799,7 @@ void App::loadMappingMarkers() {
         courseMode_ = course == "pack" ? 1 : course == "mapping" ? 2 : 0;
         mappingGhost_ = cfg["ghost"].as<bool>(false);
     } catch (const std::exception &error) {
-        std::cerr << "robotics-pool-viewer: mapping course disabled: " << error.what() << '\n';
+        std::cerr << "nereus-viewer: mapping course disabled: " << error.what() << '\n';
         mappingMarkers_.clear();
     }
 }
@@ -2053,7 +2053,7 @@ int App::loop() {
             try {
                 loadScenario(json);
             } catch (const std::exception &error) {
-                std::cerr << "robotics-pool-viewer: rejecting scenario document: " << error.what() << '\n';
+                std::cerr << "nereus-viewer: rejecting scenario document: " << error.what() << '\n';
             }
         }
         if (composition_)

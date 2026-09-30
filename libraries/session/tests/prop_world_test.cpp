@@ -23,7 +23,7 @@ constexpr double kRotationToleranceRad = 0.15;
 constexpr int kEventToleranceTicks = 10;
 
 Json readFixture() {
-    std::ifstream stream(std::string(RP_SESSION_FIXTURES) + "/prop_world.json");
+    std::ifstream stream(std::string(NEREUS_SESSION_FIXTURES) + "/prop_world.json");
     EXPECT_TRUE(stream.good());
     return Json::parse(stream);
 }
@@ -162,7 +162,7 @@ TEST_P(PropWorldEquivalence, MatchesPythonReference) {
     const std::string name = GetParam();
     const Json fixture = readFixture();
     const Json &data = fixture.at("cases").at(name);
-    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     const Replay run = replay(scenario, data, fixture.at("dt").get<double>(), fixture.at("sample_ticks").get<int>());
     compareEvents(run, data.at("events"), name);
     int worst = 0;
@@ -181,7 +181,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PropWorldEquivalence,
 
 TEST(PropWorld, FinalStatesAndQueriesMatch) {
     const Json fixture = readFixture();
-    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     for (const char *name : {"grasp_carry_release", "drop_helmet_basket", "drop_warning_basket", "release_elsewhere"}) {
         const Json &data = fixture.at("cases").at(name);
         PropWorld world(scenario, "table");
@@ -232,7 +232,7 @@ const Matrix6 kInverseMass = (Eigen::Matrix<double, 6, 1>() << 1 / 40., 1 / 45.,
 TEST(PropWorld, RobotContactsStopThePadsAtTheTable) {
     const Json fixture = readFixture();
     const Json &data = fixture.at("cases").at("empty_jaws");
-    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     PropWorld world(scenario, "table");
     auto contacts = world.vehicleContacts(0.4);
     const Matrix4 mount_local = matrixOf(data.at("mount_local"));
@@ -261,7 +261,7 @@ TEST(PropWorld, RobotContactsStopThePadsAtTheTable) {
 TEST(PropWorld, HeldPropIsPartOfTheRobotAgainstScenery) {
     const Json fixture = readFixture();
     const Json &data = fixture.at("cases").at("grasp_carry_release");
-    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     const double dt = fixture.at("dt").get<double>();
     const Matrix4 mount_local = matrixOf(data.at("mount_local"));
     const auto press = [&](bool robot_contacts) {
@@ -305,7 +305,7 @@ TEST(PropWorld, HeldPropIsPartOfTheRobotAgainstScenery) {
 }
 
 TEST(PropWorld, RejectsInvalidInputsAndMissingAssets) {
-    auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     PropWorld world(scenario, "table");
     EXPECT_EQ(world.task(), "table");
     EXPECT_EQ(world.mechanismId(), "claw");

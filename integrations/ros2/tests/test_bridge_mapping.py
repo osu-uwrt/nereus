@@ -10,7 +10,7 @@ import numpy as np
 
 try:
     import rosidl_runtime_py  # noqa: F401
-    from robotics_platform_ros.mapping import (
+    from nereus_ros.mapping import (
         BOOLEAN,
         INTEGER,
         MATRIX3,

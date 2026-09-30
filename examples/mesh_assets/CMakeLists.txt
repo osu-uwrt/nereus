@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
 project(MeshAssetConsumer LANGUAGES CXX)
-find_package(RoboticsPlatform REQUIRED CONFIG)
+find_package(Nereus REQUIRED CONFIG)
 add_executable(mesh_asset_demo main.cpp)
-target_link_libraries(mesh_asset_demo PRIVATE RoboticsPlatform::mesh_assets)
+target_link_libraries(mesh_asset_demo PRIVATE Nereus::mesh_assets)

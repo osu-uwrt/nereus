@@ -2,7 +2,7 @@
 
 import json
 
-import robotics_platform as rp
+import nereus as rp
 
 
 def main() -> None:

@@ -1,5 +1,5 @@
 #pragma once
-// Resolved scenario as produced by the pack tool (`python -m robotics_platform.packs`), i.e. the
+// Resolved scenario as produced by the pack tool (`python -m nereus.packs`), i.e. the
 // bridge's resolved.json layout plus `asset_paths`. Validation is the pack tool's job; this
 // loader only checks the fields it reads. Pack documents stay JSON: robot/pool/task data is
 // consumed by the component that owns it, never by name switches.

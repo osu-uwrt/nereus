@@ -13,8 +13,8 @@ compile_commands.json
 *.egg-info/
 # Local development links into build/ (python/src extension modules and content/shader symlinks)
 *.so
-/python/src/robotics_platform/content
-/python/src/robotics_platform/shaders
+/python/src/nereus/content
+/python/src/nereus/shaders
 # Local tooling state
 /.claude/
 /collaboration_logs/

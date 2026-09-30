@@ -71,7 +71,7 @@ def main():
         shutil.rmtree(build)
         for file in installed.rglob("*.cmake"):
             text = file.read_text()
-            if str(source) in text or str(ROOT) in text or "rp_simulation" in text:
+            if str(source) in text or str(ROOT) in text or "nereus_simulation" in text:
                 raise RuntimeError(f"Unwanted dependency in {file}")
         example = temp / "extension"
         shutil.copytree(ROOT / "examples/viewer", example)
@@ -97,7 +97,7 @@ def main():
                 env=env,
             )
             run([cmake, "--build", temp / "scene-consumer-build", "--parallel", "2"], env=env)
-            content = installed / "share/robotics_platform/visuals/scenes"
+            content = installed / "share/nereus/visuals/scenes"
             run(
                 [temp / "scene-consumer-build/scene_consumer",
                  content / "talos_workspace.yaml", content / "talos_motion.yaml"],
@@ -108,7 +108,7 @@ def main():
                  content / "talos_indicator_workspace.yaml", content / "talos_indicator_recording.yaml"],
                 cwd=temp, env=env,
             )
-        executable = installed / "bin/robotics-viewer"
+        executable = installed / "bin/nereus-desktop"
         run([executable, "--help"], cwd=temp, env=env)
         if args.graphics:
             graphics_env = dict(env)
@@ -128,10 +128,10 @@ def main():
             if scenes:
                 run(
                     [ROOT / "build" / args.preset / "scene_viewport_contract",
-                     installed / "share/robotics_platform/shaders"],
+                     installed / "share/nereus/shaders"],
                     cwd=temp, env=graphics_env,
                 )
-            fixture = installed / "share/robotics_platform/workspaces/local_demo.yaml"
+            fixture = installed / "share/nereus/workspaces/local_demo.yaml"
             cases = [
                 ("empty", []),
                 ("start", [fixture]),
@@ -139,7 +139,7 @@ def main():
             ]
             if scenes:
                 scene_workspace = (
-                    installed / "share/robotics_platform/visuals/scenes/talos_workspace.yaml"
+                    installed / "share/nereus/visuals/scenes/talos_workspace.yaml"
                 )
                 cases += [
                     ("talos-start", [scene_workspace]),

@@ -1,6 +1,6 @@
-// robotics-sim-ros <resolved.json> --output <run dir> [--sensors a,b] [--duration s]
+// nereus-sim <resolved.json> --output <run dir> [--sensors a,b] [--duration s]
 //                  [--no-cameras] [--always-cameras] [--validate-only]
-// The C++ simulator bridge (port of python -m robotics_platform_ros): validates the bridge pack
+// The C++ simulator bridge (port of python -m nereus_ros): validates the bridge pack
 // against the installed ROS types before the first step, then runs the session in real time and
 // writes resolved.json, execution.json, and on exit tasks.json and summary.json.
 #include "camera_sink.hpp"
@@ -65,7 +65,7 @@ Arguments parse(int argc, char **argv) {
             arguments.scenario = arg;
     }
     if (arguments.scenario.empty() || arguments.output.empty())
-        throw std::invalid_argument("usage: robotics-sim-ros <resolved.json> --output <run dir> "
+        throw std::invalid_argument("usage: nereus-sim <resolved.json> --output <run dir> "
                                     "[--sensors a,b] [--duration s] [--no-cameras] [--always-cameras] [--validate-only]");
     return arguments;
 }
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
     try {
         arguments = parse(argc, argv);
     } catch (const std::exception &error) {
-        std::cerr << "robotics_platform_ros: " << error.what() << "\n";
+        std::cerr << "nereus_ros: " << error.what() << "\n";
         return 2;
     }
 
@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
         writeJson(arguments.output / "execution.json",
                   executionRecord(*resolved, *core, sensors, deferred, duration_ns, cameras.get()));
     } catch (const std::exception &error) {
-        std::cerr << "robotics_platform_ros: " << error.what() << "\n";
+        std::cerr << "nereus_ros: " << error.what() << "\n";
         return 1;
     }
     if (arguments.validate_only) {
@@ -198,7 +198,7 @@ int main(int argc, char **argv) {
             reason = "interrupted";
     } catch (const std::exception &error) {
         reason = std::string("failed: ") + error.what();
-        std::cerr << "robotics_platform_ros: " << reason << "\n";
+        std::cerr << "nereus_ros: " << reason << "\n";
         status = 1;
     }
     std::signal(SIGINT, SIG_IGN); // a repeated Ctrl-C must not cut the records
@@ -231,7 +231,7 @@ int main(int argc, char **argv) {
         }
         writeJson(arguments.output / "summary.json", summary);
     } catch (const std::exception &error) {
-        std::cerr << "robotics_platform_ros: " << error.what() << "\n";
+        std::cerr << "nereus_ros: " << error.what() << "\n";
         status = 1;
     }
     node.reset();

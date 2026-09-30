@@ -9,8 +9,8 @@ import numpy as np
 
 try:
     from rclpy.serialization import deserialize_message, serialize_message
-    from robotics_platform_ros.images import compile_image_writer, compile_info_writer
-    from robotics_platform_ros.mapping import MappingError
+    from nereus_ros.images import compile_image_writer, compile_info_writer
+    from nereus_ros.mapping import MappingError
     from sensor_msgs.msg import CameraInfo, CompressedImage, Image
 except ImportError as error:
     raise unittest.SkipTest(f"camera message test dependencies unavailable: {error}") from None

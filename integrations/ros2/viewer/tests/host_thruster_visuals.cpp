@@ -14,7 +14,7 @@ const std::vector<std::string> kOrder{"VUS", "VUP", "HUS", "HUP", "HLS", "HLP", 
 TEST(HostThrusterVisuals, RpmIntegrationTimeoutAndGeometry) {
     ThrusterVisuals absent;
     ASSERT_TRUE(absent.rotors.empty() && absent.topic.empty());
-    ThrusterVisuals visuals(YAML::LoadFile(std::string(RP_VIEWER_CONTENT) + "/talos_uwrt_thruster_visuals.yaml"), kOrder);
+    ThrusterVisuals visuals(YAML::LoadFile(std::string(NEREUS_VIEWER_CONTENT) + "/talos_uwrt_thruster_visuals.yaml"), kOrder);
     ASSERT_TRUE(visuals.rotors.size() == 8);
     ASSERT_TRUE(visuals.rotors[3].inputIndex == 3 && visuals.rotors[3].asset == "rotor_HUP");
     // Recorded expectations from Talos's signed forward/reverse calibration.
@@ -88,7 +88,7 @@ TEST(HostThrusterVisuals, RpmIntegrationTimeoutAndGeometry) {
 }
 
 TEST(HostThrusterVisuals, RotorNamingAnUnknownThrusterIsRejected) {
-    const auto config = YAML::LoadFile(std::string(RP_VIEWER_CONTENT) + "/talos_uwrt_thruster_visuals.yaml");
+    const auto config = YAML::LoadFile(std::string(NEREUS_VIEWER_CONTENT) + "/talos_uwrt_thruster_visuals.yaml");
     EXPECT_THROW(ThrusterVisuals(config, {"VUS", "VUP", "HUS"}), std::invalid_argument);
     EXPECT_THROW(ThrusterVisuals(config, {}), std::invalid_argument);
 }
@@ -97,7 +97,7 @@ TEST(HostThrusterVisuals, RotorNamingAnUnknownThrusterIsRejected) {
 TEST(HostThrusterVisuals, ForceIndexFollowsBridgeOrder) {
     auto reordered = kOrder;
     std::swap(reordered[0], reordered[1]);
-    ThrusterVisuals visuals(YAML::LoadFile(std::string(RP_VIEWER_CONTENT) + "/talos_uwrt_thruster_visuals.yaml"), reordered);
+    ThrusterVisuals visuals(YAML::LoadFile(std::string(NEREUS_VIEWER_CONTENT) + "/talos_uwrt_thruster_visuals.yaml"), reordered);
     ASSERT_TRUE(visuals.rotors[0].id == "VUS" && visuals.rotors[0].inputIndex == 1);
     ASSERT_TRUE(visuals.rotors[1].id == "VUP" && visuals.rotors[1].inputIndex == 0);
 }

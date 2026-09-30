@@ -18,10 +18,10 @@ from typing import Any
 import numpy as np
 
 try:
-    from robotics_platform.pack_runtime import create_runtime
-    from robotics_platform.packs import resolve_scenario
-    from robotics_platform_ros.core import BridgeCore, BridgeError
-    from robotics_platform_ros.mapping import service_class
+    from nereus.pack_runtime import create_runtime
+    from nereus.packs import resolve_scenario
+    from nereus_ros.core import BridgeCore, BridgeError
+    from nereus_ros.mapping import service_class
     from std_msgs.msg import Empty, Float32MultiArray, String
     from visualization_msgs.msg import Marker
 except ImportError as error:  # pragma: no cover - environment dependent

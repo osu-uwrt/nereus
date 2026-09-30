@@ -7,7 +7,7 @@ using namespace robotics;
 
 TEST(ScenarioExecution, UnpolledWorkerMatchesSynchronousScenarioAndDrainsSensors) {
     const auto scenario =
-        config::loadScenario(std::filesystem::path(RP_CONTENT) / "examples/profile_pool.yaml");
+        config::loadScenario(std::filesystem::path(NEREUS_CONTENT) / "examples/profile_pool.yaml");
     auto expected = config::makeRuntime(scenario);
     auto observers = runner::telemetry(*expected, scenario.sensors, nullptr);
     std::size_t command = 0;
@@ -34,7 +34,7 @@ TEST(ScenarioExecution, UnpolledWorkerMatchesSynchronousScenarioAndDrainsSensors
 
 TEST(ScenarioExecution, StopJoinsWithoutCompletingLongScenario) {
     auto scenario =
-        config::loadScenario(std::filesystem::path(RP_CONTENT) / "examples/profile_pool.yaml");
+        config::loadScenario(std::filesystem::path(NEREUS_CONTENT) / "examples/profile_pool.yaml");
     scenario.ticks = 10000000;
     auto source = std::make_shared<visualization::LivePoseSource>(
         visualization::LivePoseOptions{"simulation", "clock"});
@@ -57,7 +57,7 @@ TEST(ScenarioExecution, WorkerFailurePropagatesToOwner) {
 }
 
 TEST(ScenarioExecution, OriginalTalosRigMovesEveryRotorFromRealizedForces) {
-    const auto content = std::filesystem::path(RP_CONTENT);
+    const auto content = std::filesystem::path(NEREUS_CONTENT);
     const auto scenario = config::loadScenario(content / "examples/talos_navigation_pool.yaml");
     const auto rig = viewer::loadRotorRig(content / "visuals/scenes/talos_rotors.yaml");
     ASSERT_EQ(rig.mounts.size(), 8U);

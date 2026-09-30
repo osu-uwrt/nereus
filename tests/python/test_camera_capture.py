@@ -11,9 +11,9 @@ from pathlib import Path
 import numpy as np
 
 try:
-    from robotics_platform import _camera as camera
+    from nereus import _camera as camera
 except ImportError:
-    if os.environ.get("RP_REQUIRE_CAMERA"):
+    if os.environ.get("NEREUS_REQUIRE_CAMERA"):
         raise
     camera = None
 
@@ -116,8 +116,8 @@ class CameraCaptureTests(unittest.TestCase):
     def test_extension_loads_without_native_simulation_or_ros(self):
         subprocess.run([sys.executable, "-c", "\n".join([
             "import sys",
-            "from robotics_platform import _camera",
-            "assert 'robotics_platform._native' not in sys.modules",
+            "from nereus import _camera",
+            "assert 'nereus._native' not in sys.modules",
             "assert not any(k == 'rclpy' or k.startswith('rclpy.') for k in sys.modules)",
         ])], check=True)
         self.assertTrue(self.host.device)

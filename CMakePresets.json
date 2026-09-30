@@ -29,7 +29,7 @@
       "inherits": "dev",
       "binaryDir": "${sourceDir}/build/asan",
       "cacheVariables": {
-        "RP_ENABLE_SANITIZERS": "ON"
+        "NEREUS_ENABLE_SANITIZERS": "ON"
       }
     },
     {
@@ -37,8 +37,8 @@
       "inherits": "viewer",
       "binaryDir": "${sourceDir}/build/scene-viewer",
       "cacheVariables": {
-        "RP_BUILD_SCENE_RENDERER": "ON",
-        "RP_INSTALL_REFERENCE_VISUALS": "ON"
+        "NEREUS_BUILD_SCENE_RENDERER": "ON",
+        "NEREUS_INSTALL_REFERENCE_VISUALS": "ON"
       }
     },
     {
@@ -47,7 +47,7 @@
       "binaryDir": "${sourceDir}/build/scene-viewer-asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "RP_ENABLE_SANITIZERS": "ON"
+        "NEREUS_ENABLE_SANITIZERS": "ON"
       }
     },
     {
@@ -55,8 +55,8 @@
       "inherits": "assets",
       "binaryDir": "${sourceDir}/build/rendering",
       "cacheVariables": {
-        "RP_BUILD_SCENE_RENDERER": "ON",
-        "RP_BUILD_RENDER_CAPTURE": "ON"
+        "NEREUS_BUILD_SCENE_RENDERER": "ON",
+        "NEREUS_BUILD_RENDER_CAPTURE": "ON"
       }
     },
     {
@@ -65,7 +65,7 @@
       "binaryDir": "${sourceDir}/build/rendering-asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "RP_ENABLE_SANITIZERS": "ON"
+        "NEREUS_ENABLE_SANITIZERS": "ON"
       }
     },
     {
@@ -73,10 +73,10 @@
       "inherits": "release",
       "binaryDir": "${sourceDir}/build/assets",
       "cacheVariables": {
-        "RP_BUILD_SIMULATION": "OFF",
-        "RP_BUILD_CLI": "OFF",
-        "RP_BUILD_MESH_ASSETS": "ON",
-        "RP_INSTALL_REFERENCE_VISUALS": "ON"
+        "NEREUS_BUILD_SIMULATION": "OFF",
+        "NEREUS_BUILD_CLI": "OFF",
+        "NEREUS_BUILD_MESH_ASSETS": "ON",
+        "NEREUS_INSTALL_REFERENCE_VISUALS": "ON"
       }
     },
     {
@@ -85,7 +85,7 @@
       "binaryDir": "${sourceDir}/build/assets-asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "RP_ENABLE_SANITIZERS": "ON"
+        "NEREUS_ENABLE_SANITIZERS": "ON"
       }
     },
     {
@@ -93,7 +93,7 @@
       "inherits": "release",
       "binaryDir": "${sourceDir}/build/plant-only",
       "cacheVariables": {
-        "RP_BUILD_CLI": "OFF",
+        "NEREUS_BUILD_CLI": "OFF",
         "BUILD_TESTING": "OFF"
       }
     },
@@ -102,9 +102,9 @@
       "inherits": "release",
       "binaryDir": "${sourceDir}/build/viewer",
       "cacheVariables": {
-        "RP_BUILD_SIMULATION": "OFF",
-        "RP_BUILD_CLI": "OFF",
-        "RP_BUILD_VIEWER": "ON"
+        "NEREUS_BUILD_SIMULATION": "OFF",
+        "NEREUS_BUILD_CLI": "OFF",
+        "NEREUS_BUILD_VIEWER": "ON"
       }
     },
     {
@@ -112,7 +112,7 @@
       "inherits": "release",
       "binaryDir": "${sourceDir}/build/simulation-view",
       "cacheVariables": {
-        "RP_BUILD_SIMULATION_VIEW": "ON"
+        "NEREUS_BUILD_SIMULATION_VIEW": "ON"
       }
     },
     {
@@ -121,7 +121,7 @@
       "binaryDir": "${sourceDir}/build/simulation-view-asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "RP_ENABLE_SANITIZERS": "ON"
+        "NEREUS_ENABLE_SANITIZERS": "ON"
       }
     },
     {
@@ -129,8 +129,8 @@
       "inherits": "simulation-view",
       "binaryDir": "${sourceDir}/build/simulator-viewer",
       "cacheVariables": {
-        "RP_BUILD_VIEWER": "ON",
-        "RP_BUILD_SIMULATOR_VIEWER": "ON"
+        "NEREUS_BUILD_VIEWER": "ON",
+        "NEREUS_BUILD_SIMULATOR_VIEWER": "ON"
       }
     },
     {
@@ -139,7 +139,7 @@
       "binaryDir": "${sourceDir}/build/simulator-viewer-asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "RP_ENABLE_SANITIZERS": "ON"
+        "NEREUS_ENABLE_SANITIZERS": "ON"
       }
     },
     {
@@ -148,7 +148,7 @@
       "binaryDir": "${sourceDir}/build/viewer-asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "RP_ENABLE_SANITIZERS": "ON"
+        "NEREUS_ENABLE_SANITIZERS": "ON"
       }
     },
     {
@@ -156,16 +156,16 @@
       "inherits": "scene-viewer",
       "binaryDir": "${sourceDir}/build/ros-viewer",
       "cacheVariables": {
-        "RP_BUILD_ROS_VIEWER": "ON",
-        "RP_BUILD_MESH_ASSETS": "ON",
+        "NEREUS_BUILD_ROS_VIEWER": "ON",
+        "NEREUS_BUILD_MESH_ASSETS": "ON",
         "BUILD_TESTING": "ON",
-        "RP_BUILD_SIMULATION": "ON",
-        "RP_BUILD_SESSION": "ON",
-        "RP_BUILD_PACK_SCENE": "ON",
-        "RP_BUILD_SESSION_CAMERAS": "ON",
-        "RP_BUILD_ROS_BRIDGE": "ON",
-        "RP_BUILD_CAMERAS": "ON",
-        "RP_BUILD_OFFSCREEN_RENDERER": "ON"
+        "NEREUS_BUILD_SIMULATION": "ON",
+        "NEREUS_BUILD_SESSION": "ON",
+        "NEREUS_BUILD_PACK_SCENE": "ON",
+        "NEREUS_BUILD_SESSION_CAMERAS": "ON",
+        "NEREUS_BUILD_ROS_BRIDGE": "ON",
+        "NEREUS_BUILD_CAMERAS": "ON",
+        "NEREUS_BUILD_OFFSCREEN_RENDERER": "ON"
       }
     },
     {
@@ -173,7 +173,7 @@
       "inherits": "dev",
       "binaryDir": "${sourceDir}/build/session",
       "cacheVariables": {
-        "RP_BUILD_SESSION": "ON",
+        "NEREUS_BUILD_SESSION": "ON",
         "BUILD_TESTING": "ON"
       }
     }

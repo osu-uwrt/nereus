@@ -1,4 +1,4 @@
-// Frame-time statistics for robotics-pool-viewer (--profile log and the F3 readout). Pure data, no GL/ROS.
+// Frame-time statistics for nereus-viewer (--profile log and the F3 readout). Pure data, no GL/ROS.
 #pragma once
 #include <algorithm>
 #include <array>

@@ -2,7 +2,7 @@
 // Renderer scene composition from a resolved scenario: pool, task static visuals (with UV
 // cutouts and per-visual texture overrides), robot visuals, plus caller-posed dynamic instances.
 // One implementation shared by the ROS viewer and the simulator's cameras; it mirrors
-// python/src/robotics_platform/pack_cameras.py, which stays the reference.
+// python/src/nereus/pack_cameras.py, which stays the reference.
 //
 // Robot poses are the robot frame root (`robot.frames.root`, the physics COM) in the scenario
 // world frame. Meshes are loaded once and shared (immutable) by every Scene composed.

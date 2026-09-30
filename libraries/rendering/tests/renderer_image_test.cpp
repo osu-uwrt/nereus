@@ -146,7 +146,7 @@ class RendererImage : public ::testing::Test {
     static void SetUpTestSuite() {
         context = std::make_unique<Context>();
         if (context->window)
-            renderer = std::make_unique<r::Renderer>(RP_RENDERING_SHADERS);
+            renderer = std::make_unique<r::Renderer>(NEREUS_RENDERING_SHADERS);
     }
     static void TearDownTestSuite() {
         renderer.reset();
@@ -155,7 +155,7 @@ class RendererImage : public ::testing::Test {
     void SetUp() override {
         if (!renderer)
             GTEST_SKIP() << "no OpenGL 3.3 context (DISPLAY unavailable)";
-        directory = fs::temp_directory_path() / ("rp_renderer_image_" + std::to_string(::getpid()));
+        directory = fs::temp_directory_path() / ("nereus_renderer_image_" + std::to_string(::getpid()));
         fs::create_directories(directory);
     }
     void TearDown() override {
@@ -168,7 +168,7 @@ class RendererImage : public ::testing::Test {
 };
 
 TEST_F(RendererImage, CaptureImageRequiresAFrameAndOmitsUnrequestedOutputs) {
-    r::Renderer fresh(RP_RENDERING_SHADERS);
+    r::Renderer fresh(NEREUS_RENDERING_SHADERS);
     EXPECT_THROW(fresh.captureImage(), std::logic_error);
     fresh.draw(scene(quad()), view(), plain(), 0, 33, 17);
     const auto rgb_only = fresh.captureImage(true, false);
@@ -298,7 +298,7 @@ TEST_F(RendererImage, SharedTexturesAreReusedAndReleasedWithTheirMeshes) {
 
 TEST_F(RendererImage, ImportedTaskAssetWithTextureRenders) {
     const fs::path asset =
-        fs::path(RP_PACK_CONTENT) / "tasks/robosub_2026/assets/torpedo/model.dae";
+        fs::path(NEREUS_PACK_CONTENT) / "tasks/robosub_2026/assets/torpedo/model.dae";
     if (!fs::exists(asset))
         GTEST_SKIP() << "imported torpedo asset unavailable";
     auto mesh = std::make_shared<r::MeshAsset>(r::loadMesh(asset));
@@ -313,7 +313,7 @@ TEST_F(RendererImage, ImportedTaskAssetWithTextureRenders) {
 }
 
 TEST_F(RendererImage, AbandonContextReleasesCpuOwnersWithoutAContextAndIsTerminal) {
-    r::Renderer lost(RP_RENDERING_SHADERS);
+    r::Renderer lost(NEREUS_RENDERING_SHADERS);
     auto mesh = quad();
     std::weak_ptr<const r::MeshAsset> retained = mesh;
     lost.draw(scene(mesh), view(), plain(), 0, 16, 16);

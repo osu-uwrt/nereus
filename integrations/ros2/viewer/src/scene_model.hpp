@@ -1,6 +1,6 @@
 // Composes the renderer scene (pool, course, robot, mechanisms, lights) from a Scenario and the
 // per-frame VisualState. Pool, task visuals (cutouts, texture overrides) and robot visuals come from
-// rp_pack_scene, the same composition the simulator's cameras use; this class adds the viewer-only
+// nereus_pack_scene, the same composition the simulator's cameras use; this class adds the viewer-only
 // content (rotor/claw animation, status lights, calibration board, markers, payloads).
 #pragma once
 #include "scenario.hpp"

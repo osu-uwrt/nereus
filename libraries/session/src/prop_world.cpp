@@ -1,4 +1,4 @@
-// Port of python/src/robotics_platform/prop_world.py: same algorithm, constants and event contract,
+// Port of python/src/nereus/prop_world.py: same algorithm, constants and event contract,
 // on Bullet's C++ API. PyBullet wraps btMultiBodyDynamicsWorld with base-only btMultiBody bodies
 // (createMultiBody), so this does the same instead of using btRigidBody: identical integration,
 // damping, contact and constraint code paths. Frame/quaternion helpers mirror the Python ones.

@@ -33,7 +33,7 @@ cleanup() { [ -n "${BRIDGE:-}" ] && kill "$BRIDGE" 2>/dev/null; wait 2>/dev/null
 trap cleanup EXIT
 
 ros2 daemon stop >/dev/null 2>&1
-python3 -m robotics_platform_ros "$ROOT/content/packs/scenarios/talos_uwrt" --output "$OUT" \
+python3 -m nereus_ros "$ROOT/content/packs/scenarios/talos_uwrt" --output "$OUT" \
   --no-cameras --duration 240 >"$OUT.log" 2>&1 &
 BRIDGE=$!
 for _ in $(seq 60); do

@@ -10,8 +10,8 @@ import math
 import unittest
 
 import numpy as np
-from robotics_platform import _native as native
-from robotics_platform.mechanisms import Mechanisms
+from nereus import _native as native
+from nereus.mechanisms import Mechanisms
 
 
 def robot():

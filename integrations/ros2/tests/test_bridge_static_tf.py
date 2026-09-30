@@ -6,7 +6,7 @@ import time
 import unittest
 
 import numpy as np
-from robotics_platform_ros.core import BridgeError
+from nereus_ros.core import BridgeError
 from test_bridge_core import BRIDGE, EPOCH_NS, OFFSET, WORLD, _make
 
 
@@ -72,12 +72,12 @@ class StaticTransformTests(unittest.TestCase):
         with self.assertRaisesRegex(BridgeError, "never_publish"):
             _make(bridge)
 
-    @unittest.skipUnless(os.environ.get("RP_TEST_ROS_LIVE") == "1", "live ROS test is opt-in")
+    @unittest.skipUnless(os.environ.get("NEREUS_TEST_ROS_LIVE") == "1", "live ROS test is opt-in")
     def test_late_listener_receives_static_transform_with_no_simulation_step(self):
         import rclpy
         from rclpy.node import Node
         from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
-        from robotics_platform_ros.node import BridgeNode
+        from nereus_ros.node import BridgeNode
         from tf2_msgs.msg import TFMessage
 
         rclpy.init()

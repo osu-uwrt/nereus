@@ -26,12 +26,12 @@ void print(const robotics::simulation::Snapshot &s) {
 
 int main(int argc, char **argv) {
     if (argc == 2 && std::string(argv[1]) == "--help") {
-        std::cout << "Usage: robotics-sim SCENARIO.yaml [--sensors OUTPUT.csv]\n"
+        std::cout << "Usage: nereus-run SCENARIO.yaml [--sensors OUTPUT.csv]\n"
                      "Run fixed simulation ticks without ROS or graphics; write CSV to stdout.\n";
         return 0;
     }
     if (argc != 2 && (argc != 4 || std::string(argv[2]) != "--sensors")) {
-        std::cerr << "Usage: robotics-sim SCENARIO.yaml [--sensors OUTPUT.csv]\n";
+        std::cerr << "Usage: nereus-run SCENARIO.yaml [--sensors OUTPUT.csv]\n";
         return 2;
     }
     try {
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
         std::cout.flush();
         return std::cout ? 0 : 1;
     } catch (const std::exception &error) {
-        std::cerr << "robotics-sim: " << error.what() << '\n';
+        std::cerr << "nereus-run: " << error.what() << '\n';
         return 1;
     }
 }

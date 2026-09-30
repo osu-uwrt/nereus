@@ -94,6 +94,6 @@ agree before any detection.
 ## Try it
 
 ```sh
-PYTHONPATH=python/src python3 -m robotics_platform.packs validate content/packs/scenarios/my_practice
+PYTHONPATH=python/src python3 -m nereus.packs validate content/packs/scenarios/my_practice
 ros2 launch integrations/uwrt/launch/sim.launch.py scenario:=$PWD/content/packs/scenarios/my_practice
 ```

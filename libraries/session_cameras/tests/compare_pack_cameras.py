@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Pixel comparison of rp_session_cameras against python/src/robotics_platform/pack_cameras.py.
+"""Pixel comparison of nereus_session_cameras against python/src/nereus/pack_cameras.py.
 
 Both render the same resolved scenario at fixed root poses with the scenario seed (noise on, always
-mode). Usage (needs the Python `_camera` extension built from this tree, RP_BUILD_CAMERA_PYTHON):
-  compare_pack_cameras.py --python-package DIR_WITH_robotics_platform_incl__camera.so \
+mode). Usage (needs the Python `_camera` extension built from this tree, NEREUS_BUILD_CAMERA_PYTHON):
+  compare_pack_cameras.py --python-package DIR_WITH_nereus_incl__camera.so \
       --capture-tool build/.../session_cameras_capture --scenario content/packs/scenarios/talos_uwrt
 """
 import argparse
@@ -43,8 +43,8 @@ def main() -> int:
     ap.add_argument("--resolved-json", type=Path, required=True, help="pack tool output for the C++ side")
     args = ap.parse_args()
     sys.path.insert(0, str(args.python_package))
-    from robotics_platform import pack_cameras as pc
-    from robotics_platform.packs import resolve_scenario
+    from nereus import pack_cameras as pc
+    from nereus.packs import resolve_scenario
 
     resolved = resolve_scenario(args.scenario)
     t0 = time.perf_counter()

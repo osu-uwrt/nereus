@@ -7,9 +7,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-import robotics_platform as rp
-from robotics_platform.pack_runtime import create_runtime
-from robotics_platform.packs import resolve_scenario
+import nereus as rp
+from nereus.pack_runtime import create_runtime
+from nereus.packs import resolve_scenario
 from test_packs_fixtures import write_generic_packs
 
 ROOT = Path(__file__).resolve().parents[2]

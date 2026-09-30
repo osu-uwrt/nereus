@@ -13,7 +13,7 @@ bool equal(glm::vec3 a, glm::vec3 b) {
 TEST(HostStatusLights, ModesTargetsAndPulses) {
     StatusLights absent;
     ASSERT_TRUE(absent.lights.empty() && absent.input.empty() && absent.topic.empty());
-    StatusLights lights(YAML::LoadFile(std::string(RP_VIEWER_CONTENT) + "/talos_uwrt_status_lights.yaml"));
+    StatusLights lights(YAML::LoadFile(std::string(NEREUS_VIEWER_CONTENT) + "/talos_uwrt_status_lights.yaml"));
     ASSERT_TRUE(lights.lights.size() == 3);
     ASSERT_TRUE(lights.topic == "command/led");
     for (const auto &light : lights.lights) {

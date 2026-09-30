@@ -58,8 +58,8 @@ def main():
         for path in installed.rglob("*.cmake"):
             data = path.read_text()
             forbidden = [str(source), str(ROOT)]
-            if path.name.startswith("RoboticsPlatformTargets"):
-                forbidden += ["OpenGL", "GLEW", "glfw", "rp_simulation", "yaml-cpp"]
+            if path.name.startswith("NereusTargets"):
+                forbidden += ["OpenGL", "GLEW", "glfw", "nereus_simulation", "yaml-cpp"]
             if any(token in data for token in forbidden):
                 raise RuntimeError(f"unwanted asset dependency: {path}")
         shutil.copytree(ROOT / "examples/mesh_assets", temp / "consumer")
@@ -79,7 +79,7 @@ def main():
         run(
             [
                 temp / "consumer-build/mesh_asset_demo",
-                installed / "share/robotics_platform/visuals/talos",
+                installed / "share/nereus/visuals/talos",
             ],
             cwd=temp,
             env=env,

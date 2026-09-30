@@ -17,7 +17,7 @@ OUT = Path(__file__).with_name("rules_calls.json")
 TESTS = ["test_task_scoring_2026.py", "test_task_step4.py", "test_session_run_control.py",
          "test_task_runtime.py"]
 
-from robotics_platform import task_runtime  # noqa: E402
+from nereus import task_runtime  # noqa: E402
 
 records: dict[str, dict] = {}
 

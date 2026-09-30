@@ -14,11 +14,11 @@ from pathlib import Path
 
 import numpy as np
 
-from robotics_platform import _native as native
-from robotics_platform.mechanisms import Mechanisms
-from robotics_platform.pack_runtime import create_runtime
-from robotics_platform.packs import resolve_scenario
-from robotics_platform.session import Session
+from nereus import _native as native
+from nereus.mechanisms import Mechanisms
+from nereus.pack_runtime import create_runtime
+from nereus.packs import resolve_scenario
+from nereus.session import Session
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]

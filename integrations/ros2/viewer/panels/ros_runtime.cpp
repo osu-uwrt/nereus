@@ -45,14 +45,14 @@ void RosProviders::stop() {
 }
 void RosProviders::registerFactories(Registry &registry) {
     RuntimeFactory factory = [owner = impl](const Context &ctx) { return owner->get(ctx); };
-#ifdef RP_VIEWER_UWRT
+#ifdef NEREUS_VIEWER_UWRT
     registerUwrtMotion(registry, factory);
     registerUwrtAutonomy(registry, factory);
 #endif
     registerStandardMotion(registry, factory);
     registerSimRun(registry, factory);
     registerSimulationRate(registry, factory);
-#ifdef RP_VIEWER_UWRT
+#ifdef NEREUS_VIEWER_UWRT
     registerUwrtActuators(registry, factory);
     registerUwrtMapping(registry, factory);
 #endif

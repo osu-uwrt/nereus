@@ -1,7 +1,7 @@
 """Scripted physical cases for the pack-driven claw/table prop world (no ROS, no wall time).
 
 Jaw motion comes from the real Mechanisms claw runtime; the robot pose is driven directly. When
-the original riptide_simulator claw_world.py is importable (RP_ORIGINAL_CLAW_WORLD or the sibling
+the original riptide_simulator claw_world.py is importable (NEREUS_ORIGINAL_CLAW_WORLD or the sibling
 release checkout) the same script also runs through its ClawWorld and outcomes are compared.
 """
 
@@ -14,17 +14,17 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-from robotics_platform import _native as native
-from robotics_platform.mechanisms import Mechanisms
-from robotics_platform.packs import resolve_scenario
-from robotics_platform.prop_world import PropWorld, Water, _matrix, _xyzw
+from nereus import _native as native
+from nereus.mechanisms import Mechanisms
+from nereus.packs import resolve_scenario
+from nereus.prop_world import PropWorld, Water, _matrix, _xyzw
 from ruamel.yaml import YAML
 
 ROOT = Path(__file__).resolve().parents[2]
 SCENARIO = ROOT / "content/packs/scenarios/talos_uwrt/scenario.yaml"
 ORIGINAL = Path(
     os.environ.get(
-        "RP_ORIGINAL_CLAW_WORLD",
+        "NEREUS_ORIGINAL_CLAW_WORLD",
         ROOT.parent.parent / "release/src/riptide_simulator/c_simulator",
     )
 )

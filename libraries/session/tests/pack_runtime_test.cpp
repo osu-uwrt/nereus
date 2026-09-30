@@ -15,7 +15,7 @@ Json boxJson(const robotics::simulation::BoxProxy &b) {
 
 TEST(PackRuntime, MatchesPythonPlantParametersFramesAndDynamics) {
     const auto fixture = loadFixture("pack_runtime_reference.json");
-    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     auto pack = createRuntime(scenario);
     const auto &p = pack.parameters;
 
@@ -83,7 +83,7 @@ TEST(PackRuntime, MatchesPythonPlantParametersFramesAndDynamics) {
 }
 
 TEST(PackRuntime, RejectsBadSensorSelections) {
-    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     std::vector<std::string> duplicate{"imu", "imu"}, unknown{"nope"}, camera{"ffc"};
     EXPECT_THROW(createRuntime(scenario, &duplicate), std::invalid_argument);
     EXPECT_THROW(createRuntime(scenario, &unknown), std::invalid_argument);

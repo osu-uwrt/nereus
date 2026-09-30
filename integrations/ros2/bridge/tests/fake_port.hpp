@@ -86,7 +86,7 @@ inline Json defaultBridge() {
 }
 
 inline session::ResolvedScenario makeScenario(const Json &bridge, const Json &robot) {
-    Json document = {{"format", "robotics_platform.resolved_scenario"},
+    Json document = {{"format", "nereus.resolved_scenario"},
                      {"version", 1},
                      {"scenario", {{"world_frame", "scenario_world"}, {"seed", 0}}},
                      {"robot", robot},

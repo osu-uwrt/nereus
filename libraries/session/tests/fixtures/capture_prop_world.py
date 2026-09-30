@@ -19,7 +19,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT / "tests/python"))
 import test_prop_world as t  # noqa: E402
-from robotics_platform.packs import resolve_scenario  # noqa: E402
+from nereus.packs import resolve_scenario  # noqa: E402
 
 SAMPLE_TICKS = 50
 

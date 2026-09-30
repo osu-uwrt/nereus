@@ -307,7 +307,7 @@
         "sha256"
       ],
       "additionalProperties": false,
-      "description": "robotics_platform repository file whose verified values this document copies."
+      "description": "nereus repository file whose verified values this document copies."
     },
     "provenance": {
       "type": "object",

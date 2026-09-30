@@ -1,4 +1,4 @@
-"""``python -m robotics_platform_ros <scenario> --output <run dir>``: run one bridged scenario.
+"""``python -m nereus_ros <scenario> --output <run dir>``: run one bridged scenario.
 
 Every run resolves the packs, validates the bridge against installed ROS types before the
 first step, and writes resolved.json, execution.json and (on exit) summary.json.
@@ -15,8 +15,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from robotics_platform.pack_runtime import create_runtime
-from robotics_platform.packs import PackError, resolve_scenario
+from nereus.pack_runtime import create_runtime
+from nereus.packs import PackError, resolve_scenario
 
 from .core import BridgeCore, BridgeError
 from .mapping import MappingError
@@ -38,7 +38,7 @@ def execution_record(resolved: Any, core: BridgeCore, sensors: list[str],
                      deferred: tuple[str, ...], duration_ns: int | None) -> dict[str, Any]:
     config = core.config
     return {
-        "format": "robotics_platform_ros.execution",
+        "format": "nereus_ros.execution",
         "version": 1,
         "resolved_content_sha256": resolved.manifest()["content_sha256"],
         "timestep_ns": core.timestep_ns,
@@ -46,7 +46,7 @@ def execution_record(resolved: Any, core: BridgeCore, sensors: list[str],
         "clock": {"epoch_ns": core.epoch_ns, "reset_policy": core.reset_policy,
                   "real_time_factor": core.real_time_factor, "topic": config["clock"]["topic"]},
         "namespace": config["namespace"],
-        "node_name": config.get("node_name", "robotics_platform_bridge"),
+        "node_name": config.get("node_name", "nereus_bridge"),
         "parameters": {"real_time_factor": "double on the bridge node; 0 pauses stepping and /clock, "
                                            "negative or non-finite values are rejected"},
         "world_frame": core.world_frame,
@@ -109,7 +109,7 @@ def without_cameras(resolved: Any) -> Any:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m robotics_platform_ros")
+    parser = argparse.ArgumentParser(prog="python -m nereus_ros")
     parser.add_argument("scenario", type=Path, help="scenario pack folder or file")
     parser.add_argument("--output", type=Path, required=True, help="run directory to create")
     parser.add_argument("--sensors", help="comma-separated robot sensor ids to execute "
@@ -135,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
         pack = create_runtime(resolved, sensor_ids=native_ids)
         cameras = None
         if camera_ids:
-            from robotics_platform.pack_cameras import PackCameras
+            from nereus.pack_cameras import PackCameras
 
             from .camera_bridge import CameraBridge
 
@@ -152,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
                execution_record(resolved, preflight, sensors, deferred,
                                 duration_ns))
     except (PackError, BridgeError, MappingError, ValueError, OSError, ImportError) as error:
-        print(f"robotics_platform_ros: {error}", file=sys.stderr)
+        print(f"nereus_ros: {error}", file=sys.stderr)
         return 1
     if arguments.validate_only:
         print(f"validated {arguments.scenario}; records in {arguments.output}")
@@ -170,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
         node = BridgeNode(lambda lookup: BridgeCore(resolved, pack, epoch_ns=epoch_ns,
                                                    lookup=lookup, cameras=cameras),
                           resolved.bridge["namespace"],
-                          resolved.bridge.get("node_name", "robotics_platform_bridge"))
+                          resolved.bridge.get("node_name", "nereus_bridge"))
         node.start_cameras()
         run(node, duration_ns)
     except KeyboardInterrupt:
@@ -192,14 +192,14 @@ def main(argv: list[str] | None = None) -> int:
         core = preflight if node is None else node.core
         tasks = core.session.tasks
         _write(arguments.output / "tasks.json", {
-            "format": "robotics_platform_ros.tasks", "version": 1,
+            "format": "nereus_ros.tasks", "version": 1,
             "scores": {} if tasks is None else dict(tasks.snapshot()["scores"]),
             "run": core.session.run_snapshot(),
             "counters": dict(core.session.task_counters),
             "events": json.loads(json.dumps(core.task_events, default=_plain)),
         })
         _write(arguments.output / "summary.json", {
-            "format": "robotics_platform_ros.summary", "version": 1, "stop": reason,
+            "format": "nereus_ros.summary", "version": 1, "stop": reason,
             "ticks": snapshot.tick, "elapsed_ns": snapshot.elapsed_ns,
             "generation": snapshot.generation,
             "killed": core.killed, "counters": asdict(core.counters),

@@ -10,11 +10,11 @@ from unittest.mock import Mock
 try:
     from rclpy.task import Future
     from robot_localization.srv import SetPose
-    from robotics_platform import Pose
-    from robotics_platform.pack_runtime import create_runtime
-    from robotics_platform.packs import resolve_scenario
-    from robotics_platform_ros.core import BridgeCore, Counters
-    from robotics_platform_ros.node import BridgeNode
+    from nereus import Pose
+    from nereus.pack_runtime import create_runtime
+    from nereus.packs import resolve_scenario
+    from nereus_ros.core import BridgeCore, Counters
+    from nereus_ros.node import BridgeNode
 except ImportError as error:
     raise SkipTest(f"ROS alignment dependencies unavailable: {error}") from None
 

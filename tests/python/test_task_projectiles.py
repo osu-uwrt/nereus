@@ -6,9 +6,9 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-from robotics_platform.packs import resolve_scenario
-from robotics_platform.task_projectiles import PerforatedPanel
-from robotics_platform.task_runtime import TaskRuntime, _placement, _pose
+from nereus.packs import resolve_scenario
+from nereus.task_projectiles import PerforatedPanel
+from nereus.task_runtime import TaskRuntime, _placement, _pose
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -65,9 +65,9 @@ class PanelTests(unittest.TestCase):
                          (2, 0, 0))
         self.assertEqual(panel.release_distance([3, 0, 0]), 1)
 
-    @unittest.skipUnless(os.environ.get('RP_PAYLOAD_REFERENCE'), 'optional pinned original model')
+    @unittest.skipUnless(os.environ.get('NEREUS_PAYLOAD_REFERENCE'), 'optional pinned original model')
     def test_random_geometry_matches_original_model(self):
-        path = os.environ['RP_PAYLOAD_REFERENCE']
+        path = os.environ['NEREUS_PAYLOAD_REFERENCE']
         spec = importlib.util.spec_from_file_location('original_payload_geometry', path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)

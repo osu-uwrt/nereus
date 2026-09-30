@@ -5,7 +5,7 @@
 using robotics::session::loadResolvedScenario;
 
 TEST(ResolvedScenario, LoadsTheTalosDocumentWithAbsoluteAssets) {
-    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     EXPECT_EQ(scenario.robot.at("id"), "talos");
     EXPECT_EQ(scenario.task("gate").at("kind"), "task");
     EXPECT_TRUE(scenario.asset("robot", "body_mesh").is_absolute());

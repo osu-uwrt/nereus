@@ -123,7 +123,7 @@ def main() -> int:
     os.environ.update({k: env[k] for k in ("ROS_DOMAIN_ID", "ROS_LOCALHOST_ONLY",
                                            "RMW_IMPLEMENTATION")})
     commands = [
-        [sys.executable, "-m", "robotics_platform_ros", str(args.scenario.resolve()),
+        [sys.executable, "-m", "nereus_ros", str(args.scenario.resolve()),
          "--output", str(args.output / "bridge")],
         ["ros2", "launch", str(HERE / "mission_stack.launch.py")],
     ]

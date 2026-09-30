@@ -39,7 +39,7 @@ session::ResolvedScenario withoutCameras(session::ResolvedScenario resolved) {
 }
 
 struct Talos {
-    session::ResolvedScenario resolved = withoutCameras(session::loadResolvedScenario(RP_RESOLVED_TALOS));
+    session::ResolvedScenario resolved = withoutCameras(session::loadResolvedScenario(NEREUS_RESOLVED_TALOS));
     std::vector<std::string> native_ids = [this] {
         std::vector<std::string> ids;
         for (const auto &sensor : resolved.robot.at("sensors"))

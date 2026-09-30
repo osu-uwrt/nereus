@@ -11,7 +11,7 @@ namespace r = robotics::rendering;
 
 void SceneModel::warn(const std::string &text) const {
     warnings_.push_back(text);
-    std::cerr << "robotics-pool-viewer: " << text << '\n';
+    std::cerr << "nereus-viewer: " << text << '\n';
 }
 
 std::shared_ptr<const r::MeshAsset> SceneModel::mesh(const std::filesystem::path &path) const {

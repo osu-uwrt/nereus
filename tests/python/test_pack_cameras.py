@@ -18,14 +18,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-from robotics_platform.packs import resolve_scenario
+from nereus.packs import resolve_scenario
 from test_camera_pack_fields import APPEARANCE, ASSET, CAMERA, CAMERA_FRAMES, MESH, mutate
 from test_packs_fixtures import write_generic_packs
 
 try:
-    from robotics_platform import pack_cameras as pc
+    from nereus import pack_cameras as pc
 except ImportError:
-    if os.environ.get("RP_REQUIRE_CAMERA"):
+    if os.environ.get("NEREUS_REQUIRE_CAMERA"):
         raise
     pc = None
 
@@ -151,9 +151,9 @@ class TalosPackCameraTests(unittest.TestCase):
     def test_module_needs_only_the_camera_extension(self):
         subprocess.run([sys.executable, "-c", "\n".join([
             "import sys",
-            "import robotics_platform.pack_cameras",
-            "loaded = [k for k in sys.modules if k.startswith(('robotics_platform._native',"
-            " 'robotics_platform.packs', 'rclpy'))]",
+            "import nereus.pack_cameras",
+            "loaded = [k for k in sys.modules if k.startswith(('nereus._native',"
+            " 'nereus.packs', 'rclpy'))]",
             "assert not loaded, loaded",
         ])], check=True)
 
@@ -283,9 +283,9 @@ class TalosPackCameraTests(unittest.TestCase):
                 cameras.reset(seed)
 
     def test_seed_derivation_is_stable_and_independent_of_selection_order(self):
-        self.assertEqual(pc.derive_seed(7, "ffc", "left"), 3893539410)
-        self.assertEqual(pc.derive_seed(7, "ffc", "right"), 1429836168)
-        self.assertEqual(pc.derive_seed(7, "dfc", "left"), 3363439695)
+        self.assertEqual(pc.derive_seed(7, "ffc", "left"), 1806992950)
+        self.assertEqual(pc.derive_seed(7, "ffc", "right"), 2700668674)
+        self.assertEqual(pc.derive_seed(7, "dfc", "left"), 2393369837)
         a = self.enabled(sensors=["ffc", "dfc"]).describe()
         b = self.enabled(sensors=["dfc", "ffc"]).describe()
         for sensor in ("ffc", "dfc"):
@@ -584,7 +584,7 @@ class NativeCoexistenceTests(unittest.TestCase):
     def test_camera_spatial_types_coexist_with_the_native_extension(self):
         script = "\n".join([
             "import numpy as np",
-            "from robotics_platform import _camera, _native",
+            "from nereus import _camera, _native",
             "def edge(module, parent, child, position, wxyz):",
             "    item = module.FixedFrame(); item.parent, item.child = parent, child",
             "    pose = module.Pose(); pose.translation = position",
@@ -611,7 +611,7 @@ class NativeCoexistenceTests(unittest.TestCase):
             "        continue",
             "    raise AssertionError('both extensions must apply native pose validation')",
         ])
-        probe = subprocess.run([sys.executable, "-c", "import robotics_platform._native"],
+        probe = subprocess.run([sys.executable, "-c", "import nereus._native"],
                                capture_output=True)
         if probe.returncode:
             self.skipTest("native extension is not installed alongside the camera extension")

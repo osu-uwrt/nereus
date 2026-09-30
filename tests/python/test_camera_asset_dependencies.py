@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from robotics_platform.packs import resolve_scenario
+from nereus.packs import resolve_scenario
 from test_pack_cameras import generic_packs, pc
 
 

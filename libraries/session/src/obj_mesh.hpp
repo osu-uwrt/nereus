@@ -1,5 +1,5 @@
 #pragma once
-// Minimal Wavefront OBJ reader for collision meshes (private to rp_session). Reads `v` lines and
+// Minimal Wavefront OBJ reader for collision meshes (private to nereus_session). Reads `v` lines and
 // triangulates `f` polygons as fans (collision assets are triangle meshes). Throws
 // std::runtime_error with the path in the message.
 #include <Eigen/Core>

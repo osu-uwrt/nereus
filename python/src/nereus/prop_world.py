@@ -102,7 +102,7 @@ def _bullet() -> tuple[Any, Any]:
     except ImportError as error:  # pragma: no cover - depends on the environment
         raise ImportError(
             "the prop world needs the optional pybullet package "
-            "(pip install 'robotics-platform[props]' or pip install pybullet)"
+            "(pip install 'nereus[props]' or pip install pybullet)"
         ) from error
     return pybullet, BulletClient
 

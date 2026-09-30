@@ -1,7 +1,7 @@
 #pragma once
 // Scheduled, on-demand acquisition of the robot pack's stereo cameras for a running session.
-// Ports python/src/robotics_platform/pack_cameras.py (capture/processing) and the worker half of
-// integrations/ros2/python/robotics_platform_ros/camera_bridge.py (scheduling, bounded queues,
+// Ports python/src/nereus/pack_cameras.py (capture/processing) and the worker half of
+// integrations/ros2/python/nereus_ros/camera_bridge.py (scheduling, bounded queues,
 // stale discard, seed reset). No ROS: products are plain buffers and numbers for a bridge to publish.
 //
 // Threading: request()/setDemand()/invalidate() are called by the session owner and never wait for
@@ -37,7 +37,7 @@ const char *outputName(Output); // "rgb_left" | "depth_left" | "rgb_right" (pack
 std::optional<Output> outputFromName(const std::string &);
 
 // Stable 32-bit processor seed: first 4 bytes, big-endian, of
-// sha256(b"robotics_platform.camera.v1" NUL decimal(seed) NUL sensor id NUL eye).
+// sha256(b"nereus.camera.v1" NUL decimal(seed) NUL sensor id NUL eye).
 std::uint32_t deriveSeed(std::uint64_t seed, const std::string &sensor_id, const std::string &eye);
 std::array<std::uint8_t, 32> sha256(const std::string &);
 
@@ -49,7 +49,7 @@ struct CameraInfo {
 };
 
 struct Options {
-    std::filesystem::path shader_directory; // default: $RP_SHADER_DIR, then the source-tree shaders
+    std::filesystem::path shader_directory; // default: $NEREUS_SHADER_DIR, then the source-tree shaders
     std::vector<std::string> sensor_ids;    // empty: every enabled stereo_camera
     bool always = false;                    // render every pack output regardless of demand
     std::map<std::string, int> jpeg_quality; // sensor id -> JPEG quality for colour outputs (absent: none)

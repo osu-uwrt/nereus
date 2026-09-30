@@ -8,7 +8,7 @@ using robotics::ros_viewer::host::loadMappingMarkers;
 
 namespace {
 std::filesystem::path write(const std::string &text) {
-    const auto path = std::filesystem::temp_directory_path() / ("rp_markers_" + std::to_string(::getpid()) + ".yaml");
+    const auto path = std::filesystem::temp_directory_path() / ("nereus_markers_" + std::to_string(::getpid()) + ".yaml");
     std::ofstream(path) << text;
     return path;
 }

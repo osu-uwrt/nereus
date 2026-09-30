@@ -49,7 +49,7 @@ PYBIND11_MODULE(_camera, m) {
         .def_readwrite("near_plane", &c::Intrinsics::near_plane)
         .def_readwrite("far_plane", &c::Intrinsics::far_plane)
         .def("projection", &c::Intrinsics::projection);
-    // rp_spatial types with the robotics_platform._native API and validation. Module-local so
+    // nereus_spatial types with the nereus._native API and validation. Module-local so
     // both extensions coexist in one process; each accepts the other's values (same C++ type).
     auto pose = py::class_<s::Pose>(m, "Pose", py::module_local()).def(py::init<>());
     pose.def_property(

@@ -18,7 +18,7 @@ from rcl_interfaces.msg import ParameterDescriptor, ParameterType, SetParameters
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
-from robotics_platform import _native as native
+from nereus import _native as native
 from rosgraph_msgs.msg import Clock
 from tf2_ros import (
     Buffer,
@@ -65,7 +65,7 @@ class BridgeNode(Node):
     """Owns every ROS entity of one bridge pack; never advances the runtime itself."""
 
     def __init__(self, core_factory: Callable[[Callable[[str, str], Any]], BridgeCore],
-                 namespace: str, node_name: str = "robotics_platform_bridge") -> None:
+                 namespace: str, node_name: str = "nereus_bridge") -> None:
         super().__init__(node_name, namespace=namespace)
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self, spin_thread=False)

@@ -1,6 +1,6 @@
 // Ported from riptide_simulator camera_faker pool_viewer uwrt_mapping.cpp; see docs/PROVENANCE.md.
 #include "ros_runtime.hpp"
-#ifdef RP_VIEWER_HAVE_CHAMELEON
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON
 #include <chameleon_tf_msgs/action/model_frame.hpp>
 #endif
 #include <riptide_msgs2/msg/mapping_target_info.hpp>
@@ -10,7 +10,7 @@
 
 namespace robotics::ros_viewer::panels {
 namespace {
-#ifdef RP_VIEWER_HAVE_CHAMELEON
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON
 using Cal = chameleon_tf_msgs::action::ModelFrame;
 using Goal = rclcpp_action::ClientGoalHandle<Cal>;
 #endif
@@ -22,7 +22,7 @@ class UwrtMapping final : public Mapping {
         : runtime(runtime), timeout(cfg["request_timeout"].as<double>(3)),
           calibrationTimeout(cfg["calibration_timeout"].as<double>(60)),
           statusTimeout(cfg["status_timeout"].as<double>(2)) {
-#ifdef RP_VIEWER_HAVE_CHAMELEON
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON
         cal =
             rclcpp_action::create_client<Cal>(runtime->node, expand(cfg["calibration_action"].as<std::string>(), ctx));
 #endif
@@ -41,7 +41,7 @@ class UwrtMapping final : public Mapping {
     ~UwrtMapping() override {
         // The host stops the executor before destroying providers. Cancel only
         // our accepted goal, with no callback that could outlive this instance.
-#ifdef RP_VIEWER_HAVE_CHAMELEON
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON
         if (goal && rclcpp::ok())
             cal->async_cancel_goal(goal);
 #endif
@@ -51,7 +51,7 @@ class UwrtMapping final : public Mapping {
         return value;
     }
     void calibrate(const std::string &parent, const std::string &child, unsigned samples) override {
-#ifdef RP_VIEWER_HAVE_CHAMELEON
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON
         std::lock_guard<std::mutex> lock(mutex);
         if (value.calibrating || !cal->action_server_is_ready() || parent.empty() || child.empty() || parent == child ||
             samples == 0 || samples > 65535)
@@ -161,7 +161,7 @@ class UwrtMapping final : public Mapping {
 
   private:
     void cancelLocked() {
-#ifdef RP_VIEWER_HAVE_CHAMELEON
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON
         value.calibrationMessage = goal ? "Canceling calibration..." : "Cancel requested; awaiting goal response";
         if (goal)
             cal->async_cancel_goal(goal, [this](rclcpp_action::Client<Cal>::CancelResponse::SharedPtr reply) {
@@ -175,7 +175,7 @@ class UwrtMapping final : public Mapping {
         std::lock_guard<std::mutex> lock(mutex);
         const auto now = Steady::now();
         auto elapsed = [&](auto since) { return std::chrono::duration<double>(now - since).count(); };
-        #ifdef RP_VIEWER_HAVE_CHAMELEON
+        #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
         value.calibrationReady = cal->action_server_is_ready();
 #else
         value.calibrationReady = false;
@@ -209,7 +209,7 @@ class UwrtMapping final : public Mapping {
     uint64_t resetEpoch = 0, targetEpoch = 0;
     int64_t resetId = 0, targetId = 0;
     Steady::time_point lastStatus{}, calSince{}, resetSince{}, targetSince{};
-#ifdef RP_VIEWER_HAVE_CHAMELEON
+#ifdef NEREUS_VIEWER_HAVE_CHAMELEON
     Goal::SharedPtr goal;
     rclcpp_action::Client<Cal>::SharedPtr cal;
 #endif

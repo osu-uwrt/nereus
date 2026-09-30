@@ -48,7 +48,7 @@ Json executionRecord(const session::ResolvedScenario &resolved, const BridgeCore
     for (const auto &service : config.value("services", Json::array()))
         services.push_back(pick(service, {"id", "service", "service_type", "action"}));
     return Json{
-        {"format", "robotics_platform_ros.execution"},
+        {"format", "nereus_ros.execution"},
         {"version", 1},
         {"resolved_content_sha256", resolved.document.value("content_sha256", "")},
         {"timestep_ns", core.timestepNs()},
@@ -56,7 +56,7 @@ Json executionRecord(const session::ResolvedScenario &resolved, const BridgeCore
         {"clock", {{"epoch_ns", core.epochNs()}, {"reset_policy", core.resetPolicy()},
                    {"real_time_factor", core.realTimeFactor()}, {"topic", config.at("clock").at("topic")}}},
         {"namespace", config.at("namespace")},
-        {"node_name", config.value("node_name", "robotics_platform_bridge")},
+        {"node_name", config.value("node_name", "nereus_bridge")},
         {"parameters", {{"real_time_factor", "double on the bridge node; 0 pauses stepping and /clock, "
                                              "negative or non-finite values are rejected"}}},
         {"world_frame", core.worldFrame()},
@@ -82,7 +82,7 @@ Json tasksRecord(BridgeCore &core) {
     if (run && run->contains("rows"))
         for (const auto &row : run->at("rows"))
             scores[row.at("key").get<std::string>()] = row.at("points");
-    return Json{{"format", "robotics_platform_ros.tasks"},
+    return Json{{"format", "nereus_ros.tasks"},
                 {"version", 1},
                 {"scores", scores},
                 {"run", run ? *run : Json()},
@@ -97,7 +97,7 @@ Json summaryRecord(BridgeCore &core, const std::string &reason, const CameraSink
         stats[name] = {{"acquired", item.acquired}, {"delivered", item.delivered},
                        {"unavailable", item.unavailable}, {"dropped_pending", item.dropped_pending},
                        {"dropped_delivered", item.dropped_delivered}};
-    return Json{{"format", "robotics_platform_ros.summary"},
+    return Json{{"format", "nereus_ros.summary"},
                 {"version", 1},
                 {"stop", reason},
                 {"ticks", snapshot.tick},

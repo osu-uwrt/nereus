@@ -12,7 +12,7 @@ using namespace robotics::session::testing;
 
 TEST(Mechanisms, ReplaysThePythonScript) {
     const auto fixture = loadFixture("mechanisms_reference.json");
-    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     Mechanisms m(scenario.robot);
     const auto &p = fixture.at("pose");
     Pose pose{Eigen::Vector3d(p.at("translation")[0], p.at("translation")[1], p.at("translation")[2]),
@@ -71,7 +71,7 @@ TEST(Mechanisms, ReplaysThePythonScript) {
 }
 
 TEST(Mechanisms, RejectsInvalidData) {
-    auto robot = loadResolvedScenario(RP_RESOLVED_TALOS).robot;
+    auto robot = loadResolvedScenario(NEREUS_RESOLVED_TALOS).robot;
     auto broken = robot;
     broken["mechanisms"][0]["parameters"]["capacity"] = 3; // does not match the two slots
     EXPECT_THROW(Mechanisms{broken}, std::invalid_argument);

@@ -29,9 +29,9 @@ def write(path, value):
 
 
 def prepare(output):
-    from robotics_platform import _native as native
-    from robotics_platform.pack_runtime import create_runtime
-    from robotics_platform.packs import resolve_scenario
+    from nereus import _native as native
+    from nereus.pack_runtime import create_runtime
+    from nereus.packs import resolve_scenario
 
     packs = output / "packs"
     shutil.copytree(ROOT / "content/packs", packs)
@@ -134,7 +134,7 @@ def measure(args, fixture, processes):
     from rclpy.qos import QoSProfile, ReliabilityPolicy
     from riptide_msgs2.msg import ControllerCommand, KillSwitchReport, MappingTargetInfo
     from riptide_msgs2.srv import MappingTarget
-    from robotics_platform import _native as native
+    from nereus import _native as native
     from sensor_msgs.msg import CameraInfo, CompressedImage, Image
     from std_msgs.msg import Bool, Float32MultiArray
     from std_srvs.srv import SetBool, Trigger
@@ -611,7 +611,7 @@ def main():
         {k: env[k] for k in ("ROS_DOMAIN_ID", "ROS_LOCALHOST_ONLY", "RMW_IMPLEMENTATION")}
     )
     sys.path.insert(0, str(args.sdk.resolve()))
-    from robotics_platform import _native
+    from nereus import _native
 
     write(
         args.output / "native_module.json",
@@ -626,7 +626,7 @@ def main():
         [
             sys.executable,
             "-m",
-            "robotics_platform_ros",
+            "nereus_ros",
             str(scenario),
             "--output",
             str(args.output / "bridge"),

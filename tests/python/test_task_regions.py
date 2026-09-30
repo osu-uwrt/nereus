@@ -18,8 +18,8 @@ import math
 import unittest
 
 import numpy as np
-from robotics_platform import _native as native
-from robotics_platform.task_regions import PortalTracker
+from nereus import _native as native
+from nereus.task_regions import PortalTracker
 
 PARAMETERS = {
     "plane": {"axis": "x", "offset_m": 0.0},

@@ -131,7 +131,7 @@ BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras)
     : impl_(std::make_unique<Impl>()), core_(core) {
     impl_->cameras = cameras;
     const Json &config = core.config();
-    node_ = std::make_shared<rclcpp::Node>(config.value("node_name", "robotics_platform_bridge"),
+    node_ = std::make_shared<rclcpp::Node>(config.value("node_name", "nereus_bridge"),
                                            config.value("namespace", "/"));
     impl_->buffer = std::make_shared<tf2_ros::Buffer>(node_->get_clock());
     impl_->listener = std::make_shared<tf2_ros::TransformListener>(*impl_->buffer, node_, false);

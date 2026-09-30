@@ -22,14 +22,14 @@ class Profiles : public testing::Test {
     std::filesystem::path root;
     Profiles() {
         root = std::filesystem::temp_directory_path() /
-               ("robotics-profiles-" +
+               ("nereus-profiles-" +
                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + "-" +
                 std::to_string(std::random_device{}()));
         if (!std::filesystem::create_directory(root)) {
             throw std::runtime_error("cannot create test directory");
         }
         for (const auto *folder : {"robots", "worlds", "sensors", "examples"})
-            std::filesystem::copy(std::filesystem::path(RP_TEST_CONTENT) / folder, root / folder,
+            std::filesystem::copy(std::filesystem::path(NEREUS_TEST_CONTENT) / folder, root / folder,
                                   std::filesystem::copy_options::recursive);
     }
     ~Profiles() override {

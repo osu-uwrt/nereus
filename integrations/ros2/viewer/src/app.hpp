@@ -1,4 +1,4 @@
-// robotics-pool-viewer: ROS 2 client GUI for the robotics-platform simulator bridge.
+// nereus-viewer: ROS 2 client GUI for the nereus simulator bridge.
 #pragma once
 #include <optional>
 #include <string>

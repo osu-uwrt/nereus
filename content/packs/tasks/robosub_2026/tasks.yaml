@@ -1,4 +1,4 @@
-# Task pack = task include files + run rules + assets; runtime scoring is executed by robotics_platform.task_runtime + hooks/rules_2026.py.
+# Task pack = task include files + run rules + assets; runtime scoring is executed by nereus.task_runtime + hooks/rules_2026.py.
 # No course layout (scenario-owned) and no robot names (capabilities by mechanism type only).
 schema_version: 1
 kind: tasks

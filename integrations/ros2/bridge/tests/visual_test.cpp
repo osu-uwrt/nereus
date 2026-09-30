@@ -28,7 +28,7 @@ session::ResolvedScenario scenarioWith(const std::vector<Json> &streams, const J
     bridge["streams"] = Json::array();
     for (const auto &stream : streams)
         bridge["streams"].push_back(stream);
-    Json document = {{"format", "robotics_platform.resolved_scenario"}, {"version", 1},
+    Json document = {{"format", "nereus.resolved_scenario"}, {"version", 1},
                      {"scenario", {{"world_frame", "scenario_world"}, {"seed", 0}}}, {"robot", robot},
                      {"pool", Json::object()}, {"tasks", Json::object()},
                      {"task_definitions", Json::array({{{"id", "table"},

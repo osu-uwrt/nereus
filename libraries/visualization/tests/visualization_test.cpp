@@ -236,7 +236,7 @@ TEST(Session, ComposesExternalSourceAndDisplayAndIsolatesFailures) {
 }
 TEST(Workspace, InstalledStylePathsRoundTripAndAtomicSave) {
     Temporary temporary;
-    const auto source = std::filesystem::path(RP_WORKSPACES);
+    const auto source = std::filesystem::path(NEREUS_WORKSPACES);
     std::filesystem::copy(source, temporary.directory / "input",
                           std::filesystem::copy_options::recursive);
     auto workspace = ui::loadWorkspace(temporary.directory / "input/local_demo.yaml");
@@ -316,7 +316,7 @@ TEST(Session, BadExtensionsDoNotHideOtherDisplays) {
 }
 TEST(Workspace, RejectsInvalidNestedValuesAndRetainsResolvedData) {
     Temporary temporary;
-    auto workspace = ui::loadWorkspace(std::filesystem::path(RP_WORKSPACES) / "local_demo.yaml");
+    auto workspace = ui::loadWorkspace(std::filesystem::path(NEREUS_WORKSPACES) / "local_demo.yaml");
     const auto file = temporary.directory / "workspace.yaml";
     auto text = ui::serializeWorkspace(workspace, file);
     const auto position = text.find("distance:");

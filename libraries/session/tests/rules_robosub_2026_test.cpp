@@ -41,7 +41,7 @@ std::string firstDifference(const Json &a, const Json &b, const std::string &pat
 }
 
 Json loadCalls() {
-    std::ifstream file(std::string(RP_SOURCE_DIR) + "/extensions/rules/robosub_2026/tests/rules_calls.json");
+    std::ifstream file(std::string(NEREUS_SOURCE_DIR) + "/extensions/rules/robosub_2026/tests/rules_calls.json");
     EXPECT_TRUE(file.good());
     return Json::parse(file).at("calls");
 }

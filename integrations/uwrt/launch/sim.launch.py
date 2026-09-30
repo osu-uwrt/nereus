@@ -6,15 +6,15 @@
         [active_control_model:=mpc] [mpc_model:=sim|<name>|<path>] [mpc_odom_topic:=simulator/ground_truth]
         [mpc_state_source:=sensors|odometry]
 
-bridge:=cpp runs the rclcpp simulator (build/ros-viewer/.../robotics-sim-ros) on the pack resolved
-with `python -m robotics_platform.packs resolve`; cameras:=false passes --no-cameras and
+bridge:=cpp runs the rclcpp simulator (build/ros-viewer/.../nereus-sim) on the pack resolved
+with `python -m nereus.packs resolve`; cameras:=false passes --no-cameras and
 always_cameras:=true renders every camera output regardless of subscribers.
 
 The controller arguments pass through to riptide_bringup2 (mission_stack.launch.py); empty keeps bringup's
 default controller. MPC on the simulator plant: active_control_model:=mpc mpc_model:=sim.
 
 Run records (resolved.json, execution.json, summary.json, tasks.json) go to `output`
-(default /tmp/robotics_sim/<timestamp>). Ctrl-C stops everything and writes the records.
+(default /tmp/nereus_sim/<timestamp>). Ctrl-C stops everything and writes the records.
 """
 
 import os
@@ -50,14 +50,14 @@ CONTROLLER_ARGS = {
 def _processes(context):
     rmw = LC("rmw").perform(context)
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
-    output = LC("output").perform(context) or f"/tmp/robotics_sim/{time.strftime('%Y%m%d-%H%M%S')}"
+    output = LC("output").perform(context) or f"/tmp/nereus_sim/{time.strftime('%Y%m%d-%H%M%S')}"
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     scenario = LC("scenario").perform(context)
     if LC("bridge").perform(context) == "cpp":
         binary = LC("bridge_binary").perform(context)
         resolved = f"{output}.resolved.json"
         subprocess.run(
-            [sys.executable, "-m", "robotics_platform.packs", "resolve", scenario, "-o", resolved],
+            [sys.executable, "-m", "nereus.packs", "resolve", scenario, "-o", resolved],
             check=True, cwd=str(ROOT),
             env={**os.environ, "PYTHONPATH": os.pathsep.join(
                 [str(ROOT / "python/src"), os.environ.get("PYTHONPATH", "")])})
@@ -72,7 +72,7 @@ def _processes(context):
         python_path = os.pathsep.join(
             [str(ROOT / "integrations/ros2/python"), str(ROOT / "python/src"),
              os.environ.get("PYTHONPATH", "")])
-        cmd = ["python3", "-m", "robotics_platform_ros", scenario, "--output", output]
+        cmd = ["python3", "-m", "nereus_ros", scenario, "--output", output]
         if LC("cameras").perform(context).lower() in ("false", "0", "no"):
             cmd.append("--no-cameras")
         actions.append(ExecuteProcess(
@@ -83,7 +83,7 @@ def _processes(context):
         launch_arguments=[(k, LC(k)) for k in CONTROLLER_ARGS],
         condition=IfCondition(LC("stack"))))
     actions.append(ExecuteProcess(
-        cmd=[str(ROOT / "build/ros-viewer/robotics-pool-viewer")], cwd=str(ROOT),
+        cmd=[str(ROOT / "build/ros-viewer/nereus-viewer")], cwd=str(ROOT),
         output="screen", name="pool_viewer", condition=IfCondition(LC("viewer"))))
     return actions
 
@@ -96,8 +96,8 @@ def generate_launch_description():
         DeclareLaunchArgument("viewer", default_value="true", description="launch the pool viewer"),
         DeclareLaunchArgument("bridge", default_value="cpp", description="simulator bridge: cpp or python (reference)"),
         DeclareLaunchArgument("bridge_binary", default_value=str(
-            ROOT / "build/ros-viewer/integrations/ros2/bridge/robotics-sim-ros"),
-            description="robotics-sim-ros executable used by bridge:=cpp"),
+            ROOT / "build/ros-viewer/integrations/ros2/bridge/nereus-sim"),
+            description="nereus-sim executable used by bridge:=cpp"),
         DeclareLaunchArgument("cameras", default_value="true", description="run camera acquisition"),
         DeclareLaunchArgument("always_cameras", default_value="false",
                               description="cpp bridge: render cameras regardless of subscribers"),

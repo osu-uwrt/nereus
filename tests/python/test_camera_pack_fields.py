@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from robotics_platform.packs import PackError, load_pack, resolve_scenario
+from nereus.packs import PackError, load_pack, resolve_scenario
 from test_packs_fixtures import write_generic_packs
 
 CONTENT = Path(__file__).resolve().parents[2] / "content" / "packs"
@@ -105,7 +105,7 @@ class TalosCameraFieldTests(unittest.TestCase):
             parameters = camera["parameters"]
             with self.subTest(camera=camera["id"]):
                 self.assertTrue(camera["enabled"])
-                self.assertEqual(parameters["outputs"], ["rgb_left", "depth_left", "camera_info"])
+                self.assertEqual(parameters["outputs"], ["rgb_left", "depth_left", "camera_info", "point_cloud"])
                 self.assertEqual(parameters["intrinsics_left"], parameters["intrinsics_right"])
                 right = transforms[parameters["right_frame"]]
                 self.assertEqual(right["parent"], camera["frame"])

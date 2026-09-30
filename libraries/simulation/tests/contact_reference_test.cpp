@@ -50,7 +50,7 @@ Case contactCase(int scenario) {
 }
 } // namespace
 TEST(BoxContacts, MatchesOriginalStaticBoxImpulseAndDepenetration) {
-    std::ifstream fixture(std::string(RP_FIXTURES) + "/legacy_box_contacts.csv");
+    std::ifstream fixture(std::string(NEREUS_FIXTURES) + "/legacy_box_contacts.csv");
     ASSERT_TRUE(fixture);
     std::string row;
     ASSERT_TRUE(std::getline(fixture, row));
@@ -101,8 +101,8 @@ TEST(BoxContacts, PlantMatchesOriginalPreAndPostIntegrationContactSequence) {
     // The original solver itself takes different contact branches after rounding
     // at -O0 vs -O2. Match one complete captured trajectory, never a per-field mix.
     std::array<std::ifstream, 2> fixtures{
-        std::ifstream(std::string(RP_FIXTURES) + "/legacy_box_steps.csv"),
-        std::ifstream(std::string(RP_FIXTURES) + "/legacy_box_steps_unoptimized.csv")};
+        std::ifstream(std::string(NEREUS_FIXTURES) + "/legacy_box_steps.csv"),
+        std::ifstream(std::string(NEREUS_FIXTURES) + "/legacy_box_steps_unoptimized.csv")};
     std::array<double, 2> maximum_error{};
     std::string row;
     for (auto &fixture : fixtures) {

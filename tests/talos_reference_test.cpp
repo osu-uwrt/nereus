@@ -9,10 +9,10 @@
 
 TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
     const auto config =
-        robotics::config::loadScenario(std::string(RP_TEST_CONTENT) + "/examples/talos_pool.yaml");
+        robotics::config::loadScenario(std::string(NEREUS_TEST_CONTENT) + "/examples/talos_pool.yaml");
     std::array<std::ifstream, 2> fixtures{
-        std::ifstream(std::string(RP_FIXTURES) + "/legacy_talos.csv"),
-        std::ifstream(std::string(RP_FIXTURES) + "/legacy_talos_unoptimized.csv")};
+        std::ifstream(std::string(NEREUS_FIXTURES) + "/legacy_talos.csv"),
+        std::ifstream(std::string(NEREUS_FIXTURES) + "/legacy_talos_unoptimized.csv")};
     std::array<double, 2> error{};
     std::array<std::string, 2> worst;
     std::string row;
@@ -88,7 +88,7 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
 
 TEST(TalosReference, OriginalNoiseDisabledSensorFormulas) {
     namespace sensors = robotics::sensors;
-    const auto config = robotics::config::loadScenario(std::string(RP_TEST_CONTENT) +
+    const auto config = robotics::config::loadScenario(std::string(NEREUS_TEST_CONTENT) +
                                                        "/examples/talos_inertial_pool.yaml");
     const auto mount = [&config](const char *frame) {
         const auto &pose = config.body_frames.fromRoot(frame);
@@ -111,7 +111,7 @@ TEST(TalosReference, OriginalNoiseDisabledSensorFormulas) {
     altitude_parameters.target_position_body = config.body_frames.fromRoot("base_link").translation;
     altitude_parameters.reported_variance = .0001;
     sensors::ReferenceAltitude altitude(altitude_parameters);
-    std::ifstream fixture(std::string(RP_FIXTURES) + "/legacy_sensor_kinematics.csv");
+    std::ifstream fixture(std::string(NEREUS_FIXTURES) + "/legacy_sensor_kinematics.csv");
     ASSERT_TRUE(fixture);
     std::string row;
     ASSERT_TRUE(std::getline(fixture, row));

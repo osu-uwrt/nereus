@@ -22,8 +22,8 @@ fs::path locatePackDirectory(const YAML::Node &doc, const fs::path &hint) {
     };
     if (usable(hint))
         return hint;
-#ifdef RP_PACK_CONTENT
-    const fs::path root = fs::path(RP_PACK_CONTENT) / "scenarios";
+#ifdef NEREUS_PACK_CONTENT
+    const fs::path root = fs::path(NEREUS_PACK_CONTENT) / "scenarios";
     if (fs::is_directory(root))
         for (const auto &entry : fs::directory_iterator(root))
             if (entry.is_directory() && fs::exists(entry.path() / doc["scenario_file"].as<std::string>("scenario.yaml")) &&
@@ -141,7 +141,7 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
     try {
         auto document = nlohmann::json::parse(json);
         if (!document.contains("format"))
-            document["format"] = "robotics_platform.resolved_scenario";
+            document["format"] = "nereus.resolved_scenario";
         nlohmann::json paths = nlohmann::json::object();
         for (const auto &[role, byId] : assets)
             for (const auto &[id, path] : byId)

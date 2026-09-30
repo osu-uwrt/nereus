@@ -34,7 +34,7 @@ BodyState initial(int scenario) {
 }
 } // namespace
 TEST(StageReference, MatchesPinnedLegacySurfaceSubmergedAndEntryMotion) {
-    std::ifstream fixture(std::string(RP_FIXTURES) + "/legacy_stage_dynamics.csv");
+    std::ifstream fixture(std::string(NEREUS_FIXTURES) + "/legacy_stage_dynamics.csv");
     ASSERT_TRUE(fixture);
     std::string row;
     ASSERT_TRUE(std::getline(fixture, row));

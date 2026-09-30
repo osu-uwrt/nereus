@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from robotics_platform.packs import PackError, load_pack, resolve_scenario
-from robotics_platform.packs.__main__ import main
+from nereus.packs import PackError, load_pack, resolve_scenario
+from nereus.packs.__main__ import main
 from test_packs_fixtures import write_generic_packs
 
 

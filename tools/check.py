@@ -86,7 +86,7 @@ def main():
     if args.install_check:
         # Relocate the installed prefix and copy the downstream example. The exported
         # build graph must refer only to installed artifacts and system dependencies.
-        with tempfile.TemporaryDirectory(prefix="robotics-install-") as directory:
+        with tempfile.TemporaryDirectory(prefix="nereus-install-") as directory:
             temp = Path(directory)
             prefix = temp / "staging"
             run([cmake, "--install", ROOT / "build" / args.preset, "--prefix", prefix], env=env)
@@ -110,8 +110,8 @@ def main():
                 subprocess.run([str(temp / "sensor-build/sensor_demo")], cwd=temp,
                                env=env, stdout=output, check=True)
             with (temp / "trajectory.csv").open("w") as output:
-                subprocess.run([str(installed / "bin/robotics-sim"),
-                                str(installed / "share/robotics_platform/examples/empty_pool.yaml")],
+                subprocess.run([str(installed / "bin/nereus-run"),
+                                str(installed / "share/nereus/examples/empty_pool.yaml")],
                                cwd=temp, env=env, stdout=output, check=True)
             profile_consumer = temp / "profiles"
             shutil.copytree(ROOT / "examples/profiles", profile_consumer)
@@ -119,10 +119,10 @@ def main():
                  f"-DCMAKE_PREFIX_PATH={installed}", "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF"], env=env)
             run([cmake, "--build", temp / "profile-build", "--parallel", "2"], env=env)
             run([temp / "profile-build/profile_demo",
-                 installed / "share/robotics_platform/examples/profile_pool.yaml"], cwd=temp, env=env)
+                 installed / "share/nereus/examples/profile_pool.yaml"], cwd=temp, env=env)
             with (temp / "profile-trajectory.csv").open("w") as output:
-                subprocess.run([str(installed / "bin/robotics-sim"),
-                                str(installed / "share/robotics_platform/examples/profile_pool.yaml"),
+                subprocess.run([str(installed / "bin/nereus-run"),
+                                str(installed / "share/nereus/examples/profile_pool.yaml"),
                                 "--sensors", str(temp / "profile-sensors.csv")],
                                cwd=temp, env=env, stdout=output, check=True)
             if args.preset.startswith(("simulation-view", "simulator-viewer")):

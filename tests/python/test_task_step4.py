@@ -3,7 +3,7 @@
 Scripted scenarios use the real pack. Table events come from a physical owner, so the real
 pack has no table task yet; tests add an empty table task to a copy of the resolved pack.
 Comparisons against the original RunScore/CourseJudge run when the original checkout exists
-(override with RP_SCORING_REFERENCE) and are skipped otherwise.
+(override with NEREUS_SCORING_REFERENCE) and are skipped otherwise.
 """
 
 import copy
@@ -15,14 +15,14 @@ from pathlib import Path
 
 import numpy as np
 import yaml
-from robotics_platform.packs import resolve_scenario
-from robotics_platform.task_runtime import TaskRuntime, _envelope, _placement, _pose
-from robotics_platform.task_zones import OpenCrate
+from nereus.packs import resolve_scenario
+from nereus.task_runtime import TaskRuntime, _envelope, _placement, _pose
+from nereus.task_zones import OpenCrate
 
 ROOT = Path(__file__).resolve().parents[2]
 SCENARIO = ROOT / "content/packs/scenarios/talos_uwrt/scenario.yaml"
 ORIGINAL_ROOT = Path("/home/ubuntu/osu-uwrt/release/src/riptide_simulator/c_simulator")
-ORIGINAL = Path(os.environ.get("RP_SCORING_REFERENCE",
+ORIGINAL = Path(os.environ.get("NEREUS_SCORING_REFERENCE",
                                ORIGINAL_ROOT / "tasks/2026/behavior/scoring.py"))
 ORIGINAL_TASKS = ORIGINAL.parents[1] / "config/tasks.yaml"
 TABLE = {"task": "table", "position_m": [19.290761, 9.007, -1.54], "yaw_deg": 89.039804}

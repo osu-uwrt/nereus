@@ -122,10 +122,10 @@ used for resets and for aligning your estimator after a placement (`estimator_al
 ## Checking a bridge
 
 ```sh
-PYTHONPATH=python/src python3 -m robotics_platform.packs validate content/packs/scenarios/<scenario>
+PYTHONPATH=python/src python3 -m nereus.packs validate content/packs/scenarios/<scenario>
 ros2 launch integrations/uwrt/launch/sim.launch.py scenario:=$PWD/content/packs/scenarios/<scenario> stack:=false
 ros2 topic list          # every stream topic should be there
 ```
 
 The bridge rejects unknown message types, fields and native endpoints at startup, naming the stream. Run records
-in `/tmp/robotics_sim/<run>/summary.json` count published, filtered and rejected messages per stream.
+in `/tmp/nereus_sim/<run>/summary.json` count published, filtered and rejected messages per stream.

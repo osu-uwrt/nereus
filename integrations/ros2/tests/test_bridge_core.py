@@ -15,9 +15,9 @@ import numpy as np
 try:
     import rosidl_runtime_py  # noqa: F401
     from robot_localization.srv import SetPose
-    from robotics_platform import _native as native
-    from robotics_platform_ros.core import BridgeCore, BridgeError, Publication
-    from robotics_platform_ros.mapping import message_class, service_class
+    from nereus import _native as native
+    from nereus_ros.core import BridgeCore, BridgeError, Publication
+    from nereus_ros.mapping import message_class, service_class
     from std_msgs.msg import Bool, Float64MultiArray
     from std_srvs.srv import Trigger
 except ImportError as error:  # pragma: no cover - environment dependent

@@ -60,10 +60,10 @@ struct Sha256 {
 std::filesystem::path defaultShaders(const std::filesystem::path &given) {
     if (!given.empty())
         return given;
-    if (const char *env = std::getenv("RP_SHADER_DIR"))
+    if (const char *env = std::getenv("NEREUS_SHADER_DIR"))
         return env;
-#ifdef RP_RENDERING_SHADERS
-    return RP_RENDERING_SHADERS;
+#ifdef NEREUS_RENDERING_SHADERS
+    return NEREUS_RENDERING_SHADERS;
 #else
     return {};
 #endif
@@ -118,7 +118,7 @@ std::array<std::uint8_t, 32> sha256(const std::string &text) {
 }
 
 std::uint32_t deriveSeed(std::uint64_t seed, const std::string &sensor_id, const std::string &eye) {
-    std::string text = "robotics_platform.camera.v1";
+    std::string text = "nereus.camera.v1";
     text.push_back('\0');
     text += std::to_string(seed);
     text.push_back('\0');

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
 project(SimulationViewConsumer LANGUAGES CXX)
-find_package(RoboticsPlatform REQUIRED CONFIG)
+find_package(Nereus REQUIRED CONFIG)
 add_executable(simulation_view_demo main.cpp)
-target_link_libraries(simulation_view_demo PRIVATE RoboticsPlatform::simulation_view)
+target_link_libraries(simulation_view_demo PRIVATE Nereus::simulation_view)

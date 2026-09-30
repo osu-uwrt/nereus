@@ -1,4 +1,4 @@
-"""Command line: ``python -m robotics_platform.packs {validate,resolve,types,schema}``."""
+"""Command line: ``python -m nereus.packs {validate,resolve,types,schema}``."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def _schema(arguments: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m robotics_platform.packs")
+    parser = argparse.ArgumentParser(prog="python -m nereus.packs")
     commands = parser.add_subparsers(dest="command", required=True)
     validate = commands.add_parser("validate", help="validate a pack or scenario (no runtime/ROS)")
     validate.add_argument("pack", help="pack folder or file")

@@ -22,7 +22,7 @@ from ._document import (
     read_yaml,
 )
 
-FORMAT = "robotics_platform.resolved_scenario"
+FORMAT = "nereus.resolved_scenario"
 FORMAT_VERSION = 1
 
 

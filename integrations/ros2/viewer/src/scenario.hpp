@@ -79,6 +79,6 @@ struct Scenario {
 };
 
 // `config`: the host viewer document (fallback ui, camera display names). `packDirHint` locates the
-// pack folder for documents without asset_paths (local previews); empty searches RP_PACK_CONTENT.
+// pack folder for documents without asset_paths (local previews); empty searches NEREUS_PACK_CONTENT.
 Scenario parseScenario(const std::string &json, const YAML::Node &config, const std::filesystem::path &packDirHint);
 } // namespace robotics::ros_viewer::host

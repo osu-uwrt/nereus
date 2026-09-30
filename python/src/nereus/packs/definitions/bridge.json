@@ -87,7 +87,7 @@
     },
     "node_name": {
       "$ref": "common.schema.json#/$defs/name",
-      "description": "Name of the ROS node the bridge runs as (default robotics_platform_bridge); parameter clients address it, e.g. /<namespace>/<node_name>."
+      "description": "Name of the ROS node the bridge runs as (default nereus_bridge); parameter clients address it, e.g. /<namespace>/<node_name>."
     }
   },
   "required": [

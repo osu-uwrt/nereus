@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
-from robotics_platform.packs import (
+from nereus.packs import (
     DOCUMENT_KINDS,
     PackError,
     load_pack,
@@ -19,7 +19,7 @@ from robotics_platform.packs import (
     schema,
     type_catalog,
 )
-from robotics_platform.packs.__main__ import main
+from nereus.packs.__main__ import main
 from test_packs_fixtures import write_generic_packs
 
 TALOS = Path(__file__).resolve().parents[2] / "content" / "packs"
@@ -195,7 +195,7 @@ class CommandLineTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertIn("unresolved asset tasks:hoop_mesh (step 3)", out)
             self.assertEqual(json.loads(dump.read_text())["format"],
-                             "robotics_platform.resolved_scenario")
+                             "nereus.resolved_scenario")
             code, _, err = self.run_cli("validate", str(scenario), "--strict")
             self.assertEqual(code, 1)
             self.assertIn("hoop_mesh", err)

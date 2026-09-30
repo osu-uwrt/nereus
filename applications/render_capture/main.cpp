@@ -136,7 +136,7 @@ void checkContracts(r::Renderer &renderer, const r::Scene &scene, const r::View 
 int main(int argc, char **argv) {
     try {
         if (argc != 4 && argc != 5) {
-            std::cerr << "robotics-render-capture SHADER_DIRECTORY TALOS_PACK OUTPUT_DIRECTORY "
+            std::cerr << "nereus-render-capture SHADER_DIRECTORY TALOS_PACK OUTPUT_DIRECTORY "
                          "[REFERENCE_INPUTS]\n";
             return 2;
         }

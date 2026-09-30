@@ -34,7 +34,7 @@ r::ImageCapture capture(r::OffscreenRenderer &host, int width = 32) {
 }
 }
 TEST(Offscreen, CapturesWithoutAWindowAndOwnsPixelsAcrossResize) {
-    r::OffscreenRenderer host(RP_RENDERING_SHADERS);
+    r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     EXPECT_FALSE(host.device().empty());
     const auto image = capture(host);
     EXPECT_EQ(image.rgb.size(), 32u * 32 * 3);
@@ -48,7 +48,7 @@ TEST(Offscreen, CapturesWithoutAWindowAndOwnsPixelsAcrossResize) {
     EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
 }
 TEST(Offscreen, CanMoveCaptureToAWorkerAndSerializeConcurrentCalls) {
-    r::OffscreenRenderer host(RP_RENDERING_SHADERS);
+    r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     const auto expected = capture(host);
     auto first = std::async(std::launch::async, [&] { return capture(host); });
     auto second = std::async(std::launch::async, [&] { return capture(host); });
@@ -57,8 +57,8 @@ TEST(Offscreen, CanMoveCaptureToAWorkerAndSerializeConcurrentCalls) {
     EXPECT_EQ(capture(host).rgb, expected.rgb);
 }
 TEST(Offscreen, HostsShareDisplayLifetimeAndRecoverFromInvalidInput) {
-    auto first = std::make_unique<r::OffscreenRenderer>(RP_RENDERING_SHADERS);
-    r::OffscreenRenderer second(RP_RENDERING_SHADERS);
+    auto first = std::make_unique<r::OffscreenRenderer>(NEREUS_RENDERING_SHADERS);
+    r::OffscreenRenderer second(NEREUS_RENDERING_SHADERS);
     const auto expected = capture(second);
     first.reset();
     EXPECT_EQ(capture(second).depth, expected.depth);
@@ -67,13 +67,13 @@ TEST(Offscreen, HostsShareDisplayLifetimeAndRecoverFromInvalidInput) {
     EXPECT_EQ(capture(second).rgb, expected.rgb);
 }
 TEST(Offscreen, FailedConstructionReleasesItsContext) {
-    EXPECT_THROW(r::OffscreenRenderer("/nonexistent/robotics-shaders"), std::runtime_error);
+    EXPECT_THROW(r::OffscreenRenderer("/nonexistent/nereus-shaders"), std::runtime_error);
     EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
-    r::OffscreenRenderer next(RP_RENDERING_SHADERS);
+    r::OffscreenRenderer next(NEREUS_RENDERING_SHADERS);
     EXPECT_FALSE(capture(next).rgb.empty());
 }
 TEST(Offscreen, RestoresCallersEglContextAndApiAfterSuccessAndFailure) {
-    r::OffscreenRenderer host(RP_RENDERING_SHADERS);
+    r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     const auto get = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
         eglGetProcAddress("eglGetPlatformDisplayEXT"));
     ASSERT_NE(get, nullptr);
@@ -107,18 +107,18 @@ TEST(Offscreen, RestoresCallersEglContextAndApiAfterSuccessAndFailure) {
 }
 
 TEST(Offscreen, HostCanBeDestroyedOnAWorkerThread) {
-    auto host = std::make_unique<r::OffscreenRenderer>(RP_RENDERING_SHADERS);
+    auto host = std::make_unique<r::OffscreenRenderer>(NEREUS_RENDERING_SHADERS);
     capture(*host);
     std::async(std::launch::async, [host = std::move(host)]() mutable {
         host.reset();
         EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
     }).get();
-    r::OffscreenRenderer next(RP_RENDERING_SHADERS);
+    r::OffscreenRenderer next(NEREUS_RENDERING_SHADERS);
     EXPECT_FALSE(capture(next).rgb.empty());
 }
 
 TEST(Offscreen, LastHostDoesNotInvalidateAnExternalContextOnTheSameDisplay) {
-    auto host = std::make_unique<r::OffscreenRenderer>(RP_RENDERING_SHADERS);
+    auto host = std::make_unique<r::OffscreenRenderer>(NEREUS_RENDERING_SHADERS);
     const auto get = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
         eglGetProcAddress("eglGetPlatformDisplayEXT"));
     const auto display = get(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
@@ -148,13 +148,13 @@ TEST(Offscreen, LastHostDoesNotInvalidateAnExternalContextOnTheSameDisplay) {
 
 TEST(Offscreen, ReinitializesDisplayTerminatedBetweenHostLifetimes) {
     {
-        r::OffscreenRenderer first(RP_RENDERING_SHADERS);
+        r::OffscreenRenderer first(NEREUS_RENDERING_SHADERS);
         capture(first);
     }
     const auto get = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
         eglGetProcAddress("eglGetPlatformDisplayEXT"));
     const auto display = get(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
     ASSERT_TRUE(eglTerminate(display));
-    r::OffscreenRenderer next(RP_RENDERING_SHADERS);
+    r::OffscreenRenderer next(NEREUS_RENDERING_SHADERS);
     EXPECT_FALSE(capture(next).rgb.empty());
 }

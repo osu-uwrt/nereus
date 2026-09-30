@@ -8,7 +8,7 @@
 namespace v = robotics::visualization;
 namespace {
 std::vector<std::vector<double>> rows(const std::string &name, std::size_t columns) {
-    std::ifstream file(std::string(RP_ANIMATION_FIXTURES) + "/animation_reference_" + name +
+    std::ifstream file(std::string(NEREUS_ANIMATION_FIXTURES) + "/animation_reference_" + name +
                        ".csv");
     if (!file)
         throw std::runtime_error("missing original animation reference");

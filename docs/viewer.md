@@ -1,6 +1,6 @@
 # Using the viewer
 
-`robotics-pool-viewer` is the operator interface for both the simulator and the real robot. The sim launch
+`nereus-viewer` is the operator interface for both the simulator and the real robot. The sim launch
 starts it for you; for the real robot use `ros2 launch integrations/uwrt/launch/robot.launch.py`.
 
 ![Viewer with the robot in the pool](images/robot.jpg)
@@ -97,4 +97,4 @@ All of it is YAML in `content/viewer/`:
 | `talos_uwrt_thruster_visuals.yaml`, `talos_uwrt_status_lights.yaml` | rotor animation and LED bars |
 
 Toolbar and sidebar items are listed by type; reorder or remove entries to change the layout. For command-line
-options run `build/ros-viewer/robotics-pool-viewer --help`.
+options run `build/ros-viewer/nereus-viewer --help`.

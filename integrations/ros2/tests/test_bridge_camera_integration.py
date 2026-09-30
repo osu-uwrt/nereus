@@ -6,9 +6,9 @@ import time
 import unittest
 from types import SimpleNamespace
 
-from robotics_platform_ros.__main__ import select_sensors
-from robotics_platform_ros.camera_bridge import CameraBridge
-from robotics_platform_ros.core import BridgeCore, BridgeError
+from nereus_ros.__main__ import select_sensors
+from nereus_ros.camera_bridge import CameraBridge
+from nereus_ros.core import BridgeCore, BridgeError
 from test_bridge_core import BRIDGE, EPOCH_NS, QOS, RESET, ROBOT, _make
 from test_camera_bridge import Provider, resolved
 
@@ -73,11 +73,11 @@ class CameraIntegrationTests(unittest.TestCase):
             core.step()
         worker.close()
 
-    @unittest.skipUnless(os.environ.get("RP_TEST_ROS_LIVE") == "1", "live ROS test is opt-in")
+    @unittest.skipUnless(os.environ.get("NEREUS_TEST_ROS_LIVE") == "1", "live ROS test is opt-in")
     def test_live_node_publishes_camera_acquisition_stamp_frame_and_owned_depth(self):
         import rclpy
         from rclpy.node import Node
-        from robotics_platform_ros.node import BridgeNode
+        from nereus_ros.node import BridgeNode
         from sensor_msgs.msg import Image
 
         data, pack = configured(), _make().pack

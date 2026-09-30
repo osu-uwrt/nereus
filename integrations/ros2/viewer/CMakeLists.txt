@@ -14,10 +14,10 @@ find_package(rcl_interfaces REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(riptide_msgs2 QUIET)
 find_package(chameleon_tf_msgs QUIET)
-option(RP_ROS_VIEWER_UWRT "Build the UWRT (riptide_msgs2) panel providers" ${riptide_msgs2_FOUND})
+option(NEREUS_ROS_VIEWER_UWRT "Build the UWRT (riptide_msgs2) panel providers" ${riptide_msgs2_FOUND})
 
-add_library(rp_glm INTERFACE)
-target_include_directories(rp_glm SYSTEM INTERFACE ${PROJECT_SOURCE_DIR}/third_party/glm)
+add_library(nereus_glm INTERFACE)
+target_include_directories(nereus_glm SYSTEM INTERFACE ${PROJECT_SOURCE_DIR}/third_party/glm)
 
 # Panels library (composition, providers, panels, overlays): panels/CMakeLists.txt.
 add_subdirectory(panels)

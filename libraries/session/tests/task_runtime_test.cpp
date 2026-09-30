@@ -81,7 +81,7 @@ const ResolvedScenario &scenario() {
     // Captured Python cases start scoring at boot; the pack default (operator "start") is covered by
     // the Python run-control tests.
     static const ResolvedScenario s = [] {
-        auto loaded = loadResolvedScenario(RP_RESOLVED_TALOS);
+        auto loaded = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
         loaded.scenario["run"]["auto_start"] = true;
         return loaded;
     }();
@@ -148,7 +148,7 @@ void replay(const Json &captured, const RulesRegistry &rules, bool with_derived)
 } // namespace
 
 TEST(TaskRuntimeEquivalence, GeometryCasesMatchPython) {
-    const Json fixture = readJson(std::string(RP_SESSION_FIXTURES) + "/task_runtime_capture.json");
+    const Json fixture = readJson(std::string(NEREUS_SESSION_FIXTURES) + "/task_runtime_capture.json");
     ASSERT_EQ(fixture["cases"].size(), 7u);
     for (const auto &captured : fixture["cases"]) {
         SCOPED_TRACE(captured["name"].get<std::string>());
@@ -157,7 +157,7 @@ TEST(TaskRuntimeEquivalence, GeometryCasesMatchPython) {
 }
 
 TEST(TaskRuntimeEquivalence, Robosub2026RulesMatchPythonHook) {
-    const Json fixture = readJson(std::string(RP_SESSION_FIXTURES) + "/task_runtime_capture.json");
+    const Json fixture = readJson(std::string(NEREUS_SESSION_FIXTURES) + "/task_runtime_capture.json");
     ASSERT_EQ(fixture["rules_cases"].size(), 7u);
     for (const auto &captured : fixture["rules_cases"]) {
         SCOPED_TRACE(captured["name"].get<std::string>());

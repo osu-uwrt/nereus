@@ -9,8 +9,8 @@ from types import SimpleNamespace
 import numpy as np
 
 try:
-    from robotics_platform_ros.camera_bridge import CameraBridge
-    from robotics_platform_ros.mapping import MappingError
+    from nereus_ros.camera_bridge import CameraBridge
+    from nereus_ros.mapping import MappingError
 except ImportError as error:
     raise unittest.SkipTest(f"camera bridge dependencies unavailable: {error}") from None
 

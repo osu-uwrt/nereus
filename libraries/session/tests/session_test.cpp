@@ -13,7 +13,7 @@
 using namespace robotics::session;
 using namespace robotics::session::testing;
 
-namespace robotics::session { // private to rp_session (src/run_score.cpp)
+namespace robotics::session { // private to nereus_session (src/run_score.cpp)
 Json buildRunSnapshot(const Json &, const Json &, Json, std::int64_t, double, const std::string &);
 }
 
@@ -48,7 +48,7 @@ void replay(const std::string &fixture_name, bool tasks) {
     const auto fixture = loadFixture(fixture_name);
     // The Python reference scripts were captured with the run started at boot; the pack default
     // (operator "start") is covered by the Python run-control tests.
-    auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     scenario.scenario["run"]["auto_start"] = true;
     const RulesRegistry rules = robotics::rules::standardRules();
     const auto sensors = sensorNames(scenario);
@@ -154,7 +154,7 @@ TEST(Session, ReplaysThePythonScriptWithTasksAndRunControl) {
 
 TEST(Session, RunSnapshotDocumentMatchesPython) {
     const auto fixture = loadFixture("session_reference.json");
-    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     for (const auto &c : fixture.at("run_snapshot_cases")) {
         const auto actual = buildRunSnapshot(scenario.tasks, c.at("snapshot"), c.at("extra"), c.at("now_ns"),
                                              c.at("adjustment"), c.at("message"));
@@ -165,7 +165,7 @@ TEST(Session, RunSnapshotDocumentMatchesPython) {
 namespace {
 void throughput(bool tasks, const char *label,
                 std::vector<std::string> task_ids = {"gate", "torpedo", "slalom"}) {
-    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     const RulesRegistry rules = robotics::rules::standardRules();
     const auto sensors = sensorNames(scenario);
     Session s(scenario, createRuntime(scenario, &sensors), rules, SessionOptions{tasks ? &task_ids : nullptr, tasks});
@@ -206,10 +206,10 @@ TEST(Session, ThroughputWithTheTableContactWorld) {
 // token and at 45 degrees. The grasp must hold without creeping: pads must not keep pushing on a
 // welded prop (Bullet multibody colliders ignore setIgnoreCollisionCheck).
 TEST(Session, GraspedPropStaysInTheClawWhileCarried) {
-    std::ifstream stream(std::string(RP_SESSION_FIXTURES) + "/prop_world.json");
+    std::ifstream stream(std::string(NEREUS_SESSION_FIXTURES) + "/prop_world.json");
     const Json fixture = Json::parse(stream);
     const Json &data = fixture.at("cases").at("release_elsewhere");
-    const auto scenario = loadResolvedScenario(RP_RESOLVED_TALOS);
+    const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     const RulesRegistry rules = robotics::rules::standardRules();
     const auto sensors = sensorNames(scenario);
     const std::vector<std::string> task_ids{"table"};

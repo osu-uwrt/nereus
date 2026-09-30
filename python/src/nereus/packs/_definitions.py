@@ -107,7 +107,7 @@ def _schema(kind: str) -> str:
             raise AssertionError(f"definition name collision: {name}")
         defs[name] = definition
     document.pop("$schema", None)
-    bundle = {"$schema": _DIALECT, "$id": f"urn:robotics-platform:pack:{kind}:1", **document}
+    bundle = {"$schema": _DIALECT, "$id": f"urn:nereus:pack:{kind}:1", **document}
     bundle["$defs"] = defs
     expanded = _expand(bundle)
     Draft202012Validator.check_schema(expanded)
@@ -125,7 +125,7 @@ def type_catalog() -> dict[str, Any]:
     defs = _shared_defs()
     return {
         "$schema": _DIALECT,
-        "$id": "urn:robotics-platform:types:1",
+        "$id": "urn:nereus:types:1",
         "categories": {
             category: {name: {"$ref": f"#/$defs/{definition}"} for name, definition in types.items()}
             for category, types in registry().items()

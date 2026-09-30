@@ -22,7 +22,7 @@ TEST(Payload, MatchesEveryStateOfIndependentOriginalTrajectories) {
     // This checked capture executes the pinned original Python module, independently
     // of this implementation. Includes entry/exit, initial surface, neutral mass,
     // current, dry gyroscopic motion and angular-damping substeps for both models.
-    std::ifstream input(RP_PAYLOAD_FIXTURE);
+    std::ifstream input(NEREUS_PAYLOAD_FIXTURE);
     ASSERT_TRUE(input);
     PayloadParameters parameters;
     PayloadEnvironment environment;

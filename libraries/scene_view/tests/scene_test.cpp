@@ -58,7 +58,7 @@ TEST(SceneView, StaticPoolAndTiltedSourceBindingAreExplicit) {
 }
 TEST(SceneView, LoaderRejectsUnknownFieldsAndResolvesRelativeMeshes) {
     const auto temp = std::filesystem::temp_directory_path() /
-                      ("robotics-scene-test-" + std::to_string(getpid()) + ".yaml");
+                      ("nereus-scene-test-" + std::to_string(getpid()) + ".yaml");
     {
         std::ofstream output(temp);
         output << "version: 1\ngroups: []\nunknown: true\n";
@@ -68,7 +68,7 @@ TEST(SceneView, LoaderRejectsUnknownFieldsAndResolvesRelativeMeshes) {
         std::ofstream output(temp);
         output << "version: 1\ngroups:\n  - id: sample\n    frame: world\n    instances:\n      - "
                   "mesh: "
-               << (std::filesystem::path(RP_ROOT) / "tests/fixtures/nested_mesh.gltf")
+               << (std::filesystem::path(NEREUS_ROOT) / "tests/fixtures/nested_mesh.gltf")
                       .lexically_relative(temp.parent_path())
                       .string()
                << "\n";
@@ -113,7 +113,7 @@ TEST(SceneView, ColorBindingsUseTheSameFrozenSourceTimeAndOmitIncompleteGroups) 
 
 TEST(SceneView, EmissiveBoxesPreserveDimensionsMountAndSourceBinding) {
     const auto temp = std::filesystem::temp_directory_path() /
-                      ("robotics-box-test-" + std::to_string(getpid()) + ".yaml");
+                      ("nereus-box-test-" + std::to_string(getpid()) + ".yaml");
     const std::string valid = R"(version: 1
 groups:
   - id: lamp

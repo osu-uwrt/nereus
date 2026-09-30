@@ -6,7 +6,7 @@ namespace robotics::viewer {
 SceneDraw sceneDrawer(std::filesystem::path shaders) {
     if (shaders.empty())
         shaders = std::filesystem::canonical("/proc/self/exe").parent_path().parent_path() /
-                  "share/robotics_platform/shaders";
+                  "share/nereus/shaders";
     struct State {
         std::unique_ptr<rendering::Renderer> renderer;
         scene_view::Document document;

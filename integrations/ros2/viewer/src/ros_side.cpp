@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
-#ifdef RP_VIEWER_UWRT
+#ifdef NEREUS_VIEWER_UWRT
 #include <riptide_msgs2/msg/led_command.hpp>
 #endif
 
@@ -194,7 +194,7 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
                                          "Ignoring invalid realized thruster forces for propeller animation");
             }));
     if (lights.input == "riptide_msgs2/msg/LedCommand") {
-#ifdef RP_VIEWER_UWRT
+#ifdef NEREUS_VIEWER_UWRT
         subscriptions_.push_back(node_->create_subscription<riptide_msgs2::msg::LedCommand>(
             scenario.absolute(lights.topic), 10, [this](const riptide_msgs2::msg::LedCommand &msg) {
                 using Command = riptide_msgs2::msg::LedCommand;
@@ -212,7 +212,7 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
                 lights_->command(glm::vec3(msg.red, msg.green, msg.blue) / 255.f, mode, msg.target, now());
             }));
 #else
-        std::cerr << "robotics-pool-viewer: built without riptide_msgs2; LED commands are not shown\n";
+        std::cerr << "nereus-viewer: built without riptide_msgs2; LED commands are not shown\n";
 #endif
     } else if (lights.input == "std_msgs/msg/ColorRGBA") {
         subscriptions_.push_back(node_->create_subscription<std_msgs::msg::ColorRGBA>(
@@ -459,7 +459,7 @@ void RosSide::receiveMarkers(std::map<MarkerKey, MarkerRecord> &records,
         if (m.type == Marker::MESH_RESOURCE) {
             record.mesh = resolveMeshResource(m.mesh_resource);
             if (record.mesh.empty() && warnedMeshes_.insert(m.mesh_resource).second)
-                std::cerr << "robotics-pool-viewer: cannot resolve mesh resource " << m.mesh_resource << '\n';
+                std::cerr << "nereus-viewer: cannot resolve mesh resource " << m.mesh_resource << '\n';
         }
         records[{m.ns, m.id}] = std::move(record);
     }
@@ -502,7 +502,7 @@ void RosSide::captureDetections(bool show) {
     const DetectionShow shown = detectionShow();
     if (shown.downgraded && !warnedDetectionDowngrade_) {
         warnedDetectionDowngrade_ = true;
-        std::cerr << "robotics-pool-viewer: no simulator truth; detection placement truth/both treated as estimate\n";
+        std::cerr << "nereus-viewer: no simulator truth; detection placement truth/both treated as estimate\n";
     }
     for (auto &[key, entry] : detectionMarkers_) {
         const auto &m = entry.marker;

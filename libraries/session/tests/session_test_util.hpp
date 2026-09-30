@@ -10,7 +10,7 @@
 
 namespace robotics::session::testing {
 inline Json loadFixture(const std::string &name) {
-    std::ifstream stream(std::string(RP_SESSION_FIXTURES) + "/" + name);
+    std::ifstream stream(std::string(NEREUS_SESSION_FIXTURES) + "/" + name);
     if (!stream)
         throw std::runtime_error("missing fixture " + name);
     return Json::parse(stream);

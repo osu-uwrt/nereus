@@ -1,20 +1,20 @@
-add_library(rp_scene_view src/scene.cpp src/load.cpp)
-add_library(RoboticsPlatform::scene_view ALIAS rp_scene_view)
-set_target_properties(rp_scene_view PROPERTIES EXPORT_NAME scene_view)
-target_include_directories(rp_scene_view PUBLIC
+add_library(nereus_scene_view src/scene.cpp src/load.cpp)
+add_library(Nereus::scene_view ALIAS nereus_scene_view)
+set_target_properties(nereus_scene_view PROPERTIES EXPORT_NAME scene_view)
+target_include_directories(nereus_scene_view PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-target_link_libraries(rp_scene_view PUBLIC rp_scene_rendering rp_visualization PRIVATE yaml-cpp)
-rp_project_options(rp_scene_view)
-install(TARGETS rp_scene_view EXPORT RoboticsPlatformTargets
+target_link_libraries(nereus_scene_view PUBLIC nereus_scene_rendering nereus_visualization PRIVATE yaml-cpp)
+nereus_project_options(nereus_scene_view)
+install(TARGETS nereus_scene_view EXPORT NereusTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   add_executable(scene_view_tests tests/scene_test.cpp)
-  target_link_libraries(scene_view_tests PRIVATE rp_scene_view GTest::gtest_main)
-  target_compile_definitions(scene_view_tests PRIVATE RP_ROOT="${PROJECT_SOURCE_DIR}")
-  rp_project_options(scene_view_tests)
+  target_link_libraries(scene_view_tests PRIVATE nereus_scene_view GTest::gtest_main)
+  target_compile_definitions(scene_view_tests PRIVATE NEREUS_ROOT="${PROJECT_SOURCE_DIR}")
+  nereus_project_options(scene_view_tests)
   include(GoogleTest)
   gtest_discover_tests(scene_view_tests DISCOVERY_MODE PRE_TEST)
 endif()

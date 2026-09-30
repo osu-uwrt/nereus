@@ -66,7 +66,7 @@ def run_trial(kind, output, domain, scenario, sdk):
         simulator = [
             sys.executable,
             "-m",
-            "robotics_platform_ros",
+            "nereus_ros",
             str(scenario),
             "--output",
             str(output / "bridge"),

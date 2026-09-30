@@ -8,8 +8,8 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 
-from robotics_platform.packs import resolve_scenario
-from robotics_platform.task_runtime import TaskRuntime, _placement, _pose
+from nereus.packs import resolve_scenario
+from nereus.task_runtime import TaskRuntime, _placement, _pose
 
 ROOT = Path(__file__).resolve().parents[3]
 

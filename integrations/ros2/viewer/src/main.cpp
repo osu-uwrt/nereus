@@ -6,7 +6,7 @@
 namespace {
 void usage() {
     std::cout <<
-        "robotics-pool-viewer: ROS 2 pool viewer for the robotics-platform simulator bridge\n"
+        "nereus-viewer: ROS 2 pool viewer for the nereus simulator bridge\n"
         "  --scenario FILE        load the scene from a resolved.json (default: latched scenario topic)\n"
         "  --pack-dir DIR         scenario pack folder used to resolve assets of a --scenario file\n"
         "  --config FILE          host viewer document (default content/viewer/talos_uwrt_host.yaml)\n"
@@ -156,7 +156,7 @@ int main(int argc, char **argv) {
     try {
         return robotics::ros_viewer::host::run(options, argc, argv);
     } catch (const std::exception &error) {
-        std::cerr << "robotics-pool-viewer: " << error.what() << '\n';
+        std::cerr << "nereus-viewer: " << error.what() << '\n';
         return 1;
     }
 }
