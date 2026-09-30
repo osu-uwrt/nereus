@@ -511,11 +511,13 @@ PropWorld::Impl::Impl(const ResolvedScenario &resolved, const std::string &task_
     const double depth = pool.at("depth_m").get<double>();
     surface_z = water_level + pool_placement.at("position_m").at(2).get<double>();
     const Matrix4 pool_from_world = yawMatrix(pool_placement);
-    for (const auto &b : resolved.pool.at("collision_boxes")) {
+    // A pool floor is either its generated profile boxes or the box whose top sits at the flat floor.
+    for (const auto &b : poolCollisionBoxes(resolved.pool)) {
         const Vec3 center = vec3(b.at("center_m"), "center_m");
         const Vec3 size = vec3(b.at("size_m"), "size_m");
-        pool_boxes.push_back({pool_from_world * poseOf(b.at("center_m"), b.at("orientation_wxyz")), size / 2,
-                              std::abs(center.z() + size.z() / 2 - (water_level - depth)) < 1e-3});
+        pool_boxes.push_back(
+            {pool_from_world * poseOf(b.at("center_m"), b.at("orientation_wxyz")), size / 2,
+             b.value("floor", false) || std::abs(center.z() + size.z() / 2 - (water_level - depth)) < 1e-3});
     }
     build();
 }

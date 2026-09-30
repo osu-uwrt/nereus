@@ -229,6 +229,8 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
     assignVec3(pool.current_velocity, wp, "current_m_s");
     assignVec3(pool.current_oscillation_amplitude, wp, "current_oscillation_amplitude_m_s");
     assignNumber(pool.current_oscillation_frequency, wp, "current_oscillation_frequency_hz");
+    if (has(wp, "floor_profile"))
+        pool.floor = poolFloor(world);
     const Json &placement = at(scenario, "pool_placement");
     const Eigen::Vector3d placement_position = vec3(at(placement, "position_m"), "position_m");
     pool.yaw_world = radians(num(at(placement, "yaw_deg"), "yaw_deg"));
@@ -290,7 +292,7 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
         contacts.body_boxes.push_back(makeBox(box, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity()));
     const double half_yaw = parameters.pool.yaw_world / 2;
     const Eigen::Quaterniond pool_quaternion(std::cos(half_yaw), 0, 0, std::sin(half_yaw));
-    for (const auto &box : at(world, "collision_boxes"))
+    for (const auto &box : poolCollisionBoxes(world))
         contacts.world_boxes.push_back(makeBox(box, placement_position, pool_quaternion));
     for (const auto &instance : at(scenario, "task_placements")) {
         const double yaw = radians(num(at(instance, "yaw_deg"), "yaw_deg")) / 2;

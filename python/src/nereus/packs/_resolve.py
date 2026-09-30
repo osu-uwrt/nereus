@@ -247,6 +247,7 @@ def resolve_scenario(path: Path) -> ResolvedScenario:
         data, robot, tasks_data, [item["id"] for item in definitions], mechanism_types
     )
     problems += _prefixed(scenario.path, scenario_problems)
+    problems += _prefixed(scenario.path, semantics.scenario_pool(data, documents["pool"].plain()))
     if problems:
         raise PackError(problems)
 

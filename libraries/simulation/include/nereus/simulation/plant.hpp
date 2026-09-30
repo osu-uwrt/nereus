@@ -1,5 +1,6 @@
 #pragma once
 #include <nereus/simulation/contacts.hpp>
+#include <nereus/simulation/floor_profile.hpp>
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -64,7 +65,12 @@ struct Pool {
     Eigen::Vector3d current_velocity = Eigen::Vector3d::Zero();              // Mean, world frame.
     Eigen::Vector3d current_oscillation_amplitude = Eigen::Vector3d::Zero(); // m/s.
     double current_oscillation_frequency = 0;                                // Hz; zero disables oscillation.
+    // Sloped floor; empty means flat at `depth`. When set, its deepest point is `depth`.
+    FloorProfile floor;
 };
+
+// The pool's floor profile, or a flat one at `depth` along the length.
+FloorProfile floorOf(const Pool &pool);
 
 struct PlantParameters {
     BodyParameters body;

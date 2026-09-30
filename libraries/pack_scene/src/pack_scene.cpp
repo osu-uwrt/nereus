@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <optional>
 #include <set>
 #include <stdexcept>
 
@@ -114,6 +115,17 @@ std::vector<r::PoolStripe> poolStripes(const Json &pool) {
     const float length = p.at("length_m").get<float>(), width = p.at("width_m").get<float>(),
                 depth = p.at("depth_m").get<float>();
     const StripeStyle base = styled(markings, {});
+    // Floor depth where a wall meets the floor, `at` metres along the wall.
+    const auto profiled = p.contains("floor_profile") ? std::optional(session::poolFloor(pool)) : std::nullopt;
+    const auto wallDepth = [&](r::PoolSide side, float at) {
+        if (!profiled)
+            return depth;
+        const Eigen::Vector2d xy = side == r::PoolSide::XMin   ? Eigen::Vector2d(0, at)
+                                   : side == r::PoolSide::XMax ? Eigen::Vector2d(length, at)
+                                   : side == r::PoolSide::YMin ? Eigen::Vector2d(at, 0)
+                                                               : Eigen::Vector2d(at, width);
+        return static_cast<float>(profiled->depthAt(xy));
+    };
     if (markings.contains("lane_grid")) {
         const auto &grid = markings.at("lane_grid");
         const StripeStyle style = styled(grid, base);
@@ -143,7 +155,7 @@ std::vector<r::PoolStripe> poolStripes(const Json &pool) {
                                               : std::array{r::PoolSide::YMin, r::PoolSide::YMax})
                     for (int i = 0; i < count; ++i) {
                         const float at = first + float(i) * spacing;
-                        addStripe(out, side, {at, -depth}, {at, 0}, wall);
+                        addStripe(out, side, {at, -wallDepth(side, at)}, {at, 0}, wall);
                     }
         }
     }
@@ -274,6 +286,12 @@ void PackScene::buildPool() {
             geometry.waterline_band = vector2(surface.at("waterline_band_m"));
     }
     geometry.markings = pack_scene::poolStripes(pool);
+    if (p.contains("floor_profile")) {
+        const auto floor = session::poolFloor(pool);
+        for (const auto &vertex : floor.polyline())
+            geometry.floor_profile.push_back(vertex.cast<float>());
+        geometry.floor_along_x = floor.axis() == simulation::FloorProfile::Axis::X;
+    }
     static_ = r::makePoolScene(geometry);
     pool_instances_ = static_.instances.size();
     // makePoolScene order: floor, 4 walls, 4 decks, 4 coping strips, floor stripes?, wall stripes?
@@ -293,6 +311,8 @@ void PackScene::buildPool() {
                     {"deck_height_m", geometry.deck_height},
                     {"stripes", pool_stripes_.size()},
                     {"placement", {{"position_m", at}, {"yaw_deg", yaw}}}};
+    if (p.contains("floor_profile"))
+        pool_record_["floor_profile"] = p.at("floor_profile");
 }
 
 void PackScene::buildTasks() {

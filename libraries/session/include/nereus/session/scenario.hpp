@@ -3,6 +3,7 @@
 // bridge's resolved.json layout plus `asset_paths`. Validation is the pack tool's job; this
 // loader only checks the fields it reads. Pack documents stay JSON: robot/pool/task data is
 // consumed by the component that owns it, never by name switches.
+#include <nereus/simulation/floor_profile.hpp>
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
@@ -27,4 +28,10 @@ struct ResolvedScenario {
 // Throws std::runtime_error with file/field context.
 ResolvedScenario loadResolvedScenario(const std::filesystem::path &resolved_json);
 ResolvedScenario parseResolvedScenario(const Json &document);
+
+// A pool document's floor: its `parameters.floor_profile`, or flat at `depth_m` along the length.
+simulation::FloorProfile poolFloor(const Json &pool);
+// A pool document's static contact boxes (pool-local): its `collision_boxes`, plus one box per floor
+// segment, flagged `"floor": true`, when the floor is profiled.
+Json poolCollisionBoxes(const Json &pool);
 } // namespace nereus::session

@@ -97,11 +97,16 @@ struct PoolGeometry {
     Eigen::Vector2f waterline_band = {-.13f, .04f};
     Eigen::Vector3f waterline_color = {.065f, .20f, .27f};
     std::vector<PoolStripe> markings;
+    // Sloped floor: (position along x, or along y when floor_along_x is false; depth below the water)
+    // vertices from 0 to the pool extent. Empty: flat at dimensions.z(), which is always the deepest point.
+    std::vector<Eigen::Vector2f> floor_profile;
+    bool floor_along_x = true;
 };
 // Unit cube centered on origin, six separate normal/UV faces. CPU-only geometry.
 std::shared_ptr<const MeshAsset> makeBoxMesh();
 // Optional original pool appearance geometry. No robot, task, fluid dynamics or transport.
 // Instance order: floor, four walls, four decks, four coping strips, then one Marking instance for the
-// floor stripes and one for the wall stripes, each only when there are any.
+// floor stripes and one for the wall stripes, each only when there are any. A profiled floor is a mesh
+// following the profile, floor stripes drape over it and each wall reaches the floor where it meets it.
 Scene makePoolScene(const PoolGeometry &parameters = {});
 } // namespace nereus::rendering

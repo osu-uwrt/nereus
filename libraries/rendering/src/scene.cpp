@@ -15,11 +15,64 @@ Eigen::Matrix4f eigen(const glm::mat4 &m) {
 bool unitColor(const Eigen::Vector3f &c) {
     return c.allFinite() && (c.array() >= 0).all() && (c.array() <= 1).all();
 }
+// Depth of a profiled floor (see PoolGeometry::floor_profile) at a position along its axis.
+float profileDepth(const std::vector<Eigen::Vector2f> &profile, float s) {
+    if (!(s > profile.front().x()))
+        return profile.front().y();
+    if (s >= profile.back().x())
+        return profile.back().y();
+    const auto upper = std::upper_bound(profile.begin(), profile.end(), s,
+                                        [](float value, const Eigen::Vector2f &v) { return value < v.x(); });
+    const Eigen::Vector2f &a = *(upper - 1), &b = *upper;
+    return a.y() + (b.y() - a.y()) * (s - a.x()) / (b.x() - a.x());
+}
+// Floor mesh over a profiled floor: one strip across the pool per profile segment, smooth normals.
+std::shared_ptr<const MeshAsset> floorMesh(const PoolGeometry &p) {
+    const auto &profile = p.floor_profile;
+    const float span = p.floor_along_x ? p.dimensions.y() : p.dimensions.x();
+    const auto point = [&](float s, float across, float depth) -> Eigen::Vector3f {
+        return p.floor_along_x ? Eigen::Vector3f(s, across, -depth) : Eigen::Vector3f(across, s, -depth);
+    };
+    auto result = std::make_shared<MeshAsset>();
+    Submesh mesh;
+    for (std::size_t k = 0; k < profile.size(); ++k) {
+        // Average the neighbouring segment slopes (depth per metre) for a smooth normal.
+        const auto slope = [&](std::size_t i) {
+            return (profile[i + 1].y() - profile[i].y()) / (profile[i + 1].x() - profile[i].x());
+        };
+        const float m = k == 0 ? slope(0) : k + 1 == profile.size() ? slope(k - 1) : (slope(k - 1) + slope(k)) / 2;
+        const Eigen::Vector3f normal =
+            (p.floor_along_x ? Eigen::Vector3f(m, 0, 1) : Eigen::Vector3f(0, m, 1)).normalized();
+        for (float across : {0.f, span})
+            mesh.vertices.push_back({point(profile[k].x(), across, profile[k].y()), normal, {profile[k].x(), across}});
+        if (k == 0)
+            continue;
+        const auto a = static_cast<std::uint32_t>(2 * (k - 1)), b = a + 2;
+        // Counter-clockwise seen from above for either axis.
+        if (p.floor_along_x)
+            for (auto i : {a, b, b + 1, a, b + 1, a + 1})
+                mesh.indices.push_back(i);
+        else
+            for (auto i : {a, a + 1, b + 1, a, b + 1, b})
+                mesh.indices.push_back(i);
+    }
+    result->minimum = {0, 0, -p.dimensions.z()};
+    result->maximum = {p.dimensions.x(), p.dimensions.y(), 0};
+    for (const auto &v : mesh.vertices) {
+        result->minimum = result->minimum.cwiseMin(v.position);
+        result->maximum = result->maximum.cwiseMax(v.position);
+    }
+    result->submeshes.push_back(std::move(mesh));
+    return result;
+}
 // Decal quads for one pool side, one submesh per colour, in pool-local coordinates relative to the water
-// surface. Each quad extends kPad past its stripe so the Marking shader can fade the edge.
+// surface. Each quad extends kPad past its stripe so the Marking shader can fade the edge. Over a profiled
+// floor, floor quads are split along their length and each vertex sits on the floor below it.
 std::shared_ptr<const MeshAsset> stripeMesh(const std::vector<PoolStripe> &stripes, bool floor, float length,
-                                            float width, float depth) {
+                                            float width, float depth, const std::vector<Eigen::Vector2f> &profile = {},
+                                            bool along_x = true) {
     constexpr float kPad = .05f, kLift = .002f; // the lift keeps decals off the surface they lie on
+    constexpr float kPiece = .1f;               // longest split piece along a profiled floor's axis
     auto result = std::make_shared<MeshAsset>();
     result->minimum.setConstant(std::numeric_limits<float>::max());
     result->maximum.setConstant(std::numeric_limits<float>::lowest());
@@ -61,6 +114,30 @@ std::shared_ptr<const MeshAsset> stripeMesh(const std::vector<PoolStripe> &strip
         }
         const auto start = static_cast<std::uint32_t>(found->vertices.size());
         const Eigen::Vector2f uv((half + kPad) / half, (halfWidth + kPad) / halfWidth);
+        if (floor && !profile.empty()) {
+            const float axial = std::abs(along_x ? u.x() : u.y());
+            const int pieces = std::max(1, static_cast<int>(std::ceil(axial * 2 * (half + kPad) / kPiece)));
+            for (int i = 0; i <= pieces; ++i)
+                for (float side : {-1.f, 1.f}) {
+                    const Eigen::Vector2f corner(-1 + 2.f * static_cast<float>(i) / static_cast<float>(pieces), side);
+                    const Eigen::Vector2f q =
+                        center + corner.x() * (half + kPad) * u + corner.y() * (halfWidth + kPad) * across;
+                    const float s = along_x ? q.x() : q.y();
+                    const float m = (profileDepth(profile, s + .05f) - profileDepth(profile, s - .05f)) / .1f;
+                    const Eigen::Vector3f position(q.x(), q.y(), -profileDepth(profile, s) + kLift);
+                    const Eigen::Vector3f n =
+                        (along_x ? Eigen::Vector3f(m, 0, 1) : Eigen::Vector3f(0, m, 1)).normalized();
+                    found->vertices.push_back({position, n, corner.cwiseProduct(uv)});
+                    result->minimum = result->minimum.cwiseMin(position);
+                    result->maximum = result->maximum.cwiseMax(position);
+                }
+            for (int i = 0; i < pieces; ++i) {
+                const auto a = start + static_cast<std::uint32_t>(2 * i);
+                for (auto k : {a, a + 2, a + 3, a, a + 3, a + 1})
+                    found->indices.push_back(k);
+            }
+            continue;
+        }
         for (Eigen::Vector2f corner :
              {Eigen::Vector2f(-1, -1), Eigen::Vector2f(1, -1), Eigen::Vector2f(1, 1), Eigen::Vector2f(-1, 1)}) {
             const Eigen::Vector3f position =
@@ -116,6 +193,18 @@ Scene makePoolScene(const PoolGeometry &p) {
             !std::isfinite(stripe.width) || stripe.width <= 0 || !unitColor(stripe.color))
             throw std::invalid_argument(
                 "pool stripes require distinct finite ends, a positive width and a unit colour");
+    if (!p.floor_profile.empty()) {
+        const float extent = p.floor_along_x ? p.dimensions.x() : p.dimensions.y();
+        bool valid = p.floor_profile.size() >= 2 && p.floor_profile.front().x() == 0 &&
+                     std::abs(p.floor_profile.back().x() - extent) <= 1e-4f * std::max(1.f, extent);
+        for (std::size_t k = 0; valid && k < p.floor_profile.size(); ++k)
+            valid = p.floor_profile[k].allFinite() && p.floor_profile[k].y() > 0 &&
+                    p.floor_profile[k].y() <= p.dimensions.z() * (1 + 1e-5f) &&
+                    (k == 0 || p.floor_profile[k].x() > p.floor_profile[k - 1].x());
+        if (!valid)
+            throw std::invalid_argument("pool floor profile must run from 0 to the pool extent with increasing "
+                                        "positions and depths in (0, depth]");
+    }
     Scene scene;
     const auto geometry = makeBoxMesh();
     const float length = p.dimensions.x(), width = p.dimensions.y(), depth = p.dimensions.z(), deck = p.deck_height;
@@ -132,12 +221,28 @@ Scene makePoolScene(const PoolGeometry &p) {
         instance.material = material;
         scene.instances.push_back(std::move(instance));
     };
-    box(at(length / 2, width / 2, -depth - .12f), {length, width, .24f}, p.tile_color, SurfaceMaterial::Tiles);
-    box(at(length / 2, -.15f, (deck - depth) / 2), {length, .3f, depth + deck}, p.tile_color, SurfaceMaterial::Tiles);
-    box(at(length / 2, width + .15f, (deck - depth) / 2), {length, .3f, depth + deck}, p.tile_color,
+    const auto &profile = p.floor_profile;
+    if (profile.empty()) {
+        box(at(length / 2, width / 2, -depth - .12f), {length, width, .24f}, p.tile_color, SurfaceMaterial::Tiles);
+    } else {
+        Instance instance;
+        instance.mesh = floorMesh(p);
+        instance.transform = eigen(at(0, 0, 0));
+        instance.tint << p.tile_color, 1;
+        instance.material = SurfaceMaterial::Tiles;
+        scene.instances.push_back(std::move(instance));
+    }
+    // Walls across a profiled floor's axis stop at the floor depth at their end; the others reach the deepest
+    // point (the floor hides what lies below it).
+    const float atStart = profile.empty() ? depth : profile.front().y();
+    const float atEnd = profile.empty() ? depth : profile.back().y();
+    const float yMin = p.floor_along_x ? depth : atStart, yMax = p.floor_along_x ? depth : atEnd;
+    const float xMin = p.floor_along_x ? atStart : depth, xMax = p.floor_along_x ? atEnd : depth;
+    box(at(length / 2, -.15f, (deck - yMin) / 2), {length, .3f, yMin + deck}, p.tile_color, SurfaceMaterial::Tiles);
+    box(at(length / 2, width + .15f, (deck - yMax) / 2), {length, .3f, yMax + deck}, p.tile_color,
         SurfaceMaterial::Tiles);
-    box(at(-.15f, width / 2, (deck - depth) / 2), {.3f, width, depth + deck}, p.tile_color, SurfaceMaterial::Tiles);
-    box(at(length + .15f, width / 2, (deck - depth) / 2), {.3f, width, depth + deck}, p.tile_color,
+    box(at(-.15f, width / 2, (deck - xMin) / 2), {.3f, width, xMin + deck}, p.tile_color, SurfaceMaterial::Tiles);
+    box(at(length + .15f, width / 2, (deck - xMax) / 2), {.3f, width, xMax + deck}, p.tile_color,
         SurfaceMaterial::Tiles);
     for (float y : {-1.5f, width + 1.5f})
         box(at(length / 2, y < 0 ? -1.8f : width + 1.8f, deck - .15f), {length + 6.6f, 3, .3f}, {.73f, .76f, .73f},
@@ -150,7 +255,7 @@ Scene makePoolScene(const PoolGeometry &p) {
     for (float x : {-.10f, length + .10f})
         box(at(x, width / 2, deck + .02f), {.22f, width, .055f}, {.9f, .91f, .86f});
     for (bool floor : {true, false})
-        if (auto mesh = stripeMesh(p.markings, floor, length, width, depth)) {
+        if (auto mesh = stripeMesh(p.markings, floor, length, width, depth, profile, p.floor_along_x)) {
             Instance instance;
             instance.mesh = std::move(mesh);
             instance.transform = eigen(at(0, 0, 0));

@@ -44,6 +44,7 @@ add_library(nereus_simulation
   libraries/simulation/src/thruster_dynamics.cpp
   libraries/simulation/src/box_contacts.cpp
   libraries/simulation/src/payload.cpp
+  libraries/simulation/src/floor_profile.cpp
   libraries/simulation/src/plant.cpp)
 add_library(Nereus::simulation ALIAS nereus_simulation)
 set_target_properties(nereus_simulation PROPERTIES EXPORT_NAME simulation)
@@ -128,7 +129,7 @@ if(BUILD_TESTING AND NEREUS_BUILD_SIMULATION)
   include(GoogleTest)
   add_executable(plant_tests libraries/simulation/tests/plant_test.cpp
     libraries/simulation/tests/model_reference_test.cpp libraries/simulation/tests/stage_reference_test.cpp
-    libraries/simulation/tests/contact_reference_test.cpp)
+    libraries/simulation/tests/contact_reference_test.cpp libraries/simulation/tests/floor_profile_test.cpp)
   target_compile_definitions(plant_tests PRIVATE NEREUS_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures")
   target_include_directories(plant_tests PRIVATE libraries/simulation/src)
   target_link_libraries(plant_tests PRIVATE nereus_simulation GTest::gtest_main)

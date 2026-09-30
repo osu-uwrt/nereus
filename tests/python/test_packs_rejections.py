@@ -346,6 +346,75 @@ class PoolMarkingTests(PackRejectionCase):
         self.assert_load_rejects("pool", "/markings/ends")
 
 
+class PoolFloorProfileTests(PackRejectionCase):
+    """The fixture pool is 10 m long, 3 m deep; profiled here to rise to 2 m at the far end."""
+
+    FLOOR_BOX = "- {id: floor, size_m: [10, 5, 1], center_m: [5, 2.5, -3.5], orientation_wxyz: [1, 0, 0, 0]}\n"
+    WALL_BOX = "- {id: end_wall, size_m: [1, 5, 4], center_m: [10.5, 2.5, -1], orientation_wxyz: [1, 0, 0, 0]}\n"
+
+    def profile(self, points: str = "[[0, 3], [4, 3], [7, 2], [10, 2]]", along: str = "x") -> None:
+        self.edit(
+            "pool/pool.yaml",
+            "current_oscillation_frequency_hz: 0}",
+            f"current_oscillation_frequency_hz: 0, floor_profile: {{along: {along}, points_m: {points}}}}}",
+        )
+        self.edit("pool/pool.yaml", self.FLOOR_BOX, self.WALL_BOX)
+
+    def test_profiled_floor_loads_and_resolves(self) -> None:
+        self.profile()
+        self.edit(
+            "pool/pool.yaml",
+            "collision_boxes:\n",
+            "markings:\n"
+            "  wall_lines:\n"
+            "  - {wall: x_min, from: [1, -3], to: [1, 0]}\n"
+            "  - {wall: x_max, from: [1, -2], to: [1, 0]}\n"
+            "  - {wall: y_min, from: [2, -3], to: [8, -2]}\n"
+            "collision_boxes:\n",
+        )
+        load_pack(self.root / "pool")
+        resolve_scenario(self.scenario)
+
+    def test_profile_must_span_the_pool(self) -> None:
+        self.profile("[[0, 3], [8, 2]]")
+        self.assert_load_rejects("pool", "must run from 0 to 10 m along x, not 0..8 m")
+
+    def test_profile_along_y_spans_the_width(self) -> None:
+        self.profile("[[0, 3], [10, 2]]", along="y")
+        self.assert_load_rejects("pool", "must run from 0 to 5 m along y")
+
+    def test_profile_positions_increase(self) -> None:
+        self.profile("[[0, 3], [6, 3], [5, 2], [10, 2]]")
+        self.assert_load_rejects("pool", "positions must increase")
+
+    def test_profile_depths_positive(self) -> None:
+        self.profile("[[0, 3], [5, 0], [10, 3]]")
+        self.assert_load_rejects("pool", "depths must be positive")
+
+    def test_depth_is_the_deepest_point(self) -> None:
+        self.profile("[[0, 2.5], [10, 2]]")
+        self.assert_load_rejects("pool", "3 m must be the profile's deepest point (2.5 m)")
+
+    def test_flat_floor_box_is_rejected(self) -> None:
+        self.profile()
+        self.edit("pool/pool.yaml", self.WALL_BOX, self.WALL_BOX + self.FLOOR_BOX)
+        self.assert_load_rejects("pool", "'floor' is a flat floor box")
+
+    def test_wall_line_below_the_shallow_end(self) -> None:
+        self.profile()
+        self.edit(
+            "pool/pool.yaml",
+            "collision_boxes:\n",
+            "markings: {wall_lines: [{wall: x_max, from: [1, -3], to: [1, 0]}]}\ncollision_boxes:\n",
+        )
+        self.assert_load_rejects("pool", "/markings/wall_lines/0/from: z -3 m is outside -2..0.3 m")
+
+    def test_sphere_pool_contacts_need_a_flat_floor(self) -> None:
+        self.profile()
+        self.edit("scenario/scenario.yaml", "model: box_scene", "model: sphere_pool")
+        self.assert_resolve_rejects("sphere_pool needs a flat pool floor")
+
+
 class FolderRejectionTests(PackRejectionCase):
     def test_folder_with_two_canonical_files(self) -> None:
         (self.root / "robot" / "pool.yaml").write_text(POOL, encoding="utf-8")

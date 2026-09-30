@@ -44,6 +44,29 @@ lighting:
 
 The robot collides with `collision_boxes`; the viewer draws the floor, walls, deck and coping from `parameters`.
 
+### Sloped floor
+
+A floor that changes depth along the pool (a dive well, a shallow end) is a `floor_profile` in `parameters`:
+depth below the water at points along one axis, constant across the other, joined by a monotone cubic so flat
+stretches stay flat and a curve never overshoots its end depths.
+
+```yaml
+parameters:
+  length_m: 25.0
+  depth_m: 5.1816               # the deepest point of the profile
+  floor_profile:
+    along: x                    # or y
+    points_m: [[0, 5.1816], [9.3, 5.1816], [15.3, 4.2672], [25, 4.2672]]   # [position, depth], 0..length
+  # ...
+collision_boxes:                # walls only: the floor's contact boxes are generated from the profile
+- ...
+```
+
+The same floor is used by the viewer and cameras (the floor mesh, lines draped over it, walls meeting it), by
+the DVL's range to the bottom, by vehicle and prop contacts, and by the task runtime's floor checks. Validation
+rejects a profile that does not span the pool, a `depth_m` that is not its deepest point, a flat floor box
+alongside it, and `sphere_pool` contacts (use `box_scene`).
+
 ### Lane lines and finish
 
 Painted lines are data, not part of the renderer: a pool without `markings` has a plain tiled floor. Everything

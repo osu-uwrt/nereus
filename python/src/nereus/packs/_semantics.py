@@ -259,9 +259,59 @@ def pool(data: dict[str, Any]) -> list[str]:
     problems: list[str] = []
     duplicates((item["id"] for item in data["collision_boxes"]), "collision box", problems)
     _quaternions(data, "", problems)
+    if "floor_profile" in data["parameters"]:
+        _floor_profile(data["parameters"], data["collision_boxes"], problems)
     if "markings" in data:
         _pool_markings(data["markings"], data["parameters"], problems)
     return problems
+
+
+def _floor_profile(
+    parameters: dict[str, Any], boxes: list[dict[str, Any]], problems: list[str]
+) -> None:
+    """The profile spans the pool, deepens only where it says, and replaces the floor box."""
+    where = "/parameters/floor_profile"
+    profile = parameters["floor_profile"]
+    points = profile["points_m"]
+    extent = parameters["length_m"] if profile["along"] == "x" else parameters["width_m"]
+    positions = [point[0] for point in points]
+    depths = [point[1] for point in points]
+    if abs(positions[0]) > POOL_EDGE_TOLERANCE or abs(positions[-1] - extent) > POOL_EDGE_TOLERANCE:
+        problems.append(
+            f"{where}/points_m: must run from 0 to {extent:g} m along {profile['along']}, "
+            f"not {positions[0]:g}..{positions[-1]:g} m"
+        )
+    if any(b <= a for a, b in zip(positions, positions[1:])):
+        problems.append(f"{where}/points_m: positions must increase")
+    if any(depth <= 0 for depth in depths):
+        problems.append(f"{where}/points_m: depths must be positive")
+    if abs(max(depths) - parameters["depth_m"]) > POOL_EDGE_TOLERANCE:
+        problems.append(
+            f"/parameters/depth_m: {parameters['depth_m']:g} m must be the profile's deepest point "
+            f"({max(depths):g} m)"
+        )
+    floor_top = parameters["water_level_m"] - parameters["depth_m"]
+    for box in boxes:
+        if abs(box["center_m"][2] + box["size_m"][2] / 2 - floor_top) < 1e-3:
+            problems.append(
+                f"/collision_boxes: '{box['id']}' is a flat floor box; a profiled floor generates its own"
+            )
+
+
+def _floor_depth(parameters: dict[str, Any], wall: str, along: float) -> float:
+    """Depth where a wall meets the floor, `along` metres along the wall. On a profiled floor the curve
+    between two control points never leaves their depth range, so the deeper one bounds it."""
+    profile = parameters.get("floor_profile")
+    if profile is None:
+        return parameters["depth_m"]
+    points = profile["points_m"]
+    across_axis = {"x": ("x_min", "x_max"), "y": ("y_min", "y_max")}[profile["along"]]
+    if wall in across_axis:
+        return points[0][1] if wall == across_axis[0] else points[-1][1]
+    for (a, depth_a), (b, depth_b) in zip(points, points[1:]):
+        if along <= b:
+            return max(depth_a, depth_b)
+    return points[-1][1]
 
 
 def _pool_markings(
@@ -269,7 +319,7 @@ def _pool_markings(
 ) -> None:
     """Every stripe lies on the surface it is painted on (T bars may overhang)."""
     length, width = parameters["length_m"], parameters["width_m"]
-    depth, deck = parameters["depth_m"], parameters["deck_height_m"]
+    deck = parameters["deck_height_m"]
     grid = markings.get("lane_grid")
     if grid is not None:
         inset = grid.get("inset_m", 0.0)
@@ -292,7 +342,8 @@ def _pool_markings(
     for index, line in enumerate(markings.get("wall_lines", [])):
         along = width if line["wall"] in ("x_min", "x_max") else length
         where = f"/markings/wall_lines/{index}"
-        _stripe(line, where, ("along the wall", 0, along), ("z", -depth, deck), problems)
+        bottom = max(_floor_depth(parameters, line["wall"], end[0]) for end in (line["from"], line["to"]))
+        _stripe(line, where, ("along the wall", 0, along), ("z", -bottom, deck), problems)
 
 
 def _between(value: float, low: float, high: float) -> bool:
@@ -592,6 +643,13 @@ def bridge_binding(data: dict[str, Any], robot_data: dict[str, Any]) -> list[str
 
 
 # ------------------------------------------------------------------ scenario
+
+
+def scenario_pool(data: dict[str, Any], pool_data: dict[str, Any]) -> list[str]:
+    """Scenario settings the selected pool cannot support."""
+    if data["contacts"]["model"] == "sphere_pool" and "floor_profile" in pool_data["parameters"]:
+        return ["/contacts/model: sphere_pool needs a flat pool floor; use box_scene with a floor_profile"]
+    return []
 
 
 def scenario(

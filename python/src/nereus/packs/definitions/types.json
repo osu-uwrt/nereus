@@ -367,6 +367,37 @@
         "current_oscillation_frequency_hz": {
           "type": "number",
           "minimum": 0
+        },
+        "floor_profile": {
+          "type": "object",
+          "properties": {
+            "along": {
+              "enum": [
+                "x",
+                "y"
+              ],
+              "description": "Pool axis the depth varies along; it is constant across the other."
+            },
+            "points_m": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "minItems": 2,
+              "description": "[position along the axis, depth below the water] in m, from 0 to the pool's length (along x) or width (along y), positions increasing. Joined by a monotone cubic, so flat stretches stay flat and curves never overshoot."
+            }
+          },
+          "required": [
+            "along",
+            "points_m"
+          ],
+          "additionalProperties": false,
+          "description": "Sloped floor. Omitted: flat at depth_m. depth_m must be the deepest point; floor contact boxes are generated from the profile, so collision_boxes lists only the walls."
         }
       },
       "required": [
