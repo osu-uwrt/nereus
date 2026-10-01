@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
+from nereus.datasets._documents import DATASET_KINDS
 from nereus.packs import (
     DOCUMENT_KINDS,
     PackError,
@@ -20,6 +21,7 @@ from nereus.packs import (
     type_catalog,
 )
 from nereus.packs.__main__ import main
+from nereus.packs._document import read_yaml
 from test_packs_fixtures import write_generic_packs
 
 TALOS = Path(__file__).resolve().parents[2] / "content" / "packs"
@@ -120,7 +122,8 @@ class ScenarioTests(unittest.TestCase):
         resolved = resolve_scenario(TALOS / "scenarios" / "talos_uwrt")
         self.assertEqual(resolved.run_options["role"], "repair")
         for path in sorted(TALOS.rglob("*.yaml")):
-            if path.name != "exceptions.yaml":
+            # Dataset documents (parts, labels, dataset) are not simulator packs; test_datasets_* covers them.
+            if path.name != "exceptions.yaml" and read_yaml(path).get("kind") not in DATASET_KINDS:
                 self.assertEqual(load_pack(path).dumps(), path.read_text(), path.name)
 
 
