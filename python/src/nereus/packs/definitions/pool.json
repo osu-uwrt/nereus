@@ -347,9 +347,14 @@
           "maxItems": 3,
           "description": "Length along its +x, width, height, in m."
         },
-        "yaw_deg": {
-          "type": "number",
-          "description": "Turn about +Z, degrees (default 0)."
+        "rpy_deg": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "[roll, pitch, yaw] in degrees about the box's x, y, z axes (applied yaw, then pitch, then roll); default level."
         },
         "color_rgb": {
           "$ref": "#/$defs/rgb",

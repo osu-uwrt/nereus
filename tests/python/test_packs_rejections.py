@@ -452,7 +452,7 @@ class PoolFixtureTests(PackRejectionCase):
 
     def test_boxes_and_recess_load(self) -> None:
         self.add_fixtures(
-            "- {id: grate, type: box, center_m: [6, 2], size_m: [1.2, 0.6, 0.03], yaw_deg: 90, "
+            "- {id: grate, type: box, center_m: [6, 2], size_m: [1.2, 0.6, 0.03], rpy_deg: [0, 0, 90], "
             "color_rgb: [0.8, 0.8, 0.8], contact: true}\n"
             "- {id: tread, type: box, center_m: [9.7, 0.2, -0.4], size_m: [0.8, 0.3, 0.05]}\n"
             "- {id: stairs, type: recess, wall: y_min, from: [9, -1.2], to: [9.9, 0.3], depth_m: 0.5}\n"

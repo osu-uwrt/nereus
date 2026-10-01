@@ -301,7 +301,7 @@ void PackScene::buildPool() {
         r::PoolBox box;
         box.center = fixture.center.cast<float>() - Eigen::Vector3f(0, 0, surface);
         box.size = fixture.size.cast<float>();
-        box.yaw = static_cast<float>(fixture.yaw);
+        box.rotation = fixture.orientation.toRotationMatrix().cast<float>();
         box.on_floor = fixture.on_floor;
         geometry.boxes.push_back(box);
     }

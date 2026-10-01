@@ -95,16 +95,17 @@ struct FloorSlope {
     std::vector<Eigen::Vector2f> polyline;
 };
 // A solid block in the pool (a raised floor grate, a stair tread, a grab rail), pool-local, z relative to
-// the water surface, turned `yaw` radians about +Z.
+// the water surface, its axes turned by `rotation` (pool from box).
 struct PoolBox {
     Eigen::Vector3f center = Eigen::Vector3f::Zero(), size = Eigen::Vector3f::Ones();
-    float yaw = 0;
+    Eigen::Matrix3f rotation = Eigen::Matrix3f::Identity();
     Eigen::Vector3f color = {.68f, .85f, .87f};
     bool tiled = false;    // the pool's tile finish (tile_color) instead of a plain colour
     bool on_floor = false; // grouped with the floor (otherwise with the walls)
 };
 // An opening `depth` metres into a wall. from/to are opposite corners as (coordinate along the wall, z relative
-// to the water surface); the recess is lined with the pool's tiles.
+// to the water surface); the recess is lined with the pool's tiles. One reaching the deck opens through the
+// deck and coping as well (a stair well).
 struct PoolRecess {
     PoolSide side = PoolSide::YMin;
     Eigen::Vector2f from = Eigen::Vector2f::Zero(), to = Eigen::Vector2f::Zero();

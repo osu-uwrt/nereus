@@ -57,7 +57,7 @@ TEST(PoolFloor, FixtureBoxesRestOnTheFloorAndCanCollide) {
                        "floor_profile": {"along": "x", "points_m": [[0, 5], [10, 5], [20, 3]]}},
         "collision_boxes": [],
         "fixtures": [
-            {"id": "grate", "type": "box", "center_m": [15, 2], "size_m": [1.2, 0.6, 0.04], "yaw_deg": 90,
+            {"id": "grate", "type": "box", "center_m": [15, 2], "size_m": [1.2, 0.6, 0.04], "rpy_deg": [0, 0, 90],
              "contact": true},
             {"id": "tread", "type": "box", "center_m": [5, 0.2, -0.6], "size_m": [1, 0.4, 0.05]},
             {"id": "stairs", "type": "recess", "wall": "y_min", "from": [4, -1], "to": [6, 0.3], "depth_m": 0.4}
@@ -69,7 +69,8 @@ TEST(PoolFloor, FixtureBoxesRestOnTheFloorAndCanCollide) {
     const double floor = 0.5 - nereus::session::poolFloor(pool).depthAt({15, 2});
     EXPECT_NEAR(boxes[0].center.z() - boxes[0].size.z() / 2, floor, 1e-12);
     EXPECT_TRUE(boxes[0].on_floor);
-    EXPECT_NEAR(boxes[0].yaw, M_PI / 2, 1e-12);
+    EXPECT_TRUE(boxes[0].orientation.isApprox(Eigen::Quaterniond(Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitZ())),
+                                              1e-12));
     EXPECT_DOUBLE_EQ(boxes[1].center.z(), 0.5 - 0.6); // given z is relative to the water surface
     EXPECT_FALSE(boxes[1].on_floor);
     // Only the contact box collides; the profiled floor's boxes follow it.

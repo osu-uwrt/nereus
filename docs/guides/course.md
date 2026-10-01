@@ -110,10 +110,12 @@ Validation rejects stripes that leave the surface they are painted on (T bars ma
 
 Raised or recessed fittings are `fixtures`; flat details such as vents and flush drains are better drawn as
 markings. A `box` is a solid block: given `[x, y]` it rests on the floor at that point (following a sloped
-floor), given `[x, y, z]` it is placed with z relative to the water surface. Without `color_rgb` it takes the
+floor), given `[x, y, z]` it is placed with z relative to the water surface; `rpy_deg` tilts it (a sloping
+handrail). Without `color_rgb` it takes the
 pool's tile finish; `contact: true` also makes it a static contact box for the robot and props. A `recess`
 cuts an opening into a wall, between two corners given as `[coordinate along the wall, z]`, lined with tiles;
-it is drawn only (contacts treat the wall as solid).
+one reaching the deck opens through the deck as well (a stair well). Recesses are drawn only (contacts treat the
+wall as solid).
 
 ```yaml
 fixtures:

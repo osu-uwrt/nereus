@@ -34,11 +34,12 @@ ResolvedScenario parseResolvedScenario(const Json &document);
 // shallowest of them), or flat at `depth_m`.
 simulation::PoolFloor poolFloor(const Json &pool);
 // A pool document's `box` fixtures, placed: pool-local centre (z relative to the water surface; a box given
-// only x, y rests on the floor at its centre), size, yaw about +Z.
+// only x, y rests on the floor at its centre), size, orientation (pool from box; rpy_deg about the box's x,
+// y, z axes applied yaw, pitch, roll).
 struct PoolFixtureBox {
     std::string id;
     Eigen::Vector3d center = Eigen::Vector3d::Zero(), size = Eigen::Vector3d::Ones();
-    double yaw = 0; // radians
+    Eigen::Quaterniond orientation = Eigen::Quaterniond::Identity();
     bool on_floor = false, contact = false;
 };
 std::vector<PoolFixtureBox> poolFixtureBoxes(const Json &pool);

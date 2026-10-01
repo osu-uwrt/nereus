@@ -334,13 +334,14 @@ TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
         return c.x() - half.x() < 16 - 1e-4f && c.x() + half.x() > 15 + 1e-4f && c.y() - half.y() < -1e-4f &&
                c.y() + half.y() > -.49f && c.z() - half.z() < .3f - 1e-4f && c.z() + half.z() > -1.2f + 1e-4f;
     };
+    // Nor of its deck or coping: a recess reaching the deck is an open stair well.
     std::size_t lining = 0;
     for (const auto i : layout.walls) {
         const auto &instance = scene.instances[i];
-        if (instance.material != r::SurfaceMaterial::Tiles)
+        if (instance.material == r::SurfaceMaterial::Marking || i + 1 == scene.instances.size()) // the tread
             continue;
-        EXPECT_FALSE(inside(instance)) << "wall instance " << i;
-        lining += i > 12;
+        EXPECT_FALSE(inside(instance)) << "wall, deck or coping instance " << i;
+        lining += i > 12 && instance.material == r::SurfaceMaterial::Tiles;
     }
     EXPECT_GE(lining, 4u); // the wall's other pieces and the lining
     // Every wall piece comes before the wall markings, which are drawn after the surface they lie on.
