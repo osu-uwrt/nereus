@@ -53,13 +53,19 @@ markings:
   # Diving lines beside lap lines 4 and 6 at the shallow end.
   - {from: [19.83, 7.936], to: [23.6, 7.936]}
   - {from: [18.02, 10.988], to: [23.52, 10.988]}
-  # Flush slotted inlets in the floor.
-  - {from: [15.32, 1.49], to: [15.74, 1.49], width_m: 0.39, color_rgb: [0.05, 0.12, 0.16]}
-  - {from: [15.35, 1.3925], to: [15.71, 1.3925], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
-  - {from: [15.35, 1.5875], to: [15.71, 1.5875], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
-  - {from: [11.725, 2.96], to: [12.175, 2.96], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
-  - {from: [11.755, 2.885], to: [12.145, 2.885], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
-  - {from: [11.755, 3.035], to: [12.145, 3.035], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
+  # A flush slotted vent at the base of each cross line, centred on it.
+  - {from: [4.0472, 1.781], to: [4.4872, 1.781], width_m: 0.34, color_rgb: [0.05, 0.12, 0.16]}
+  - {from: [4.0772, 1.696], to: [4.4572, 1.696], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
+  - {from: [4.0772, 1.866], to: [4.4572, 1.866], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
+  - {from: [7.8572, 2.318], to: [8.2972, 2.318], width_m: 0.34, color_rgb: [0.05, 0.12, 0.16]}
+  - {from: [7.8872, 2.233], to: [8.2672, 2.233], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
+  - {from: [7.8872, 2.403], to: [8.2672, 2.403], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
+  - {from: [11.6672, 2.898], to: [12.1072, 2.898], width_m: 0.34, color_rgb: [0.05, 0.12, 0.16]}
+  - {from: [11.6972, 2.813], to: [12.0772, 2.813], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
+  - {from: [11.6972, 2.983], to: [12.0772, 2.983], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
+  - {from: [15.4772, 1.556], to: [15.9172, 1.556], width_m: 0.34, color_rgb: [0.05, 0.12, 0.16]}
+  - {from: [15.5072, 1.471], to: [15.8872, 1.471], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
+  - {from: [15.5072, 1.641], to: [15.8872, 1.641], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
   # A dark plus-shaped target above each lap line on both end walls: a stem from the waterline down to
   # 0.97 m and a 0.91 m crossbar at 0.46 m, 0.3 m wide strokes (fitted on the shallow-end wall).
   wall_lines:
