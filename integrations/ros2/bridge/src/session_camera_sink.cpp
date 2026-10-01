@@ -122,6 +122,7 @@ class SessionCameraSink final : public CameraSink {
         sc::Options camera_options;
         camera_options.sensor_ids = camera_ids;
         camera_options.always = options.always;
+        camera_options.supersample = options.supersample;
         camera_options.jpeg_quality = quality;
         cameras_ = std::make_unique<sc::SessionCameras>(resolved, camera_options);
         quality_ = quality;

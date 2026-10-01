@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "shared dataset document values",
+  "description": "Values shared by the parts, labels and dataset documents. Cross-document references (asset ids, task ids, part names, classes) are semantic checks, not JSON Schema checks.",
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+      "maxLength": 128,
+      "description": "Identifier for ids, task ids, frame ids and asset ids."
+    },
+    "part": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$",
+      "maxLength": 128,
+      "description": "Part name, scoped by task."
+    },
+    "class": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*$",
+      "maxLength": 128,
+      "description": "Model class name as it appears in the model's names list."
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?![A-Za-z][A-Za-z0-9+.-]*:).+$",
+      "description": "Pack-root-relative file path; never escapes the pack."
+    },
+    "pack_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?![A-Za-z][A-Za-z0-9+.-]*:).+$",
+      "description": "Document-folder-relative path selecting another pack folder or file; parent segments allowed."
+    },
+    "range": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "[low, high], low <= high (semantic check); a value is drawn uniformly in it."
+    },
+    "nonnegative_range": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": 0
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "[low, high] of non-negative values, low <= high (semantic check)."
+    },
+    "vector3": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Free non-executable annotations; never interpreted."
+    }
+  }
+}

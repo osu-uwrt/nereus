@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace nereus::rendering {
@@ -24,6 +25,9 @@ struct Material {
     // Per-submesh render data supplied by scene composition; the loader leaves it empty.
     // The renderer accepts at most four cutouts per submesh.
     std::vector<UvCutout> cutouts;
+    // Importer material name (Assimp aiMaterial name, e.g. a COLLADA <material name>), for selecting
+    // submeshes by material; rendering ignores it.
+    std::string name;
 };
 struct Submesh {
     std::vector<Vertex> vertices;

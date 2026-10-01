@@ -1,0 +1,86 @@
+# UWRT front-camera (ffc) training set: every task the ffc model sees, labelled per the UWRT label pack.
+# Geometry (talos_uwrt: RoboSub pool 2.13 m deep; the approach sampler keeps the camera between 0.1 m
+# below the surface and 0.2 m above the floor). Every printed sign/board faces +X of its frame:
+#   gate     gate.yaml "+X toward the approach (start) side"; the gate_repair/gate_rescue panel's textured
+#            quad has normal +X; panels hang at 0.25 m depth.
+#   torpedo  torpedo.yaml "+X out of the printed face toward the approach side"; board centre 1.37 m deep.
+#   slalom   poles are cylinders (seen from anywhere); rows at 1.3 m depth, poles 0.91 m tall.
+#   surface  each sign's +X points at the octagon centre (surface.yaml sign frame yaws); signs 0.3 m deep,
+#            1.38 m from the centre, so views from inside the octagon stay under ~2.6 m.
+#   bins     magnet light face: cover lid normal +X, tilted up 45 deg by the bins.yaml visual orientation.
+# talos_uwrt_rpac is not used: its course keeps the RoboSub map coordinates, which put the bins 0.6 m
+# beyond the RPAC north wall (every bins sample there would be skipped).
+kind: dataset
+id: uwrt_ffc_2026
+description: Front camera, every ffc task (gate, slalom, torpedo, octagon signs, magnet lights).
+labels: ../../labels/uwrt
+model: ffc
+scenarios: [../../scenarios/talos_uwrt]
+seed: 1
+image:
+  resolution_px: native
+  crop: center
+  format: jpg
+  jpeg_quality: 92
+robot_visuals: true
+split: {train: 0.8, val: 0.2, test: 0.0}
+
+tasks:
+  gate:
+    count: 500
+    sampler: {type: approach, frame: [gate_repair, gate_rescue], facing: [1, 0, 0], range_m: [0.8, 5.0],
+              bearing_deg: 60, elevation_deg: [-25, 5], aim_jitter_deg: 15, roll_deg: 4, pitch_deg: 6}
+  slalom:
+    count: 400
+    # Rows are 2.1 m apart: keep to ~3 m of the target row so the far rows stay inside the 5 m label range.
+    sampler: {type: approach, frame: [slalom_front, slalom_middle, slalom_back], facing: [1, 0, 0],
+              both_sides: true, range_m: [0.8, 3.0], bearing_deg: 80, elevation_deg: [-10, 20],
+              aim_jitter_deg: 20, roll_deg: 4, pitch_deg: 6}
+  torpedo:
+    count: 500
+    sampler: {type: approach, frame: task, facing: [1, 0, 0], range_m: [0.8, 4.5], bearing_deg: 50,
+              elevation_deg: [-10, 20], aim_jitter_deg: 12, roll_deg: 4, pitch_deg: 6}
+  surface:
+    count: 400
+    # From inside the octagon, below the signs (surfacing).
+    sampler: {type: approach, frame: [compass, hammer_and_wrench, buoy, sos], facing: [1, 0, 0],
+              range_m: [0.6, 2.6], bearing_deg: 50, elevation_deg: [-35, 5], aim_jitter_deg: 12,
+              roll_deg: 4, pitch_deg: 8}
+  bins:
+    count: 300
+    # Magnet lights (labelled only while red); the face looks 45 deg up, so the camera is above it.
+    sampler: {type: approach, frame: [magnet_target1, magnet_target2], facing: [1, 0, 0], range_m: [0.5, 2.0],
+              bearing_deg: 50, elevation_deg: [10, 45], aim_jitter_deg: 10, roll_deg: 4, pitch_deg: 6}
+
+# ~12 % of the images: pool views with no labelled object (team training guide: 10-15 % background).
+background: {count: 280, sampler: {type: free, depth_m: [0.3, 1.8], roll_deg: 4, pitch_deg: 6}}
+
+# Appearance. Water is relative to the pool pack's calibrated optics (robosub_2026: scattering 0.458), so
+# scale 1 is the pool as calibrated. RoboSub is outdoors: mostly the nominal look, some clear bright midday,
+# some murky water, a little overcast.
+randomize:
+  placement: {groups: [[surface, table]]}   # the octagon hangs over the table: jitter them together
+  environments:
+    list:
+    - id: nominal
+      weight: 5
+      water: {scattering_scale: [0.85, 1.2], absorption_scale: [0.85, 1.2]}
+    - id: clear
+      weight: 2
+      water: {scattering_scale: [0.55, 0.8], absorption_scale: [0.7, 0.9]}
+      # Exposure capped at 1.15: brighter washes out the white table top seen by dfc.
+      lighting: {caustics: [0.8, 1.5], exposure: [0.9, 1.15], direct_light_scale: [1.0, 1.2],
+                 sun_elevation_deg: [60, 85]}
+    - id: murky
+      weight: 2
+      # Scattering x1.7 already hides a board 4 m away and x2.2 makes it nearly invisible: stay near the
+      # edge of the label range, not past it.
+      water: {scattering_scale: [1.3, 1.8], absorption_scale: [1.2, 1.6]}
+      # Turbid water dims the sun: with the default direct light (up to x1.2) murky:max read washed out.
+      lighting: {caustics: [0.0, 0.4], exposure: [0.8, 1.0], direct_light_scale: [0.7, 1.0]}
+      image: {noise_sigma: [1, 5], blur_px: [0.3, 1.2]}
+    - id: overcast
+      weight: 1
+      lighting: {caustics: [0.0, 0.2], exposure: [0.65, 0.9], direct_light_scale: [0.35, 0.6],
+                 ambient_light_scale: [0.7, 0.95], sun_elevation_deg: [25, 50], glare: [0.0, 0.2]}
+      image: {noise_sigma: [2, 6]}

@@ -154,6 +154,12 @@ ImageCapture OffscreenRenderer::capture(const Scene &scene, const View &view, co
     impl_->renderer->draw(scene, view, appearance, time, width, height);
     return impl_->renderer->captureImage(color, depth);
 }
+LabelCapture OffscreenRenderer::captureLabels(const Scene &scene, const std::vector<InstanceLabel> &labels,
+                                              const View &view, int width, int height) {
+    std::lock_guard<std::mutex> lock(host_mutex);
+    Binding binding(impl_->display, impl_->surface, impl_->context);
+    return impl_->renderer->drawLabels(scene, labels, view, width, height);
+}
 const std::string &OffscreenRenderer::device() const {
     return impl_->device;
 }

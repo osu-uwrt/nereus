@@ -29,7 +29,7 @@ scoring_envelope: {collision_boxes: [hull], points: []}
 visuals: [...]                  # optional: meshes for the viewer and cameras
 ```
 
-Point a [scenario](course.md) at the folder and run `python3 -m nereus.packs validate
+Point a [scenario](course.md) at the folder and run `uv run nereus-packs validate
 <scenario>`; errors name the file and key.
 
 ## Physics: `body`

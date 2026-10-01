@@ -1,14 +1,15 @@
 """One-command UWRT simulation: nereus-sim + the UWRT robot stack + the pool viewer.
 
     ros2 launch integrations/uwrt/launch/sim.launch.py [stack:=false] [viewer:=false]
-        [scenario:=<pack folder>] [output:=<run dir>] [rmw:=<rmw implementation>]
-        [cameras:=true|false] [always_cameras:=true|false]
+        [pool:=robosub|rpac] [scenario:=<pack folder>] [output:=<run dir>] [rmw:=<rmw implementation>]
+        [cameras:=true|false] [always_cameras:=true|false] [camera_supersample:=1..4]
         [active_control_model:=mpc] [mpc_model:=sim|<name>|<path>] [mpc_odom_topic:=simulator/ground_truth]
         [mpc_state_source:=sensors|odometry]
 
 The simulator (build/ros-viewer/.../nereus-sim) runs the scenario resolved with
 `python -m nereus.packs resolve`; cameras:=false passes --no-cameras and
-always_cameras:=true renders every camera output regardless of subscribers.
+always_cameras:=true renders every camera output regardless of subscribers. camera_supersample sets the
+camera anti-aliasing factor (empty: the simulator's default, off; 2..4 supersample).
 
 The controller arguments pass through to riptide_bringup2 (mission_stack.launch.py); empty keeps bringup's
 default controller. MPC on the simulator plant: active_control_model:=mpc mpc_model:=sim.
@@ -47,13 +48,28 @@ CONTROLLER_ARGS = {
 }
 
 
+# pool:=<name> picks the matching UWRT scenario; scenario:=<folder> picks any pack instead.
+POOLS = {"robosub": "talos_uwrt", "rpac": "talos_uwrt_rpac"}
+
+
+def _scenario(context):
+    scenario, pool = LC("scenario").perform(context), LC("pool").perform(context)
+    if scenario and pool:
+        raise RuntimeError("pass pool:= or scenario:=, not both")
+    if scenario:
+        return os.path.abspath(scenario)
+    if (pool or "robosub") not in POOLS:
+        raise RuntimeError(f"unknown pool '{pool}' (known: {', '.join(POOLS)})")
+    return str(ROOT / "content/packs/scenarios" / POOLS[pool or "robosub"])
+
+
 def _processes(context):
     rmw = LC("rmw").perform(context)
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
     # The resolver and simulator run in the repository root: relative paths mean the caller's directory.
     output = os.path.abspath(LC("output").perform(context) or f"/tmp/nereus_sim/{time.strftime('%Y%m%d-%H%M%S')}")
     Path(output).parent.mkdir(parents=True, exist_ok=True)
-    scenario = os.path.abspath(LC("scenario").perform(context))
+    scenario = _scenario(context)
     binary = LC("bridge_binary").perform(context)
     resolved = f"{output}.resolved.json"
     subprocess.run(
@@ -66,6 +82,8 @@ def _processes(context):
         command.append("--no-cameras")
     elif LC("always_cameras").perform(context).lower() in ("true", "1", "yes"):
         command.append("--always-cameras")
+    if LC("camera_supersample").perform(context):
+        command += ["--camera-supersample", LC("camera_supersample").perform(context)]
     actions.append(ExecuteProcess(cmd=command, cwd=str(ROOT), output="screen",
                                   sigterm_timeout="15", name="simulator"))
     actions.append(IncludeLaunchDescription(
@@ -80,7 +98,9 @@ def _processes(context):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("scenario", default_value=str(ROOT / "content/packs/scenarios/talos_uwrt")),
+        DeclareLaunchArgument("pool", default_value="",
+                              description=f"pool to run in: {' | '.join(POOLS)} (empty: robosub)"),
+        DeclareLaunchArgument("scenario", default_value="", description="scenario pack folder (overrides pool)"),
         DeclareLaunchArgument("output", default_value=""),
         DeclareLaunchArgument("stack", default_value="true", description="launch the UWRT stack"),
         DeclareLaunchArgument("viewer", default_value="true", description="launch the pool viewer"),
@@ -90,6 +110,8 @@ def generate_launch_description():
         DeclareLaunchArgument("cameras", default_value="true", description="run camera acquisition"),
         DeclareLaunchArgument("always_cameras", default_value="false",
                               description="render cameras regardless of subscribers"),
+        DeclareLaunchArgument("camera_supersample", default_value="",
+                              description="camera anti-aliasing factor 1..4 (empty: the simulator's default)"),
         # Default: the shell's RMW (UWRT uses rmw_zenoh_cpp with a running `ros2 run rmw_zenoh_cpp
         # rmw_zenohd`). FastDDS showed 0.4-0.9 s reliable-delivery stalls of the simulator's /tf under
         # full-stack load with camera traffic; Zenoh delivered the same run without stalls.

@@ -60,3 +60,14 @@ TEST(HostViewerInput, PanFocusPicking) {
     ASSERT_TRUE(glm::length(glm::vec2(emptyPixel) - glm::vec2(.8f, .7f)) < .001f);
     ASSERT_TRUE(!focusPlanePoint(projection * view, eye, target, {1.1f, .5f}, emptyFocus));
 }
+TEST(HostViewerInput, DepthTexelFollowsTheDepthTextureSize) {
+    EXPECT_EQ(depthTexel({0, 0}, 640, 480), glm::ivec2(0, 479)) << "top-left cursor, bottom-up rows";
+    EXPECT_EQ(depthTexel({.9999f, .9999f}, 640, 480), glm::ivec2(639, 0));
+    EXPECT_EQ(depthTexel({.5f, .5f}, 640, 480), glm::ivec2(320, 239));
+    // A 2x / 3x supersampled frame: the texel lies in the block of the output pixel under the cursor.
+    for (const int n : {2, 3})
+        for (const glm::vec2 uv :
+             {glm::vec2(.1f, .2f), glm::vec2(.73f, .41f), glm::vec2(.5f, .5f), glm::vec2(0, .999f)})
+            EXPECT_EQ(depthTexel(uv, n * 640, n * 480) / n, depthTexel(uv, 640, 480))
+                << n << " " << uv.x << "," << uv.y;
+}

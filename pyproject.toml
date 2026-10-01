@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nereus"
 version = "0.1.0"
-description = "Nereus pack tools: validate and resolve robot, pool, task, bridge and scenario packs"
+description = "Nereus pack tools: validate and resolve robot, pool, task, bridge and scenario packs; plan and export synthetic datasets"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
@@ -14,10 +14,17 @@ dependencies = ["numpy>=1.23,<3", "ruamel.yaml>=0.18,<0.20",
                 "jsonschema>=4.21,<5", "referencing>=0.34,<1"]
 
 [project.optional-dependencies]
-dev = ["build>=1.2,<2", "mypy>=1.11,<2", "ruff>=0.9,<1", "pytest>=7"]
+dev = ["build>=1.2,<2", "mypy>=1.11,<2", "ruff>=0.9,<1", "pytest>=8.4"]
+# Synthetic dataset export/preview (OpenCV) and the part-mask tool (Pillow, SciPy).
+datasets = ["opencv-python-headless>=4.6,<5", "Pillow>=9", "scipy>=1.8"]
+
+# `uv sync` installs the project (editable) with this default group: every tool, one environment.
+[dependency-groups]
+dev = ["nereus[dev,datasets]"]
 
 [project.scripts]
 nereus-packs = "nereus.packs.__main__:main"
+nereus-dataset = "nereus.datasets.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["python/src"]
@@ -25,6 +32,12 @@ where = ["python/src"]
 [tool.setuptools.package-data]
 nereus = ["py.typed"]
 "nereus.packs" = ["definitions/*.json"]
+"nereus.datasets" = ["definitions/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]
+# No plugins are used; a sourced ROS workspace would otherwise inject its pytest plugins through PYTHONPATH.
+addopts = "--disable-plugin-autoload"
 
 [tool.ruff]
 target-version = "py310"
@@ -38,5 +51,5 @@ python_version = "3.10"
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["ruamel.*", "jsonschema.*"]
+module = ["ruamel.*", "jsonschema.*", "cv2", "cv2.*"]
 ignore_missing_imports = true

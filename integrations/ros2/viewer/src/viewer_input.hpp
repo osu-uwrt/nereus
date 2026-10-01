@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <cmath>
 #include <glm/glm.hpp>
 namespace nereus::ros_viewer::host {
@@ -17,6 +18,12 @@ inline bool depthPoint(const glm::mat4 &viewProjection, glm::vec2 uv, float dept
         return false;
     point = glm::vec3(world) / world.w;
     return std::isfinite(point.x + point.y + point.z);
+}
+// Texel under the cursor (uv in [0, 1), rows top-down) of a width x height depth texture, OpenGL rows bottom-up.
+// The texture's own size: a supersampled frame's depth is larger than its colour image.
+inline glm::ivec2 depthTexel(glm::vec2 uv, int width, int height) {
+    return {std::clamp(int(uv.x * float(width)), 0, width - 1),
+            std::clamp(height - 1 - int(uv.y * float(height)), 0, height - 1)};
 }
 // Empty background has no depth sample. Use the plane through the current
 // orbit target, facing the camera, so F remains useful anywhere in the viewport.

@@ -93,6 +93,12 @@ TEST(SessionCameras, ConfigurationFromPack) {
     EXPECT_THROW(cameras->setDemand(ids[0], sc::Output::RgbRight, true), std::invalid_argument);
     EXPECT_THROW(cameras->setDemand("nope", sc::Output::RgbLeft, true), std::invalid_argument);
     EXPECT_TRUE(cameras->describe().at("scene").contains("cutouts"));
+    EXPECT_EQ(cameras->describe().at("supersample"), 1) << "off by default (it costs GPU time per frame)";
+    for (const int bad : {0, 5}) {
+        sc::Options options;
+        options.supersample = bad;
+        EXPECT_THROW(make(options), std::runtime_error) << bad;
+    }
 }
 
 TEST(SessionCameras, OnlyDemandedOutputsAreProduced) {

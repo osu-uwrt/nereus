@@ -56,7 +56,7 @@ if(NEREUS_BUILD_SCENE_RENDERER)
     if(BUILD_TESTING)
       add_executable(offscreen_tests tests/offscreen_test.cpp)
       target_link_libraries(offscreen_tests PRIVATE nereus_offscreen_rendering GTest::gtest_main
-        OpenGL::EGL Threads::Threads)
+        OpenGL::EGL Threads::Threads PNG::PNG)
       target_compile_definitions(offscreen_tests PRIVATE
         NEREUS_RENDERING_SHADERS="${CMAKE_CURRENT_SOURCE_DIR}/shaders")
       nereus_project_options(offscreen_tests)

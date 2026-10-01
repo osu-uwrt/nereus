@@ -56,8 +56,18 @@ struct RobotOverride {
 // A moving (rigid_body) prop that names a display mesh; the caller supplies its pose.
 struct PropVisual {
     std::string task, prop, asset;
+    std::string frame; // the task frame of its rigid body
     std::shared_ptr<const rendering::MeshAsset> mesh;
     Matrix4d world_from_asset_at_reset = Matrix4d::Identity();
+};
+
+// Where a staticScene() instance came from. Task visuals name their task, prop, asset, texture override (asset id,
+// or empty) and task frame, and their index in the prop's `visuals`; pool mesh fixtures and equipment visuals name
+// only their asset; generated pool geometry (floor, walls, decks, coping, stripes, boxes) names nothing.
+struct StaticSource {
+    std::string role; // "pool" | "task" | "equipment"
+    std::string task, prop, asset, texture, frame;
+    std::size_t visual = 0;
 };
 
 // A task visual (emissive) whose tint follows the indicator of a task region (magnet target lights):
@@ -78,6 +88,10 @@ class PackScene {
     // Pool geometry (floor, walls, decks, coping), task visuals, then equipment visuals; static for the run.
     const rendering::Scene &staticScene() const {
         return static_;
+    }
+    // Parallel to staticScene().instances: where each instance came from.
+    const std::vector<StaticSource> &staticSources() const {
+        return sources_;
     }
     // staticScene() indices of the equipment pack's visuals (the last static instances).
     const std::vector<std::size_t> &equipmentInstances() const {
@@ -150,6 +164,7 @@ class PackScene {
     spatial::FixedFrames frames_;
     rendering::Appearance appearance_;
     rendering::Scene static_;
+    std::vector<StaticSource> sources_;
     std::size_t pool_instances_ = 0;
     std::vector<std::size_t> pool_floor_, pool_walls_, equipment_;
     std::vector<rendering::PoolStripe> pool_stripes_;

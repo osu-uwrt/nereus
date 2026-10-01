@@ -74,6 +74,12 @@ struct Appearance {
     // the main view), reuses the shadow map of the last full draw when one exists, and skips the surface
     // reflection and bloom passes. Default false keeps every existing draw bit-identical.
     bool preview = false;
+    // Supersampling anti-aliasing, 1..4: the scene passes render at supersample x the output size with the
+    // same projection, and the post pass averages each supersample x supersample block in linear HDR before
+    // tone mapping (a sensor pixel integrates its area, so edges, cutouts and alpha-tested texels all
+    // resolve). Costs about supersample^2 in fill and target memory. 1 (default) keeps every draw
+    // bit-identical; labels (Renderer::drawLabels) are never supersampled.
+    int supersample = 1;
     // Observer-only orbit focus marker: a shaded, depth-tested yellow disc at this world
     // point, sized to the camera distance. Unset (default) keeps every draw bit-identical; never set it
     // for sensor renders.

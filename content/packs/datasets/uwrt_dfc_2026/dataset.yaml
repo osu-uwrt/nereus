@@ -1,0 +1,64 @@
+# UWRT down-camera (dfc) training set: bin vinyls and the table, labelled per the UWRT label pack.
+# Altitudes are bounded by the RoboSub pool (talos_uwrt, 2.13 m deep) with the camera at least 0.1 m
+# under the surface: the bins stand on the floor (vinyl floors 1.56-1.83 m deep) and the table top is
+# 1.54 m deep, so ~1.4 m is the highest overhead view of either.
+# talos_uwrt_rpac is not used: its course keeps the RoboSub map coordinates, which put the bins 0.6 m
+# beyond the RPAC north wall.
+kind: dataset
+id: uwrt_dfc_2026
+description: Down camera, bin vinyls (blood / fire) and the table props and baskets.
+labels: ../../labels/uwrt
+model: dfc
+scenarios: [../../scenarios/talos_uwrt]
+seed: 1
+image:
+  resolution_px: native
+  crop: center
+  format: jpg
+  jpeg_quality: 92
+robot_visuals: true
+split: {train: 0.8, val: 0.2, test: 0.0}
+
+tasks:
+  bins:
+    count: 500
+    # Above one of the four crates (vinyl floor frames); neighbours often in view too.
+    sampler: {type: overhead, frame: [bin_vinyl1, bin_vinyl2, bin_vinyl3, bin_vinyl4], altitude_m: [0.6, 1.45],
+              radius_m: 0.35, roll_deg: 4, pitch_deg: 4}
+  table:
+    count: 600
+    # Table top (0.64 m square) with the baskets 0.4 m either side of its centre.
+    sampler: {type: overhead, frame: task, altitude_m: [0.5, 1.4], radius_m: 0.45, roll_deg: 4, pitch_deg: 4}
+
+# ~12 % of the images: pool views with no labelled object (team training guide: 10-15 % background).
+background: {count: 150, sampler: {type: free, depth_m: [0.3, 1.8], roll_deg: 4, pitch_deg: 4}}
+
+# Appearance. Water is relative to the pool pack's calibrated optics (robosub_2026: scattering 0.458), so
+# scale 1 is the pool as calibrated. RoboSub is outdoors: mostly the nominal look, some clear bright midday,
+# some murky water, a little overcast.
+randomize:
+  placement: {groups: [[surface, table]]}   # the octagon hangs over the table: jitter them together
+  environments:
+    list:
+    - id: nominal
+      weight: 5
+      water: {scattering_scale: [0.85, 1.2], absorption_scale: [0.85, 1.2]}
+    - id: clear
+      weight: 2
+      water: {scattering_scale: [0.55, 0.8], absorption_scale: [0.7, 0.9]}
+      # Exposure capped at 1.15: brighter washes out the white table top seen by dfc.
+      lighting: {caustics: [0.8, 1.5], exposure: [0.9, 1.15], direct_light_scale: [1.0, 1.2],
+                 sun_elevation_deg: [60, 85]}
+    - id: murky
+      weight: 2
+      # Scattering x1.7 already hides a board 4 m away and x2.2 makes it nearly invisible: stay near the
+      # edge of the label range, not past it.
+      water: {scattering_scale: [1.3, 1.8], absorption_scale: [1.2, 1.6]}
+      # Turbid water dims the sun: with the default direct light (up to x1.2) murky:max read washed out.
+      lighting: {caustics: [0.0, 0.4], exposure: [0.8, 1.0], direct_light_scale: [0.7, 1.0]}
+      image: {noise_sigma: [1, 5], blur_px: [0.3, 1.2]}
+    - id: overcast
+      weight: 1
+      lighting: {caustics: [0.0, 0.2], exposure: [0.65, 0.9], direct_light_scale: [0.35, 0.6],
+                 ambient_light_scale: [0.7, 0.95], sun_elevation_deg: [25, 50], glare: [0.0, 0.2]}
+      image: {noise_sigma: [2, 6]}

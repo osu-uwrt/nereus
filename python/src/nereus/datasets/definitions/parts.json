@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "task pack parts",
+  "description": "parts.yaml next to a tasks pack's tasks.yaml: named, team-neutral pieces of the course artwork and props for labelled renders. Never read by the simulator.",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "const": "parts"
+    },
+    "id": {
+      "$ref": "common.json#/$defs/name"
+    },
+    "tasks": {
+      "$ref": "common.json#/$defs/name",
+      "description": "Id of the tasks pack this file sits in."
+    },
+    "description": {
+      "type": "string"
+    },
+    "textures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/texture"
+      }
+    },
+    "visuals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/visual"
+      }
+    },
+    "metadata": {
+      "$ref": "common.json#/$defs/metadata"
+    }
+  },
+  "required": [
+    "kind",
+    "id",
+    "tasks"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "texture": {
+      "type": "object",
+      "description": "Part map of one texture: an 8-bit grayscale PNG with the texture's size and UV layout; pixel value -> part. Every visual drawing the texture gets the map.",
+      "properties": {
+        "texture": {
+          "$ref": "common.json#/$defs/name",
+          "description": "Tasks-pack asset id of the texture."
+        },
+        "mask": {
+          "$ref": "common.json#/$defs/path",
+          "description": "Part map, relative to the tasks pack folder."
+        },
+        "task": {
+          "$ref": "common.json#/$defs/name",
+          "description": "Apply only to visuals of this task (default: every task drawing the texture)."
+        },
+        "parts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/texture_part"
+          }
+        }
+      },
+      "required": [
+        "texture",
+        "mask",
+        "parts"
+      ],
+      "additionalProperties": false
+    },
+    "texture_part": {
+      "type": "object",
+      "description": "One part-map value. Several values may share a part name (one instance per value). The remaining keys drive tools/generate_part_masks.py.",
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255
+        },
+        "part": {
+          "$ref": "common.json#/$defs/part"
+        },
+        "seed_px": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "A texture pixel inside the part (x, y; top-left origin)."
+        },
+        "threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "close_px": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "background": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "fill": {
+          "enum": [
+            "small",
+            "all",
+            "none"
+          ]
+        }
+      },
+      "required": [
+        "value",
+        "part",
+        "seed_px"
+      ],
+      "additionalProperties": false
+    },
+    "visual": {
+      "type": "object",
+      "description": "Whole-visual (part) or per-material (materials) parts of the visuals selected by task, asset and the optional prop and frame filters.",
+      "properties": {
+        "task": {
+          "$ref": "common.json#/$defs/name"
+        },
+        "asset": {
+          "$ref": "common.json#/$defs/name"
+        },
+        "prop": {
+          "$ref": "common.json#/$defs/name"
+        },
+        "frame": {
+          "$ref": "common.json#/$defs/name"
+        },
+        "part": {
+          "$ref": "common.json#/$defs/part"
+        },
+        "materials": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "common.json#/$defs/part"
+          },
+          "description": "Importer material name -> part; unlisted materials have no part."
+        },
+        "split": {
+          "enum": [
+            "none",
+            "connected"
+          ],
+          "description": "connected: each connected triangle piece of a selected submesh is its own instance."
+        },
+        "indicator": {
+          "$ref": "common.json#/$defs/name",
+          "description": "Task region whose indicator colour name is recorded on the instance."
+        }
+      },
+      "required": [
+        "task",
+        "asset"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "part"
+          ]
+        },
+        {
+          "required": [
+            "materials"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}
