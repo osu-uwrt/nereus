@@ -16,26 +16,31 @@ from nereus.packs import PackError
 RENDERER_ENV = "NEREUS_DATASET_RENDERER"
 # Source checkout: python/src/nereus/datasets/render.py -> repository root.
 REPOSITORY = Path(__file__).resolve().parents[4]
-BUILT = Path("build/datasets/libraries/datasets/nereus-dataset-render")
+# Presets that build the renderer, in lookup order (./build.sh picks ros-viewer when ROS is sourced).
+BUILT = tuple(
+    Path(f"build/{preset}/libraries/datasets/nereus-dataset-render")
+    for preset in ("datasets", "ros-viewer")
+)
 
 
 def find_renderer(explicit: Path | None = None) -> Path:
-    """``--renderer``, then ``$NEREUS_DATASET_RENDERER``, then the ``datasets`` preset build."""
-    candidates = [
+    """``--renderer``, then ``$NEREUS_DATASET_RENDERER``, then the datasets / ros-viewer builds."""
+    given = [
         (explicit, "--renderer"),
         (Path(os.environ[RENDERER_ENV]) if os.environ.get(RENDERER_ENV) else None, RENDERER_ENV),
-        (REPOSITORY / BUILT, "the datasets preset build"),
     ]
-    for candidate, origin in candidates:
+    for candidate, origin in given:
         if candidate is None:
             continue
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return candidate.resolve()
-        if origin != "the datasets preset build":
-            raise PackError(f"{candidate}: renderer from {origin} is not an executable file")
+        raise PackError(f"{candidate}: renderer from {origin} is not an executable file")
+    for built in BUILT:
+        candidate = REPOSITORY / built
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate.resolve()
     raise PackError(
-        f"no renderer: pass --renderer, set {RENDERER_ENV} or build it "
-        f"(cmake --preset datasets && cmake --build --preset datasets) at {REPOSITORY / BUILT}"
+        f"no renderer: run ./build.sh at {REPOSITORY}, pass --renderer or set {RENDERER_ENV}"
     )
 
 

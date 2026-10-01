@@ -239,16 +239,12 @@ refused unless `--force`.
 
 ## Command line
 
-Install the tools with the `datasets` extra (OpenCV for export and previews; planning works without it) and
-build the renderer once:
+Set up once from the repository root: `./build.sh` syncs the Python environment and builds the renderer
+(`uv sync` alone sets up just the Python side). Then run the commands below with `uv run nereus-dataset ...`,
+or `source .venv/bin/activate` first. Outside uv, `pip install -e '.[datasets]'` installs the same tools.
 
-```bash
-pip install -e '.[datasets]'
-cmake --preset datasets && cmake --build --preset datasets
-```
-
-The renderer is found from `--renderer`, then `$NEREUS_DATASET_RENDERER`, then
-`build/datasets/libraries/datasets/nereus-dataset-render`.
+The renderer is found from `--renderer`, then `$NEREUS_DATASET_RENDERER`, then the `datasets` or `ros-viewer`
+preset build (`build/<preset>/libraries/datasets/nereus-dataset-render`).
 
 ```bash
 # Everything: plan, render (2 parallel shards), export YOLO segment, write a preview sheet.

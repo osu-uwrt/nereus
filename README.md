@@ -22,17 +22,19 @@ Tested on Ubuntu 22.04 with ROS 2 Humble.
 # System libraries
 sudo apt install cmake g++ libeigen3-dev libyaml-cpp-dev nlohmann-json3-dev libgtest-dev \
   libbullet-dev libassimp-dev libglfw3-dev libglew-dev libegl-dev libpng-dev libjpeg-dev libopencv-dev
-# Pack tools (validation and resolving)
-pip install numpy "ruamel.yaml>=0.18" jsonschema referencing
+# uv, once per machine (manages the Python environment)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Build (with ROS 2 and your robot workspace sourced; the UWRT integration needs riptide_msgs2)
 source /opt/ros/humble/setup.bash && source ~/osu-uwrt/release/install/setup.bash
-cmake --preset ros-viewer
-cmake --build --preset ros-viewer -j4
+./build.sh
 ```
 
-`COLCON_IGNORE` keeps colcon out of this folder; everything builds into `build/`. Use `-j2` on machines with
-little memory.
+`./build.sh` syncs the Python environment (`.venv`: pack tools, dataset tools, tests and linters, installed
+editable from `python/src`) and builds a CMake preset: `ros-viewer` when ROS is sourced, otherwise `datasets`
+(the headless renderer and dataset generator); `./build.sh <preset>` picks one. Use `NEREUS_JOBS=2` on machines
+with little memory. Python-only setup is just `uv sync`. Run the tools with `uv run <tool>` or after
+`source .venv/bin/activate`. `COLCON_IGNORE` keeps colcon out of this folder; everything builds into `build/`.
 
 ## Run
 
@@ -87,7 +89,7 @@ nereus-sim resolved.json  ◄── ROS 2 ──►  your robot stack   ◄─�
 Check a pack after editing:
 
 ```sh
-PYTHONPATH=python/src python3 -m nereus.packs validate content/packs/scenarios/talos_uwrt
+uv run nereus-packs validate content/packs/scenarios/talos_uwrt
 ```
 
 ## Known limitations
@@ -102,7 +104,7 @@ PYTHONPATH=python/src python3 -m nereus.packs validate content/packs/scenarios/t
 
 ```sh
 ctest --test-dir build/ros-viewer -LE live -j2          # C++ (run a subset with -R <name>)
-cd tests/python && PYTHONPATH=../../python/src python3 -m pytest -q
+uv run pytest tests/python -q
 ```
 
 ## License

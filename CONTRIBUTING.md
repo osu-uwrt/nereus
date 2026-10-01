@@ -3,9 +3,9 @@
 ## Before committing
 
 ```sh
-cmake --build --preset ros-viewer -j4
+./build.sh
 ctest --test-dir build/ros-viewer -LE live -R <area>      # the tests for what you touched
-PYTHONPATH=python/src python3 -m nereus.packs validate content/packs/scenarios/talos_uwrt
+uv run nereus-packs validate content/packs/scenarios/talos_uwrt
 ```
 
 Run the full suites (`ctest ... -LE live -j2`, `pytest` in `tests/python`) for changes to the simulation,
