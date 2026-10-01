@@ -95,7 +95,7 @@ preview:
 
 # Robot-pack assets that the pack lists but does not place as visuals (launcher body).
 extra_visuals:
-  - {asset: launcher_mesh, frame: cad}
+  - {asset: launcher_mesh, frame: origin}
 
 # Claw jaws: pack visuals (by asset id) that translate along the frame's +Y (left) / -Y (right) with
 # simulator/claw_joints = [left_m, right_m].

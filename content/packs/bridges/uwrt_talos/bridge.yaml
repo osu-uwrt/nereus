@@ -47,7 +47,7 @@ tf:
   - {parent: talos/dfc_left_camera_optical_frame, child: talos/dfc_right_camera_optical_frame, from_frame: dfc_left_optical, to_frame: dfc_right_optical}
   # Simulator-truth tree under the published truth base; mirrors the robot pack so tools can
   # compare truth with the estimate.
-  - {parent: simulator/talos/base_link, child: simulator/talos/origin, from_frame: base_link, to_frame: cad, truth: true}
+  - {parent: simulator/talos/base_link, child: simulator/talos/origin, from_frame: base_link, to_frame: origin, truth: true}
   - {parent: simulator/talos/base_link, child: simulator/talos/ffc_camera_link, from_frame: base_link, to_frame: ffc_mount, truth: true}
   - {parent: simulator/talos/ffc_camera_link, child: simulator/talos/ffc_left_camera_optical_frame, from_frame: ffc_mount, to_frame: ffc_left_optical, truth: true}
   - {parent: simulator/talos/base_link, child: simulator/talos/dfc_camera_link, from_frame: base_link, to_frame: dfc_mount, truth: true}

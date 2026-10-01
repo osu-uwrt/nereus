@@ -16,7 +16,7 @@ TEST(HostStatusLights, ModesTargetsAndPulses) {
     ASSERT_TRUE(lights.lights.size() == 3);
     ASSERT_TRUE(lights.topic == "command/led");
     for (const auto &light : lights.lights) {
-        ASSERT_TRUE(light.frame == "cad");
+        ASSERT_TRUE(light.frame == "origin");
         ASSERT_TRUE(light.mount[3].y > 0 && light.mount[3].z > 0); // port hull, above the CAD origin
         ASSERT_TRUE(equal(light.state.color(0), glm::vec3(0)));
     }

@@ -34,7 +34,7 @@
    "transforms": [
     {
      "parent": "com",
-     "child": "cad",
+     "child": "origin",
      "position_m": [
       0.1,
       0,
@@ -48,7 +48,7 @@
      ]
     },
     {
-     "parent": "cad",
+     "parent": "origin",
      "child": "base_link",
      "position_m": [
       -0.1,
@@ -63,7 +63,7 @@
      ]
     },
     {
-     "parent": "cad",
+     "parent": "origin",
      "child": "cam_mount",
      "position_m": [
       0.3,
@@ -93,7 +93,7 @@
      ]
     },
     {
-     "parent": "cad",
+     "parent": "origin",
      "child": "launch_mount",
      "position_m": [
       0,
@@ -112,7 +112,7 @@
   "visuals": [
    {
     "asset": "body_mesh",
-    "frame": "cad",
+    "frame": "origin",
     "position_m": [
      0,
      0,
@@ -159,7 +159,7 @@
    {
     "id": "imu",
     "type": "ahrs",
-    "frame": "cad",
+    "frame": "origin",
     "parameters": {}
    }
   ],

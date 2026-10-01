@@ -27,3 +27,8 @@ First version for the team.
   lap lines, staggered cross lines, diving lines and end-wall targets.
 - `talos_uwrt_rpac` scenario: the RoboSub 2026 course at its prior-map poses, set in the RPAC dive
   well (`ros2 launch ... sim.launch.py scenario:=content/packs/scenarios/talos_uwrt_rpac`).
+- Robot packs can be measured from any datum: `frames.body` names the centre-of-mass frame in a tree
+  rooted elsewhere, thrusters can sit at a `frame` (thrust along its +X), collision boxes can name
+  the `frame` they are measured in and the altitude sensor can report a `target_frame`. Resolving re-roots the tree at the body, so the runtime is unchanged. Talos is
+  now measured from `origin` (the camera-cage screw `talos.yaml` uses, formerly the `cad` frame), with
+  `com` as one of its frames.

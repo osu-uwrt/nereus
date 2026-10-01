@@ -174,6 +174,7 @@ def robot(data: dict[str, Any]) -> list[str]:
             problems.append(f"{where}: unknown frame '{name}'")
 
     frame(data["reference_frame"], "/reference_frame")
+    frame(frames.get("body", root), "/frames/body")
     body = data["body"]["parameters"]
     where = "/body/parameters/inertia_matrix"
     if _symmetric_semidefinite(body["inertia_matrix"], where, problems):
@@ -188,14 +189,24 @@ def robot(data: dict[str, Any]) -> list[str]:
 
     boxes = [item["id"] for item in data["collision_boxes"]]
     duplicates(boxes, "collision box", problems)
+    for item in data["collision_boxes"]:
+        if "frame" in item:
+            frame(item["frame"], f"/collision_boxes/{item['id']}/frame")
     duplicates((item["id"] for item in data["thrusters"]), "thruster", problems)
     for item in data["thrusters"]:
-        _unit(
-            item["direction"], f"/thrusters/{item['id']}/direction", problems, DIRECTION_TOLERANCE
-        )
+        where = f"/thrusters/{item['id']}"
+        placed = ["position_m" in item, "direction" in item]
+        if "frame" in item:
+            frame(item["frame"], f"{where}/frame")
+            if any(placed):
+                problems.append(f"{where}: give frame, or position_m and direction, not both")
+        elif not all(placed):
+            problems.append(f"{where}: needs frame, or position_m and direction")
+        if "direction" in item:
+            _unit(item["direction"], f"{where}/direction", problems, DIRECTION_TOLERANCE)
         response = item["parameters"]
         if response["forward_limit_n"] <= 0 and response["reverse_limit_n"] <= 0:
-            problems.append(f"/thrusters/{item['id']}: cannot produce force")
+            problems.append(f"{where}: cannot produce force")
 
     duplicates((item["id"] for item in data["sensors"]), "sensor", problems)
     for item in data["sensors"]:
@@ -206,6 +217,12 @@ def robot(data: dict[str, Any]) -> list[str]:
         for index, axis in enumerate(parameters.get("axes", [])):
             if math.hypot(*axis) == 0:
                 problems.append(f"{where}/parameters/axes/{index}: zero axis")
+        if "target_frame" in parameters:
+            frame(parameters["target_frame"], f"{where}/parameters/target_frame")
+            if "target_position_body_m" in parameters:
+                problems.append(
+                    f"{where}/parameters: give target_frame or target_position_body_m, not both"
+                )
         if item["type"] == "stereo_camera":
             _stereo(item, parent_of, transforms, where, problems)
 

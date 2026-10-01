@@ -279,6 +279,10 @@
     "reference_altitude": {
       "type": "object",
       "properties": {
+        "target_frame": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Robot frame whose altitude is reported. Replaces target_position_body_m."
+        },
         "target_position_body_m": {
           "$ref": "common.schema.json#/$defs/vector3"
         },
