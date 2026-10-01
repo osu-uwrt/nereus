@@ -79,9 +79,9 @@ fixtures:
 - {id: grates_1, type: mesh, asset: raised_grates, center_m: [2.1336, 1.865]}
 - {id: grates_2, type: mesh, asset: raised_grates, center_m: [9.455, 1.865]}
 - {id: grates_3, type: mesh, asset: raised_grates, center_m: [13.785, 1.865]}
-# Stairs between the tower pillars: a well cut back 1.8 m into the platform wall and deck, down to 1.22 m, with a
-# landing at deck level, five treads and three handrails.
-- {id: tower_stairs_well, type: recess, wall: y_min, from: [10.9, -1.22], to: [13.0, 0.3048], depth_m: 1.8}
+# Stairs between the tower pillars: a well cut back 2.4 m into the platform wall and deck, down to 1.22 m, with a
+# landing at deck level, seven treads at about 32 degrees and three handrails.
+- {id: tower_stairs_well, type: recess, wall: y_min, from: [10.9, -1.22], to: [13.0, 0.3048], depth_m: 2.4}
 - {id: tower_stairs, type: mesh, asset: tower_stairs, center_m: [11.95, 0, 0]}
 # Wall ladders: on the far side wall near the shallow end (toe holds located in the pool video), and on the
 # platform wall just past the tower near the deep corner (from photos).

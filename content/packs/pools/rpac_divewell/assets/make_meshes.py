@@ -2,7 +2,7 @@
 
 Run from anywhere: python3 make_meshes.py. Writes next to this file:
 - tower_stairs.obj: the staircase in the well between the tower pillars (a landing, treads and three
-  handrails). Origin at the well's centre on the wall face; the pool is +y, the well runs back to y = -1.8, and
+  handrails). Origin at the well's centre on the wall face; the pool is +y, the well runs back to y = -WELL_DEPTH, and
   -x is the deep-end side.
 - ladder.obj: a wall ladder (two grab rails over the edge, toe holds on the wall). Origin on the wall face at
   the ladder's centre; the pool is +y, the deck -y.
@@ -15,6 +15,7 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 DECK = 0.3048  # deck above the water
+WELL_DEPTH = 2.4  # tower stair well, back from the wall face (pool.yaml's recess depth_m must match)
 
 COLORS = {
     "steel": (0.75, 0.77, 0.78),
@@ -151,28 +152,31 @@ def _cross(a, b):
 
 
 def tower_stairs() -> Mesh:
-    """A landing at deck level against the back of the well, then five treads stepping down toward the pool
-    (0.25 m runs, 0.25 m risers) to the well floor at z = -1.22, each with a dark nosing. Three handrails run
-    down the flight 0.9 m above the nosings, each from a hooped top on the landing with a post to a tread
-    halfway down: the deep-end-side one ends on a tread above the bottom, the other two drop to the well floor
-    at the front."""
+    """A landing at deck level against the back of the well, then pool-stair treads stepping down toward the pool
+    (0.3 m runs, 0.19 m risers, about 32 degrees, matching the handrail slope in the platform photo) to the well
+    floor at z = -1.22, each with a dark nosing. Three identical handrails (centre line, 0.45 m in from the
+    shallow-end side, close to the deep-end side) run down the flight 0.9 m above the nosings from a hooped top on
+    the landing, with a post to a tread partway down, and drop to the well floor at the front."""
     m = Mesh()
-    half, back, floor, landing, run = 1.05, 1.8, -1.22, 1.5, 0.25
-    rise = (DECK - floor) / 6
+    half, back, floor, run, risers = 1.05, WELL_DEPTH, -1.22, 0.3, 8
+    rise = (DECK - floor) / risers
+    landing = run * (risers - 1)  # the landing's front edge, back from the wall; the treads fill the rest to the
+    # wall face, where the last riser drops to the well floor
     m.box("tread", (-half, -back, floor), (half, -landing, DECK))
-    for k in range(1, 6):
+    for k in range(1, risers):
         top, front = DECK - rise * k, -landing + run * k
         m.box("tread", (-half, -landing + run * (k - 1), floor), (half, front, top))
         m.box("nosing", (-half, front - 0.05, top), (half, front, top + 0.002))
-    slope = rise / run
 
     def nosing_z(y: float) -> float:
-        return DECK - slope * (y + landing)
+        return DECK - rise / run * (y + landing)
 
-    for x, end, foot in ((-0.6, -0.8, DECK - rise * 3), (0.0, -0.15, floor), (0.75, -0.15, floor)):
-        m.tube("steel", [(x, -1.72, DECK), (x, -1.72, DECK + 0.95), (x, -landing, nosing_z(-landing) + 0.9),
-                         (x, end, nosing_z(end) + 0.9), (x, end, foot)])
-        m.tube("steel", [(x, -1.1, nosing_z(-1.1) + 0.9), (x, -1.1, DECK - rise * 2)])
+    for x in (-0.92, 0.0, 0.6):
+        m.tube("steel", [(x, -back + 0.08, DECK), (x, -back + 0.08, DECK + 0.95),
+                         (x, -landing, nosing_z(-landing) + 0.9), (x, -0.15, nosing_z(-0.15) + 0.9),
+                         (x, -0.15, floor)])
+        mid = -landing + run * 3
+        m.tube("steel", [(x, mid, nosing_z(mid) + 0.9), (x, mid, DECK - rise * 3)])
     return m
 
 
