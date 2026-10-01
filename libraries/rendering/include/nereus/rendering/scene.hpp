@@ -99,6 +99,9 @@ struct FloorSlope {
 struct PoolBox {
     Eigen::Vector3f center = Eigen::Vector3f::Zero(), size = Eigen::Vector3f::Ones();
     Eigen::Matrix3f rotation = Eigen::Matrix3f::Identity();
+    // A smaller top face (length, width) slopes the four sides in (a raised grate); unset, a plain box.
+    std::optional<Eigen::Vector2f> top;
+    std::optional<Eigen::Vector3f> side_color; // sloped sides' colour; unset, `color`
     Eigen::Vector3f color = {.68f, .85f, .87f};
     bool tiled = false;    // the pool's tile finish (tile_color) instead of a plain colour
     bool on_floor = false; // grouped with the floor (otherwise with the walls)

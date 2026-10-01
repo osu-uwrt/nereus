@@ -265,6 +265,10 @@ def pool(data: dict[str, Any]) -> list[str]:
         _pool_markings(data["markings"], data["parameters"], problems)
     if "fixtures" in data:
         _pool_fixtures(data["fixtures"], data["parameters"], problems)
+        asset_ids = {item["id"] for item in data.get("assets", [])}
+        for index, fixture in enumerate(data["fixtures"]):
+            if fixture["type"] == "mesh" and fixture["asset"] not in asset_ids:
+                problems.append(f"/fixtures/{index}/asset: unknown pool asset '{fixture['asset']}'")
     return problems
 
 
@@ -276,12 +280,15 @@ def _pool_fixtures(fixtures: list[dict[str, Any]], parameters: dict[str, Any], p
     deck = parameters["deck_height_m"]
     for index, fixture in enumerate(fixtures):
         where = f"/fixtures/{index}"
-        if fixture["type"] == "box":
+        if fixture["type"] in ("box", "mesh"):
             center = fixture["center_m"]
             if len(center) == 2 and not (_between(center[0], 0, length) and _between(center[1], 0, width)):
                 problems.append(f"{where}/center_m: ({center[0]:g}, {center[1]:g}) is outside the pool floor")
             if not (_between(center[0], -3, length + 3) and _between(center[1], -3, width + 3)):
                 problems.append(f"{where}/center_m: ({center[0]:g}, {center[1]:g}) is outside the pool")
+            top = fixture.get("top_size_m")
+            if top is not None and (top[0] > fixture["size_m"][0] or top[1] > fixture["size_m"][1]):
+                problems.append(f"{where}/top_size_m: the top must be no larger than the base")
             if len(center) == 3 and not _between(center[2], -parameters["depth_m"], deck + 2):
                 problems.append(
                     f"{where}/center_m: z {center[2]:g} m is outside {-parameters['depth_m']:g}..{deck + 2:g} m"
@@ -384,6 +391,13 @@ def _pool_markings(
                 problems.append(
                     f"{where}: lines at {first:g}..{last:g} m fall outside the pool (0..{extent:g} m)"
                 )
+        targets = grid.get("targets")
+        if targets is not None:
+            for value in (*targets["stem_m"], targets["bar_z_m"]):
+                if not _between(value, -parameters["depth_m"], deck):
+                    problems.append(
+                        f"/markings/lane_grid/targets: z {value:g} m is outside {-parameters['depth_m']:g}..{deck:g} m"
+                    )
     for index, line in enumerate(markings.get("lines", [])):
         _stripe(line, f"/markings/lines/{index}", ("x", 0, length), ("y", 0, width), problems)
     for index, line in enumerate(markings.get("wall_lines", [])):

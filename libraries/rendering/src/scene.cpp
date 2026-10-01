@@ -1,4 +1,5 @@
 #include "nereus/rendering/scene.hpp"
+#include <Eigen/Geometry>
 #include <Eigen/LU>
 #include <algorithm>
 #include <cmath>
@@ -52,6 +53,36 @@ std::pair<std::vector<float>, std::vector<float>> floorGrid(const PoolGeometry &
         axis->erase(std::unique(axis->begin(), axis->end()), axis->end());
     }
     return {xs, ys};
+}
+// A box whose top face (top_l x top_w) is smaller than its base (l x w): four sides sloping in, centred on
+// the origin, z from -h/2 to h/2. Top and sides are separate submeshes so they can differ in colour.
+std::shared_ptr<const MeshAsset> frustumMesh(const Eigen::Vector3f &base, const Eigen::Vector2f &top,
+                                             const Eigen::Vector3f &top_color, const Eigen::Vector3f &side_color) {
+    const float bl = base.x() / 2, bw = base.y() / 2, tl = top.x() / 2, tw = top.y() / 2, h = base.z() / 2;
+    const Eigen::Vector3f b[4] = {{-bl, -bw, -h}, {bl, -bw, -h}, {bl, bw, -h}, {-bl, bw, -h}};
+    const Eigen::Vector3f t[4] = {{-tl, -tw, h}, {tl, -tw, h}, {tl, tw, h}, {-tl, tw, h}};
+    auto result = std::make_shared<MeshAsset>();
+    Submesh topFace, sides;
+    topFace.material.base_color << top_color, 1;
+    sides.material.base_color << side_color, 1;
+    const auto quad = [](Submesh &mesh, const Eigen::Vector3f &p0, const Eigen::Vector3f &p1, const Eigen::Vector3f &p2,
+                         const Eigen::Vector3f &p3) { // counter-clockwise from outside
+        const Eigen::Vector3f n = (p1 - p0).cross(p2 - p0).normalized();
+        const auto start = static_cast<std::uint32_t>(mesh.vertices.size());
+        for (const auto &[p, uv] : {std::pair{p0, Eigen::Vector2f(0, 0)}, std::pair{p1, Eigen::Vector2f(1, 0)},
+                                    std::pair{p2, Eigen::Vector2f(1, 1)}, std::pair{p3, Eigen::Vector2f(0, 1)}})
+            mesh.vertices.push_back({p, n, uv});
+        for (auto i : {0U, 1U, 2U, 0U, 2U, 3U})
+            mesh.indices.push_back(start + i);
+    };
+    quad(topFace, t[0], t[1], t[2], t[3]);
+    for (int k = 0; k < 4; ++k)
+        quad(sides, b[k], b[(k + 1) % 4], t[(k + 1) % 4], t[k]);
+    quad(sides, b[0], b[3], b[2], b[1]); // bottom
+    result->submeshes = {std::move(topFace), std::move(sides)};
+    result->minimum = -base / 2;
+    result->maximum = base / 2;
+    return result;
 }
 // Floor mesh over a profiled floor, exact for its profiles' polylines. The grid runs through every profile
 // vertex, so on each cell every profile is a plane; the cell splits into convex pieces, one per profile, where
@@ -252,6 +283,10 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
             throw std::invalid_argument("pool floor profile must run from 0 to the pool extent with increasing "
                                         "positions and depths in (0, depth]");
     }
+    for (const auto &b : p.boxes)
+        if (b.top && (!b.top->allFinite() || (b.top->array() <= 0).any() || b.top->x() > b.size.x() ||
+                      b.top->y() > b.size.y() || (b.side_color && !unitColor(*b.side_color))))
+            throw std::invalid_argument("a pool box's top must be positive and no larger than its base");
     for (const auto &b : p.boxes)
         if (!b.center.allFinite() || !b.size.allFinite() || (b.size.array() <= 0).any() || !b.rotation.allFinite() ||
             !(b.rotation.transpose() * b.rotation).isApprox(Eigen::Matrix3f::Identity(), 1e-4f) ||
@@ -465,8 +500,18 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
         for (int row = 0; row < 3; ++row)
             for (int col = 0; col < 3; ++col)
                 rotation[col][row] = b.rotation(row, col);
-        box(at(b.center.x(), b.center.y(), b.center.z()) * rotation, {b.size.x(), b.size.y(), b.size.z()},
-            b.tiled ? p.tile_color : b.color, b.tiled ? SurfaceMaterial::Tiles : SurfaceMaterial::Asset);
+        const Eigen::Vector3f color = b.tiled ? p.tile_color : b.color;
+        const auto material = b.tiled ? SurfaceMaterial::Tiles : SurfaceMaterial::Asset;
+        if (!b.top) {
+            box(at(b.center.x(), b.center.y(), b.center.z()) * rotation, {b.size.x(), b.size.y(), b.size.z()}, color,
+                material);
+            continue;
+        }
+        Instance instance;
+        instance.mesh = frustumMesh(b.size, *b.top, color, b.side_color.value_or(color));
+        instance.transform = eigen(at(b.center.x(), b.center.y(), b.center.z()) * rotation);
+        instance.material = material;
+        scene.instances.push_back(std::move(instance));
     }
     if (layout)
         *layout = std::move(groups);

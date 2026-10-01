@@ -157,6 +157,20 @@ std::vector<r::PoolStripe> poolStripes(const Json &pool) {
                         const float at = first + float(i) * spacing;
                         addStripe(out, side, {at, -wallDepth(side, at)}, {at, 0}, wall);
                     }
+            // A target (stem and crossbar) on both end walls above each line.
+            if (grid.contains("targets")) {
+                const auto &target = grid.at("targets");
+                const StripeStyle mark = styled(target, wall);
+                const Eigen::Vector2f stem = vector2(target.at("stem_m"));
+                const float bar = target.at("bar_z_m").get<float>(), half = target.at("bar_length_m").get<float>() / 2;
+                for (const auto side : alongX ? std::array{r::PoolSide::XMin, r::PoolSide::XMax}
+                                              : std::array{r::PoolSide::YMin, r::PoolSide::YMax})
+                    for (int i = 0; i < count; ++i) {
+                        const float at = first + float(i) * spacing;
+                        addStripe(out, side, {at, stem.x()}, {at, stem.y()}, mark);
+                        addStripe(out, side, {at - half, bar}, {at + half, bar}, mark);
+                    }
+            }
         }
     }
     for (const auto &line : markings.value("lines", Json::array()))
@@ -316,6 +330,10 @@ void PackScene::buildPool() {
                     placed.color = rgb(fixture.at("color_rgb"));
                 else
                     placed.tiled = true;
+                if (fixture.contains("top_size_m"))
+                    placed.top = vector2(fixture.at("top_size_m"));
+                if (fixture.contains("side_color_rgb"))
+                    placed.side_color = rgb(fixture.at("side_color_rgb"));
             } else if (type == "recess") {
                 r::PoolRecess recess;
                 recess.side = wallSide(fixture.at("wall").get<std::string>());
@@ -332,6 +350,20 @@ void PackScene::buildPool() {
     pool_stripes_ = geometry.markings;
     pool_floor_ = std::move(layout.floor);
     pool_walls_ = std::move(layout.walls);
+    // Mesh fixtures from the pool's own assets (stairs, rails, grates), after the generated pool geometry.
+    for (const auto &fixture : session::poolFixtureMeshes(pool)) {
+        Matrix4d pool_from_mesh = Matrix4d::Identity();
+        pool_from_mesh.topLeftCorner<3, 3>() = fixture.orientation.toRotationMatrix();
+        pool_from_mesh.topRightCorner<3, 1>() =
+            fixture.center - Eigen::Vector3d(0, 0, p.at("water_level_m").get<double>());
+        auto placed =
+            instance("pool", fixture.asset,
+                     Matrix4d(geometry.local_to_world.cast<double>()) *
+                         Eigen::Affine3d(Eigen::Translation3d(0, 0, geometry.water_level)).matrix() * pool_from_mesh);
+        (fixture.on_floor ? pool_floor_ : pool_walls_).push_back(static_.instances.size());
+        static_.instances.push_back(std::move(placed));
+    }
+    pool_instances_ = static_.instances.size();
     pool_record_ = {{"dimensions_m", {geometry.dimensions[0], geometry.dimensions[1], geometry.dimensions[2]}},
                     {"water_level_world_m", geometry.water_level},
                     {"deck_height_m", geometry.deck_height},

@@ -337,6 +337,15 @@ class PoolMarkingTests(PackRejectionCase):
         self.add_markings("  lane_grid: {along_y: {count: 2, spacing_m: 2}, inset_m: 2.5}\n")
         self.assert_load_rejects("pool", "inset_m 2.5 leaves no line on a 5 m floor")
 
+    def test_lane_grid_targets(self) -> None:
+        self.add_markings(
+            "  lane_grid: {along_x: {count: 2, spacing_m: 2}, targets: {stem_m: [-1, 0], bar_z_m: -0.5, "
+            "bar_length_m: 0.6, color_rgb: [0, 0, 0]}}\n"
+        )
+        load_pack(self.root / "pool")
+        self.edit("pool/pool.yaml", "stem_m: [-1, 0]", "stem_m: [-4, 0]")
+        self.assert_load_rejects("pool", "/markings/lane_grid/targets: z -4 m is outside -3..0.3 m")
+
     def test_lane_grid_needs_a_family(self) -> None:
         self.add_markings("  lane_grid: {inset_m: 1}\n")
         self.assert_load_rejects("pool", "/markings/lane_grid")
@@ -455,6 +464,8 @@ class PoolFixtureTests(PackRejectionCase):
             "- {id: grate, type: box, center_m: [6, 2], size_m: [1.2, 0.6, 0.03], rpy_deg: [0, 0, 90], "
             "color_rgb: [0.8, 0.8, 0.8], contact: true}\n"
             "- {id: tread, type: box, center_m: [9.7, 0.2, -0.4], size_m: [0.8, 0.3, 0.05]}\n"
+            "- {id: vent, type: box, center_m: [3, 3], size_m: [0.75, 0.75, 0.05], top_size_m: [0.55, 0.55], "
+            "color_rgb: [0.8, 0.8, 0.8], side_color_rgb: [0.3, 0.4, 0.4]}\n"
             "- {id: stairs, type: recess, wall: y_min, from: [9, -1.2], to: [9.9, 0.3], depth_m: 0.5}\n"
         )
         load_pack(self.root / "pool")
@@ -467,6 +478,10 @@ class PoolFixtureTests(PackRejectionCase):
         )
         self.assert_load_rejects("pool", "/fixtures/0/center_m: (10.5, 2) is outside the pool floor")
         self.assert_load_rejects("pool", "/fixtures/1/center_m: (14, 2) is outside the pool")
+
+    def test_box_top_larger_than_its_base(self) -> None:
+        self.add_fixtures("- {id: vent, type: box, center_m: [3, 3], size_m: [0.5, 0.5, 0.05], top_size_m: [0.6, 0.4]}\n")
+        self.assert_load_rejects("pool", "/fixtures/0/top_size_m: the top must be no larger than the base")
 
     def test_box_far_above_the_deck(self) -> None:
         self.add_fixtures("- {id: rail, type: box, center_m: [5, 2, 2.5], size_m: [1, 1, 0.1]}\n")
@@ -486,6 +501,10 @@ class PoolFixtureTests(PackRejectionCase):
             "- {id: a, type: box, center_m: [6, 2], size_m: [1, 1, 0.1]}\n"
         )
         self.assert_load_rejects("pool", "fixture")
+
+    def test_mesh_needs_a_pool_asset(self) -> None:
+        self.add_fixtures("- {id: stairs, type: mesh, asset: stairs, center_m: [5, 0, 0]}\n")
+        self.assert_load_rejects("pool", "/fixtures/0/asset: unknown pool asset 'stairs'")
 
     def test_unknown_fixture_type(self) -> None:
         self.add_fixtures("- {id: a, type: ladder, center_m: [5, 2], size_m: [1, 1, 0.1]}\n")

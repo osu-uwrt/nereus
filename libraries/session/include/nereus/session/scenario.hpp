@@ -43,6 +43,15 @@ struct PoolFixtureBox {
     bool on_floor = false, contact = false;
 };
 std::vector<PoolFixtureBox> poolFixtureBoxes(const Json &pool);
+// A pool document's `mesh` fixtures, placed like boxes: `center` is the mesh origin (on the floor at x, y when
+// only those are given), `asset` the pool asset id.
+struct PoolFixtureMesh {
+    std::string id, asset;
+    Eigen::Vector3d center = Eigen::Vector3d::Zero();
+    Eigen::Quaterniond orientation = Eigen::Quaterniond::Identity();
+    bool on_floor = false;
+};
+std::vector<PoolFixtureMesh> poolFixtureMeshes(const Json &pool);
 // A pool document's static contact boxes (pool-local): its `collision_boxes`, one box per floor segment
 // (flagged `"floor": true`) when the floor is profiled, and its `box` fixtures with `contact: true`.
 Json poolCollisionBoxes(const Json &pool);

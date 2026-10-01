@@ -172,6 +172,28 @@ TEST(PackScene, RoboSubLaneGridExpandsToStripesOnFloorAndEndWalls) {
     EXPECT_EQ(pack.describe().at("pool").at("stripes").get<std::size_t>(), stripes.size());
 }
 
+TEST(PackScene, LaneGridTargetsSitOnBothEndWallsAboveEachLine) {
+    const auto pool = rs::Json::parse(R"({
+        "parameters": {"length_m": 25, "width_m": 12, "depth_m": 2},
+        "markings": {"lane_grid": {"along_x": {"count": 2, "spacing_m": 4},
+                                   "targets": {"stem_m": [-1, 0], "bar_z_m": -0.5, "bar_length_m": 0.6,
+                                               "width_m": 0.3, "color_rgb": [0, 0, 0]}}}
+    })");
+    std::vector<r::PoolStripe> walls;
+    for (const auto &stripe : ps::poolStripes(pool))
+        if (stripe.side != r::PoolSide::Floor)
+            walls.push_back(stripe);
+    ASSERT_EQ(walls.size(), 2u * 2 * 2); // 2 lines x 2 end walls x (stem, bar)
+    EXPECT_EQ(walls[0].side, r::PoolSide::XMin);
+    EXPECT_EQ(walls[4].side, r::PoolSide::XMax);
+    EXPECT_EQ(walls[0].from, Eigen::Vector2f(4, -1)); // lines at y = 4 and 8
+    EXPECT_EQ(walls[0].to, Eigen::Vector2f(4, 0));
+    EXPECT_EQ(walls[1].from, Eigen::Vector2f(3.7f, -.5f));
+    EXPECT_EQ(walls[1].to, Eigen::Vector2f(4.3f, -.5f));
+    EXPECT_FLOAT_EQ(walls[1].width, .3f);
+    EXPECT_EQ(walls[1].color, Eigen::Vector3f::Zero());
+}
+
 TEST(PackScene, IrregularLinesKeepTheirPlacementAndStyleOverrides) {
     const auto pool = rs::Json::parse(R"({
         "parameters": {"length_m": 25, "width_m": 12, "depth_m": 2},
@@ -312,6 +334,8 @@ TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
     grate.center = {5, 2, -3.98f};
     grate.size = {1.2f, .6f, .04f};
     grate.on_floor = true;
+    grate.top = Eigen::Vector2f(1.f, .4f); // sloped sides
+    grate.side_color = Eigen::Vector3f(.3f, .4f, .4f);
     r::PoolBox tread;
     tread.center = {15.5f, -.25f, -.6f};
     tread.size = {1, .5f, .05f};
@@ -357,6 +381,22 @@ TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
     EXPECT_EQ(layout.floor.back(), scene.instances.size() - 2);
     EXPECT_EQ(layout.walls.back(), scene.instances.size() - 1);
     EXPECT_TRUE(inside(scene.instances.back()));
+    // The grate is a sloped-sided box: its top face is the smaller one, its sides their own colour.
+    const auto &grateMesh = *scene.instances[layout.floor.back()].mesh;
+    ASSERT_EQ(grateMesh.submeshes.size(), 2u);
+    for (const auto &v : grateMesh.submeshes[0].vertices) {
+        EXPECT_NEAR(std::abs(v.position.x()), .5f, 1e-6);
+        EXPECT_NEAR(v.position.z(), .02f, 1e-6);
+        EXPECT_NEAR(v.normal.z(), 1, 1e-6);
+    }
+    EXPECT_EQ(grateMesh.submeshes[1].material.base_color.head<3>(), Eigen::Vector3f(.3f, .4f, .4f));
+    for (const auto &v : grateMesh.submeshes[1].vertices) {
+        if (v.normal.z() < -.99f)
+            continue;               // the bottom
+        EXPECT_GT(v.normal.z(), 0); // a side sloping in, so facing out and up
+        EXPECT_LT(v.normal.z(), .99f);
+        EXPECT_GT(v.normal.head<2>().dot(v.position.head<2>()), 0);
+    }
     // Without recesses or boxes the scene keeps its usual 13 boxes.
     EXPECT_EQ(r::makePoolScene({}).instances.size(), 13u);
     geometry.recesses[0].depth = 0;

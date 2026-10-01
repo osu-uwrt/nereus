@@ -93,6 +93,7 @@ markings:
     inset_m: 2.0                   # stop short of the end walls
     ends: t                        # a bar across both ends (t_length_m, default 1 m)
     on_walls: true                 # continue each line up both end walls to the surface
+    targets: {stem_m: [-1, 0], bar_z_m: -0.5, bar_length_m: 0.9}   # a plus/T target on both end walls per line
   lines:                           # any other floor stripe, at any angle
   - {from: [4, 2], to: [12, 5], ends: [t, none], width_m: 0.3, color_rgb: [0.6, 0.1, 0.1]}
   wall_lines:
@@ -117,8 +118,16 @@ cuts an opening into a wall, between two corners given as `[coordinate along the
 one reaching the deck opens through the deck as well (a stair well). Recesses are drawn only (contacts treat the
 wall as solid).
 
+A `mesh` places one of the pool's `assets` (OBJ or COLLADA, metres, Z up) the same way: on the floor at `[x, y]`
+or at `[x, y, z]`, turned by `rpy_deg`. Detailed fittings (stairs, rails, grates) are best as meshes; a small
+generator script next to them keeps their dimensions editable (see the RPAC dive well's `assets/make_meshes.py`).
+A box can also slope its sides in to a smaller `top_size_m`.
+
 ```yaml
+assets:
+- {id: stairs, path: assets/stairs.obj}
 fixtures:
+- {id: stairs, type: mesh, asset: stairs, center_m: [12, 0, 0]}
 - {id: drain, type: box, center_m: [21.5, 2.1], size_m: [1.2, 0.6, 0.03], color_rgb: [0.8, 0.85, 0.85]}
 - {id: stair_well, type: recess, wall: y_min, from: [22.0, -1.2], to: [23.0, 0.3], depth_m: 0.45}
 - {id: stair_tread_1, type: box, center_m: [22.5, -0.2, -0.3], size_m: [1.0, 0.25, 0.05]}

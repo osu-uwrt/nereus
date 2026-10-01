@@ -31,6 +31,26 @@ simulation::PoolFloor poolFloor(const Json &pool) {
     return simulation::PoolFloor(std::move(profiles));
 }
 
+namespace {
+// Where a fixture sits: on the floor under x, y (lifted by `lift`) when only those are given, else at z
+// relative to the water surface; turned by rpy_deg (yaw, then pitch, then roll about the fixture's axes).
+void place(const Json &fixture, const simulation::PoolFloor &floor, double surface, double lift,
+           Eigen::Vector3d &center, Eigen::Quaterniond &orientation, bool &on_floor) {
+    const auto &c = fixture.at("center_m");
+    on_floor = c.size() == 2;
+    const double x = c.at(0).get<double>(), y = c.at(1).get<double>();
+    center = {x, y, on_floor ? surface - floor.depthAt(Eigen::Vector2d(x, y)) + lift : surface + c.at(2).get<double>()};
+    orientation = Eigen::Quaterniond::Identity();
+    if (fixture.contains("rpy_deg")) {
+        const auto &rpy = fixture.at("rpy_deg");
+        const double radians = 3.14159265358979323846 / 180;
+        orientation = Eigen::AngleAxisd(rpy.at(2).get<double>() * radians, Eigen::Vector3d::UnitZ()) *
+                      Eigen::AngleAxisd(rpy.at(1).get<double>() * radians, Eigen::Vector3d::UnitY()) *
+                      Eigen::AngleAxisd(rpy.at(0).get<double>() * radians, Eigen::Vector3d::UnitX());
+    }
+}
+} // namespace
+
 std::vector<PoolFixtureBox> poolFixtureBoxes(const Json &pool) {
     std::vector<PoolFixtureBox> out;
     if (!pool.contains("fixtures"))
@@ -42,22 +62,29 @@ std::vector<PoolFixtureBox> poolFixtureBoxes(const Json &pool) {
             continue;
         PoolFixtureBox box;
         box.id = fixture.at("id").get<std::string>();
-        const auto &center = fixture.at("center_m"), &size = fixture.at("size_m");
+        const auto &size = fixture.at("size_m");
         box.size = {size.at(0).get<double>(), size.at(1).get<double>(), size.at(2).get<double>()};
-        box.on_floor = center.size() == 2;
-        const double x = center.at(0).get<double>(), y = center.at(1).get<double>();
-        box.center = {x, y,
-                      box.on_floor ? surface - floor.depthAt(Eigen::Vector2d(x, y)) + box.size.z() / 2
-                                   : surface + center.at(2).get<double>()};
-        if (fixture.contains("rpy_deg")) {
-            const auto &rpy = fixture.at("rpy_deg");
-            const double radians = 3.14159265358979323846 / 180;
-            box.orientation = Eigen::AngleAxisd(rpy.at(2).get<double>() * radians, Eigen::Vector3d::UnitZ()) *
-                              Eigen::AngleAxisd(rpy.at(1).get<double>() * radians, Eigen::Vector3d::UnitY()) *
-                              Eigen::AngleAxisd(rpy.at(0).get<double>() * radians, Eigen::Vector3d::UnitX());
-        }
+        place(fixture, floor, surface, box.size.z() / 2, box.center, box.orientation, box.on_floor);
         box.contact = fixture.value("contact", false);
         out.push_back(std::move(box));
+    }
+    return out;
+}
+
+std::vector<PoolFixtureMesh> poolFixtureMeshes(const Json &pool) {
+    std::vector<PoolFixtureMesh> out;
+    if (!pool.contains("fixtures"))
+        return out;
+    const auto floor = poolFloor(pool);
+    const double surface = pool.at("parameters").at("water_level_m").get<double>();
+    for (const auto &fixture : pool.at("fixtures")) {
+        if (fixture.at("type").get<std::string>() != "mesh")
+            continue;
+        PoolFixtureMesh mesh;
+        mesh.id = fixture.at("id").get<std::string>();
+        mesh.asset = fixture.at("asset").get<std::string>();
+        place(fixture, floor, surface, 0, mesh.center, mesh.orientation, mesh.on_floor);
+        out.push_back(std::move(mesh));
     }
     return out;
 }
