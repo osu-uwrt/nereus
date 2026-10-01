@@ -9,7 +9,7 @@ description: Ohio State RPAC dive well, 25 m x 56 ft, 17 ft deep rising to 14 ft
 
 type: rectangular_pool
 parameters:
-  length_m: 25.22                # 82.7 ft: fitted to the pool video (the published area / 56 ft gives 82.8)
+  length_m: 25.23                # 82.8 ft: fitted to the pool video (the published area / 56 ft gives 82.8)
   width_m: 17.0688             # 56 ft
   depth_m: 5.1816              # 17 ft
   deck_height_m: 0.3048        # above water
@@ -19,27 +19,29 @@ parameters:
   current_m_s: [0.0, 0.0, 0.0]
   current_oscillation_amplitude_m_s: [0.0, 0.0, 0.0]
   current_oscillation_frequency_hz: 0.0
-  # 17 ft at the deep end, flat to just past the fourth cross line, then rising steadily to 14 ft at the
-  # shallow wall (fitted to the pool video; the deck depth markers read 16'9" and 15'6" along the slope).
+  # Deepest (17 ft) beside the platforms at the deep end. The floor is the shallower of two slopes: along the
+  # pool, flat through the fourth cross line then rising to 14 ft at the shallow wall; across it, flat to
+  # 13.5 m then rising to 14.3 ft at the far side wall. Fitted to the pool video; the deck depth markers
+  # (17'0" 5.18 m, 16'9" 5.10 m, 15'6" 4.72 m, 14'0" 4.27 m) agree.
   floor_profile:
-    along: x
-    points_m: [[0, 5.1816], [15.98, 5.1816], [22.67, 4.592], [23.47, 4.492], [25.22, 4.2672]]
+  - {along: x, points_m: [[0, 5.1816], [15.7, 5.1816], [23.26, 4.51], [25.18, 4.2672], [25.23, 4.2672]]}
+  - {along: y, points_m: [[0, 5.1816], [13.54, 5.1816], [17.0688, 4.364]]}
 
 # Static wall boxes in pool coordinates, depth + deck + 1 m tall; the floor's boxes come from the profile.
 collision_boxes:
 - {id: west_wall, size_m: [1, 19.0688, 6.4864], center_m: [-0.5, 8.5344, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
-- {id: east_wall, size_m: [1, 19.0688, 6.4864], center_m: [25.72, 8.5344, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
-- {id: south_wall, size_m: [25.22, 1, 6.4864], center_m: [12.61, -0.5, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
-- {id: north_wall, size_m: [25.22, 1, 6.4864], center_m: [12.61, 17.5688, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
+- {id: east_wall, size_m: [1, 19.0688, 6.4864], center_m: [25.73, 8.5344, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
+- {id: south_wall, size_m: [25.23, 1, 6.4864], center_m: [12.615, -0.5, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
+- {id: north_wall, size_m: [25.23, 1, 6.4864], center_m: [12.615, 17.5688, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
 
 # White lines on a dark blue bottom; positions fitted to the pool video.
 markings:
   color_rgb: [0.85, 0.93, 0.95]
   width_m: 0.254
-  # Eight lap lines centred in 7 ft lanes (first 3.5 ft from the y = 0 wall), T ends 1.6 m off the end walls.
+  # Eight lap lines centred in 7 ft lanes (first 3.5 ft from the y = 0 wall), T ends 1.63 m off the end walls.
   lane_grid:
     along_x: {count: 8, spacing_m: 2.1336}
-    inset_m: 1.61
+    inset_m: 1.63
     ends: t
     t_length_m: 1.04
   lines:
@@ -49,32 +51,32 @@ markings:
   - {from: [11.8872, 3.148], to: [11.8872, 9.244]}
   - {from: [15.6972, 1.806], to: [15.6972, 8.057]}
   # Diving lines beside lap lines 4 and 6 at the shallow end.
-  - {from: [19.85, 7.936], to: [23.61, 7.936]}
-  - {from: [18.02, 10.988], to: [23.53, 10.988]}
+  - {from: [19.83, 7.936], to: [23.6, 7.936]}
+  - {from: [18.02, 10.988], to: [23.52, 10.988]}
   # A dark plus-shaped target above each lap line on the shallow-end wall: a stem from the waterline down
-  # to 0.97 m and a 0.91 m crossbar at 0.46 m.
+  # to 0.97 m and a 0.91 m crossbar at 0.46 m, 0.3 m wide strokes.
   wall_lines:
-  - {wall: x_max, from: [1.0668, -0.965], to: [1.0668, 0.0], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [0.6118, -0.46], to: [1.5218, -0.46], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [3.2004, -0.965], to: [3.2004, 0.0], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [2.7454, -0.46], to: [3.6554, -0.46], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [5.334, -0.965], to: [5.334, 0.0], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [4.879, -0.46], to: [5.789, -0.46], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [7.4676, -0.965], to: [7.4676, 0.0], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [7.0126, -0.46], to: [7.9226, -0.46], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [9.6012, -0.965], to: [9.6012, 0.0], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [9.1462, -0.46], to: [10.0562, -0.46], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [11.7348, -0.965], to: [11.7348, 0.0], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [11.2798, -0.46], to: [12.1898, -0.46], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [13.8684, -0.965], to: [13.8684, 0.0], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [13.4134, -0.46], to: [14.3234, -0.46], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [16.002, -0.965], to: [16.002, 0.0], color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: x_max, from: [15.547, -0.46], to: [16.457, -0.46], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [1.0668, -0.965], to: [1.0668, 0.0], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [0.6118, -0.46], to: [1.5218, -0.46], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [3.2004, -0.965], to: [3.2004, 0.0], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [2.7454, -0.46], to: [3.6554, -0.46], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [5.334, -0.965], to: [5.334, 0.0], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [4.879, -0.46], to: [5.789, -0.46], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [7.4676, -0.965], to: [7.4676, 0.0], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [7.0126, -0.46], to: [7.9226, -0.46], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [9.6012, -0.965], to: [9.6012, 0.0], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [9.1462, -0.46], to: [10.0562, -0.46], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [11.7348, -0.965], to: [11.7348, 0.0], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [11.2798, -0.46], to: [12.1898, -0.46], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [13.8684, -0.965], to: [13.8684, 0.0], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [13.4134, -0.46], to: [14.3234, -0.46], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [16.002, -0.965], to: [16.002, 0.0], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [15.547, -0.46], to: [16.457, -0.46], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
   # A dark band around the walls about 1.2 m down.
   - {wall: x_min, from: [0, -1.18], to: [17.0688, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
   - {wall: x_max, from: [0, -1.18], to: [17.0688, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: y_min, from: [0, -1.18], to: [25.22, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: y_max, from: [0, -1.18], to: [25.22, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: y_min, from: [0, -1.18], to: [25.23, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: y_max, from: [0, -1.18], to: [25.23, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
 
 surface:
   tile_rgb: [0.1, 0.42, 0.42]
