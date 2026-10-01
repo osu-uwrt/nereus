@@ -1,0 +1,108 @@
+# Named pieces of the course artwork and props, for labelled renders (team-neutral: no classes here).
+# Not referenced by tasks.yaml; the dataset tools find it next to the scenario's tasks pack.
+kind: parts
+id: robosub_2026_parts
+tasks: robosub_2026
+description: Named pieces of the RoboSub 2026 course artwork and props, for labelled renders.
+
+# Part maps: 8-bit grayscale PNGs, same size and UV layout as the texture; pixel value -> part.
+# Built by tools/generate_part_masks.py (re-run it after editing a seed or a texture; the test checks
+# the committed PNGs are current). Each part is its whole emoji silhouette, holes filled: a seed is a
+# pixel on the emoji (texture px, top-left origin). Optional keys: threshold (max channel distance
+# from the background colour, default 24/255; 40 cuts the soft glow some emojis carry, 4-6 keeps
+# near-white highlights that reach the edge), close_px (default 2), background ([r, g, b]) and fill:
+#   small  (default) fill holes under 15 % of the component area: letters, windows, the compass hook
+#          loop; larger enclosed background (the helmet strap loop) stays background
+#   all    fill every hole: rings (ring + hole disk) and the buoy (its white centre)
+#   none   no fill
+textures:
+# Torpedo board. Rings: the four red rings, each covering ring + hole disk (the hole itself is a real
+# cutout). Values follow the panel holes in torpedo.yaml (centre px = (u, 1 - v) * 2304).
+- texture: torpedo_texture
+  mask: assets/torpedo/Task4_ver1_parts.png
+  parts:
+  - {value: 1, part: icon_fire, seed_px: [376, 378], threshold: 40}   # soft glow on the left edge
+  - {value: 2, part: icon_blood, seed_px: [1979, 1404]}
+  - {value: 3, part: icon_ambulance, seed_px: [507, 1916], threshold: 6}   # pale highlights reach the edge
+  - {value: 4, part: icon_fire_engine, seed_px: [1839, 464], threshold: 6}
+  - {value: 5, part: ring, seed_px: [372, 679], fill: all}     # fire_large
+  - {value: 6, part: ring, seed_px: [1184, 213], fill: all}    # fire_small
+  - {value: 7, part: ring, seed_px: [1970, 1700], fill: all}   # blood_large
+  - {value: 8, part: ring, seed_px: [1153, 1652], fill: all}   # blood_small
+
+# Gate role halves.
+- texture: gate_repair_texture
+  mask: assets/gate_repair/Task1_SurveyRepair_parts.png
+  parts:
+  - {value: 1, part: icon_compass, seed_px: [334, 330], threshold: 40}   # soft glow right of the ring
+  - {value: 2, part: icon_hammer_and_wrench, seed_px: [816, 814]}
+- texture: gate_rescue_texture
+  mask: assets/gate_rescue/Task1_SearchRescue_parts.png
+  parts:
+  - {value: 1, part: icon_buoy, seed_px: [711, 404], threshold: 4, fill: all}   # near-white band ends
+  - {value: 2, part: icon_sos, seed_px: [330, 600], threshold: 40}   # pink glow; letters are holes
+
+# Octagon signs.
+- texture: octagon_buoy_texture
+  mask: assets/octagon_buoy/Task5_Search_parts.png
+  parts:
+  - {value: 1, part: icon_buoy, seed_px: [420, 758], threshold: 4, fill: all}
+- texture: octagon_compass_texture
+  mask: assets/octagon_compass/Task5_Survey_parts.png
+  parts:
+  - {value: 1, part: icon_compass, seed_px: [597, 706], threshold: 40}
+- texture: octagon_hammer_and_wrench_texture
+  mask: assets/octagon_hammer_and_wrench/Task5_Repair_parts.png
+  parts:
+  - {value: 1, part: icon_hammer_and_wrench, seed_px: [589, 685]}
+- texture: octagon_sos_texture
+  mask: assets/octagon_sos/Task5_Rescue_parts.png
+  parts:
+  - {value: 1, part: icon_sos, seed_px: [580, 300], threshold: 40}
+
+# Bin vinyls (each crate's vinyl is a texture override in bins.yaml).
+- texture: bin_vinyl_blood_texture
+  mask: assets/bin_vinyl/Task3_Blood_parts.png
+  parts:
+  - {value: 1, part: icon_blood, seed_px: [487, 521]}
+- texture: bin_vinyl_fire_texture
+  mask: assets/bin_vinyl/Task3_Fire_parts.png
+  parts:
+  - {value: 1, part: icon_fire, seed_px: [475, 515], threshold: 40}
+
+# Table props and baskets. NutBolt and Pill are RGBA (transparent outside a white disc).
+- texture: bandage_visual_task5_bandaid_fixed
+  mask: assets/visual/table_bandage/Task5_BandAid_parts.png
+  parts:
+  - {value: 1, part: icon_bandage, seed_px: [145, 143]}
+- texture: basket_helmet_visual_task5_redcross_fixed
+  mask: assets/visual/table_basket_helmet/Task5_RedCross_parts.png
+  parts:
+  - {value: 1, part: icon_helmet, seed_px: [415, 257]}
+- texture: basket_warning_visual_task5_warning_fixed
+  mask: assets/visual/table_basket_warning/Task5_Warning_parts.png
+  parts:
+  - {value: 1, part: icon_warning, seed_px: [427, 356]}
+- texture: nut_and_bolt_visual_task5_nutbolt_fixed
+  mask: assets/visual/table_nut_and_bolt/Task5_NutBolt_parts.png
+  parts:
+  - {value: 1, part: icon_nut_and_bolt, seed_px: [119, 117]}
+- texture: pill_visual_task5_pill_fixed
+  mask: assets/visual/table_pill/Task5_Pill_parts.png
+  parts:
+  - {value: 1, part: icon_pill, seed_px: [121, 119]}
+- texture: plug_visual_task5_electric_fixed
+  mask: assets/visual/table_plug/Task5_Electric_parts.png
+  parts:
+  - {value: 1, part: icon_plug, seed_px: [134, 134]}
+
+# Whole-visual and per-material parts.
+visuals:
+# Slalom row (one visual per row frame). Assimp 5.2 material names (the COLLADA <material name>):
+# Material.001 = red (diffuse 1 0.005 0.005), the single centre pole: shaft plus top and bottom caps,
+# three vertex-disjoint pieces, so no split: one row = one red pole instance. Material.002 = white,
+# the two side poles and the base frame.
+- {task: slalom, asset: slalom_mesh, materials: {Material.001: pole_red, Material.002: pole_white}}
+# Magnet light covers (rim + clear lid); the indicator colour (red until latched) rides on the instance.
+- {task: bins, asset: magnet_cover_mesh, frame: magnet_target1, part: magnet_cover, indicator: magnet_target1}
+- {task: bins, asset: magnet_cover_mesh, frame: magnet_target2, part: magnet_cover, indicator: magnet_target2}

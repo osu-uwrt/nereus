@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "label pack",
+  "description": "A team's labeling guide: task parts -> classes per task, class order per model, per-class export options. Applied at export; the renderer uses it only to reject views.",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "const": "labels"
+    },
+    "id": {
+      "$ref": "common.json#/$defs/name"
+    },
+    "description": {
+      "type": "string"
+    },
+    "guide": {
+      "type": "string",
+      "description": "Where the human labeling guide lives."
+    },
+    "tasks_pack": {
+      "$ref": "common.json#/$defs/name",
+      "description": "Tasks pack id whose parts.yaml the part patterns are checked against."
+    },
+    "models": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "common.json#/$defs/name"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/model"
+      }
+    },
+    "classes": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "common.json#/$defs/class"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/class_options"
+      }
+    },
+    "tasks": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "common.json#/$defs/name"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "propertyNames": {
+          "$ref": "common.json#/$defs/class"
+        },
+        "additionalProperties": {
+          "$ref": "#/$defs/mapping"
+        },
+        "description": "class <- parts of this task."
+      }
+    },
+    "export": {
+      "type": "object",
+      "properties": {
+        "min_visible_px": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Instances with fewer visible pixels at the output resolution are dropped."
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "$ref": "common.json#/$defs/metadata"
+    }
+  },
+  "required": [
+    "kind",
+    "id",
+    "tasks_pack",
+    "models",
+    "tasks"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "model": {
+      "type": "object",
+      "properties": {
+        "camera": {
+          "$ref": "common.json#/$defs/name",
+          "description": "Robot pack camera sensor id."
+        },
+        "max_range_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Views with a labelled instance farther than this (median depth) are never generated."
+        },
+        "classes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "common.json#/$defs/class"
+          },
+          "description": "Class order = the deployed model's class ids."
+        }
+      },
+      "required": [
+        "camera",
+        "max_range_m",
+        "classes"
+      ],
+      "additionalProperties": false
+    },
+    "class_options": {
+      "type": "object",
+      "properties": {
+        "shape": {
+          "enum": [
+            "visible",
+            "outer"
+          ],
+          "description": "visible (default): the rendered pixels; outer: holes in the instance mask filled."
+        }
+      },
+      "additionalProperties": false
+    },
+    "pattern": {
+      "type": "string",
+      "pattern": "^[a-z0-9_*?\\[\\]!-]+$",
+      "description": "Part name or shell-style glob (*, ?, [...])."
+    },
+    "mapping": {
+      "oneOf": [
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/pattern"
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "parts": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/pattern"
+              }
+            },
+            "when": {
+              "type": "object",
+              "properties": {
+                "indicator": {
+                  "$ref": "common.json#/$defs/name",
+                  "description": "Only instances whose indicator shows this colour name."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "parts"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

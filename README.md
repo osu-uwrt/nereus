@@ -82,6 +82,7 @@ nereus-sim resolved.json  ◄── ROS 2 ──►  your robot stack   ◄─�
 - [Pool and course layout](docs/guides/course.md)
 - [Tasks and scoring](docs/guides/tasks.md)
 - [Wiring your ROS stack](docs/guides/bridge.md)
+- [Synthetic datasets](docs/guides/datasets.md)
 
 Check a pack after editing:
 

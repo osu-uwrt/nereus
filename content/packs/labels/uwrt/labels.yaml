@@ -1,0 +1,40 @@
+# UWRT label pack: which course parts become which classes of the team's deployed models.
+# Source: the UWRT labeling guide (`guide` below; quotes are from it). Labels follow the object's edge
+# exactly: the guide's bad examples are an edge that "doesn't cover the entire vinyl" and one that "goes
+# beyond the vinyl". The guide says not to label the fire truck or ambulance; they, and magnet, joined the
+# ffc model after it was written.
+kind: labels
+id: uwrt_robosub_2026
+description: UWRT labeling guide for RoboSub 2026.
+guide: https://osu-uwrt-1.gitbook.io/computer-vision-guide/cvat-usage-and-labeling-guide/labeling-guide
+tasks_pack: robosub_2026            # part names are checked against that pack's parts.yaml
+
+# Class order = the deployed model's class id order.
+models:
+  ffc: {camera: ffc, max_range_m: 5.0,
+        classes: [blood, buoy, compass, circle, fire, hammer_and_wrench, slalom, sos, ambulance, fire_engine, magnet]}
+  dfc: {camera: dfc, max_range_m: 3.0,
+        classes: [bandage, blood, fire, helmet, nut_and_bolt, pill, plug, warning]}
+
+# Class <- parts, per task (part entries may use * globs).
+tasks:
+  # Gate and octagon signs: the emoji ("the compass emoji, including the hook"; buoy: "the outside borders of
+  # the buoy emoji", so its centre is included).
+  gate:    {compass: [icon_compass], hammer_and_wrench: [icon_hammer_and_wrench], buoy: [icon_buoy], sos: [icon_sos]}
+  surface: {compass: [icon_compass], hammer_and_wrench: [icon_hammer_and_wrench], buoy: [icon_buoy], sos: [icon_sos]}
+  # Slalom: "the red poles for slalom"; the white poles are never labelled.
+  slalom:  {slalom: [pole_red]}
+  # Torpedo board: circle = "each hole on the torpedo vinyl, make sure to include the red circle around the
+  # hole" (the label pass gives the see-through hole the ring's part, so circle is ring + opening).
+  torpedo: {fire: [icon_fire], blood: [icon_blood], circle: [ring], ambulance: [icon_ambulance],
+            fire_engine: [icon_fire_engine]}
+  # Bins: "the drop of blood", "the entire fire emoji"; magnet = the light's front plastic cover, only while
+  # its LEDs are red.
+  bins:    {fire: [icon_fire], blood: [icon_blood], magnet: {parts: [magnet_cover], when: {indicator: red}}}
+  # Table: the emoji on each prop and basket ("the entire helmet emoji"; nut and bolt: "threads aren't
+  # labeled individually").
+  table:   {pill: [icon_pill], bandage: [icon_bandage], nut_and_bolt: [icon_nut_and_bolt], plug: [icon_plug],
+            warning: [icon_warning], helmet: [icon_helmet]}
+
+export:
+  min_visible_px: 25                # instances with fewer visible pixels (at output resolution) are dropped
