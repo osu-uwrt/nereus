@@ -287,10 +287,13 @@ void PackScene::buildPool() {
     }
     geometry.markings = pack_scene::poolStripes(pool);
     if (p.contains("floor_profile")) {
-        const auto floor = session::poolFloor(pool);
-        for (const auto &vertex : floor.polyline())
-            geometry.floor_profile.push_back(vertex.cast<float>());
-        geometry.floor_along_x = floor.axis() == simulation::FloorProfile::Axis::X;
+        for (const auto &profile : session::poolFloor(pool).profiles()) {
+            r::FloorSlope slope;
+            slope.along_x = profile.axis() == simulation::FloorProfile::Axis::X;
+            for (const auto &vertex : profile.polyline())
+                slope.polyline.push_back(vertex.cast<float>());
+            geometry.floor_profiles.push_back(std::move(slope));
+        }
     }
     static_ = r::makePoolScene(geometry);
     pool_instances_ = static_.instances.size();

@@ -28,17 +28,24 @@ TEST(PoolFloor, ProfiledPoolsGenerateFlaggedFloorBoxes) {
     // Flat: the pool's own boxes, untouched.
     EXPECT_EQ(nereus::session::poolCollisionBoxes(pool), pool.at("collision_boxes"));
     EXPECT_TRUE(nereus::session::poolFloor(pool).isFlat());
-    EXPECT_DOUBLE_EQ(nereus::session::poolFloor(pool).depthAt(10.0), 5);
+    EXPECT_DOUBLE_EQ(nereus::session::poolFloor(pool).depthAt({10, 4}), 5);
     pool["parameters"]["floor_profile"] = {{"along", "x"}, {"points_m", {{0, 5}, {8, 5}, {14, 3}, {20, 3}}}};
     const auto floor = nereus::session::poolFloor(pool);
-    EXPECT_DOUBLE_EQ(floor.depthAt(4.0), 5);
-    EXPECT_DOUBLE_EQ(floor.depthAt(17.0), 3);
+    EXPECT_DOUBLE_EQ(floor.depthAt({4, 4}), 5);
+    EXPECT_DOUBLE_EQ(floor.depthAt({17, 4}), 3);
     const auto boxes = nereus::session::poolCollisionBoxes(pool);
-    ASSERT_EQ(boxes.size(), 1 + floor.polyline().size() - 1);
+    ASSERT_EQ(boxes.size(), 1 + floor.profiles()[0].polyline().size() - 1);
     EXPECT_EQ(boxes[0].at("id"), "end_wall");
     for (std::size_t k = 1; k < boxes.size(); ++k) {
         EXPECT_TRUE(boxes[k].at("floor").get<bool>());
         EXPECT_EQ(boxes[k].at("id"), "floor_" + std::to_string(k - 1));
         EXPECT_DOUBLE_EQ(boxes[k].at("size_m")[1].get<double>(), 8);
     }
+    // A list of profiles: the floor is the shallowest, with every profile's boxes.
+    pool["parameters"]["floor_profile"] = Json::array(
+        {pool["parameters"]["floor_profile"], {{"along", "y"}, {"points_m", {{0, 5}, {3, 5}, {6, 4}, {8, 4}}}}});
+    const auto both = nereus::session::poolFloor(pool);
+    EXPECT_DOUBLE_EQ(both.depthAt({4, 7}), 4);
+    EXPECT_EQ(nereus::session::poolCollisionBoxes(pool).size(),
+              1 + both.profiles()[0].polyline().size() - 1 + both.profiles()[1].polyline().size() - 1);
 }

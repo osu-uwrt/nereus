@@ -126,7 +126,7 @@ TEST(FloorProfile, PlantAcceptsAProfiledPoolOnlyWithBoxContacts) {
     p.pool.length = 20;
     p.pool.width = 8;
     p.pool.depth = 5;
-    p.pool.floor = well();
+    p.pool.floor = nereus::simulation::PoolFloor({well()});
     p.contacts.model = ContactModel::Disabled;
     BodyState start;
     start.position = {2, 2, -1};
@@ -139,4 +139,28 @@ TEST(FloorProfile, PlantAcceptsAProfiledPoolOnlyWithBoxContacts) {
     p.pool.depth = 5;
     p.pool.length = 25; // profile does not span the pool
     EXPECT_THROW(Plant(p, start), std::invalid_argument);
+}
+
+TEST(PoolFloor, TheShallowestProfileIsTheFloor) {
+    using nereus::simulation::PoolFloor;
+    // Deep beside y = 0 at the x = 0 end, rising along x (to 3 m) and across y (to 4 m).
+    const PoolFloor floor({well(), FloorProfile::smooth(Axis::Y, {{0, 5}, {4, 5}, {7, 4}, {8, 4}})});
+    EXPECT_DOUBLE_EQ(floor.depthAt({2, 2}), 5);   // the deep flat
+    EXPECT_DOUBLE_EQ(floor.depthAt({2, 7.5}), 4); // up the cross slope
+    EXPECT_DOUBLE_EQ(floor.depthAt({17, 2}), 3);  // up the long slope
+    EXPECT_DOUBLE_EQ(floor.depthAt({17, 7.5}), 3);
+    EXPECT_DOUBLE_EQ(floor.maxDepth(), 5);
+    EXPECT_FALSE(floor.isFlat());
+    EXPECT_TRUE(PoolFloor::flat(2, 10).isFlat());
+    // A ray meets whichever surface it reaches first.
+    EXPECT_DOUBLE_EQ(*floor.rayDistance({2, 7.5, -1}, {0, 0, -1}, 0), 3);
+    const Eigen::Vector3d origin(2, 2, -1), across = Eigen::Vector3d(0, 1, -.4).normalized();
+    const Eigen::Vector3d hit = origin + *floor.rayDistance(origin, across, 0) * across;
+    EXPECT_NEAR(hit.z(), -floor.depthAt(hit.head<2>()), 1e-9);
+    EXPECT_GT(hit.y(), 4);
+    // Contact boxes: every profile's, each spanning the pool across its axis.
+    const auto boxes = nereus::simulation::floorBoxes(floor, 20, 8, 0);
+    ASSERT_EQ(boxes.size(), floor.profiles()[0].polyline().size() - 1 + floor.profiles()[1].polyline().size() - 1);
+    EXPECT_DOUBLE_EQ(boxes.front().size.y(), 8);
+    EXPECT_DOUBLE_EQ(boxes.back().size.y(), 20);
 }

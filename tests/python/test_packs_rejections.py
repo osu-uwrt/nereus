@@ -393,7 +393,7 @@ class PoolFloorProfileTests(PackRejectionCase):
 
     def test_depth_is_the_deepest_point(self) -> None:
         self.profile("[[0, 2.5], [10, 2]]")
-        self.assert_load_rejects("pool", "3 m must be the profile's deepest point (2.5 m)")
+        self.assert_load_rejects("pool", "3 m must be the floor's deepest point (2.5 m)")
 
     def test_flat_floor_box_is_rejected(self) -> None:
         self.profile()
@@ -408,6 +408,35 @@ class PoolFloorProfileTests(PackRejectionCase):
             "markings: {wall_lines: [{wall: x_max, from: [1, -3], to: [1, 0]}]}\ncollision_boxes:\n",
         )
         self.assert_load_rejects("pool", "/markings/wall_lines/0/from: z -3 m is outside -2..0.3 m")
+
+    def test_profile_list_rising_toward_two_walls(self) -> None:
+        self.profile("[[0, 3], [4, 3], [7, 2], [10, 2]]}, {along: y, points_m: [[0, 3], [3, 3], [5, 2.5]]")
+        self.edit("pool/pool.yaml", "floor_profile: {along: x", "floor_profile: [{along: x")
+        self.edit("pool/pool.yaml", "[5, 2.5]]}", "[5, 2.5]]}]")
+        self.edit(
+            "pool/pool.yaml",
+            "collision_boxes:\n",
+            "markings: {wall_lines: [{wall: y_max, from: [2, -2.5], to: [2, 0]}]}\ncollision_boxes:\n",
+        )
+        load_pack(self.root / "pool")
+        resolve_scenario(self.scenario)
+
+    def test_profile_list_entries_are_checked(self) -> None:
+        self.profile("[[0, 3], [10, 2]]}, {along: y, points_m: [[0, 3], [4, 2.5]]")
+        self.edit("pool/pool.yaml", "floor_profile: {along: x", "floor_profile: [{along: x")
+        self.edit("pool/pool.yaml", "[4, 2.5]]}", "[4, 2.5]]}]")
+        self.assert_load_rejects("pool", "/parameters/floor_profile/1/points_m: must run from 0 to 5 m along y")
+
+    def test_wall_line_below_the_risen_side(self) -> None:
+        self.profile("[[0, 3], [10, 3]]}, {along: y, points_m: [[0, 3], [3, 3], [5, 2.5]]")
+        self.edit("pool/pool.yaml", "floor_profile: {along: x", "floor_profile: [{along: x")
+        self.edit("pool/pool.yaml", "[5, 2.5]]}", "[5, 2.5]]}]")
+        self.edit(
+            "pool/pool.yaml",
+            "collision_boxes:\n",
+            "markings: {wall_lines: [{wall: y_max, from: [2, -3], to: [2, 0]}]}\ncollision_boxes:\n",
+        )
+        self.assert_load_rejects("pool", "/markings/wall_lines/0/from: z -3 m is outside -2.5..0.3 m")
 
     def test_sphere_pool_contacts_need_a_flat_floor(self) -> None:
         self.profile()

@@ -266,29 +266,41 @@ def pool(data: dict[str, Any]) -> list[str]:
     return problems
 
 
+def _floor_profiles(parameters: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """(JSON pointer, profile) for each floor profile; `floor_profile` is one profile or a list."""
+    floor = parameters.get("floor_profile")
+    if floor is None:
+        return []
+    if isinstance(floor, list):
+        return [(f"/parameters/floor_profile/{index}", item) for index, item in enumerate(floor)]
+    return [("/parameters/floor_profile", floor)]
+
+
 def _floor_profile(
     parameters: dict[str, Any], boxes: list[dict[str, Any]], problems: list[str]
 ) -> None:
-    """The profile spans the pool, deepens only where it says, and replaces the floor box."""
-    where = "/parameters/floor_profile"
-    profile = parameters["floor_profile"]
-    points = profile["points_m"]
-    extent = parameters["length_m"] if profile["along"] == "x" else parameters["width_m"]
-    positions = [point[0] for point in points]
-    depths = [point[1] for point in points]
-    if abs(positions[0]) > POOL_EDGE_TOLERANCE or abs(positions[-1] - extent) > POOL_EDGE_TOLERANCE:
+    """Each profile spans the pool, depth_m is the floor's deepest point, and no flat floor box remains."""
+    deepest = []
+    for where, profile in _floor_profiles(parameters):
+        points = profile["points_m"]
+        extent = parameters["length_m"] if profile["along"] == "x" else parameters["width_m"]
+        positions = [point[0] for point in points]
+        depths = [point[1] for point in points]
+        if abs(positions[0]) > POOL_EDGE_TOLERANCE or abs(positions[-1] - extent) > POOL_EDGE_TOLERANCE:
+            problems.append(
+                f"{where}/points_m: must run from 0 to {extent:g} m along {profile['along']}, "
+                f"not {positions[0]:g}..{positions[-1]:g} m"
+            )
+        if any(b <= a for a, b in zip(positions, positions[1:])):
+            problems.append(f"{where}/points_m: positions must increase")
+        if any(depth <= 0 for depth in depths):
+            problems.append(f"{where}/points_m: depths must be positive")
+        deepest.append(max(depths))
+    # Each profile varies along one axis only, so the floor's deepest point is the shallowest of theirs.
+    if abs(min(deepest) - parameters["depth_m"]) > POOL_EDGE_TOLERANCE:
         problems.append(
-            f"{where}/points_m: must run from 0 to {extent:g} m along {profile['along']}, "
-            f"not {positions[0]:g}..{positions[-1]:g} m"
-        )
-    if any(b <= a for a, b in zip(positions, positions[1:])):
-        problems.append(f"{where}/points_m: positions must increase")
-    if any(depth <= 0 for depth in depths):
-        problems.append(f"{where}/points_m: depths must be positive")
-    if abs(max(depths) - parameters["depth_m"]) > POOL_EDGE_TOLERANCE:
-        problems.append(
-            f"/parameters/depth_m: {parameters['depth_m']:g} m must be the profile's deepest point "
-            f"({max(depths):g} m)"
+            f"/parameters/depth_m: {parameters['depth_m']:g} m must be the floor's deepest point "
+            f"({min(deepest):g} m)"
         )
     floor_top = parameters["water_level_m"] - parameters["depth_m"]
     for box in boxes:
@@ -299,19 +311,26 @@ def _floor_profile(
 
 
 def _floor_depth(parameters: dict[str, Any], wall: str, along: float) -> float:
-    """Depth where a wall meets the floor, `along` metres along the wall. On a profiled floor the curve
-    between two control points never leaves their depth range, so the deeper one bounds it."""
-    profile = parameters.get("floor_profile")
-    if profile is None:
+    """Depth where a wall meets the floor, `along` metres along the wall: the shallowest profile there.
+    A profile's curve between two control points never leaves their depth range, so the deeper of them
+    bounds it."""
+    profiles = _floor_profiles(parameters)
+    if not profiles:
         return parameters["depth_m"]
-    points = profile["points_m"]
-    across_axis = {"x": ("x_min", "x_max"), "y": ("y_min", "y_max")}[profile["along"]]
-    if wall in across_axis:
-        return points[0][1] if wall == across_axis[0] else points[-1][1]
-    for (a, depth_a), (b, depth_b) in zip(points, points[1:]):
-        if along <= b:
-            return max(depth_a, depth_b)
-    return points[-1][1]
+    bounds = []
+    for _, profile in profiles:
+        points = profile["points_m"]
+        across_axis = {"x": ("x_min", "x_max"), "y": ("y_min", "y_max")}[profile["along"]]
+        if wall in across_axis:
+            bounds.append(points[0][1] if wall == across_axis[0] else points[-1][1])
+            continue
+        bound = points[-1][1]
+        for (a, depth_a), (b, depth_b) in zip(points, points[1:]):
+            if along <= b:
+                bound = max(depth_a, depth_b)
+                break
+        bounds.append(bound)
+    return min(bounds)
 
 
 def _pool_markings(

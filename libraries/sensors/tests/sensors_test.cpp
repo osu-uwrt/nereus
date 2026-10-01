@@ -1005,8 +1005,10 @@ TEST(ReferenceAltitude, RejectsInvalidParametersAndOverflow) {
 }
 
 TEST(Dvl, SlopedFloorRangesFollowTheProfile) {
-    sim::Pool pool; // 20 m x 10 m, 5 m deep at x = 0 rising to 3 m from x = 14
-    pool.floor = sim::FloorProfile::smooth(sim::FloorProfile::Axis::X, {{0, 5}, {8, 5}, {14, 3}, {20, 3}});
+    sim::Pool pool; // 20 m x 10 m, 5 m deep, rising to 3 m from x = 14 and to 4 m from y = 9
+    pool.floor =
+        sim::PoolFloor({sim::FloorProfile::smooth(sim::FloorProfile::Axis::X, {{0, 5}, {8, 5}, {14, 3}, {20, 3}}),
+                        sim::FloorProfile::smooth(sim::FloorProfile::Axis::Y, {{0, 5}, {6, 5}, {9, 4}, {10, 4}})});
     pool.origin_xy_world = {-10, -12};
     pool.yaw_world = .7;
     PoolBottom bottom(pool);
@@ -1016,13 +1018,14 @@ TEST(Dvl, SlopedFloorRangesFollowTheProfile) {
     const Eigen::Vector3d down = -Eigen::Vector3d::UnitZ();
     EXPECT_DOUBLE_EQ(bottom(world({4, 5, -1}), down)->distance, 4);
     EXPECT_DOUBLE_EQ(bottom(world({17, 5, -1}), down)->distance, 2);
-    EXPECT_NEAR(bottom(world({11, 5, -1}), down)->distance, pool.floor.depthAt(11.0) - 1, 1e-9);
+    EXPECT_NEAR(bottom(world({11, 5, -1}), down)->distance, pool.floor.depthAt({11, 5}) - 1, 1e-9);
+    EXPECT_DOUBLE_EQ(bottom(world({4, 9.5, -1}), down)->distance, 3); // up the cross slope
     // Looking ahead up the slope from the deep end, the range is to the slope, not the deep floor.
     const Eigen::Vector3d origin(6, 5, -1), ahead = Eigen::Vector3d(1, 0, -.3).normalized();
     const double range = bottom(world(origin), rotation * ahead)->distance;
     const Eigen::Vector3d hit = origin + range * ahead;
     EXPECT_GT(hit.x(), 8);
-    EXPECT_NEAR(hit.z(), -pool.floor.depthAt(hit.x()), 1e-9);
+    EXPECT_NEAR(hit.z(), -pool.floor.depthAt(hit.head<2>()), 1e-9);
     EXPECT_LT(range, (5 - 1) / .3 * ahead.norm());
     // Below the shallow floor there is no bottom to see.
     EXPECT_FALSE(bottom(world({17, 5, -3.5}), down));

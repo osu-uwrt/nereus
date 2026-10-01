@@ -88,6 +88,12 @@ struct PoolStripe {
     float width = .254f;
     Eigen::Vector3f color = {.093f, .14f, .16f};
 };
+// One sloped-floor profile: (position along x, or along y when along_x is false; depth below the water)
+// vertices from 0 to the pool extent along that axis. The depth is constant across the other axis.
+struct FloorSlope {
+    bool along_x = true;
+    std::vector<Eigen::Vector2f> polyline;
+};
 struct PoolGeometry {
     Eigen::Vector3f dimensions = {50, 22.86f, 2.1336f};
     float water_level = 0, deck_height = .305288888f;
@@ -97,10 +103,9 @@ struct PoolGeometry {
     Eigen::Vector2f waterline_band = {-.13f, .04f};
     Eigen::Vector3f waterline_color = {.065f, .20f, .27f};
     std::vector<PoolStripe> markings;
-    // Sloped floor: (position along x, or along y when floor_along_x is false; depth below the water)
-    // vertices from 0 to the pool extent. Empty: flat at dimensions.z(), which is always the deepest point.
-    std::vector<Eigen::Vector2f> floor_profile;
-    bool floor_along_x = true;
+    // Sloped floor: at each point the shallowest of these profiles. Empty: flat at dimensions.z(), which is
+    // always the deepest point.
+    std::vector<FloorSlope> floor_profiles;
 };
 // Unit cube centered on origin, six separate normal/UV faces. CPU-only geometry.
 std::shared_ptr<const MeshAsset> makeBoxMesh();

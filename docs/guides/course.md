@@ -62,9 +62,18 @@ collision_boxes:                # walls only: the floor's contact boxes are gene
 - ...
 ```
 
+A floor that also rises toward a side wall takes a list of profiles; at each point the floor is the shallowest
+of them, so a deep flat area can slope up toward several walls (here toward the shallow end and the far side):
+
+```yaml
+  floor_profile:
+  - {along: x, points_m: [[0, 5.18], [16, 5.18], [25, 4.27]]}
+  - {along: y, points_m: [[0, 5.18], [14, 5.18], [17, 4.6]]}
+```
+
 The same floor is used by the viewer and cameras (the floor mesh, lines draped over it, walls meeting it), by
 the DVL's range to the bottom, by vehicle and prop contacts, and by the task runtime's floor checks. Validation
-rejects a profile that does not span the pool, a `depth_m` that is not its deepest point, a flat floor box
+rejects a profile that does not span the pool, a `depth_m` that is not the floor's deepest point, a flat floor box
 alongside it, and `sphere_pool` contacts (use `box_scene`).
 
 ### Lane lines and finish

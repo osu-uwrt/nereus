@@ -5,6 +5,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace nereus::simulation {
 namespace {
@@ -174,6 +175,52 @@ std::optional<double> FloorProfile::rayDistance(const Eigen::Vector3d &origin, c
     }
     consider(polyline_.back().x(), infinity, polyline_.back().y(), 0);
     return best;
+}
+
+PoolFloor::PoolFloor(std::vector<FloorProfile> profiles) : profiles_(std::move(profiles)) {
+    for (const auto &profile : profiles_)
+        require(!profile.empty(), "pool floor profiles must not be empty");
+}
+
+PoolFloor PoolFloor::flat(double depth, double length) {
+    return PoolFloor({FloorProfile::flat(depth, length)});
+}
+
+double PoolFloor::depthAt(const Eigen::Vector2d &pool_xy) const {
+    require(!empty(), "empty floor has no depth");
+    double depth = profiles_.front().depthAt(pool_xy);
+    for (std::size_t k = 1; k < profiles_.size(); ++k)
+        depth = std::min(depth, profiles_[k].depthAt(pool_xy));
+    return depth;
+}
+
+double PoolFloor::maxDepth() const {
+    require(!empty(), "empty floor has no depth");
+    double depth = profiles_.front().maxDepth();
+    for (std::size_t k = 1; k < profiles_.size(); ++k)
+        depth = std::min(depth, profiles_[k].maxDepth());
+    return depth;
+}
+
+std::optional<double> PoolFloor::rayDistance(const Eigen::Vector3d &origin, const Eigen::Vector3d &direction,
+                                             double surface_z) const {
+    require(!empty(), "empty floor has no floor");
+    std::optional<double> best;
+    for (const auto &profile : profiles_)
+        if (const auto t = profile.rayDistance(origin, direction, surface_z); t && (!best || *t < *best))
+            best = t;
+    return best;
+}
+
+std::vector<FloorBox> floorBoxes(const PoolFloor &floor, double length, double width, double surface_z,
+                                 double thickness, double overlap) {
+    std::vector<FloorBox> boxes;
+    for (const auto &profile : floor.profiles()) {
+        const double span = profile.axis() == FloorProfile::Axis::X ? width : length;
+        for (auto &box : floorBoxes(profile, span, surface_z, thickness, overlap))
+            boxes.push_back(box);
+    }
+    return boxes;
 }
 
 std::vector<FloorBox> floorBoxes(const FloorProfile &profile, double span, double surface_z, double thickness,

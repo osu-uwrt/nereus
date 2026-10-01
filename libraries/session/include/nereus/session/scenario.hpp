@@ -29,8 +29,9 @@ struct ResolvedScenario {
 ResolvedScenario loadResolvedScenario(const std::filesystem::path &resolved_json);
 ResolvedScenario parseResolvedScenario(const Json &document);
 
-// A pool document's floor: its `parameters.floor_profile`, or flat at `depth_m` along the length.
-simulation::FloorProfile poolFloor(const Json &pool);
+// A pool document's floor: its `parameters.floor_profile` (one profile or a list, the floor being the
+// shallowest of them), or flat at `depth_m`.
+simulation::PoolFloor poolFloor(const Json &pool);
 // A pool document's static contact boxes (pool-local): its `collision_boxes`, plus one box per floor
 // segment, flagged `"floor": true`, when the floor is profiled.
 Json poolCollisionBoxes(const Json &pool);

@@ -129,7 +129,7 @@ struct TaskRuntime::Impl {
     Json seed;
     double surface_z{0}, floor_z{0}, pool_length{0}, pool_width{0}; // floor_z: the deepest floor
     Pose pool_from_world;
-    simulation::FloorProfile floor;
+    simulation::PoolFloor floor;
     // Floor height under a world point.
     double floorZAt(const Vec3 &world) const {
         const Vec3 local = spatial::apply(pool_from_world, world);

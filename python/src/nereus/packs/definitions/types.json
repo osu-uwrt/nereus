@@ -369,35 +369,19 @@
           "minimum": 0
         },
         "floor_profile": {
-          "type": "object",
-          "properties": {
-            "along": {
-              "enum": [
-                "x",
-                "y"
-              ],
-              "description": "Pool axis the depth varies along; it is constant across the other."
+          "oneOf": [
+            {
+              "$ref": "#/$defs/floor_slope"
             },
-            "points_m": {
+            {
               "type": "array",
               "items": {
-                "type": "array",
-                "items": {
-                  "type": "number"
-                },
-                "minItems": 2,
-                "maxItems": 2
+                "$ref": "#/$defs/floor_slope"
               },
-              "minItems": 2,
-              "description": "[position along the axis, depth below the water] in m, from 0 to the pool's length (along x) or width (along y), positions increasing. Joined by a monotone cubic, so flat stretches stay flat and curves never overshoot."
+              "minItems": 1
             }
-          },
-          "required": [
-            "along",
-            "points_m"
           ],
-          "additionalProperties": false,
-          "description": "Sloped floor. Omitted: flat at depth_m. depth_m must be the deepest point; floor contact boxes are generated from the profile, so collision_boxes lists only the walls."
+          "description": "Sloped floor: one profile, or a list whose shallowest profile is the floor at each point (a deep area rising toward several walls). Omitted: flat at depth_m. depth_m must be the deepest point; floor contact boxes are generated from the profiles, so collision_boxes lists only the walls."
         }
       },
       "required": [
@@ -415,6 +399,37 @@
       "additionalProperties": false,
       "description": "Finite rectangular pool in pool-local SI units: origin at the floor-plan corner on the water surface, +Z up.",
       "x-category": "pool"
+    },
+    "floor_slope": {
+      "type": "object",
+      "properties": {
+        "along": {
+          "enum": [
+            "x",
+            "y"
+          ],
+          "description": "Pool axis the depth varies along; it is constant across the other."
+        },
+        "points_m": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "minItems": 2,
+          "description": "[position along the axis, depth below the water] in m, from 0 to the pool's length (along x) or width (along y), positions increasing. Joined by a monotone cubic, so flat stretches stay flat and curves never overshoot."
+        }
+      },
+      "required": [
+        "along",
+        "points_m"
+      ],
+      "additionalProperties": false,
+      "description": "One floor profile: depth varying along one pool axis, constant across the other."
     },
     "water_optics": {
       "type": "object",

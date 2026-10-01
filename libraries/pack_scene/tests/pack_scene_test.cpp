@@ -209,51 +209,64 @@ TEST(PackScene, IrregularLinesKeepTheirPlacementAndStyleOverrides) {
 }
 
 TEST(PackScene, ProfiledFloorDrapesStripesAndMeetsTheWalls) {
+    // Deep (5 m) beside y = 0 at the x = 0 end, rising to 3 m along x and to 4 m across y.
     const auto pool = rs::Json::parse(R"({
-        "parameters": {"length_m": 20, "width_m": 8, "depth_m": 5,
-                       "floor_profile": {"along": "x", "points_m": [[0, 5], [8, 5], [14, 3], [20, 3]]}},
+        "parameters": {"length_m": 20, "width_m": 8, "depth_m": 5, "floor_profile": [
+            {"along": "x", "points_m": [[0, 5], [8, 5], [14, 3], [20, 3]]},
+            {"along": "y", "points_m": [[0, 5], [3, 5], [6, 4], [8, 4]]}]},
         "markings": {"lane_grid": {"along_x": {"count": 2, "spacing_m": 4}, "ends": "t", "on_walls": true}}
     })");
     const auto floor = rs::poolFloor(pool);
+    const auto depth = [&](const Eigen::Vector3f &v) { return floor.depthAt(Eigen::Vector2d(v.x(), v.y())); };
     const auto stripes = ps::poolStripes(pool);
-    // Wall stripes run from the floor where each end wall meets it.
+    // Wall stripes run from the floor where they meet their wall: lines at y = 2 and y = 6.
+    std::size_t walls = 0;
     for (const auto &stripe : stripes) {
         if (stripe.side == r::PoolSide::XMin) {
-            EXPECT_FLOAT_EQ(stripe.from.y(), -5);
+            EXPECT_FLOAT_EQ(stripe.from.y(), stripe.from.x() < 4 ? -5 : -4);
+            ++walls;
         }
         if (stripe.side == r::PoolSide::XMax) {
             EXPECT_FLOAT_EQ(stripe.from.y(), -3);
+            ++walls;
         }
     }
+    EXPECT_EQ(walls, 4u);
     r::PoolGeometry geometry;
     geometry.dimensions = {20, 8, 5};
     geometry.markings = stripes;
-    for (const auto &vertex : floor.polyline())
-        geometry.floor_profile.push_back(vertex.cast<float>());
+    for (const auto &profile : floor.profiles()) {
+        r::FloorSlope slope;
+        slope.along_x = profile.axis() == nereus::simulation::FloorProfile::Axis::X;
+        for (const auto &vertex : profile.polyline())
+            slope.polyline.push_back(vertex.cast<float>());
+        geometry.floor_profiles.push_back(slope);
+    }
     const auto scene = r::makePoolScene(geometry);
-    // Floor mesh vertices lie on the profile, across the whole width.
+    // Floor mesh: a grid through both profiles' vertices, on the shallower profile everywhere.
     const auto &floorMesh = scene.instances[0].mesh->submeshes.at(0);
-    ASSERT_EQ(floorMesh.vertices.size(), 2 * floor.polyline().size());
+    ASSERT_EQ(floorMesh.vertices.size(), floor.profiles()[0].polyline().size() * floor.profiles()[1].polyline().size());
     for (const auto &v : floorMesh.vertices) {
-        EXPECT_NEAR(v.position.z(), -floor.depthAt(double(v.position.x())), 1e-5);
+        EXPECT_NEAR(v.position.z(), -depth(v.position), 1e-5);
         EXPECT_GT(v.normal.z(), .85); // this test floor peaks near 27 degrees
     }
-    // End walls reach their own floor depth plus the deck; side walls the deepest point.
+    // Each wall reaches the deepest floor along its foot, plus the deck.
     const auto height = [&](std::size_t i) { return scene.instances[i].transform.col(2).head<3>().norm(); };
-    EXPECT_NEAR(height(1), 5 + geometry.deck_height, 1e-5);
-    EXPECT_NEAR(height(3), 5 + geometry.deck_height, 1e-5);
-    EXPECT_NEAR(height(4), 3 + geometry.deck_height, 1e-5);
-    // Floor stripes drape over the slope, 2 mm above it, split finely along the rise.
+    EXPECT_NEAR(height(1), 5 + geometry.deck_height, 1e-5); // y = 0
+    EXPECT_NEAR(height(2), 4 + geometry.deck_height, 1e-5); // y = 8
+    EXPECT_NEAR(height(3), 5 + geometry.deck_height, 1e-5); // x = 0
+    EXPECT_NEAR(height(4), 3 + geometry.deck_height, 1e-5); // x = 20
+    // Floor stripes drape over both slopes, 2 mm above the floor.
     const auto &floorStripes = scene.instances[13];
     ASSERT_EQ(floorStripes.material, r::SurfaceMaterial::Marking);
     std::size_t onSlope = 0;
     for (const auto &part : floorStripes.mesh->submeshes)
         for (const auto &v : part.vertices) {
-            EXPECT_NEAR(v.position.z(), -floor.depthAt(double(v.position.x())) + .002, 1e-4);
+            EXPECT_NEAR(v.position.z(), -depth(v.position) + .002, 1e-4);
             onSlope += v.position.x() > 8 && v.position.x() < 14;
         }
     EXPECT_GT(onSlope, 2u * 2 * 50);
     // A profile that does not span the pool is rejected.
-    geometry.floor_profile.back().x() = 19;
+    geometry.floor_profiles[1].polyline.back().x() = 7;
     EXPECT_THROW(r::makePoolScene(geometry), std::invalid_argument);
 }
