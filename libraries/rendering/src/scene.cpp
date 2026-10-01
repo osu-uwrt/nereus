@@ -459,7 +459,8 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
     for (const auto &r : p.recesses) {
         const float a0 = std::min(r.from.x(), r.to.x()), a1 = std::max(r.from.x(), r.to.x());
         const float z0 = std::min(r.from.y(), r.to.y()), z1 = std::max(r.from.y(), r.to.y()), d = r.depth;
-        const float top = std::max(z1, deck);
+        // Under the deck surface where the recess opens through it, so the lining never shows on the deck top.
+        const float top = std::min(z1 + .3f, deck - .005f);
         const auto lining = [&](float b0, float b1, float n0, float n1, float c0, float c1) {
             const Aabb pool = convert(fromSide, r.side, {{b0, n0, c0}, {b1, n1, c1}});
             const Eigen::Vector3f center = (pool.first + pool.second) / 2, size = pool.second - pool.first;
