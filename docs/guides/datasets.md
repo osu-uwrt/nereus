@@ -283,9 +283,14 @@ nereus-dataset preview ~/datasets/ffc/render --count 24
 `generate` and `plan` take the same overrides, applied to every selected task: `--task T` (repeatable; `background`
 selects the background block, which is otherwise dropped when `--task` is given), `--count N` (per block),
 `--range-m A B`, `--bearing-deg X`, `--elevation-deg A B` (approach samplers), `--altitude-m A B` (overhead
-samplers), `--resolution native|WxH`, `--seed S`, `--environment ID` (repeatable, globs: keep only matching
-environments, e.g. `--environment 'murky*'`) and `--environment-mode weighted|sweep`. Sample `k` always draws from its own random stream, so the
-same spec, seed and sample index give the same image whatever the shard count.
+samplers), `--resolution native|WxH`, `--supersample N` (anti-aliasing, 1 = off), `--seed S`, `--environment ID`
+(repeatable, globs: keep only matching environments, e.g. `--environment 'murky*'`) and
+`--environment-mode weighted|sweep`. Sample `k` always draws from its own random stream, so the same spec, seed
+and sample index give the same image whatever the shard count.
+
+`render` resumes: re-running it on the same folder (after Ctrl-C or a crash) skips samples whose image, id map and
+record are complete. `plan` refuses a folder whose renders came from a different job, so use a new `--out` after
+changing the spec or the overrides; datasets never mix.
 
 ## Output
 
