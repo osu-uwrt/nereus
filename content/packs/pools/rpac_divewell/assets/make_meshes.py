@@ -221,10 +221,16 @@ def floor_vent() -> Mesh:
     return m
 
 
+# Every mesh the pack uses, by asset name. The test in tests/python/test_rpac_assets.py regenerates these.
+MESHES = {
+    "tower_stairs": tower_stairs,
+    "ladder": ladder,
+    "raised_grates": raised_grates,
+    "wall_vent": wall_vent,
+    "floor_vent": floor_vent,
+}
+
 if __name__ == "__main__":
-    tower_stairs().write("tower_stairs")
-    ladder().write("ladder")
-    raised_grates().write("raised_grates")
-    wall_vent().write("wall_vent")
-    floor_vent().write("floor_vent")
-    print("wrote tower_stairs, ladder, raised_grates, wall_vent, floor_vent")
+    for name, build in MESHES.items():
+        build().write(name)
+    print("wrote " + ", ".join(MESHES))

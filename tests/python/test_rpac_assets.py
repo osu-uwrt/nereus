@@ -31,8 +31,8 @@ class RpacAssetsTest(unittest.TestCase):
         gen = load_generator()
         with tempfile.TemporaryDirectory() as tmp:
             gen.HERE = Path(tmp)  # the script writes to HERE
-            for name in ("tower_stairs", "ladder", "raised_grates", "wall_vent", "floor_vent"):  # the script's __main__ list
-                getattr(gen, name)().write(name)
+            for name, build in gen.MESHES.items():
+                build().write(name)
             produced = sorted(p.name for p in Path(tmp).iterdir())
             self.assertTrue(produced)
             for name in produced:
