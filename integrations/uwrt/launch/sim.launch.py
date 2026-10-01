@@ -4,7 +4,7 @@
         [pool:=robosub|rpac] [scenario:=<pack folder>] [output:=<run dir>] [rmw:=<rmw implementation>]
         [cameras:=true|false] [always_cameras:=true|false] [camera_supersample:=1..4]
         [active_control_model:=mpc] [mpc_model:=sim|<name>|<path>] [mpc_odom_topic:=simulator/ground_truth]
-        [mpc_state_source:=sensors|odometry]
+        [mpc_state_source:=sensors|odometry] [nvidia:=auto|true|false]
 
 The simulator (build/ros-viewer/.../nereus-sim) runs the scenario resolved with
 `python -m nereus.packs resolve`; cameras:=false passes --no-cameras and
@@ -18,6 +18,7 @@ Run records (resolved.json, execution.json, summary.json, tasks.json) go to `out
 (default /tmp/nereus_sim/<timestamp>). Ctrl-C stops everything and writes the records.
 """
 
+import ctypes.util
 import os
 import subprocess
 import sys
@@ -38,6 +39,9 @@ from launch.substitutions import LaunchConfiguration as LC
 
 ROOT = Path(__file__).resolve().parents[3]
 STACK = ROOT / "integrations/uwrt/acceptance/mission_stack.launch.py"
+# The resolver needs the pack tools' dependencies (ruamel.yaml, jsonschema), which ./build.sh installs into
+# .venv; ros2 launch itself runs under the system Python.
+PYTHON = str(ROOT / ".venv/bin/python") if (ROOT / ".venv/bin/python").exists() else sys.executable
 # Controller selection forwarded to mission_stack.launch.py (and on to riptide_bringup2); empty = its default.
 CONTROLLER_ARGS = {
     "active_control_model": "controller: 'mpc' runs riptide_mpc, anything else complete_controller",
@@ -63,6 +67,18 @@ def _scenario(context):
     return str(ROOT / "content/packs/scenarios" / POOLS[pool or "robosub"])
 
 
+def _gpu_env(context):
+    """PRIME render offload for the viewer: on a hybrid laptop GLX opens windows on the integrated GPU unless
+    asked for NVIDIA (the simulator's EGL cameras already pick NVIDIA). auto: offload when the NVIDIA GLX
+    driver is installed."""
+    mode = LC("nvidia").perform(context).lower()
+    if mode not in ("auto", "true", "false"):
+        raise RuntimeError(f"nvidia:= must be auto, true or false (got '{mode}')")
+    if mode == "false" or (mode == "auto" and not ctypes.util.find_library("GLX_nvidia")):
+        return {}
+    return {"__NV_PRIME_RENDER_OFFLOAD": "1", "__GLX_VENDOR_LIBRARY_NAME": "nvidia"}
+
+
 def _processes(context):
     rmw = LC("rmw").perform(context)
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
@@ -73,7 +89,7 @@ def _processes(context):
     binary = LC("bridge_binary").perform(context)
     resolved = f"{output}.resolved.json"
     subprocess.run(
-        [sys.executable, "-m", "nereus.packs", "resolve", scenario, "-o", resolved],
+        [PYTHON, "-m", "nereus.packs", "resolve", scenario, "-o", resolved],
         check=True, cwd=str(ROOT),
         env={**os.environ, "PYTHONPATH": os.pathsep.join(
             [str(ROOT / "python/src"), os.environ.get("PYTHONPATH", "")])})
@@ -92,7 +108,8 @@ def _processes(context):
         condition=IfCondition(LC("stack"))))
     actions.append(ExecuteProcess(
         cmd=[str(ROOT / "build/ros-viewer/nereus-viewer")], cwd=str(ROOT),
-        output="screen", name="pool_viewer", condition=IfCondition(LC("viewer"))))
+        output="screen", name="pool_viewer", additional_env=_gpu_env(context),
+        condition=IfCondition(LC("viewer"))))
     return actions
 
 
@@ -107,6 +124,8 @@ def generate_launch_description():
         DeclareLaunchArgument("bridge_binary", default_value=str(
             ROOT / "build/ros-viewer/integrations/ros2/bridge/nereus-sim"),
             description="nereus-sim executable"),
+        DeclareLaunchArgument("nvidia", default_value="auto",
+                              description="viewer on the NVIDIA GPU via PRIME offload: auto | true | false"),
         DeclareLaunchArgument("cameras", default_value="true", description="run camera acquisition"),
         DeclareLaunchArgument("always_cameras", default_value="false",
                               description="render cameras regardless of subscribers"),
