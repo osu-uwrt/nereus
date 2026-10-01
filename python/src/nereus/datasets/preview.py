@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import math
 from pathlib import Path
 from typing import Any
@@ -108,9 +109,15 @@ def tile(render: Path, record: dict[str, Any], classes: Any, width: int) -> Imag
     caption = f"{record['name']}  {len(labelled.labels)} labels"
     if labelled.dropped_small:
         caption += f", {labelled.dropped_small} < min px"
+    if labelled.crumbs:
+        caption += f", {labelled.crumbs} crumbs"
     if labelled.far:
         caption += f"  SKIPPED: {len(labelled.far)} beyond {classes.max_range_m:g} m"
-    _text(small, caption, (0, height - 2), (0, 0, 200) if labelled.far else (40, 40, 40))
+    if labelled.fragmented:
+        caption += f"  SKIPPED: {len(labelled.fragmented)} fragmented"
+    _text(small, caption, (0, height - 2), (0, 0, 200) if labelled.skipped else (40, 40, 40))
+    if record.get("environment") is not None:
+        _text(small, str(record["environment"]), (0, 16), (60, 60, 60))
     return small
 
 
@@ -119,6 +126,7 @@ def preview(
     out: Path,
     *,
     count: int = 16,
+    environments: list[str] | None = None,
     labels: Path | None = None,
     model: str | None = None,
     tile_width: int = 480,
@@ -128,7 +136,16 @@ def preview(
     cv2 = cv2_module()
     render = Path(render).resolve()
     classes, _ = class_map(render, labels, model)
-    chosen = _pick(records(render), max(count, 1))
+    found = records(render)
+    if environments is not None:
+        found = [
+            record
+            for record in found
+            if any(
+                fnmatch.fnmatchcase(str(record.get("environment")), item) for item in environments
+            )
+        ]
+    chosen = _pick(found, max(count, 1))
     if not chosen:
         raise PackError(f"{render}: no records to preview")
     tiles = [tile(render, record, classes, tile_width) for record in chosen]

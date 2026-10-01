@@ -363,51 +363,196 @@
       ],
       "additionalProperties": false
     },
-    "randomize": {
+    "value": {
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "$ref": "common.json#/$defs/range"
+        }
+      ],
+      "description": "A number is fixed; [low, high] is drawn uniformly per sample."
+    },
+    "nonnegative_value": {
+      "oneOf": [
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "$ref": "common.json#/$defs/nonnegative_range"
+        }
+      ],
+      "description": "A number is fixed; [low, high] is drawn uniformly per sample."
+    },
+    "water": {
       "type": "object",
-      "description": "Per-sample randomization; omitted keys take the defaults.",
+      "description": "Pool water optics: *_scale multiply the pool pack's calibrated values; tint_rgb, absorption_per_m_rgb and scattering replace them.",
       "properties": {
+        "tint_scale": {
+          "$ref": "#/$defs/nonnegative_value"
+        },
+        "absorption_scale": {
+          "$ref": "#/$defs/nonnegative_value"
+        },
+        "scattering_scale": {
+          "$ref": "#/$defs/nonnegative_value"
+        },
+        "distance_scale_scale": {
+          "$ref": "#/$defs/nonnegative_value"
+        },
+        "tint_rgb": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "absorption_per_m_rgb": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "scattering": {
+          "$ref": "#/$defs/nonnegative_value"
+        }
+      },
+      "additionalProperties": false
+    },
+    "lighting": {
+      "type": "object",
+      "description": "caustics, exposure, sun angles and glare are absolute; *_scale multiply the pool's lights; profile replaces the pool's.",
+      "properties": {
+        "caustics": {
+          "$ref": "#/$defs/nonnegative_value"
+        },
+        "exposure": {
+          "$ref": "#/$defs/nonnegative_value"
+        },
+        "sun_azimuth_deg": {
+          "$ref": "#/$defs/value"
+        },
+        "sun_elevation_deg": {
+          "$ref": "#/$defs/value"
+        },
+        "glare": {
+          "$ref": "#/$defs/nonnegative_value"
+        },
+        "direct_light_scale": {
+          "$ref": "#/$defs/nonnegative_value"
+        },
+        "ambient_light_scale": {
+          "$ref": "#/$defs/nonnegative_value"
+        },
+        "profile": {
+          "enum": [
+            "indoor",
+            "outdoor"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "image_effects": {
+      "type": "object",
+      "properties": {
+        "noise_sigma": {
+          "$ref": "#/$defs/nonnegative_value"
+        },
+        "blur_px": {
+          "$ref": "#/$defs/nonnegative_value"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Gaussian RGB noise sigma (8-bit units) and blur sigma (px); 0 = off."
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+          "maxLength": 64
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Relative share in weighted mode (default 1); 0 drops the environment."
+        },
         "water": {
-          "type": "object",
-          "properties": {
-            "tint_scale": {
-              "$ref": "common.json#/$defs/nonnegative_range"
-            },
-            "absorption_scale": {
-              "$ref": "common.json#/$defs/nonnegative_range"
-            },
-            "scattering": {
-              "$ref": "common.json#/$defs/nonnegative_range"
-            }
-          },
-          "additionalProperties": false
+          "$ref": "#/$defs/water"
         },
         "lighting": {
-          "type": "object",
-          "properties": {
-            "caustics": {
-              "$ref": "common.json#/$defs/nonnegative_range"
-            },
-            "exposure": {
-              "$ref": "common.json#/$defs/nonnegative_range"
-            },
-            "direct_light_scale": {
-              "$ref": "common.json#/$defs/nonnegative_range"
-            },
-            "ambient_light_scale": {
-              "$ref": "common.json#/$defs/nonnegative_range"
-            },
-            "sun_azimuth_deg": {
-              "$ref": "common.json#/$defs/range"
-            },
-            "sun_elevation_deg": {
-              "$ref": "common.json#/$defs/range"
-            }
-          },
-          "additionalProperties": false
+          "$ref": "#/$defs/lighting"
+        },
+        "image": {
+          "$ref": "#/$defs/image_effects"
         },
         "time_s": {
-          "$ref": "common.json#/$defs/nonnegative_range"
+          "$ref": "#/$defs/nonnegative_value"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "description": "One named appearance: laid over the base randomization."
+    },
+    "environments": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "weighted",
+            "sweep"
+          ],
+          "description": "weighted (default): picked per sample by weight; sweep: cycled evenly within each task block."
+        },
+        "list": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/environment"
+          }
+        },
+        "sweep": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^((water|lighting|image)\\.[a-z_]+|time_s)$"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1
+          },
+          "description": "Cartesian grid of fixed values (keys group.key), crossed with every list entry."
+        }
+      },
+      "additionalProperties": false
+    },
+    "randomize": {
+      "type": "object",
+      "description": "Per-sample randomization. water / lighting / image / time_s are the base every environment inherits (omitted keys take the defaults).",
+      "properties": {
+        "water": {
+          "$ref": "#/$defs/water"
+        },
+        "lighting": {
+          "$ref": "#/$defs/lighting"
+        },
+        "image": {
+          "$ref": "#/$defs/image_effects"
+        },
+        "time_s": {
+          "$ref": "#/$defs/nonnegative_value"
         },
         "placement": {
           "type": "object",
@@ -446,17 +591,8 @@
           },
           "additionalProperties": false
         },
-        "image": {
-          "type": "object",
-          "properties": {
-            "noise_sigma": {
-              "$ref": "common.json#/$defs/nonnegative_range"
-            },
-            "blur_px": {
-              "$ref": "common.json#/$defs/nonnegative_range"
-            }
-          },
-          "additionalProperties": false
+        "environments": {
+          "$ref": "#/$defs/environments"
         }
       },
       "additionalProperties": false

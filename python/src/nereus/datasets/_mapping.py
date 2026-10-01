@@ -14,6 +14,8 @@ from nereus.packs._document import plain, read_yaml
 from ._documents import mapping_parts
 
 DEFAULT_MIN_VISIBLE_PX = 25
+DEFAULT_FRAGMENTS = "reject"
+DEFAULT_MIN_FRAGMENT_PX = 25
 
 
 @dataclass(frozen=True)
@@ -37,9 +39,10 @@ class ClassMap:
         self.camera: str = models[model]["camera"]
         self.names: list[str] = list(models[model]["classes"])
         self.max_range_m = float(models[model]["max_range_m"])
-        self.min_visible_px = int(
-            labels.get("export", {}).get("min_visible_px", DEFAULT_MIN_VISIBLE_PX)
-        )
+        export = labels.get("export", {})
+        self.min_visible_px = int(export.get("min_visible_px", DEFAULT_MIN_VISIBLE_PX))
+        self.fragments: str = export.get("fragments", DEFAULT_FRAGMENTS)
+        self.min_fragment_px = int(export.get("min_fragment_px", DEFAULT_MIN_FRAGMENT_PX))
         options = labels.get("classes", {})
         self.outer = {name for name, item in options.items() if item.get("shape") == "outer"}
         self.rules: dict[str, list[Rule]] = {}

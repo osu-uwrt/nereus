@@ -21,6 +21,8 @@ from jsonschema import Draft202012Validator
 from nereus.packs import PackError, ResolvedScenario
 from nereus.packs._document import plain, read_yaml
 
+from . import _environments as environments
+
 DATASET_KINDS = ("parts", "labels", "dataset")
 _DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
@@ -124,9 +126,13 @@ def _ordered(value: Any, where: str, problems: list[str]) -> None:
         is_range = len(value) == 2 and all(
             isinstance(item, (int, float)) and not isinstance(item, bool) for item in value
         )
-        if is_range and where.rsplit("/", 1)[-1] not in ("seed_px", "resolution_px"):
+        parent, _, name = where.rpartition("/")
+        values_list = parent.endswith("/sweep")  # a sweep key's values, not a range
+        if is_range and not values_list and name not in ("seed_px", "resolution_px"):
             if value[0] > value[1]:
                 problems.append(f"{where}: range low {value[0]} exceeds high {value[1]}")
+        for index, item in enumerate(value):
+            _ordered(item, f"{where}/{index}", problems)
 
 
 def duplicates(values: Iterable[str], what: str, where: str, problems: list[str]) -> None:
@@ -166,6 +172,37 @@ def _dataset_semantics(data: dict[str, Any]) -> list[str]:
         problems.append("/tasks/background: 'background' names the background block, not a task")
     if not data.get("tasks") and "background" not in data:
         problems.append("/: no tasks and no background block: nothing to generate")
+    if not problems:
+        problems += environment_problems(data.get("randomize", {}))
+    return problems
+
+
+@lru_cache(maxsize=None)
+def _environment_validator() -> Draft202012Validator:
+    bundle = schema("dataset")
+    return Draft202012Validator({"$ref": "#/$defs/environment", "$defs": bundle["$defs"]})
+
+
+def environment_problems(randomize: dict[str, Any]) -> list[str]:
+    """Expanded environments: unique ids, valid after sweep values, one form per quantity."""
+    problems: list[str] = []
+    entries = randomize.get("environments", {}).get("list", [])
+    duplicates(
+        (item["id"] for item in entries), "environment", "/randomize/environments/list", problems
+    )
+    found, _ = environments.expand(randomize)
+    for item in found:
+        where = f"/randomize/environments[{item['id']}]"
+        candidate = {key: value for key, value in item.items() if key != "weight"}
+        candidate["id"] = "x"  # expanded ids carry sweep values; the entry id was checked
+        for error in _environment_validator().iter_errors(candidate):
+            location = "/".join(str(part) for part in error.path)
+            problems.append(f"{where}/{location}: {error.message[:300]}")
+        _ordered(candidate, where, problems)
+        for group, pairs in environments.EXCLUSIVE.items():
+            for absolute, scale in pairs.items():
+                if absolute in item[group] and scale in item[group]:
+                    problems.append(f"{where}/{group}: set {absolute} or {scale}, not both")
     return problems
 
 

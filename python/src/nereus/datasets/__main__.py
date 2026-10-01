@@ -26,6 +26,8 @@ def _overrides(arguments: argparse.Namespace) -> Overrides:
         altitude_m=arguments.altitude_m,
         resolution=arguments.resolution,
         seed=arguments.seed,
+        environments=arguments.environment,
+        environment_mode=arguments.environment_mode,
     )
 
 
@@ -92,7 +94,14 @@ def _run_preview(arguments: argparse.Namespace) -> int:
     folder = Path(arguments.dir)
     out = Path(arguments.out) if arguments.out else folder / "preview.jpg"
     labels = Path(arguments.labels) if arguments.labels else None
-    sheet = preview(folder, out, count=arguments.count, labels=labels, model=arguments.model)
+    sheet = preview(
+        folder,
+        out,
+        count=arguments.count,
+        environments=arguments.environment,
+        labels=labels,
+        model=arguments.model,
+    )
     print(f"preview -> {sheet}")
     return 0
 
@@ -130,6 +139,14 @@ def _spec_options(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--resolution", help="native or WIDTHxHEIGHT")
     parser.add_argument("--seed", type=int, help="dataset seed")
+    parser.add_argument(
+        "--environment",
+        action="append",
+        help="only environments with this id (repeatable; globs, e.g. 'murky*')",
+    )
+    parser.add_argument(
+        "--environment-mode", choices=("weighted", "sweep"), help="pick by weight or cycle evenly"
+    )
 
 
 def _label_options(parser: argparse.ArgumentParser) -> None:
@@ -171,6 +188,9 @@ def main(argv: list[str] | None = None) -> int:
     preview_ = commands.add_parser("preview", help="contact sheet with label overlays")
     preview_.add_argument("dir", help="rendered folder")
     preview_.add_argument("--count", type=int, default=16, help="samples on the sheet")
+    preview_.add_argument(
+        "--environment", action="append", help="only samples of these environments (globs)"
+    )
     preview_.add_argument("--out", help="image to write (default DIR/preview.jpg)")
     _label_options(preview_)
     preview_.set_defaults(run=_run_preview)

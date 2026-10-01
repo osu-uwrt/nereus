@@ -71,6 +71,8 @@ tasks:                              # per task: class <- part patterns (* ? [..]
   bins:    {magnet: {parts: [magnet_cover], when: {indicator: red}}}   # only while its LEDs are red
 export:
   min_visible_px: 25                # smaller instances (at the output resolution) are dropped
+  fragments: reject                 # an instance seen as 2+ separate pieces: reject | keep_largest | merge
+  min_fragment_px: 25               # smaller pieces are crumbs: removed, never counted as pieces
 ```
 
 - A model is a camera, a class list in id order and `max_range_m`: views with a labelled instance farther than
@@ -78,6 +80,12 @@ export:
 - A class mapped in `tasks` but missing from a model's `classes` is not exported for that model (the dfc model
   has no `circle`, so the torpedo rings are unlabelled there).
 - A part may map to only one class per task (indicator-gated mappings aside).
+- One YOLO line is one instance, so an object visible only as separate pieces (a vinyl through the crate
+  lattice, a pole behind another pole) cannot be labelled well. With `fragments: reject` (default) the renderer
+  never generates such a view, and export skips any it finds (counted as "fragmented images skipped": 0 for
+  data rendered with the same pack). `keep_largest` labels the largest piece; `merge` joins the pieces into one
+  polygon. Pieces of 8-connected pixels under `min_fragment_px` are crumbs: removed from every format's mask
+  and ignored by the rule.
 - With the torpedo board, the label pass gives the see-through hole the ring's value, so `circle` covers ring
   plus opening without `shape: outer`.
 
@@ -112,7 +120,7 @@ tasks:
     count: 400
     sampler: {type: approach, frame: [slalom_front, slalom_middle, slalom_back], both_sides: true, ...}
 background: {count: 280, sampler: {type: free, depth_m: [0.3, 1.8]}}   # images with nothing labelled
-randomize: {water: {scattering: [0.05, 0.2]}}   # any key left out takes its default
+randomize: {water: {scattering_scale: [0.8, 1.3]}}   # see Appearance and environments
 acceptance: {min_target_px: 150}                # optional renderer acceptance overrides
 ```
 
@@ -136,21 +144,66 @@ pressed against geometry, no labelled instance beyond `max_range_m`, and for tas
 instance of the task with `min_target_px` pixels (backgrounds: no labelled pixels). Rejected attempts are drawn
 again up to `max_attempts`; a sample that never passes is skipped and logged.
 
-### Randomization defaults
+### Appearance and environments
+
+Water, lighting and image effects are randomized per sample. Every value is a number (fixed) or `[low, high]`
+(uniform per sample). **Water is relative to the pool pack**, which is calibrated (robosub_2026: scattering
+0.458): `*_scale` keys multiply the pool's values, and scale 1 is the pool as calibrated. Absolute values
+replace them where you really mean one.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `water.tint_scale` | `[0.85, 1.15]` | pool tint × U(range) |
-| `water.absorption_scale` | `[0.7, 1.4]` | pool absorption × U(range) |
-| `water.scattering` | `[0.05, 0.18]` | scattering = U(range) |
-| `lighting.caustics`, `.exposure` | `[0, 1.3]`, `[0.75, 1.25]` | absolute |
-| `lighting.direct_light_scale`, `.ambient_light_scale` | `[0.8, 1.2]` | × the pool's values |
+| `water.tint_scale` | `[0.85, 1.15]` | × the pool tint (per channel) |
+| `water.absorption_scale` | `[0.7, 1.4]` | × the pool absorption |
+| `water.scattering_scale` | `[0.8, 1.25]` | × the pool scattering |
+| `water.distance_scale_scale` | - | × the pool's distance scale |
+| `water.tint_rgb`, `.absorption_per_m_rgb`, `.scattering` | - | absolute; replaces the matching scale |
+| `lighting.caustics`, `.exposure`, `.glare` | `[0, 1.3]`, `[0.75, 1.25]`, - | absolute |
+| `lighting.direct_light_scale`, `.ambient_light_scale` | `[0.8, 1.2]` | × the pool's lights |
 | `lighting.sun_azimuth_deg`, `.sun_elevation_deg` | `[0, 360]`, `[35, 80]` | absolute |
+| `lighting.profile` | - | `indoor` / `outdoor`, replaces the pool's |
+| `image.noise_sigma`, `.blur_px` | `[0, 4]`, `[0, 0.8]` | Gaussian RGB noise (8-bit units) and blur |
 | `time_s` | `[0, 600]` | caustic phase |
 | `placement.task_yaw_deg`, `.task_offset_m` | `0`, `0` | rigid jitter of each task about its origin (±) |
 | `placement.groups` | `[]` | lists of task ids that share one jitter, e.g. `[[surface, table]]` (the octagon over the table) |
 | `indicators.latched_probability` | `0.2` | chance each indicator shows its latched colour |
-| `image.noise_sigma`, `.blur_px` | `[0, 4]`, `[0, 0.8]` | Gaussian RGB noise (8-bit units) and blur |
+
+The top-level `water` / `lighting` / `image` / `time_s` are the base. **Environments** are named looks laid over
+it; each sample gets one:
+
+```yaml
+randomize:
+  water: {tint_scale: [0.9, 1.1]}       # base: every environment inherits it
+  environments:
+    mode: weighted                      # weighted (default): drawn by weight; sweep: cycled evenly per task block
+    list:
+    - {id: nominal, weight: 5, water: {scattering_scale: [0.85, 1.2]}}
+    - id: murky
+      weight: 2
+      water: {scattering_scale: [1.4, 2.0], absorption_scale: [1.3, 1.8]}
+      lighting: {caustics: [0, 0.4]}
+      image: {noise_sigma: [1, 5], blur_px: [0.3, 1.2]}
+    sweep:                              # optional grid of fixed values, crossed with every list entry
+      lighting.exposure: [0.7, 1.0, 1.3]
+```
+
+- An environment is defaults, then the base, then its entry, then (with `sweep`) one grid point with each key
+  fixed to its value. Within one environment the latest layer that sets a quantity wins, in either form:
+  `scattering` in an entry replaces an inherited `scattering_scale`, and the other way round.
+- `weighted` draws each sample's environment by weight; `sweep` cycles through them evenly within each task
+  block (with several scenarios, every scenario sees every environment in turn). Weight 0 drops an
+  environment in either mode.
+- Values are checked after merging: scales, scattering, absorption, caustics, exposure, glare, noise and blur
+  are never negative, `tint_rgb` stays within [0, 1], and every `[low, high]` has low <= high.
+- Ids: the entry id, or `<id>/<key>=<value>,...` for sweep points (`base/...` with a sweep but no list). Without
+  `environments` there is one environment, `default`. An entry's weight is shared evenly by its sweep points.
+- Records and shard logs carry `environment` (id); the export summary counts images per environment and the
+  preview shows each tile's environment.
+
+The UWRT specs use four outdoor looks around the calibrated pool: `nominal` (50 %), `clear` (bright midday,
+low turbidity, 20 %), `murky` (scattering ×1.3–1.8, more absorption, weak caustics, blur and noise, 20 %; at
+×1.7 a board 4 m away is already faint, so murkier water would put labels on invisible objects) and `overcast`
+(weak sun, dim, noisier, 10 %).
 
 ## Command line
 
@@ -173,6 +226,10 @@ nereus-dataset generate content/packs/datasets/uwrt_ffc_2026 --out ~/datasets/ff
 nereus-dataset generate content/packs/datasets/uwrt_ffc_2026 --out /tmp/try \
     --task torpedo --count 4 --resolution 960x600
 
+# Every environment of the spec, cycled evenly, to compare their look on one preview sheet.
+nereus-dataset generate content/packs/datasets/uwrt_ffc_2026 --out /tmp/looks \
+    --task torpedo --count 8 --environment-mode sweep
+
 # Several formats from one render.
 nereus-dataset generate content/packs/datasets/uwrt_dfc_2026 --out ~/datasets/dfc \
     --formats yolo-seg,yolo-bbox,yolo-obb --workers 3
@@ -190,13 +247,14 @@ nereus-dataset preview ~/datasets/ffc/render --count 24
 | `plan DATASET --out DIR` | validate everything and write `DIR/job.json` (renders nothing) |
 | `render DIR` | run `nereus-dataset-render DIR/job.json --shard i/N` for `--workers` N (default 2) in parallel, streaming their progress; fails if any shard fails |
 | `export DIR --format F` | records -> one YOLO dataset (default `DIR/<format>`); `--labels` / `--model` re-export with another label pack or model |
-| `preview DIR` | contact sheet of `--count` samples (default 16): class-coloured masks, outlines, boxes, names |
+| `preview DIR` | contact sheet of `--count` samples (default 16): class-coloured masks, outlines, boxes, names; `--environment ID` (globs) for one look at a time |
 | `check-classes LABELS --yolo-config PATH` | compare model class orders with a detector parameter file |
 
 `generate` and `plan` take the same overrides, applied to every selected task: `--task T` (repeatable; `background`
 selects the background block, which is otherwise dropped when `--task` is given), `--count N` (per block),
 `--range-m A B`, `--bearing-deg X`, `--elevation-deg A B` (approach samplers), `--altitude-m A B` (overhead
-samplers), `--resolution native|WxH` and `--seed S`. Sample `k` always draws from its own random stream, so the
+samplers), `--resolution native|WxH`, `--seed S`, `--environment ID` (repeatable, globs: keep only matching
+environments, e.g. `--environment 'murky*'`) and `--environment-mode weighted|sweep`. Sample `k` always draws from its own random stream, so the
 same spec, seed and sample index give the same image whatever the shard count.
 
 ## Output
@@ -220,8 +278,9 @@ DIR/preview.jpg
 ```
 
 Export applies the label pack: instance -> class by its task's patterns and indicator state (a record from a
-camera other than the model's is an error); classes the model lacks are dropped; `shape: outer` fills holes; instances under `min_visible_px` are dropped; images with a
-labelled instance beyond `max_range_m` are skipped and counted. The split is a stable hash of the sample name.
+camera other than the model's is an error); classes the model lacks are dropped; instances under
+`min_visible_px` are dropped; crumbs are removed and the `fragments` rule applied; `shape: outer` fills holes;
+images with a labelled instance beyond `max_range_m` are skipped and counted. The split is a stable hash of the sample name.
 Coordinates are normalized to [0, 1] with 6 decimals:
 
 - `yolo-bbox`: `cls cx cy w h` around the mask's pixels (pixel edges: a box from x = 3 to 7 covers pixels 3..6).

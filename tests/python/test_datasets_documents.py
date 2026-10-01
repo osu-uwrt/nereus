@@ -125,6 +125,37 @@ class SchemaTests(unittest.TestCase):
         dataset["tasks"]["background"] = dataset["tasks"].pop("torpedo")
         self.assertIn("/tasks/background", check_data("dataset", dataset)[0])
 
+    def test_environment_values(self) -> None:
+        def problems(randomize: dict[str, Any]) -> list[str]:
+            dataset = _dataset()
+            dataset["randomize"] = randomize
+            return check_data("dataset", dataset)
+
+        good = {"list": [{"id": "a", "water": {"scattering_scale": [0.5, 1.0]}}]}
+        self.assertEqual(problems({"environments": good}), [])
+        bad = [
+            {"id": "neg", "water": {"scattering_scale": [-0.5, 1.0]}},
+            {"id": "tint", "water": {"tint_rgb": [0.1, 0.2, 1.5]}},
+            {"id": "order", "lighting": {"exposure": [1.2, 0.8]}},
+            {"id": "both", "water": {"scattering": 0.4, "scattering_scale": 1.2}},
+            {"id": "glare", "lighting": {"glare": -1}},
+        ]
+        for entry in bad:
+            found = problems({"environments": {"list": [entry]}})
+            self.assertTrue(found, entry["id"])
+        found = problems({"environments": {"list": [bad[2]]}})
+        self.assertEqual(
+            found,
+            ["/randomize/environments/list/0/lighting/exposure: range low 1.2 exceeds high 0.8"],
+        )
+        # Sweep values are checked once laid into each environment.
+        sweep = {"sweep": {"lighting.caustics": [0.5, -1]}}
+        self.assertTrue(any("caustics" in item for item in problems({"environments": sweep})))
+        typo = {"sweep": {"water.scatering_scale": [1.0]}}
+        self.assertTrue(any("scatering_scale" in item for item in problems({"environments": typo})))
+        both = {"list": [{"id": "a"}, {"id": "a"}]}
+        self.assertIn("duplicate environment 'a'", problems({"environments": both})[0])
+
     def test_load_document_reports_the_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)

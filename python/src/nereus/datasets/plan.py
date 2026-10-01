@@ -16,6 +16,7 @@ from typing import Any
 
 from nereus.packs import PackError, ResolvedScenario, resolve_scenario
 
+from . import _environments as environments
 from ._documents import (
     Course,
     Document,
@@ -51,24 +52,10 @@ ACCEPTANCE_DEFAULTS: dict[str, Any] = {
     "max_attempts": 200,
     "background_max_labelled_px": 0,
 }
+# Randomization kept at the top of the job; water / lighting / image / time_s live in environments.
 RANDOMIZE_DEFAULTS: dict[str, Any] = {
-    "water": {
-        "tint_scale": [0.85, 1.15],
-        "absorption_scale": [0.7, 1.4],
-        "scattering": [0.05, 0.18],
-    },
-    "lighting": {
-        "caustics": [0.0, 1.3],
-        "exposure": [0.75, 1.25],
-        "direct_light_scale": [0.8, 1.2],
-        "ambient_light_scale": [0.8, 1.2],
-        "sun_azimuth_deg": [0, 360],
-        "sun_elevation_deg": [35, 80],
-    },
-    "time_s": [0, 600],
     "placement": {"task_yaw_deg": 0, "task_offset_m": 0, "groups": []},
     "indicators": {"latched_probability": 0.2},
-    "image": {"noise_sigma": [0, 4], "blur_px": [0, 0.8]},
 }
 # Sampler keys a CLI override sets, and the sampler types that take each.
 OVERRIDE_SAMPLERS = {
@@ -91,6 +78,8 @@ class Overrides:
     altitude_m: list[float] | None = None
     resolution: str | None = None  # "native" or "WxH"
     seed: int | None = None
+    environments: list[str] | None = None  # globs over expanded environment ids
+    environment_mode: str | None = None  # weighted | sweep
 
 
 @dataclass
@@ -203,6 +192,33 @@ def _refuse_mixing(out: Path, job: dict[str, Any], documents: list[dict[str, Any
         )
 
 
+def _randomize(randomize: dict[str, Any], overrides: Overrides) -> dict[str, Any]:
+    """Job randomization: placement and indicators, plus every environment fully merged."""
+    found, mode = environments.expand(randomize)
+    if overrides.environments is not None:
+        known = ", ".join(item["id"] for item in found)
+        found = environments.select(found, overrides.environments)
+        if not found:
+            raise PackError(
+                f"--environment: {', '.join(overrides.environments)} match none of {known}"
+            )
+    if overrides.environment_mode is not None:
+        if overrides.environment_mode not in environments.MODES:
+            raise PackError(
+                f"--environment-mode: '{overrides.environment_mode}' is not weighted or sweep"
+            )
+        mode = overrides.environment_mode
+    # Weight 0 switches an environment off, in sweep mode too.
+    found = [item for item in found if item["weight"] > 0]
+    if not found:
+        raise PackError("randomize.environments: every selected environment has weight 0")
+    kept = {key: value for key, value in randomize.items() if key in RANDOMIZE_DEFAULTS}
+    result = merged(RANDOMIZE_DEFAULTS, kept)
+    result["environments"] = found
+    result["environment_mode"] = mode
+    return result
+
+
 def _job_parts(parts: Document, place: Course) -> dict[str, Any]:
     textures = []
     for item in parts.data.get("textures", []):
@@ -310,9 +326,13 @@ def plan(dataset_path: Path, out: Path, overrides: Overrides | None = None) -> P
         "acceptance": {
             "max_range_m": classes.max_range_m,
             **merged(ACCEPTANCE_DEFAULTS, data.get("acceptance", {})),
+            # The label pack's fragment rule, enforced at render time when it rejects.
+            "fragments": "reject" if classes.fragments == "reject" else "allow",
+            "min_fragment_px": classes.min_fragment_px,
+            "min_visible_px": classes.min_visible_px,
         },
         "samples": samples,
-        "randomize": merged(RANDOMIZE_DEFAULTS, data.get("randomize", {})),
+        "randomize": _randomize(data.get("randomize", {}), overrides or Overrides()),
     }
     export = {
         "format": EXPORT_FORMAT,
@@ -347,4 +367,13 @@ def describe(job: dict[str, Any]) -> list[str]:
             f"  {name:<12} {block['count']:>6}  {indices}  {block['sampler']['type']}{where}"
         )
         start = end
+    randomize = job["randomize"]
+    found = randomize["environments"]
+    if randomize["environment_mode"] == "sweep":
+        names = ", ".join(item["id"] for item in found)
+        lines.append(f"  environments (sweep, cycled evenly in each block): {names}")
+    else:
+        total = sum(item["weight"] for item in found)
+        shares = ", ".join(f"{item['id']} {item['weight'] / total:.0%}" for item in found)
+        lines.append(f"  environments (weighted): {shares}")
     return lines

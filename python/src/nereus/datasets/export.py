@@ -236,7 +236,26 @@ class Labelled:
 
     labels: list[Label] = field(default_factory=list)
     dropped_small: int = 0
+    crumbs: int = 0  # pieces under min_fragment_px removed from labelled masks
     far: list[dict[str, Any]] = field(default_factory=list)  # labelled instances beyond range
+    fragmented: list[dict[str, Any]] = field(default_factory=list)  # with fragments: reject
+
+    @property
+    def skipped(self) -> bool:
+        return bool(self.far or self.fragmented)
+
+
+def pieces(mask: Mask, min_px: int) -> tuple[list[Mask], int]:
+    """8-connected pieces of at least ``min_px`` pixels (largest first), and the crumb count."""
+    cv2 = cv2_module()
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(
+        mask.astype(np.uint8), connectivity=8
+    )
+    areas = np.asarray(stats, dtype=np.int64)[1:, cv2.CC_STAT_AREA]
+    order = sorted(range(len(areas)), key=lambda index: -int(areas[index]))
+    kept = [index + 1 for index in order if areas[index] >= min_px]
+    components = np.asarray(labels)
+    return [components == index for index in kept], int(count) - 1 - len(kept)
 
 
 def label_record(record: dict[str, Any], ids: NDArray[np.uint16], classes: ClassMap) -> Labelled:
@@ -258,6 +277,18 @@ def label_record(record: dict[str, Any], ids: NDArray[np.uint16], classes: Class
         if int(np.count_nonzero(mask)) < classes.min_visible_px:
             result.dropped_small += 1
             continue
+        kept, crumbs = pieces(mask, classes.min_fragment_px)
+        result.crumbs += crumbs
+        if not kept:  # nothing but crumbs
+            result.dropped_small += 1
+            continue
+        if len(kept) >= 2 and classes.fragments == "reject":
+            result.fragmented.append(instance)
+            continue
+        if len(kept) >= 2 and classes.fragments == "keep_largest":
+            mask = kept[0]
+        elif crumbs:
+            mask = np.logical_or.reduce(kept)
         if classes.names[cls] in classes.outer:
             mask = fill_holes(mask)
         result.labels.append(Label(cls, mask, instance))
@@ -326,8 +357,11 @@ class Summary:
     counts: list[int]
     backgrounds: int = 0
     skipped_far: list[str] = field(default_factory=list)
+    skipped_fragmented: list[str] = field(default_factory=list)
     dropped_small: int = 0
     dropped_degenerate: int = 0
+    crumbs: int = 0
+    environments: dict[str, int] = field(default_factory=dict)  # images written per environment
 
     def unbalanced(self) -> list[str]:
         """Classes more than 20 % from the mean instance count."""
@@ -347,10 +381,20 @@ class Summary:
         lines.append(f"  backgrounds (no labels): {self.backgrounds}")
         if self.skipped_far:
             lines.append(f"  skipped, labelled instance beyond range: {len(self.skipped_far)}")
+        if self.skipped_fragmented:
+            # Renders made with the same label pack never contain these.
+            lines.append(f"  fragmented images skipped: {len(self.skipped_fragmented)}")
+        if self.crumbs:
+            lines.append(f"  crumbs removed (pieces under min_fragment_px): {self.crumbs}")
         if self.dropped_small:
             lines.append(f"  instances under min_visible_px: {self.dropped_small}")
         if self.dropped_degenerate:
             lines.append(f"  instances without a polygon (slivers): {self.dropped_degenerate}")
+        if self.environments:
+            lines.append(
+                "  environments: "
+                + ", ".join(f"{name} {count}" for name, count in sorted(self.environments.items()))
+            )
         width = max((len(name) for name in self.names), default=0)
         for index, (name, count) in enumerate(zip(self.names, self.counts)):
             lines.append(f"  {index:>3} {name:<{width}} {count:>7}")
@@ -390,7 +434,14 @@ def export(
         if labelled.far:
             summary.skipped_far.append(name)
             continue
+        if labelled.fragmented:
+            summary.skipped_fragmented.append(name)
+            continue
         summary.dropped_small += labelled.dropped_small
+        summary.crumbs += labelled.crumbs
+        environment = record.get("environment")
+        if environment is not None:
+            summary.environments[environment] = summary.environments.get(environment, 0) + 1
         lines = []
         for label in labelled.labels:
             line = line_of(label.mask, label.cls)

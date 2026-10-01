@@ -38,3 +38,8 @@ tasks:
 
 export:
   min_visible_px: 25                # instances with fewer visible pixels (at output resolution) are dropped
+  # One YOLO line per instance cannot describe an object seen as separate pieces (a vinyl through the crate
+  # lattice, a pole behind another pole), so such views are never generated or exported. Pieces under
+  # min_fragment_px are crumbs: removed from the mask and not counted as pieces.
+  fragments: reject
+  min_fragment_px: 25

@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from nereus.datasets.__main__ import main
-from nereus.datasets.plan import RANDOMIZE_DEFAULTS, Overrides, apply_overrides, plan
+from nereus.datasets._environments import DEFAULTS, expand
+from nereus.datasets.plan import Overrides, _randomize, apply_overrides, plan
 from nereus.packs import PackError, resolve_scenario
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -114,12 +115,26 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(job["acceptance"]["max_range_m"], 4.5)
         self.assertEqual(job["acceptance"]["min_target_px"], 40)
         self.assertEqual(job["acceptance"]["max_attempts"], 200)
-        water = job["randomize"]["water"]
-        self.assertEqual(water["scattering"], [0.1, 0.2])
-        self.assertEqual(water["tint_scale"], RANDOMIZE_DEFAULTS["water"]["tint_scale"])
-        self.assertEqual(job["randomize"]["indicators"], {"latched_probability": 0.5})
-        self.assertEqual(job["randomize"]["placement"]["groups"], [])
-        self.assertEqual(job["randomize"]["lighting"], RANDOMIZE_DEFAULTS["lighting"])
+        self.assertEqual(job["acceptance"]["fragments"], "reject")  # the label pack default
+        self.assertEqual(job["acceptance"]["min_fragment_px"], 25)
+        self.assertEqual(job["acceptance"]["min_visible_px"], 25)
+        randomize = job["randomize"]
+        self.assertEqual(
+            sorted(randomize),
+            ["environment_mode", "environments", "indicators", "placement"],
+        )
+        (default,) = randomize["environments"]
+        self.assertEqual((default["id"], default["weight"]), ("default", 1.0))
+        # The absolute scattering replaces the default pool-relative scattering_scale.
+        self.assertEqual(
+            default["water"],
+            {"tint_scale": [0.85, 1.15], "absorption_scale": [0.7, 1.4], "scattering": [0.1, 0.2]},
+        )
+        self.assertEqual(default["lighting"], DEFAULTS["lighting"])
+        self.assertEqual(default["time_s"], [0, 600])
+        self.assertEqual(randomize["environment_mode"], "weighted")
+        self.assertEqual(randomize["indicators"], {"latched_probability": 0.5})
+        self.assertEqual(randomize["placement"]["groups"], [])
         export = json.loads((self.out / "job" / "export.json").read_text())
         self.assertEqual(export["model"], "ffc")
         self.assertEqual(export["labels"], str((self.root / "labels/labels.yaml").resolve()))
@@ -200,6 +215,84 @@ class PlanTests(unittest.TestCase):
             plan(self.root / "spec", self.out, Overrides(seed=2))
         self.assertIn("holds renders of a different job", caught.exception.problems[0])
 
+    def test_environments_list_sweep_and_overrides(self) -> None:
+        spec = self.root / "spec" / "dataset.yaml"
+        text = spec.read_text().split("randomize:")[0]
+        spec.write_text(
+            text
+            + """randomize:
+  water: {scattering_scale: [0.9, 1.1]}
+  environments:
+    list:
+    - {id: nominal, weight: 3}
+    - id: murky
+      water: {absorption_scale: [1.4, 2.0], scattering_scale: [1.3, 1.6]}
+      lighting: {caustics: [0, 0.3], profile: outdoor}
+    sweep:
+      lighting.exposure: [0.7, 1.3]
+"""
+        )
+        job = plan(spec, self.out).job
+        found = job["randomize"]["environments"]
+        self.assertEqual(
+            [(item["id"], item["weight"]) for item in found],
+            [
+                ("nominal/lighting.exposure=0.7", 1.5),
+                ("nominal/lighting.exposure=1.3", 1.5),
+                ("murky/lighting.exposure=0.7", 0.5),
+                ("murky/lighting.exposure=1.3", 0.5),
+            ],
+        )
+        nominal, murky = found[0], found[3]
+        self.assertEqual(nominal["water"]["scattering_scale"], [0.9, 1.1])  # the spec's base
+        self.assertEqual(nominal["lighting"]["exposure"], 0.7)
+        self.assertEqual(nominal["lighting"]["caustics"], [0.0, 1.3])  # default
+        self.assertEqual(murky["water"]["scattering_scale"], [1.3, 1.6])
+        self.assertEqual(murky["lighting"]["exposure"], 1.3)
+        self.assertEqual(murky["lighting"]["profile"], "outdoor")
+        self.assertEqual(sorted(nominal), ["id", "image", "lighting", "time_s", "water", "weight"])
+
+        overrides = Overrides(environments=["murky*"], environment_mode="sweep")
+        job = plan(spec, self.root / "murky", overrides).job
+        self.assertEqual(len(job["randomize"]["environments"]), 2)
+        self.assertEqual(job["randomize"]["environment_mode"], "sweep")
+        with self.assertRaises(PackError) as caught:
+            plan(spec, self.root / "none", Overrides(environments=["clear"]))
+        self.assertIn("match none of nominal/lighting.exposure=0.7", caught.exception.problems[0])
+
+        spec.write_text(spec.read_text().replace("lighting.exposure", "lighting.exposur"))
+        with self.assertRaises(PackError) as caught:
+            plan(spec, self.root / "typo")
+        self.assertIn("'exposur' was unexpected", "\n".join(caught.exception.problems))
+
+    def test_weight_zero_environments_are_dropped(self) -> None:
+        randomize = {
+            "environments": {"mode": "sweep", "list": [{"id": "on"}, {"id": "off", "weight": 0}]}
+        }
+        result = _randomize(randomize, Overrides())
+        self.assertEqual([item["id"] for item in result["environments"]], ["on"])
+        self.assertEqual(result["environment_mode"], "sweep")
+        with self.assertRaises(PackError):
+            _randomize(randomize, Overrides(environments=["off"]))
+
+    def test_environment_layers(self) -> None:
+        found, mode = expand(
+            {
+                "water": {"tint_rgb": [0.1, 0.2, 0.3]},
+                "environments": {
+                    "mode": "sweep",
+                    "list": [{"id": "a"}, {"id": "b", "water": {"tint_scale": 1.1}}],
+                },
+            }
+        )
+        self.assertEqual(mode, "sweep")
+        self.assertEqual(found[0]["water"]["tint_rgb"], [0.1, 0.2, 0.3])
+        self.assertNotIn("tint_scale", found[0]["water"])
+        self.assertEqual(found[1]["water"]["tint_scale"], 1.1)  # the higher layer's form wins
+        self.assertNotIn("tint_rgb", found[1]["water"])
+        sweep_only, _ = expand({"environments": {"sweep": {"time_s": [0, 300]}}})
+        self.assertEqual([item["id"] for item in sweep_only], ["base/time_s=0", "base/time_s=300"])
+
     def test_bad_frame_and_model(self) -> None:
         spec = self.root / "spec" / "dataset.yaml"
         spec.write_text(spec.read_text().replace("slalom_back]", "gate_repair]"))
@@ -223,6 +316,11 @@ class RealSpecTests(unittest.TestCase):
         self.assertEqual(job["camera"]["sensor"], "ffc")
         self.assertEqual(job["acceptance"]["max_range_m"], 5.0)
         self.assertEqual(job["randomize"]["placement"]["groups"], [["surface", "table"]])
+        found = job["randomize"]["environments"]
+        self.assertGreaterEqual(len(found), 3)
+        for item in found:  # pool-relative water: never an absolute scattering
+            self.assertNotIn("scattering", item["water"], item["id"])
+        self.assertEqual(job["acceptance"]["fragments"], "reject")
         tasks = [block["task"] for block in job["samples"]]
         self.assertEqual(tasks[-1], None)
         self.assertIn("torpedo", tasks)

@@ -43,6 +43,8 @@ tasks:
   table: {pill: [icon_pill]}
 export:
   min_visible_px: 10
+  fragments: merge
+  min_fragment_px: 10
 """
 
 WIDTH, HEIGHT = 40, 20
@@ -129,25 +131,40 @@ def write_render(root: Path, model: str = "ffc", folder: str = "render") -> Path
     )
 
     for k, (name, (task, ids, instances)) in enumerate(samples.items()):
-        image = np.full((HEIGHT, WIDTH, 3), 90, np.uint8)
-        cv2.imwrite(str(render / "images" / f"{name}.png"), image)
-        cv2.imwrite(str(render / "ids" / f"{name}.png"), ids)
-        record = {
-            "format": "nereus.dataset_record.v1",
-            "dataset": "test",
-            "sample": k,
-            "name": name,
-            "task": task,
-            "scenario": "s",
-            "scenario_index": 0,
-            "attempts": 1,
-            "image": f"images/{name}.png",
-            "ids": f"ids/{name}.png",
-            "camera": {"sensor": model, "width": WIDTH, "height": HEIGHT},
-            "instances": instances,
-        }
-        (render / "records" / f"{name}.json").write_text(json.dumps(record))
+        write_sample(render, model, k, name, task, ids, instances)
     return render
+
+
+def write_sample(
+    render: Path,
+    model: str,
+    k: int,
+    name: str,
+    task: str | None,
+    ids: Any,
+    instances: list[dict[str, Any]],
+) -> None:
+    image = np.full((HEIGHT, WIDTH, 3), 90, np.uint8)
+    cv2.imwrite(str(render / "images" / f"{name}.png"), image)
+    cv2.imwrite(str(render / "ids" / f"{name}.png"), ids)
+    environment = ["nominal", "murky"][k % 2]
+    record = {
+        "format": "nereus.dataset_record.v1",
+        "dataset": "test",
+        "sample": k,
+        "name": name,
+        "task": task,
+        "scenario": "s",
+        "scenario_index": 0,
+        "attempts": 1,
+        "environment": environment,
+        "environment_index": k % 2,
+        "image": f"images/{name}.png",
+        "ids": f"ids/{name}.png",
+        "camera": {"sensor": model, "width": WIDTH, "height": HEIGHT},
+        "instances": instances,
+    }
+    (render / "records" / f"{name}.json").write_text(json.dumps(record))
 
 
 def _labels(out: Path, name: str) -> list[list[float]]:
@@ -268,6 +285,7 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(summary.backgrounds, 1)
         self.assertEqual(summary.counts, [1, 1, 1, 1])
         self.assertEqual(summary.images["train"], 3)
+        self.assertEqual(summary.environments, {"nominal": 2, "murky": 1})
 
     def test_bbox_obb_and_layout(self) -> None:
         out = self.root / "bbox"
@@ -305,6 +323,42 @@ class ExportTests(unittest.TestCase):
         uneven.counts = [10, 1, 1, 1]
         self.assertEqual(uneven.unbalanced(), ["blood", "circle", "fire", "magnet"])
         self.assertTrue(any(line.startswith("WARNING") for line in uneven.report()))
+
+    def test_fragment_policies(self) -> None:
+        # One fire emoji in three pieces: 100 px, 30 px and a 9 px crumb.
+        ids = np.zeros((HEIGHT, WIDTH), np.uint16)
+        ids[2:12, 2:12] = 1
+        ids[2:7, 20:26] = 1
+        ids[15:18, 30:33] = 1
+        render = write_render(self.root, folder="fragments")
+        write_sample(
+            render,
+            "ffc",
+            4,
+            "torpedo_000004",
+            "torpedo",
+            ids,
+            [_instance(1, "torpedo", "icon_fire")],
+        )
+        for policy, expected in [
+            ("merge", [2, 0.35, 0.35, 0.6, 0.5]),  # both pieces, never the crumb
+            ("keep_largest", [2, 0.175, 0.35, 0.25, 0.5]),
+        ]:
+            labels = self.root / f"{policy}.yaml"
+            text = LABELS.replace("fragments: merge", f"fragments: {policy}")
+            labels.write_text(text.replace("min_fragment_px: 10", "min_fragment_px: 25"))
+            out = self.root / policy
+            summary = export(render, "yolo-bbox", out, labels=labels)
+            np.testing.assert_allclose(_labels(out, "torpedo_000004"), [expected], atol=1e-6)
+            self.assertGreaterEqual(summary.crumbs, 1)
+            self.assertEqual(summary.skipped_fragmented, [])
+        labels = self.root / "reject.yaml"
+        labels.write_text(LABELS.replace("fragments: merge", "fragments: reject"))
+        summary = export(render, "yolo-seg", self.root / "reject", labels=labels)
+        # The split fire of torpedo_000000 (two 24 px pieces) is fragmented too.
+        self.assertEqual(summary.skipped_fragmented, ["torpedo_000000", "torpedo_000004"])
+        self.assertIn("  fragmented images skipped: 2", summary.report())
+        self.assertFalse((self.root / "reject/labels/train/torpedo_000004.txt").exists())
 
     def test_model_camera_must_match_the_render(self) -> None:
         with self.assertRaises(PackError) as caught:
