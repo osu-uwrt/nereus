@@ -243,13 +243,24 @@ TEST(PackScene, ProfiledFloorDrapesStripesAndMeetsTheWalls) {
         geometry.floor_profiles.push_back(slope);
     }
     const auto scene = r::makePoolScene(geometry);
-    // Floor mesh: a grid through both profiles' vertices, on the shallower profile everywhere.
+    // Floor mesh: exactly the shallower profile everywhere, creases included. Every vertex is on the floor,
+    // and so is every point inside every triangle (a mesh cutting across a crease would sit above it).
     const auto &floorMesh = scene.instances[0].mesh->submeshes.at(0);
-    ASSERT_EQ(floorMesh.vertices.size(), floor.profiles()[0].polyline().size() * floor.profiles()[1].polyline().size());
     for (const auto &v : floorMesh.vertices) {
         EXPECT_NEAR(v.position.z(), -depth(v.position), 1e-5);
         EXPECT_GT(v.normal.z(), .85); // this test floor peaks near 27 degrees
     }
+    double worst = 0;
+    for (std::size_t t = 0; t + 2 < floorMesh.indices.size(); t += 3)
+        for (const Eigen::Vector3f &weights :
+             {Eigen::Vector3f(1.f / 3, 1.f / 3, 1.f / 3), Eigen::Vector3f(.6f, .2f, .2f),
+              Eigen::Vector3f(.2f, .6f, .2f), Eigen::Vector3f(.2f, .2f, .6f)}) {
+            Eigen::Vector3f q = Eigen::Vector3f::Zero();
+            for (int c = 0; c < 3; ++c)
+                q += weights[c] * floorMesh.vertices[floorMesh.indices[t + c]].position;
+            worst = std::max(worst, std::abs(q.z() + depth(q)));
+        }
+    EXPECT_LT(worst, 1e-4);
     // Each wall reaches the deepest floor along its foot, plus the deck.
     const auto height = [&](std::size_t i) { return scene.instances[i].transform.col(2).head<3>().norm(); };
     EXPECT_NEAR(height(1), 5 + geometry.deck_height, 1e-5); // y = 0

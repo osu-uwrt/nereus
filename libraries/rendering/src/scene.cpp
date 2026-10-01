@@ -52,20 +52,60 @@ std::pair<std::vector<float>, std::vector<float>> floorGrid(const PoolGeometry &
     }
     return {xs, ys};
 }
-// Floor mesh over a profiled floor: a grid through every profile vertex, smooth normals.
+// Floor mesh over a profiled floor, exact for its profiles' polylines. The grid runs through every profile
+// vertex, so on each cell every profile is a plane; the cell splits into convex pieces, one per profile, where
+// that profile is the shallowest. A crease between profiles then lies on piece edges instead of being cut
+// across (which would lift the mesh above the floor there and bury the stripes draped on it).
 std::shared_ptr<const MeshAsset> floorMesh(const PoolGeometry &p) {
     const auto [xs, ys] = floorGrid(p);
+    struct Plane { // depth = a + bx * x + by * y over one cell
+        float a, bx, by;
+        float at(const Eigen::Vector2f &q) const {
+            return a + bx * q.x() + by * q.y();
+        }
+    };
     auto result = std::make_shared<MeshAsset>();
     Submesh mesh;
-    for (float y : ys)
-        for (float x : xs)
-            mesh.vertices.push_back({{x, y, -floorDepth(p, x, y)}, floorNormal(p, x, y), {x, y}});
-    const auto columns = static_cast<std::uint32_t>(xs.size());
-    for (std::uint32_t j = 0; j + 1 < ys.size(); ++j)
-        for (std::uint32_t i = 0; i + 1 < columns; ++i) {
-            const std::uint32_t a = j * columns + i, b = a + 1, c = a + columns, d = c + 1;
-            for (auto k : {a, b, d, a, d, c}) // counter-clockwise seen from above
-                mesh.indices.push_back(k);
+    std::vector<Plane> planes(p.floor_profiles.size());
+    for (std::size_t j = 0; j + 1 < ys.size(); ++j)
+        for (std::size_t i = 0; i + 1 < xs.size(); ++i) {
+            const float x0 = xs[i], x1 = xs[i + 1], y0 = ys[j], y1 = ys[j + 1];
+            for (std::size_t k = 0; k < planes.size(); ++k) {
+                const auto &profile = p.floor_profiles[k];
+                const float s0 = profile.along_x ? x0 : y0, s1 = profile.along_x ? x1 : y1;
+                const float d0 = profileDepth(profile.polyline, s0), d1 = profileDepth(profile.polyline, s1);
+                const float slope = (d1 - d0) / (s1 - s0);
+                planes[k] = profile.along_x ? Plane{d0 - slope * s0, slope, 0} : Plane{d0 - slope * s0, 0, slope};
+            }
+            for (std::size_t k = 0; k < planes.size(); ++k) {
+                // Counter-clockwise seen from above; clipping keeps the order.
+                std::vector<Eigen::Vector2f> piece{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}};
+                for (std::size_t m = 0; m < planes.size() && piece.size() >= 3; ++m) {
+                    if (m == k)
+                        continue;
+                    // Keep where profile k is shallower; ties go to the earlier profile.
+                    const auto excess = [&](const Eigen::Vector2f &q) { return planes[k].at(q) - planes[m].at(q); };
+                    const auto inside = [&](float f) { return m < k ? f < 0 : f <= 0; };
+                    std::vector<Eigen::Vector2f> clipped;
+                    for (std::size_t v = 0; v < piece.size(); ++v) {
+                        const Eigen::Vector2f &a = piece[v], &b = piece[(v + 1) % piece.size()];
+                        const float fa = excess(a), fb = excess(b);
+                        if (inside(fa))
+                            clipped.push_back(a);
+                        if (inside(fa) != inside(fb))
+                            clipped.push_back(a + (b - a) * (fa / (fa - fb)));
+                    }
+                    piece = std::move(clipped);
+                }
+                if (piece.size() < 3)
+                    continue;
+                const auto start = static_cast<std::uint32_t>(mesh.vertices.size());
+                for (const auto &q : piece)
+                    mesh.vertices.push_back({{q.x(), q.y(), -planes[k].at(q)}, floorNormal(p, q.x(), q.y()), q});
+                for (std::uint32_t v = 1; v + 1 < piece.size(); ++v)
+                    for (auto index : {start, start + v, start + v + 1})
+                        mesh.indices.push_back(index);
+            }
         }
     result->minimum = {0, 0, -p.dimensions.z()};
     result->maximum = {p.dimensions.x(), p.dimensions.y(), 0};
