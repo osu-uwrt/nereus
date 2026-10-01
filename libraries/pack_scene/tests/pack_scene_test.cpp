@@ -368,6 +368,24 @@ TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
         lining += i > 12 && instance.material == r::SurfaceMaterial::Tiles;
     }
     EXPECT_GE(lining, 4u); // the wall's other pieces and the lining
+    // No two tiled wall pieces share volume: overlapping faces would fight (the lining showing through the wall).
+    std::vector<std::pair<Eigen::Vector3f, Eigen::Vector3f>> tiled;
+    for (const auto i : layout.walls) {
+        const auto &instance = scene.instances[i];
+        if (instance.material != r::SurfaceMaterial::Tiles)
+            continue;
+        const Eigen::Vector3f c = instance.transform.col(3).head<3>();
+        const Eigen::Vector3f half(instance.transform.col(0).head<3>().norm() / 2,
+                                   instance.transform.col(1).head<3>().norm() / 2,
+                                   instance.transform.col(2).head<3>().norm() / 2);
+        tiled.emplace_back(c - half, c + half);
+    }
+    for (std::size_t a = 0; a < tiled.size(); ++a)
+        for (std::size_t b = a + 1; b < tiled.size(); ++b) {
+            const Eigen::Vector3f overlap =
+                (tiled[a].second.cwiseMin(tiled[b].second) - tiled[a].first.cwiseMax(tiled[b].first)).cwiseMax(0);
+            EXPECT_LT(overlap.prod(), 1e-6f) << "tiled pieces " << a << " and " << b << " overlap";
+        }
     // Every wall piece comes before the wall markings, which are drawn after the surface they lie on.
     std::size_t markings = 0;
     for (std::size_t i = 0; i < scene.instances.size(); ++i)

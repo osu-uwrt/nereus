@@ -455,12 +455,16 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
     for (float x : {-.10f, length + .10f})
         sideBox(x < 0 ? PoolSide::XMin : PoolSide::XMax, {x, width / 2, deck + .02f}, {.22f, width, .055f}, copingColor,
                 SurfaceMaterial::Asset);
-    // Line each recess: back, ends, sill and (below the deck) lintel, .3 m thick like the walls.
+    // Line each recess: back, ends, sill and (below the deck) lintel, .3 m thick like the walls. The wall's own
+    // .3 m (and the deck's) already bound the opening there, so the lining only covers what lies behind them:
+    // overlapping a wall or deck face would make the two fight.
     for (const auto &r : p.recesses) {
         const float a0 = std::min(r.from.x(), r.to.x()), a1 = std::max(r.from.x(), r.to.x());
         const float z0 = std::min(r.from.y(), r.to.y()), z1 = std::max(r.from.y(), r.to.y()), d = r.depth;
-        // Under the deck surface where the recess opens through it, so the lining never shows on the deck top.
-        const float top = std::min(z1 + .3f, deck - .005f);
+        constexpr float wall = .3f;
+        if (d <= wall)
+            continue;                                           // the wall pieces line it entirely
+        const float top = z1 >= deck ? deck - wall : z1 + wall; // under the deck slab when open through it
         const auto lining = [&](float b0, float b1, float n0, float n1, float c0, float c1) {
             const Aabb pool = convert(fromSide, r.side, {{b0, n0, c0}, {b1, n1, c1}});
             const Eigen::Vector3f center = (pool.first + pool.second) / 2, size = pool.second - pool.first;
@@ -469,12 +473,12 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
                                   p.tile_color,
                                   SurfaceMaterial::Tiles});
         };
-        lining(a0 - .3f, a1 + .3f, d, d + .3f, z0 - .3f, top);
-        lining(a0 - .3f, a0, 0, d, z0 - .3f, top);
-        lining(a1, a1 + .3f, 0, d, z0 - .3f, top);
-        lining(a0, a1, 0, d, z0 - .3f, z0);
+        lining(a0 - wall, a1 + wall, d, d + wall, z0 - wall, top);
+        lining(a0 - wall, a0, wall, d, z0 - wall, top);
+        lining(a1, a1 + wall, wall, d, z0 - wall, top);
+        lining(a0, a1, wall, d, z0 - wall, z0);
         if (z1 < deck)
-            lining(a0, a1, 0, d, z1, z1 + .3f);
+            lining(a0, a1, wall, d, z1, z1 + wall);
     }
     PoolLayout groups;
     groups.floor = {0};
