@@ -22,6 +22,29 @@ struct ImageCapture {
     std::vector<std::uint8_t> rgb;
     std::vector<float> depth;
 };
+// Label pass: per scene instance an id (24 bits; 0 = occludes only, never labelled), per submesh a fixed part
+// value or an 8-bit part map sampled nearest at the submesh UVs (same row convention as diffuse textures:
+// uv (0, 0) is the bottom-left of the PNG, wrap repeats). Pixel = id << 8 | part (part 0 = the instance with
+// no part there). Water surface and Marking instances are not drawn; Clear submeshes (material Clear, or
+// untextured Asset with base alpha < .999) are drawn only when their instance id is nonzero (a labelled clear
+// cover). Diffuse texels with alpha < .4 and UV cutouts discard as in colour, except that a cutout fragment on
+// a part-mapped submesh of a nonzero id is kept where the map is nonzero (a ring's value fills its hole); id 0
+// writes 0 everywhere. Depth-tested; depth is nonlinear [0,1] like ImageCapture, from the same vertex
+// arithmetic as the colour pass (equal where both draw the same fragments on the drivers tested). Rows start
+// at the bottom.
+struct SubmeshLabel {
+    std::uint8_t part = 0;
+    std::optional<std::filesystem::path> part_map; // 8-bit PNG (gray, or first channel); overrides `part`
+};
+struct InstanceLabel {
+    std::uint32_t id = 0;                // < 2^24
+    std::vector<SubmeshLabel> submeshes; // empty = every submesh part 0; else one per submesh
+};
+struct LabelCapture {
+    int width = 0, height = 0;
+    std::vector<std::uint32_t> ids;
+    std::vector<float> depth;
+};
 // Context-owned OpenGL 3.3 renderer. Caller initializes GLEW, keeps the same context
 // current on the owning thread, and destroys Renderer before the context.
 // Does not create a window, read a clock, or own simulation/transport state.
@@ -43,6 +66,13 @@ class Renderer {
     // Requires the most recent draw to have completed successfully. Resets pixel-pack
     // state like capture() and leaves framebuffer zero bound for reading.
     ImageCapture captureImage(bool color = true, bool depth = true) const;
+    // labels: one per scene.instances entry (same order). Independent of draw(): may be called before or
+    // after it, renders into its own target and leaves the last draw's frame and captures intact. Meshes and
+    // diffuse textures share draw()'s cache (uploaded once for both; released by the next full draw when no
+    // longer drawn there); part maps stay cached while the latest call references them (visible or not), and
+    // every referenced map is loaded, so a bad path throws. Leaves framebuffer zero bound. Validates like draw().
+    LabelCapture drawLabels(const Scene &, const std::vector<InstanceLabel> &labels, const View &, int width,
+                            int height);
     // Terminal cleanup after context loss: release CPU state without any GL calls.
     // The host must destroy the context to reclaim its GPU allocations. Idempotent;
     // drawing/capture is no longer allowed after this call.

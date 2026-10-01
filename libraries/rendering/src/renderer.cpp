@@ -273,6 +273,32 @@ std::shared_ptr<Texture> uploadTexture(const std::filesystem::path &path, int ma
     checkGl("texture upload");
     return texture;
 }
+// Label part map: first channel of an 8-bit PNG, rows flipped exactly like uploadTexture so it lines up
+// texel-for-texel with a diffuse texture of the same size. Integer texture: nearest, no mipmaps, repeat.
+std::shared_ptr<Texture> uploadPartMap(const std::filesystem::path &path, int maximum_side) {
+    const auto image = loadPng(path, maximum_side);
+    std::vector<std::uint8_t> values(static_cast<std::size_t>(image.width) * image.height);
+    for (std::size_t i = 0; i < values.size(); ++i)
+        values[i] = image.rgba[4 * i];
+    auto texture = std::make_shared<Texture>();
+    glGenTextures(1, &texture->id);
+    glBindTexture(GL_TEXTURE_2D, texture->id);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    glPixelStorei(GL_UNPACK_SWAP_BYTES, GL_FALSE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, image.width, image.height, 0, GL_RED_INTEGER, GL_UNSIGNED_BYTE,
+                 values.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    checkGl("part map upload");
+    return texture;
+}
 using TextureLoader = std::function<std::shared_ptr<Texture>(const std::filesystem::path &)>;
 struct Buffers {
     GLuint vao = 0, vbo = 0, ebo = 0;
@@ -464,6 +490,61 @@ struct Frame {
         bloom[1].swap(o.bloom[1]);
     }
 };
+// Label pass target: R32UI ids + 24-bit depth, separate from the colour frame so a label pass never
+// disturbs draw()'s images or captures.
+struct LabelTarget {
+    GLuint fbo = 0, ids = 0, depth = 0;
+    int width = 0, height = 0;
+    LabelTarget() = default;
+    LabelTarget(const LabelTarget &) = delete;
+    LabelTarget &operator=(const LabelTarget &) = delete;
+    ~LabelTarget() {
+        release();
+    }
+    void release() {
+        if (fbo)
+            glDeleteFramebuffers(1, &fbo);
+        if (ids)
+            glDeleteTextures(1, &ids);
+        if (depth)
+            glDeleteTextures(1, &depth);
+        fbo = ids = depth = 0;
+        width = height = 0;
+    }
+    void resize(int w, int h) {
+        if (fbo && width == w && height == h)
+            return;
+        release();
+        const auto attach = [w, h](GLuint &id, GLenum internal, GLenum format, GLenum type, GLenum attachment) {
+            glGenTextures(1, &id);
+            glBindTexture(GL_TEXTURE_2D, id);
+            glTexImage2D(GL_TEXTURE_2D, 0, internal, w, h, 0, format, type, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, GL_TEXTURE_2D, id, 0);
+        };
+        glGenFramebuffers(1, &fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        attach(ids, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, GL_COLOR_ATTACHMENT0);
+        attach(depth, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_FLOAT, GL_DEPTH_ATTACHMENT);
+        glDrawBuffer(GL_COLOR_ATTACHMENT0);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        try {
+            checkGl("label target"); // never leave an allocation error pending for the next draw()
+        } catch (...) {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            release();
+            throw;
+        }
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            release();
+            throw std::runtime_error("label framebuffer incomplete");
+        }
+        width = w;
+        height = h;
+    }
+};
 bool affine(const Eigen::Matrix4f &m) {
     return m.allFinite() && m.row(3).isApprox(Eigen::RowVector4f(0, 0, 0, 1)) &&
            m.topLeftCorner<3, 3>().fullPivLu().isInvertible();
@@ -472,7 +553,32 @@ bool affine(const Eigen::Matrix4f &m) {
 struct Renderer::Resources {
     // Every new owned GL object must also be zeroed by abandon() after context loss.
     GLuint sceneProgram = 0, waterProgram = 0, shadowProgram = 0, postProgram = 0, bloomProgram = 0, focusProgram = 0,
-           pointsProgram = 0, quad = 0;
+           pointsProgram = 0, quad = 0, labelProgram = 0;
+    std::filesystem::path shaderRoot; // label.vert/frag compile on the first label pass
+    LabelTarget labelTarget;
+    // Part maps referenced by the latest label pass (released when a later pass stops using them).
+    struct PartMap {
+        std::shared_ptr<Texture> texture;
+        bool used = false;
+    };
+    std::map<std::filesystem::path, PartMap> partMaps;
+    GLuint partMap(const std::filesystem::path &path) {
+        std::error_code error;
+        auto key = std::filesystem::weakly_canonical(path, error);
+        if (error)
+            key = path.lexically_normal();
+        auto &entry = partMaps[key];
+        if (!entry.texture) {
+            try {
+                entry.texture = uploadPartMap(key, std::min(maximum_texture, maximum_image_side));
+            } catch (...) {
+                partMaps.erase(key);
+                throw;
+            }
+        }
+        entry.used = true;
+        return entry.texture->id;
+    }
     struct PointBuffer {
         std::shared_ptr<const PointData> source;
         GLuint vao = 0, vbo = 0;
@@ -571,8 +677,8 @@ struct Renderer::Resources {
     ~Resources() {
         for (auto &entry : pointBuffers)
             releasePoints(entry.second);
-        for (auto id :
-             {sceneProgram, waterProgram, shadowProgram, postProgram, bloomProgram, focusProgram, pointsProgram})
+        for (auto id : {sceneProgram, waterProgram, shadowProgram, postProgram, bloomProgram, focusProgram,
+                        pointsProgram, labelProgram})
             if (id)
                 glDeleteProgram(id);
         if (quad)
@@ -580,7 +686,11 @@ struct Renderer::Resources {
     }
     void abandon() noexcept {
         sceneProgram = waterProgram = shadowProgram = postProgram = bloomProgram = focusProgram = pointsProgram = quad =
-            0;
+            labelProgram = 0;
+        labelTarget.fbo = labelTarget.ids = labelTarget.depth = 0;
+        for (auto &entry : partMaps)
+            if (entry.second.texture)
+                entry.second.texture->id = 0;
         for (auto &entry : pointBuffers)
             entry.second.vao = entry.second.vbo = 0;
         pointBuffers.clear();
@@ -607,6 +717,7 @@ struct Renderer::Resources {
         }
     }
     void initialize(const std::filesystem::path &root) {
+        shaderRoot = root;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximum_texture);
         glGetIntegerv(GL_MAX_CLIP_DISTANCES, &clip_distances);
         if (maximum_texture < 4096)
@@ -1159,6 +1270,134 @@ ImageCapture Renderer::captureImage(bool color, bool depth) const {
     }
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     checkGl("image capture");
+    return result;
+}
+LabelCapture Renderer::drawLabels(const Scene &scene, const std::vector<InstanceLabel> &labels, const View &view,
+                                  int width, int height) {
+    if (!resources_)
+        throw std::logic_error("renderer context was abandoned");
+    auto &r = *resources_;
+    if (width <= 0 || height <= 0 || width > r.maximum_texture || height > r.maximum_texture || !view.eye.allFinite() ||
+        !affine(view.view) || !view.projection.allFinite() || !view.projection.fullPivLu().isInvertible())
+        throw std::invalid_argument("invalid label view or size");
+    if (labels.size() != scene.instances.size())
+        throw std::invalid_argument("label pass needs one label per scene instance");
+    // Validated and uploaded through draw()'s cache (marking entries used is harmless: draw() resets the flags).
+    std::vector<Object> objects;
+    objects.reserve(scene.instances.size());
+    for (std::size_t i = 0; i < scene.instances.size(); ++i) {
+        objects.push_back(r.instance(scene.instances[i]));
+        const auto &label = labels[i];
+        if (label.id >= (1u << 24))
+            throw std::invalid_argument("label id exceeds 24 bits");
+        if (!label.submeshes.empty() && label.submeshes.size() != objects.back().meshes.size())
+            throw std::invalid_argument("label submeshes must be empty or one per mesh submesh");
+    }
+    struct Guard {
+        ~Guard() {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+    } guard;
+    if (!r.labelProgram)
+        r.labelProgram = program(r.shaderRoot, "label");
+    // Resolve every part map up front, visible or not: a bad path always throws, and maps of off-screen
+    // submeshes stay cached for the next pass instead of being evicted and decoded again.
+    for (auto &entry : r.partMaps)
+        entry.second.used = false;
+    std::vector<std::vector<GLuint>> maps(labels.size());
+    for (std::size_t i = 0; i < labels.size(); ++i)
+        for (const auto &part : labels[i].submeshes)
+            maps[i].push_back(part.part_map ? r.partMap(*part.part_map) : 0);
+    r.labelTarget.resize(width, height);
+    glDisable(GL_COLOR_LOGIC_OP);
+    for (GLint i = 0; i < r.clip_distances; ++i)
+        glDisable(GL_CLIP_DISTANCE0 + i);
+    glDisable(GL_DEPTH_CLAMP);
+    glFrontFace(GL_CCW);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_RASTERIZER_DISCARD);
+    glDisable(GL_PRIMITIVE_RESTART);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthRange(0, 1);
+    glDepthMask(GL_TRUE);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    for (GLuint unit = 0; unit < 2; ++unit)
+        glBindSampler(unit, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, r.labelTarget.fbo);
+    glViewport(0, 0, width, height);
+    const GLuint none[4] = {0, 0, 0, 0};
+    const GLfloat far = 1;
+    glClearBufferuiv(GL_COLOR, 0, none);
+    glClearBufferfv(GL_DEPTH, 0, &far);
+    const auto p = r.labelProgram;
+    glUseProgram(p);
+    const auto viewMatrix = matrix(view.view), projection = matrix(view.projection);
+    uniform(p, "view", viewMatrix);
+    uniform(p, "projection", projection);
+    integer(p, "albedo", 0);
+    integer(p, "partMap", 1);
+    const auto viewProjection = projection * viewMatrix;
+    // Same order and Clear rule as drawScene: opaque submeshes, then Clear ones (labelled covers only).
+    for (int clear = 0; clear < 2; ++clear)
+        for (std::size_t i = 0; i < objects.size(); ++i) {
+            const auto &o = objects[i];
+            const auto &label = labels[i];
+            if (!o.visible || o.material == 7)
+                continue;
+            const Frustum frustum(viewProjection * o.transform);
+            bool modelBound = false;
+            for (std::size_t k = 0; k < o.meshes.size(); ++k) {
+                const auto &m = o.meshes[k];
+                const int material = o.material == 0 && m->color.a < .999f ? 5 : o.material;
+                if ((material == 5) != bool(clear) || (clear && label.id == 0))
+                    continue;
+                if (!frustum.intersects(m->bounds))
+                    continue;
+                if (!modelBound) {
+                    uniform(p, "model", o.transform);
+                    glUniform1ui(glGetUniformLocation(p, "id"), label.id);
+                    modelBound = true;
+                }
+                const SubmeshLabel *part = label.submeshes.empty() ? nullptr : &label.submeshes[k];
+                const GLuint map = part ? maps[i][k] : 0;
+                glUniform1ui(glGetUniformLocation(p, "part"), part ? part->part : 0u);
+                integer(p, "hasPartMap", map != 0);
+                bindTexture(map, 1);
+                integer(p, "hasTexture", m->texture != 0);
+                bindTexture(m->texture, 0);
+                integer(p, "holeCount", int(m->holes.size()));
+                if (!m->holes.empty())
+                    glUniform3fv(glGetUniformLocation(p, "holes"), static_cast<GLsizei>(m->holes.size()),
+                                 glm::value_ptr(m->holes[0]));
+                m->draw();
+            }
+        }
+    glBindVertexArray(0);
+    for (auto it = r.partMaps.begin(); it != r.partMaps.end();)
+        it = it->second.used ? std::next(it) : r.partMaps.erase(it);
+    LabelCapture result;
+    result.width = width;
+    result.height = height;
+    const auto pixels = static_cast<std::size_t>(width) * height;
+    result.ids.resize(pixels);
+    result.depth.resize(pixels);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    glPixelStorei(GL_PACK_SWAP_BYTES, GL_FALSE);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, r.labelTarget.fbo);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    glReadPixels(0, 0, width, height, GL_RED_INTEGER, GL_UNSIGNED_INT, result.ids.data());
+    glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, result.depth.data());
+    checkGl("label pass");
     return result;
 }
 } // namespace nereus::rendering

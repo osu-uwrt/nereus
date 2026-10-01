@@ -352,6 +352,7 @@ void PackScene::buildPool() {
     pool_stripes_ = geometry.markings;
     pool_floor_ = std::move(layout.floor);
     pool_walls_ = std::move(layout.walls);
+    sources_.assign(static_.instances.size(), StaticSource{"pool", {}, {}, {}, {}, {}, 0});
     // Mesh fixtures from the pool's own assets (stairs, rails, grates), after the generated pool geometry.
     for (const auto &fixture : model.meshes) {
         Matrix4d pool_from_mesh = Matrix4d::Identity();
@@ -363,6 +364,7 @@ void PackScene::buildPool() {
                          Eigen::Affine3d(Eigen::Translation3d(0, 0, geometry.water_level)).matrix() * pool_from_mesh);
         (fixture.on_floor ? pool_floor_ : pool_walls_).push_back(static_.instances.size());
         static_.instances.push_back(std::move(placed));
+        sources_.push_back({"pool", {}, {}, fixture.asset, {}, {}, 0});
     }
     pool_instances_ = static_.instances.size();
     pool_record_ = {{"dimensions_m", {geometry.dimensions[0], geometry.dimensions[1], geometry.dimensions[2]}},
@@ -400,9 +402,9 @@ void PackScene::buildTasks() {
                     visual.task = id;
                     visual.prop = propId;
                     visual.asset = parameters.at("visual_asset").get<std::string>();
+                    visual.frame = parameters.at("frame").get<std::string>();
                     visual.mesh = mesh("tasks", visual.asset);
-                    visual.world_from_asset_at_reset =
-                        toMatrix(spatial::compose(world_task, frames.at(parameters.at("frame").get<std::string>())));
+                    visual.world_from_asset_at_reset = toMatrix(spatial::compose(world_task, frames.at(visual.frame)));
                     props_.push_back(std::move(visual));
                 } else {
                     unrendered_.push_back(id + "/" + propId);
@@ -436,7 +438,8 @@ void PackScene::buildTasks() {
                 panel = std::move(spec);
             }
             std::vector<std::size_t> counts(panel ? panel->faces_x.size() : 0, 0);
-            for (const auto &visual : visuals) {
+            for (std::size_t index = 0; index < visuals.size(); ++index) {
+                const auto &visual = visuals[index];
                 const auto asset = visual.at("asset").get<std::string>();
                 const auto texture = visual.value("texture", std::string());
                 if (!texture.empty())
@@ -446,8 +449,8 @@ void PackScene::buildTasks() {
                     warn(where + " visual '" + asset + "' has no readable asset");
                     continue;
                 }
-                const auto task_asset =
-                    spatial::compose(frames.at(visual.at("frame").get<std::string>()), placement(visual));
+                const auto frame = visual.at("frame").get<std::string>();
+                const auto task_asset = spatial::compose(frames.at(frame), placement(visual));
                 if (panel) {
                     panel->asset_to_panel = toMatrix(task_asset).cast<float>();
                     try {
@@ -493,6 +496,7 @@ void PackScene::buildTasks() {
                     indicators_.push_back(std::move(follower));
                 }
                 static_.instances.push_back(std::move(item));
+                sources_.push_back({"task", id, propId, asset, texture, frame, index});
             }
             if (panel) {
                 Json faces = Json::array(), triangles = Json::array();
@@ -523,6 +527,7 @@ void PackScene::buildEquipment() {
             continue; // non-strict: skipped and warned by mesh()
         equipment_.push_back(static_.instances.size());
         static_.instances.push_back(std::move(item));
+        sources_.push_back({"equipment", {}, {}, placed.at("asset").get<std::string>(), {}, {}, 0});
     }
 }
 

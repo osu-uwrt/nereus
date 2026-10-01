@@ -135,6 +135,9 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
             aiGetMaterialColor(material, AI_MATKEY_COLOR_DIFFUSE, &color);
             float opacity = 1;
             material->Get(AI_MATKEY_OPACITY, opacity);
+            aiString name;
+            if (material->Get(AI_MATKEY_NAME, name) == AI_SUCCESS)
+                mesh.material.name = name.C_Str();
             mesh.material.base_color = {color.r, color.g, color.b, std::min(color.a, opacity)};
             if (!mesh.material.base_color.allFinite() || !std::isfinite(opacity) ||
                 (mesh.material.base_color.array() < 0).any() || mesh.material.base_color.w() > 1)

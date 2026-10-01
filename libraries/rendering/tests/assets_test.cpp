@@ -342,6 +342,9 @@ TEST(PerforatePanel, RobosubTorpedoSeparatesFrameBackingAndTexturedFront) {
     EXPECT_EQ(result.face_triangles, std::vector<std::size_t>({2, 2}));
     // loadMesh yields the frame (which also holds the two backing triangles), then the front quad.
     ASSERT_EQ(source.submeshes.size(), 2U);
+    // Material names are Assimp's: for COLLADA the <material name> attribute ("Material.001"), not its id.
+    EXPECT_EQ(source.submeshes[0].material.name, "Material.001");
+    EXPECT_EQ(source.submeshes[1].material.name, "Material.002");
     EXPECT_FALSE(source.submeshes[0].material.diffuse_texture);
     EXPECT_TRUE(source.submeshes[1].material.diffuse_texture);
     ASSERT_EQ(result.mesh.submeshes.size(), 3U);

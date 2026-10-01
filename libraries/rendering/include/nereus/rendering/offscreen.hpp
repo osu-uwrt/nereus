@@ -19,6 +19,9 @@ class OffscreenRenderer {
     OffscreenRenderer &operator=(const OffscreenRenderer &) = delete;
     ImageCapture capture(const Scene &, const View &, const Appearance &, float time, int width, int height,
                          bool color = true, bool depth = true);
+    // Renderer::drawLabels on this host's context (does not disturb capture()).
+    LabelCapture captureLabels(const Scene &, const std::vector<InstanceLabel> &labels, const View &, int width,
+                               int height);
     const std::string &device() const;
 
   private:

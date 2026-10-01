@@ -360,11 +360,53 @@ TEST_F(RendererImage, ImportedTaskAssetWithTextureRenders) {
     EXPECT_LT(image.depth[index(image, 48, 30)], 1.f) << "board must occupy the image centre";
 }
 
+TEST_F(RendererImage, LabelPassBetweenDrawsLeavesFramesAndCapturesUnchanged) {
+    std::vector<std::uint8_t> pixels = {255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255};
+    const auto file = directory / "quadrants.png";
+    writePng(file, 2, 2, 3, pixels);
+    r::Scene both = scene(quad(file));
+    r::Instance box;
+    box.mesh = r::makeBoxMesh();
+    box.transform(0, 3) = -1.5f;
+    both.instances.push_back(box);
+    auto shadowed = plain();
+    shadowed.shadows = true;
+    r::Renderer fresh(NEREUS_RENDERING_SHADERS);
+    // A label pass needs no frame and does not make one.
+    const auto first = fresh.drawLabels(both, {{1, {}}, {2, {}}}, view(), 48, 40);
+    EXPECT_EQ(first.ids[20 * 48 + 24], 1u << 8);
+    EXPECT_THROW(fresh.captureImage(), std::logic_error);
+    fresh.draw(both, view(1.2f, 48.f / 40), shadowed, 2, 48, 40);
+    const auto image = fresh.captureImage();
+    const auto full = fresh.capture();
+    // Different size and scene subset: the label target is separate from the colour frame.
+    const auto labels = fresh.drawLabels(scene(quad()), {{7, {{3, std::nullopt}}}}, view(), 17, 9);
+    EXPECT_EQ(labels.ids.size(), 17u * 9);
+    EXPECT_EQ(labels.ids[4 * 17 + 8], 7u << 8 | 3);
+    const auto again = fresh.captureImage();
+    EXPECT_EQ(again.rgb, image.rgb);
+    EXPECT_EQ(again.depth, image.depth);
+    EXPECT_EQ(fresh.capture().rgba, full.rgba);
+    fresh.draw(both, view(1.2f, 48.f / 40), shadowed, 2, 48, 40);
+    const auto redrawn = fresh.captureImage();
+    EXPECT_EQ(redrawn.rgb, image.rgb);
+    EXPECT_EQ(redrawn.depth, image.depth);
+    // Against a renderer that never ran a label pass (textured quad, shadows on).
+    r::Renderer baseline(NEREUS_RENDERING_SHADERS);
+    baseline.draw(both, view(1.2f, 48.f / 40), shadowed, 2, 48, 40);
+    const auto expected = baseline.captureImage();
+    EXPECT_EQ(image.rgb, expected.rgb);
+    EXPECT_EQ(image.depth, expected.depth);
+}
+
 TEST_F(RendererImage, AbandonContextReleasesCpuOwnersWithoutAContextAndIsTerminal) {
     r::Renderer lost(NEREUS_RENDERING_SHADERS);
     auto mesh = quad();
     std::weak_ptr<const r::MeshAsset> retained = mesh;
     lost.draw(scene(mesh), view(), plain(), 0, 16, 16);
+    const auto parts = directory / "parts.png";
+    writePng(parts, 2, 2, 3, std::vector<std::uint8_t>(2 * 2 * 3, 3));
+    lost.drawLabels(scene(mesh), {{1, {{0, parts}}}}, view(), 16, 16); // label target and a part map loaded
     mesh.reset();
     EXPECT_FALSE(retained.expired());
     glfwMakeContextCurrent(nullptr);
@@ -374,6 +416,7 @@ TEST_F(RendererImage, AbandonContextReleasesCpuOwnersWithoutAContextAndIsTermina
     EXPECT_THROW(lost.capture(), std::logic_error);
     EXPECT_THROW(lost.captureImage(), std::logic_error);
     EXPECT_THROW(lost.draw(scene(quad()), view(), plain(), 0, 16, 16), std::logic_error);
+    EXPECT_THROW(lost.drawLabels(scene(quad()), {{}}, view(), 16, 16), std::logic_error);
     // This test deliberately abandons GPU names. The fixture destroys their owning
     // context after the suite, just as the offscreen host does after a lost context.
     glfwMakeContextCurrent(context->window);

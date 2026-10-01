@@ -443,3 +443,70 @@ TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
     geometry.recesses[0].depth = 0;
     EXPECT_THROW(r::makePoolScene(geometry), std::invalid_argument);
 }
+
+// staticSources() is parallel to staticScene(): pool geometry first, then every task visual in document order
+// (task, prop, visual index, asset, texture override, frame), then equipment.
+TEST(PackScene, StaticSourcesNameWhereEachInstanceCameFrom) {
+    ps::PackScene pack(talos());
+    const auto &sources = pack.staticSources();
+    const auto &instances = pack.staticScene().instances;
+    ASSERT_EQ(sources.size(), instances.size());
+    for (std::size_t i = 0; i < pack.poolInstanceCount(); ++i)
+        EXPECT_EQ(sources[i].role, "pool") << i;
+    for (const auto i : pack.equipmentInstances()) {
+        EXPECT_EQ(sources[i].role, "equipment");
+        EXPECT_EQ(instances[i].mesh, pack.mesh("equipment", sources[i].asset));
+    }
+    std::size_t expected = 0, cursor = pack.poolInstanceCount();
+    for (const auto &task : talos().task_definitions)
+        for (const auto &prop : task.at("props")) {
+            if (prop.at("type") != "static_body")
+                continue;
+            const auto visuals = prop.at("parameters").value("visuals", rs::Json::array());
+            const bool perforated = prop.at("parameters").contains("cutouts");
+            for (std::size_t k = 0; k < visuals.size(); ++k, ++cursor, ++expected) {
+                ASSERT_LT(cursor, sources.size());
+                const auto &source = sources[cursor];
+                const auto &visual = visuals[k];
+                EXPECT_EQ(source.role, "task");
+                EXPECT_EQ(source.task, task.at("id").get<std::string>());
+                EXPECT_EQ(source.prop, prop.at("id").get<std::string>());
+                EXPECT_EQ(source.visual, k);
+                EXPECT_EQ(source.asset, visual.at("asset").get<std::string>());
+                EXPECT_EQ(source.texture, visual.value("texture", std::string()));
+                EXPECT_EQ(source.frame, visual.at("frame").get<std::string>());
+                const auto mesh = pack.mesh("tasks", source.asset, source.texture);
+                if (perforated) // cut panels are rebuilt copies with the same vertices
+                    EXPECT_EQ(instances[cursor].mesh->minimum, mesh->minimum);
+                else
+                    EXPECT_EQ(instances[cursor].mesh, mesh) << source.task << '/' << source.prop << '#' << k;
+            }
+        }
+    EXPECT_EQ(cursor, sources.size() - pack.equipmentInstances().size());
+    EXPECT_GT(expected, 10u);
+    for (const auto &item : pack.indicatorVisuals())
+        EXPECT_EQ(sources.at(item.instance).task, item.task);
+    // Bins: two vinyl placements carry the blood and fire texture overrides.
+    std::multiset<std::string> textures;
+    for (const auto &source : sources)
+        if (source.task == "bins" && !source.texture.empty())
+            textures.insert(source.texture);
+    EXPECT_EQ(textures, (std::multiset<std::string>{"bin_vinyl_blood_texture", "bin_vinyl_blood_texture",
+                                                    "bin_vinyl_fire_texture", "bin_vinyl_fire_texture"}));
+    for (const auto &visual : pack.propVisuals())
+        EXPECT_FALSE(visual.frame.empty()) << visual.prop;
+    // Pool mesh fixtures (RPAC stairs, rails) are pool sources naming their asset.
+    const auto resolved = rs::loadResolvedScenario(NEREUS_RESOLVED_RPAC);
+    ps::PackScene rpac(resolved);
+    ASSERT_EQ(rpac.staticSources().size(), rpac.staticScene().instances.size());
+    std::size_t fixtures = 0;
+    for (std::size_t i = 0; i < rpac.poolInstanceCount(); ++i) {
+        EXPECT_EQ(rpac.staticSources()[i].role, "pool");
+        if (!rpac.staticSources()[i].asset.empty()) {
+            ++fixtures;
+            EXPECT_EQ(rpac.staticScene().instances[i].mesh, rpac.mesh("pool", rpac.staticSources()[i].asset));
+        }
+    }
+    EXPECT_EQ(fixtures, rs::poolModel(resolved.pool).meshes.size());
+    EXPECT_GT(fixtures, 0u);
+}
