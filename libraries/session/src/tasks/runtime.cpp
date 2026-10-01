@@ -1,6 +1,7 @@
 // TaskRuntime (see tasks.hpp for the contract).
 #include "tasks/trackers.hpp"
 
+#include <nereus/session/pool.hpp>
 #include <nereus/session/tasks.hpp>
 
 #include <algorithm>
@@ -127,8 +128,14 @@ struct TaskRuntime::Impl {
     Json options;
     bool auto_start{false};
     Json seed;
-    double surface_z{0}, floor_z{0}, pool_length{0}, pool_width{0};
+    double surface_z{0}, floor_z{0}, pool_length{0}, pool_width{0}; // floor_z: the deepest floor
     Pose pool_from_world;
+    simulation::PoolFloor floor;
+    // Floor height under a world point.
+    double floorZAt(const Vec3 &world) const {
+        const Vec3 local = spatial::apply(pool_from_world, world);
+        return surface_z - floor.depthAt(Eigen::Vector2d(local[0], local[1]));
+    }
     std::vector<Keyed<PortalTracker>> portals;
     std::vector<Keyed<PerforatedPanel>> panels;
     std::vector<Keyed<OpenCrate>> crates;
@@ -349,13 +356,14 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
     m.options = scenario.run_options.is_null() ? Json::object() : scenario.run_options;
     m.auto_start = scenario.scenario.at("run").at("auto_start").get<bool>();
     m.seed = scenario.scenario.at("seed");
-    const double surface = scenario.pool.at("parameters").at("water_level_m").get<double>() +
-                           scenario.scenario.at("pool_placement").at("position_m").at(2).get<double>();
+    const PoolModel pool = poolModel(scenario.pool);
+    const double surface = pool.surface_z + scenario.scenario.at("pool_placement").at("position_m").at(2).get<double>();
     m.surface_z = surface;
     m.floor_z = surface - scenario.pool.at("parameters").at("depth_m").get<double>();
     m.pool_length = scenario.pool.at("parameters").at("length_m").get<double>();
     m.pool_width = scenario.pool.at("parameters").at("width_m").get<double>();
     m.pool_from_world = spatial::inverse(placementPose(scenario.scenario.at("pool_placement")));
+    m.floor = pool.floor;
     m.state = Json::object();
     m.state["environment"] = {{"surface_z_m", m.surface_z}, {"floor_z_m", m.floor_z}};
     m.state["tasks"] = Json::object();
@@ -388,8 +396,9 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
             if (kind == "perforated_panel") {
                 m.panels.push_back({id, region_id, PerforatedPanel(parameters, base)});
             } else if (kind == "rectangular_portal") {
+                const Pose portal = placed(parameters);
                 m.portals.push_back(
-                    {id, region_id, PortalTracker(parameters, placed(parameters), envelope, m.floor_z)});
+                    {id, region_id, PortalTracker(parameters, portal, envelope, m.floorZAt(portal.translation))});
             } else if (kind == "open_crate") {
                 m.crates.push_back({id, region_id, OpenCrate(parameters, placed(parameters))});
             } else if (kind == "proximity_target") {
@@ -723,7 +732,7 @@ ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const E
     }
     const double vertical = radius + std::max(0.0, state.length / 2 - radius) * std::abs(axis[2]);
     std::string reason;
-    const double floor_limit = m.floor_z + vertical;
+    const double floor_limit = m.floorZAt(new_position) + vertical;
     if (new_position[2] < floor_limit) {
         new_position[2] = floor_limit;
         current = Vec3::Zero();

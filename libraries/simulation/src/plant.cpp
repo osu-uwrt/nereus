@@ -33,6 +33,16 @@ void validate(const PlantParameters &p) {
                 std::isfinite(omega * (static_cast<double>(std::numeric_limits<std::int64_t>::max()) / 1e9)),
             "current oscillation must have finite amplitude and nonnegative frequency");
     require(std::isfinite(p.pool.water_level - p.pool.depth), "pool floor must be finite");
+    if (!p.pool.floor.empty()) {
+        for (const auto &profile : p.pool.floor.profiles()) {
+            const double extent = profile.axis() == FloorProfile::Axis::X ? p.pool.length : p.pool.width;
+            require(std::abs(profile.extent() - extent) <= 1e-9 * std::max(1.0, extent),
+                    "pool floor profile must span the pool along its axis");
+        }
+        require(std::abs(p.pool.floor.maxDepth() - p.pool.depth) <= 1e-9 * std::max(1.0, p.pool.depth),
+                "pool depth must be the floor profile's deepest point");
+        require(p.contacts.model != ContactModel::SpherePool, "sphere_pool contacts need a flat pool floor");
+    }
     std::set<std::string> ids;
     for (const auto &t : p.thrusters) {
         require(!t.id.empty() && ids.insert(t.id).second, "thruster IDs must be nonempty and unique");
@@ -353,5 +363,9 @@ Snapshot Plant::reset(const BodyState &initial) {
     ++impl_->generation;
     impl_->faulted = false;
     return observe();
+}
+
+PoolFloor floorOf(const Pool &pool) {
+    return pool.floor.empty() ? PoolFloor::flat(pool.depth, pool.length) : pool.floor;
 }
 } // namespace nereus::simulation

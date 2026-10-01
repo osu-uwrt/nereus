@@ -1,11 +1,13 @@
 // Physics and sensors built from resolved packs.
 #include <nereus/sensors/models.hpp>
+#include <nereus/session/pool.hpp>
 #include <nereus/session/session.hpp>
 
 #include "json_util.hpp"
 
 #include <cmath>
 #include <set>
+#include <utility>
 
 namespace nereus::session {
 namespace {
@@ -51,17 +53,26 @@ spatial::FixedFrames makeFrames(const Json &config) {
     return spatial::FixedFrames(at(config, "root").get<std::string>(), std::move(edges));
 }
 
-BoxProxy makeBox(const Json &config, const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation) {
+// A box `local` to a parent placed at position, orientation.
+BoxProxy makeBox(std::string id, const Eigen::Vector3d &size, const spatial::Pose &local,
+                 const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation) {
     BoxProxy box;
-    box.id = at(config, "id").get<std::string>();
-    box.size = vec3(at(config, "size_m"), "size_m");
-    const spatial::Pose local{vec3(at(config, "center_m"), "center_m"),
-                              has(config, "orientation_wxyz") ? quat(config.at("orientation_wxyz"), "orientation_wxyz")
-                                                              : Eigen::Quaterniond::Identity()};
+    box.id = std::move(id);
+    box.size = size;
     const auto pose = composeChecked({position, orientation}, local);
     box.center = pose.translation;
     box.orientation = pose.rotation;
     return box;
+}
+BoxProxy makeBox(const Json &config, const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation) {
+    return makeBox(at(config, "id").get<std::string>(), vec3(at(config, "size_m"), "size_m"),
+                   {vec3(at(config, "center_m"), "center_m"),
+                    has(config, "orientation_wxyz") ? quat(config.at("orientation_wxyz"), "orientation_wxyz")
+                                                    : Eigen::Quaterniond::Identity()},
+                   position, orientation);
+}
+BoxProxy makeBox(const PoolContactBox &config, const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation) {
+    return makeBox(config.id, config.size, {config.center, config.orientation}, position, orientation);
 }
 
 sensors::NoiseParameters makeNoise(const Json &config, bool enabled) {
@@ -219,6 +230,7 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
     parameters.command_timeout = num(at(body, "command_timeout_s"), "command_timeout_s");
     parameters.timestep = std::chrono::nanoseconds(at(scenario, "timestep_ns").get<std::int64_t>());
 
+    const PoolModel pool_model = poolModel(world);
     simulation::Pool pool;
     const Json &wp = at(world, "parameters");
     assignNumber(pool.length, wp, "length_m");
@@ -229,6 +241,8 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
     assignVec3(pool.current_velocity, wp, "current_m_s");
     assignVec3(pool.current_oscillation_amplitude, wp, "current_oscillation_amplitude_m_s");
     assignNumber(pool.current_oscillation_frequency, wp, "current_oscillation_frequency_hz");
+    if (pool_model.profiled)
+        pool.floor = pool_model.floor;
     const Json &placement = at(scenario, "pool_placement");
     const Eigen::Vector3d placement_position = vec3(at(placement, "position_m"), "position_m");
     pool.yaw_world = radians(num(at(placement, "yaw_deg"), "yaw_deg"));
@@ -290,7 +304,7 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
         contacts.body_boxes.push_back(makeBox(box, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity()));
     const double half_yaw = parameters.pool.yaw_world / 2;
     const Eigen::Quaterniond pool_quaternion(std::cos(half_yaw), 0, 0, std::sin(half_yaw));
-    for (const auto &box : at(world, "collision_boxes"))
+    for (const auto &box : pool_model.contacts)
         contacts.world_boxes.push_back(makeBox(box, placement_position, pool_quaternion));
     for (const auto &instance : at(scenario, "task_placements")) {
         const double yaw = radians(num(at(instance, "yaw_deg"), "yaw_deg")) / 2;

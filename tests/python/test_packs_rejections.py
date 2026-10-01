@@ -337,6 +337,15 @@ class PoolMarkingTests(PackRejectionCase):
         self.add_markings("  lane_grid: {along_y: {count: 2, spacing_m: 2}, inset_m: 2.5}\n")
         self.assert_load_rejects("pool", "inset_m 2.5 leaves no line on a 5 m floor")
 
+    def test_lane_grid_targets(self) -> None:
+        self.add_markings(
+            "  lane_grid: {along_x: {count: 2, spacing_m: 2}, targets: {stem_m: [-1, 0], bar_z_m: -0.5, "
+            "bar_length_m: 0.6, color_rgb: [0, 0, 0]}}\n"
+        )
+        load_pack(self.root / "pool")
+        self.edit("pool/pool.yaml", "stem_m: [-1, 0]", "stem_m: [-4, 0]")
+        self.assert_load_rejects("pool", "/markings/lane_grid/targets: z -4 m is outside -3..0.3 m")
+
     def test_lane_grid_needs_a_family(self) -> None:
         self.add_markings("  lane_grid: {inset_m: 1}\n")
         self.assert_load_rejects("pool", "/markings/lane_grid")
@@ -344,6 +353,162 @@ class PoolMarkingTests(PackRejectionCase):
     def test_unknown_end_style(self) -> None:
         self.add_markings("  ends: arrow\n")
         self.assert_load_rejects("pool", "/markings/ends")
+
+
+class PoolFloorProfileTests(PackRejectionCase):
+    """The fixture pool is 10 m long, 3 m deep; profiled here to rise to 2 m at the far end."""
+
+    FLOOR_BOX = "- {id: floor, size_m: [10, 5, 1], center_m: [5, 2.5, -3.5], orientation_wxyz: [1, 0, 0, 0]}\n"
+    WALL_BOX = "- {id: end_wall, size_m: [1, 5, 4], center_m: [10.5, 2.5, -1], orientation_wxyz: [1, 0, 0, 0]}\n"
+
+    def profile(self, points: str = "[[0, 3], [4, 3], [7, 2], [10, 2]]", along: str = "x") -> None:
+        self.edit(
+            "pool/pool.yaml",
+            "current_oscillation_frequency_hz: 0}",
+            f"current_oscillation_frequency_hz: 0, floor_profile: {{along: {along}, points_m: {points}}}}}",
+        )
+        self.edit("pool/pool.yaml", self.FLOOR_BOX, self.WALL_BOX)
+
+    def test_profiled_floor_loads_and_resolves(self) -> None:
+        self.profile()
+        self.edit(
+            "pool/pool.yaml",
+            "collision_boxes:\n",
+            "markings:\n"
+            "  wall_lines:\n"
+            "  - {wall: x_min, from: [1, -3], to: [1, 0]}\n"
+            "  - {wall: x_max, from: [1, -2], to: [1, 0]}\n"
+            "  - {wall: y_min, from: [2, -3], to: [8, -2]}\n"
+            "collision_boxes:\n",
+        )
+        load_pack(self.root / "pool")
+        resolve_scenario(self.scenario)
+
+    def test_profile_must_span_the_pool(self) -> None:
+        self.profile("[[0, 3], [8, 2]]")
+        self.assert_load_rejects("pool", "must run from 0 to 10 m along x, not 0..8 m")
+
+    def test_profile_along_y_spans_the_width(self) -> None:
+        self.profile("[[0, 3], [10, 2]]", along="y")
+        self.assert_load_rejects("pool", "must run from 0 to 5 m along y")
+
+    def test_profile_positions_increase(self) -> None:
+        self.profile("[[0, 3], [6, 3], [5, 2], [10, 2]]")
+        self.assert_load_rejects("pool", "positions must increase")
+
+    def test_profile_depths_positive(self) -> None:
+        self.profile("[[0, 3], [5, 0], [10, 3]]")
+        self.assert_load_rejects("pool", "depths must be positive")
+
+    def test_depth_is_the_deepest_point(self) -> None:
+        self.profile("[[0, 2.5], [10, 2]]")
+        self.assert_load_rejects("pool", "3 m must be the floor's deepest point (2.5 m)")
+
+    def test_flat_floor_box_is_rejected(self) -> None:
+        self.profile()
+        self.edit("pool/pool.yaml", self.WALL_BOX, self.WALL_BOX + self.FLOOR_BOX)
+        self.assert_load_rejects("pool", "'floor' is a flat floor box")
+
+    def test_wall_line_below_the_shallow_end(self) -> None:
+        self.profile()
+        self.edit(
+            "pool/pool.yaml",
+            "collision_boxes:\n",
+            "markings: {wall_lines: [{wall: x_max, from: [1, -3], to: [1, 0]}]}\ncollision_boxes:\n",
+        )
+        self.assert_load_rejects("pool", "/markings/wall_lines/0/from: z -3 m is outside -2..0.3 m")
+
+    def test_profile_list_rising_toward_two_walls(self) -> None:
+        self.profile("[[0, 3], [4, 3], [7, 2], [10, 2]]}, {along: y, points_m: [[0, 3], [3, 3], [5, 2.5]]")
+        self.edit("pool/pool.yaml", "floor_profile: {along: x", "floor_profile: [{along: x")
+        self.edit("pool/pool.yaml", "[5, 2.5]]}", "[5, 2.5]]}]")
+        self.edit(
+            "pool/pool.yaml",
+            "collision_boxes:\n",
+            "markings: {wall_lines: [{wall: y_max, from: [2, -2.5], to: [2, 0]}]}\ncollision_boxes:\n",
+        )
+        load_pack(self.root / "pool")
+        resolve_scenario(self.scenario)
+
+    def test_profile_list_entries_are_checked(self) -> None:
+        self.profile("[[0, 3], [10, 2]]}, {along: y, points_m: [[0, 3], [4, 2.5]]")
+        self.edit("pool/pool.yaml", "floor_profile: {along: x", "floor_profile: [{along: x")
+        self.edit("pool/pool.yaml", "[4, 2.5]]}", "[4, 2.5]]}]")
+        self.assert_load_rejects("pool", "/parameters/floor_profile/1/points_m: must run from 0 to 5 m along y")
+
+    def test_wall_line_below_the_risen_side(self) -> None:
+        self.profile("[[0, 3], [10, 3]]}, {along: y, points_m: [[0, 3], [3, 3], [5, 2.5]]")
+        self.edit("pool/pool.yaml", "floor_profile: {along: x", "floor_profile: [{along: x")
+        self.edit("pool/pool.yaml", "[5, 2.5]]}", "[5, 2.5]]}]")
+        self.edit(
+            "pool/pool.yaml",
+            "collision_boxes:\n",
+            "markings: {wall_lines: [{wall: y_max, from: [2, -3], to: [2, 0]}]}\ncollision_boxes:\n",
+        )
+        self.assert_load_rejects("pool", "/markings/wall_lines/0/from: z -3 m is outside -2.5..0.3 m")
+
+    def test_sphere_pool_contacts_need_a_flat_floor(self) -> None:
+        self.profile()
+        self.edit("scenario/scenario.yaml", "model: box_scene", "model: sphere_pool")
+        self.assert_resolve_rejects("sphere_pool needs a flat pool floor")
+
+
+class PoolFixtureTests(PackRejectionCase):
+    """The fixture pool is 10 m x 5 m x 3 m deep with a 0.3 m deck."""
+
+    def add_fixtures(self, fixtures: str) -> None:
+        self.edit("pool/pool.yaml", "collision_boxes:\n", f"fixtures:\n{fixtures}collision_boxes:\n")
+
+    def test_boxes_and_recess_load(self) -> None:
+        self.add_fixtures(
+            "- {id: grate, type: box, center_m: [6, 2], size_m: [1.2, 0.6, 0.03], rpy_deg: [0, 0, 90], "
+            "color_rgb: [0.8, 0.8, 0.8], contact: true}\n"
+            "- {id: tread, type: box, center_m: [9.7, 0.2, -0.4], size_m: [0.8, 0.3, 0.05]}\n"
+            "- {id: vent, type: box, center_m: [3, 3], size_m: [0.75, 0.75, 0.05], top_size_m: [0.55, 0.55], "
+            "color_rgb: [0.8, 0.8, 0.8], side_color_rgb: [0.3, 0.4, 0.4]}\n"
+            "- {id: stairs, type: recess, wall: y_min, from: [9, -1.2], to: [9.9, 0.3], depth_m: 0.5}\n"
+        )
+        load_pack(self.root / "pool")
+        resolve_scenario(self.scenario)
+
+    def test_box_outside_the_pool(self) -> None:
+        self.add_fixtures(
+            "- {id: grate, type: box, center_m: [10.5, 2], size_m: [1, 1, 0.1]}\n"
+            "- {id: rail, type: box, center_m: [14, 2, 0], size_m: [1, 1, 0.1]}\n"
+        )
+        self.assert_load_rejects("pool", "/fixtures/0/center_m: (10.5, 2) is outside the pool floor")
+        self.assert_load_rejects("pool", "/fixtures/1/center_m: (14, 2) is outside the pool")
+
+    def test_box_top_larger_than_its_base(self) -> None:
+        self.add_fixtures("- {id: vent, type: box, center_m: [3, 3], size_m: [0.5, 0.5, 0.05], top_size_m: [0.6, 0.4]}\n")
+        self.assert_load_rejects("pool", "/fixtures/0/top_size_m: the top must be no larger than the base")
+
+    def test_box_far_above_the_deck(self) -> None:
+        self.add_fixtures("- {id: rail, type: box, center_m: [5, 2, 2.5], size_m: [1, 1, 0.1]}\n")
+        self.assert_load_rejects("pool", "/fixtures/0/center_m: z 2.5 m is outside -3..2.3 m")
+
+    def test_recess_below_the_floor(self) -> None:
+        self.add_fixtures("- {id: well, type: recess, wall: x_max, from: [1, -3.5], to: [2, 0], depth_m: 0.5}\n")
+        self.assert_load_rejects("pool", "/fixtures/0/from: z -3.5 m is outside -3..0.3 m")
+
+    def test_recess_needs_an_area(self) -> None:
+        self.add_fixtures("- {id: well, type: recess, wall: x_max, from: [1, -1], to: [1, 0], depth_m: 0.5}\n")
+        self.assert_load_rejects("pool", "/fixtures/0: from and to must differ in both coordinates")
+
+    def test_duplicate_fixture_ids(self) -> None:
+        self.add_fixtures(
+            "- {id: a, type: box, center_m: [5, 2], size_m: [1, 1, 0.1]}\n"
+            "- {id: a, type: box, center_m: [6, 2], size_m: [1, 1, 0.1]}\n"
+        )
+        self.assert_load_rejects("pool", "fixture")
+
+    def test_mesh_needs_a_pool_asset(self) -> None:
+        self.add_fixtures("- {id: stairs, type: mesh, asset: stairs, center_m: [5, 0, 0]}\n")
+        self.assert_load_rejects("pool", "/fixtures/0/asset: unknown pool asset 'stairs'")
+
+    def test_unknown_fixture_type(self) -> None:
+        self.add_fixtures("- {id: a, type: ladder, center_m: [5, 2], size_m: [1, 1, 0.1]}\n")
+        self.assert_load_rejects("pool", "/fixtures/0")
 
 
 class FolderRejectionTests(PackRejectionCase):

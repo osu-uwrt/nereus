@@ -281,13 +281,14 @@ Measurement<ReferenceVelocity::Reading> ReferenceVelocity::sample(const simulati
 }
 
 PoolBottom::PoolBottom(const simulation::Pool &pool)
-    : length_(pool.length), width_(pool.width), floor_(pool.water_level - pool.depth), surface_(pool.water_level),
-      origin_xy_(pool.origin_xy_world), world_to_pool_(Eigen::Rotation2Dd(-pool.yaw_world).toRotationMatrix()) {
+    : length_(pool.length), width_(pool.width), surface_(pool.water_level), origin_xy_(pool.origin_xy_world),
+      world_to_pool_(Eigen::Rotation2Dd(-pool.yaw_world).toRotationMatrix()) {
     if (!std::isfinite(length_) || length_ <= 0 || !std::isfinite(width_) || width_ <= 0 ||
-        !std::isfinite(pool.depth) || pool.depth <= 0 || !std::isfinite(surface_) || !std::isfinite(floor_) ||
-        !origin_xy_.allFinite() || !std::isfinite(pool.yaw_world)) {
+        !std::isfinite(pool.depth) || pool.depth <= 0 || !std::isfinite(surface_) ||
+        !std::isfinite(pool.water_level - pool.depth) || !origin_xy_.allFinite() || !std::isfinite(pool.yaw_world)) {
         throw std::invalid_argument("pool bottom requires positive finite dimensions and finite level");
     }
+    floor_ = simulation::floorOf(pool);
     if (!origin_xy_.isZero(0) || pool.yaw_world != 0)
         boundary_tolerance_ = 16 * std::numeric_limits<double>::epsilon() *
                               std::max({1.0, origin_xy_.cwiseAbs().maxCoeff(), length_, width_});
@@ -305,10 +306,14 @@ std::optional<BottomHit> PoolBottom::operator()(const Eigen::Vector3d &origin_wo
         return point.x() >= -boundary_tolerance_ && point.x() <= length_ + boundary_tolerance_ &&
                point.y() >= -boundary_tolerance_ && point.y() <= width_ + boundary_tolerance_;
     };
-    if (!inside(origin) || origin.z() <= floor_ || origin.z() > surface_ || direction.z() >= 0) {
+    if (!inside(origin) || origin.z() <= surface_ - floor_.depthAt(Eigen::Vector2d(origin.head<2>())) ||
+        origin.z() > surface_ || direction.z() >= 0) {
         return std::nullopt;
     }
-    const double distance = (floor_ - origin.z()) / direction.z();
+    const auto ray = floor_.rayDistance(origin, direction, surface_);
+    if (!ray)
+        return std::nullopt;
+    const double distance = *ray;
     const Eigen::Vector3d hit = origin + distance * direction;
     if (!std::isfinite(distance) || !hit.allFinite() || !inside(hit)) {
         return std::nullopt;

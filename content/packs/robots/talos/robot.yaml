@@ -53,37 +53,41 @@ body:
 # Frame reported as the vehicle pose to tasks, the bridge and placement.
 reference_frame: base_link
 
-# Rigid frame tree rooted at the centre of mass. `cad` is the CAD model origin.
+# Rigid frame tree. Everything is measured from `origin`: the farthest-port screw on the front of the
+# camera cage, which is also the CAD model origin (riptide_descriptions talos.yaml uses the same datum).
+# `com` is the physics body; when the centre of mass moves, edit its transform. The `body` centres stay
+# relative to the centre of mass.
 frames:
-  root: com
+  root: origin
+  body: com
   transforms:
-  - {parent: com, child: cad, position_m: [0.157, -0.04, 0.048], orientation_wxyz: [1, 0, 0, 0]}
-  - {parent: cad, child: base_link, position_m: [-0.14, 0.03, -0.09], orientation_wxyz: [1, 0, 0, 0]}
-  - {parent: cad, child: thruster_VUS, position_m: [-0.134, -0.369, 0.242], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
-  - {parent: cad, child: thruster_VUP, position_m: [-0.134, 0.438, 0.242], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
-  - {parent: cad, child: thruster_HUS, position_m: [-0.14, -0.26, 0.141], orientation_wxyz: [0.6532688037723191, 0.2704955304628238, -0.27044044338085915, 0.6534018706749187]}
-  - {parent: cad, child: thruster_HUP, position_m: [-0.14, 0.328, 0.141], orientation_wxyz: [0.6532688037723191, -0.2704955304628238, -0.27044044338085915, -0.6534018706749187]}
-  - {parent: cad, child: thruster_HLS, position_m: [-0.14, -0.26, -0.141], orientation_wxyz: [0.6532688037723191, -0.2704955304628238, 0.27044044338085915, 0.6534018706749187]}
-  - {parent: cad, child: thruster_HLP, position_m: [-0.14, 0.328, -0.141], orientation_wxyz: [0.6532688037723191, 0.2704955304628238, 0.27044044338085915, -0.6534018706749187]}
-  - {parent: cad, child: thruster_VLS, position_m: [-0.134, -0.372, -0.244], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
-  - {parent: cad, child: thruster_VLP, position_m: [-0.134, 0.44, -0.244], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
-  - {parent: cad, child: imu_mount, position_m: [-0.25, -0.1492, 0.0222], orientation_wxyz: [0.0002095447747113296, 0.7071408059844668, -0.7070726926576023, -0.00020952459090689933]}
-  - {parent: cad, child: dvl_mount, position_m: [-0.119, 0.034, -0.25], orientation_wxyz: [0.9238795446418628, 0.0, 0.0, -0.3826834030792871]}
-  - {parent: cad, child: fog_mount, position_m: [0.0, 0.0, 0.0], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
-  - {parent: cad, child: depth_mount, position_m: [-0.305, -0.125, 0.045], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
-  - {parent: cad, child: poker_mount, position_m: [0.2286, 0.0127, -0.17145], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
-  - {parent: cad, child: torpedoes_mount, position_m: [0.048, 0.18200625, -0.1324], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
-  - {parent: cad, child: droppers_mount, position_m: [0.0, 0.17200625, -0.1501], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
-  - {parent: cad, child: claw_mount, position_m: [0.19, 0.034, -0.3712], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
-  - {parent: cad, child: magnet_mount, position_m: [-0.2946, 0.0475, -0.391], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
-  - {parent: cad, child: hitch_mount, position_m: [0.0, 0.0, 0.0], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
-  - {parent: cad, child: ffc_mount, position_m: [-0.0195, -0.0889, 0.02], orientation_wxyz: [0.9996750202077826, -0.004998416754581291, 0.024997083447914372, 0.00012498645879513106]}
-  - {parent: cad, child: dfc_mount, position_m: [-0.24347, -0.065568, -0.15943], orientation_wxyz: [0.5199427952056352, 0.5095974583371051, 0.48959879164377196, -0.4798572114609425]}
+  - {parent: origin, child: base_link, position_m: [-0.14, 0.03, -0.09], orientation_wxyz: [1, 0, 0, 0]}
+  - {parent: origin, child: com, position_m: [-0.157, 0.04, -0.048], orientation_wxyz: [1, 0, 0, 0]}   # with IVC
+  - {parent: origin, child: thruster_VUS, position_m: [-0.134, -0.369, 0.242], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
+  - {parent: origin, child: thruster_VUP, position_m: [-0.134, 0.438, 0.242], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
+  - {parent: origin, child: thruster_HUS, position_m: [-0.14, -0.26, 0.141], orientation_wxyz: [0.6532688037723191, 0.2704955304628238, -0.27044044338085915, 0.6534018706749187]}
+  - {parent: origin, child: thruster_HUP, position_m: [-0.14, 0.328, 0.141], orientation_wxyz: [0.6532688037723191, -0.2704955304628238, -0.27044044338085915, -0.6534018706749187]}
+  - {parent: origin, child: thruster_HLS, position_m: [-0.14, -0.26, -0.141], orientation_wxyz: [0.6532688037723191, -0.2704955304628238, 0.27044044338085915, 0.6534018706749187]}
+  - {parent: origin, child: thruster_HLP, position_m: [-0.14, 0.328, -0.141], orientation_wxyz: [0.6532688037723191, 0.2704955304628238, 0.27044044338085915, -0.6534018706749187]}
+  - {parent: origin, child: thruster_VLS, position_m: [-0.134, -0.372, -0.244], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
+  - {parent: origin, child: thruster_VLP, position_m: [-0.134, 0.44, -0.244], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
+  - {parent: origin, child: imu_mount, position_m: [-0.25, -0.1492, 0.0222], orientation_wxyz: [0.0002095447747113296, 0.7071408059844668, -0.7070726926576023, -0.00020952459090689933]}
+  - {parent: origin, child: dvl_mount, position_m: [-0.119, 0.034, -0.25], orientation_wxyz: [0.9238795446418628, 0.0, 0.0, -0.3826834030792871]}
+  - {parent: origin, child: fog_mount, position_m: [0.0, 0.0, 0.0], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
+  - {parent: origin, child: depth_mount, position_m: [-0.305, -0.125, 0.045], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
+  - {parent: origin, child: poker_mount, position_m: [0.2286, 0.0127, -0.17145], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
+  - {parent: origin, child: torpedoes_mount, position_m: [0.048, 0.18200625, -0.1324], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
+  - {parent: origin, child: droppers_mount, position_m: [0.0, 0.17200625, -0.1501], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
+  - {parent: origin, child: claw_mount, position_m: [0.19, 0.034, -0.3712], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
+  - {parent: origin, child: magnet_mount, position_m: [-0.2946, 0.0475, -0.391], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
+  - {parent: origin, child: hitch_mount, position_m: [0.0, 0.0, 0.0], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
+  - {parent: origin, child: ffc_mount, position_m: [-0.0195, -0.0889, 0.02], orientation_wxyz: [0.9996750202077826, -0.004998416754581291, 0.024997083447914372, 0.00012498645879513106]}
+  - {parent: origin, child: dfc_mount, position_m: [-0.24347, -0.065568, -0.15943], orientation_wxyz: [0.5199427952056352, 0.5095974583371051, 0.48959879164377196, -0.4798572114609425]}
   # Claw pinch point (claw meshes and grasping are placed here).
-  - {parent: cad, child: claw_pinch, position_m: [0.1845620038521386, 0.034362, -0.4164364383477267], orientation_wxyz: [1, 0, 0, 0]}
+  - {parent: origin, child: claw_pinch, position_m: [0.1845620038521386, 0.034362, -0.4164364383477267], orientation_wxyz: [1, 0, 0, 0]}
   # Hydrophones.
-  - {parent: cad, child: hydrophone_port, position_m: [-0.305, 0.325, -0.075], orientation_wxyz: [1, 0, 0, 0]}
-  - {parent: cad, child: hydrophone_starboard, position_m: [-0.315, -0.325, -0.075], orientation_wxyz: [1, 0, 0, 0]}
+  - {parent: origin, child: hydrophone_port, position_m: [-0.305, 0.325, -0.075], orientation_wxyz: [1, 0, 0, 0]}
+  - {parent: origin, child: hydrophone_starboard, position_m: [-0.315, -0.325, -0.075], orientation_wxyz: [1, 0, 0, 0]}
   # Camera optical frames (z forward, x right, y down) under each camera mount. The right optical
   # frame sits one rectified baseline along optical +X.
   - {parent: ffc_mount, child: ffc_left_optical, position_m: [0, 0, 0], orientation_wxyz: [0.5, -0.5, 0.5, -0.5]}
@@ -91,18 +95,18 @@ frames:
   - {parent: dfc_mount, child: dfc_left_optical, position_m: [0, 0, 0], orientation_wxyz: [0.5, -0.5, 0.5, -0.5]}
   - {parent: dfc_left_optical, child: dfc_right_optical, position_m: [0.05030758651145167, 0, 0], orientation_wxyz: [1, 0, 0, 0]}   # rectified baseline (dfc)
 
-# Meshes drawn on the robot. Body and rotors are authored in the `cad` frame; claw meshes sit at the
+# Meshes drawn on the robot. Body and rotors are authored in the `origin` frame; claw meshes sit at the
 # pinch point with the jaws closed (the claw mechanism animates them).
 visuals:
-- {asset: body_mesh, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-- {asset: rotor_VUS, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-- {asset: rotor_VUP, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-- {asset: rotor_HUS, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-- {asset: rotor_HUP, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-- {asset: rotor_HLS, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-- {asset: rotor_HLP, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-- {asset: rotor_VLS, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-- {asset: rotor_VLP, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: body_mesh, frame: origin, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_VUS, frame: origin, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_VUP, frame: origin, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_HUS, frame: origin, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_HUP, frame: origin, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_HLS, frame: origin, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_HLP, frame: origin, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_VLS, frame: origin, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: rotor_VLP, frame: origin, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
 - {asset: claw_static_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
 - {asset: claw_left_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
 - {asset: claw_right_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
@@ -111,24 +115,24 @@ visuals:
 # Magnet stick; its mesh origin is the magnet tip.
 - {asset: robot_magnet_mesh, frame: magnet_mount, position_m: [0, 0, 0.05], orientation_wxyz: [1, 0, 0, 0]}
 
-# Contact boxes (centres relative to the centre of mass).
+# Contact boxes, measured from `origin` like the frames.
 collision_boxes:
-- {id: hull_0, size_m: [0.35, 0.83, 0.55], center_m: [0.0, 0.0, 0.07], orientation_wxyz: [1, 0, 0, 0]}
-- {id: hull_1, size_m: [0.2, 0.05, 0.05], center_m: [0.23, -0.2, -0.1], orientation_wxyz: [1, 0, 0, 0]}   # poker
+- {id: hull_0, frame: origin, size_m: [0.35, 0.83, 0.55], center_m: [-0.157, 0.04, 0.022], orientation_wxyz: [1, 0, 0, 0]}
+- {id: hull_1, frame: origin, size_m: [0.2, 0.05, 0.05], center_m: [0.073, -0.16, -0.148], orientation_wxyz: [1, 0, 0, 0]}   # poker
 
 # Thruster order is the actuator index; the bridge maps ROS array order separately.
-# position_m and direction are relative to the centre of mass.
+# Each acts at its `thruster_*` frame, along that frame's +X.
 thrusters:
 # All eight share: delay 0.1 s, rise 0.08 s, fall 0.06 s, slew 300 N/s, +/-28 N, deadband 0,
 # scales 1, efficiency 1, propeller radius 0.05 m.
-- {id: VUS, type: lagged_force, position_m: [0.022999999999999993, -0.409, 0.29], direction: [1.0, 0.0, 0.0], parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: VUP, type: lagged_force, position_m: [0.022999999999999993, 0.398, 0.29], direction: [1.0, 0.0, 0.0], parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: HUS, type: lagged_force, position_m: [0.016999999999999987, -0.3, 0.189], direction: [-0.00014407603503774347, 0.7073882544949859, 0.7068251811053661], parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: HUP, type: lagged_force, position_m: [0.016999999999999987, 0.28800000000000003, 0.189], direction: [-0.00014407603503774347, -0.7073882544949859, 0.7068251811053661], parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: HLS, type: lagged_force, position_m: [0.016999999999999987, -0.3, -0.09299999999999999], direction: [-0.00014407603503774347, 0.7073882544949859, -0.7068251811053661], parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: HLP, type: lagged_force, position_m: [0.016999999999999987, 0.28800000000000003, -0.09299999999999999], direction: [-0.00014407603503774347, -0.7073882544949859, -0.7068251811053661], parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: VLS, type: lagged_force, position_m: [0.022999999999999993, -0.412, -0.196], direction: [1.0, 0.0, 0.0], parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: VLP, type: lagged_force, position_m: [0.022999999999999993, 0.4, -0.196], direction: [1.0, 0.0, 0.0], parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: VUS, type: lagged_force, frame: thruster_VUS, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: VUP, type: lagged_force, frame: thruster_VUP, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: HUS, type: lagged_force, frame: thruster_HUS, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: HUP, type: lagged_force, frame: thruster_HUP, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: HLS, type: lagged_force, frame: thruster_HLS, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: HLP, type: lagged_force, frame: thruster_HLP, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: VLS, type: lagged_force, frame: thruster_VLS, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: VLP, type: lagged_force, frame: thruster_VLP, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
 
 # Start killed. Kill clears queued thruster commands and disarms the mechanisms.
 safety:
@@ -185,7 +189,7 @@ sensors:
   mount_frame: depth_mount
   rate_hz: 20
   parameters:
-    target_position_body_m: [0.016999999999999987, -0.010000000000000002, -0.041999999999999996]   # base_link in COM frame
+    target_frame: base_link
     noise: {white_stddev: 0.01}
     reported_variance: 0.0001
 - id: ffc

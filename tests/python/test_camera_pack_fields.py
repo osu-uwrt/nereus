@@ -91,7 +91,7 @@ class TalosCameraFieldTests(unittest.TestCase):
             self.assertEqual(visual["orientation_wxyz"], IDENTITY)
             placed.setdefault(visual["frame"], []).append(visual["asset"])
         rotors = [f"rotor_{item['id']}" for item in self.robot["thrusters"]]
-        self.assertEqual(sorted(placed["cad"]), sorted(["body_mesh", *rotors]))
+        self.assertEqual(sorted(placed["origin"]), sorted(["body_mesh", *rotors]))
         claw = next(item for item in self.robot["mechanisms"] if item["type"] == "claw")
         self.assertEqual(claw["parameters"]["initial_state"], "closed")
         self.assertEqual(
@@ -107,7 +107,7 @@ class TalosCameraFieldTests(unittest.TestCase):
             ),
         )
         self.assertEqual(placed.pop("magnet_mount"), ["robot_magnet_mesh"])
-        self.assertEqual(set(placed), {"cad", claw["frame"]})
+        self.assertEqual(set(placed), {"origin", claw["frame"]})
 
     def test_stereo_cameras_are_enabled_with_rectified_right_eyes(self) -> None:
         transforms = {item["child"]: item for item in self.robot["frames"]["transforms"]}

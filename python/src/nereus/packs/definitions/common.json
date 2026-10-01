@@ -160,6 +160,10 @@
         "root": {
           "$ref": "#/$defs/name"
         },
+        "body": {
+          "$ref": "#/$defs/name",
+          "description": "Frame of the physics body (the centre of mass); defaults to the root."
+        },
         "transforms": {
           "type": "array",
           "items": {
@@ -173,7 +177,7 @@
         "transforms"
       ],
       "additionalProperties": false,
-      "description": "One parent per frame, no cycles; all frames resolve to the root. ROS names and TF ownership belong to the bridge."
+      "description": "One parent per frame, no cycles; all frames resolve to the root. The root is any datum the robot is measured from; resolution re-roots the tree at `body`. ROS names and TF ownership belong to the bridge."
     },
     "collision_box": {
       "type": "object",

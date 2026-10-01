@@ -16,6 +16,7 @@ if(BUILD_TESTING)
   add_executable(pack_scene_tests tests/pack_scene_test.cpp)
   target_link_libraries(pack_scene_tests PRIVATE nereus_pack_scene GTest::gtest_main)
   target_compile_definitions(pack_scene_tests PRIVATE NEREUS_RESOLVED_TALOS="${nereus_resolved_talos}"
+    NEREUS_RESOLVED_RPAC="${CMAKE_BINARY_DIR}/session_fixtures/talos_uwrt_rpac_resolved.json"
     NEREUS_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
   nereus_project_options(pack_scene_tests)
   gtest_discover_tests(pack_scene_tests DISCOVERY_MODE PRE_TEST PROPERTIES FIXTURES_REQUIRED session_resolved)

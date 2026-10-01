@@ -279,6 +279,10 @@
     "reference_altitude": {
       "type": "object",
       "properties": {
+        "target_frame": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Robot frame whose altitude is reported. Replaces target_position_body_m."
+        },
         "target_position_body_m": {
           "$ref": "common.schema.json#/$defs/vector3"
         },
@@ -367,6 +371,21 @@
         "current_oscillation_frequency_hz": {
           "type": "number",
           "minimum": 0
+        },
+        "floor_profile": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/floor_slope"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/floor_slope"
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Sloped floor: one profile, or a list whose shallowest profile is the floor at each point (a deep area rising toward several walls). Omitted: flat at depth_m. depth_m must be the deepest point; floor contact boxes are generated from the profiles, so collision_boxes lists only the walls."
         }
       },
       "required": [
@@ -384,6 +403,37 @@
       "additionalProperties": false,
       "description": "Finite rectangular pool in pool-local SI units: origin at the floor-plan corner on the water surface, +Z up.",
       "x-category": "pool"
+    },
+    "floor_slope": {
+      "type": "object",
+      "properties": {
+        "along": {
+          "enum": [
+            "x",
+            "y"
+          ],
+          "description": "Pool axis the depth varies along; it is constant across the other."
+        },
+        "points_m": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "minItems": 2,
+          "description": "[position along the axis, depth below the water] in m, from 0 to the pool's length (along x) or width (along y), positions increasing. Joined by a monotone cubic, so flat stretches stay flat and curves never overshoot."
+        }
+      },
+      "required": [
+        "along",
+        "points_m"
+      ],
+      "additionalProperties": false,
+      "description": "One floor profile: depth varying along one pool axis, constant across the other."
     },
     "water_optics": {
       "type": "object",

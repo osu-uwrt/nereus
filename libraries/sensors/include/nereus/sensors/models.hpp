@@ -124,7 +124,8 @@ class PoolBottom {
                                         const Eigen::Vector3d &direction_world) const;
 
   private:
-    double length_, width_, floor_, surface_;
+    double length_, width_, surface_;
+    simulation::PoolFloor floor_;
     Eigen::Vector2d origin_xy_;
     Eigen::Matrix2d world_to_pool_;
     double boundary_tolerance_{0};

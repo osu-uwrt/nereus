@@ -46,9 +46,9 @@
     "collision_boxes": {
       "type": "array",
       "items": {
-        "$ref": "common.schema.json#/$defs/collision_box"
+        "$ref": "#/$defs/collision_box"
       },
-      "description": "Robot contact proxies expressed in the frames root (COM)."
+      "description": "Robot contact proxies, each in its `frame` (default: the body frame, the COM)."
     },
     "thrusters": {
       "type": "array",
@@ -95,15 +95,47 @@
   ],
   "additionalProperties": false,
   "$defs": {
+    "collision_box": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "frame": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Frame the box is expressed in; defaults to the body frame."
+        },
+        "size_m": {
+          "$ref": "common.schema.json#/$defs/positive_vector3"
+        },
+        "center_m": {
+          "$ref": "common.schema.json#/$defs/vector3"
+        },
+        "orientation_wxyz": {
+          "$ref": "common.schema.json#/$defs/quaternion"
+        }
+      },
+      "required": [
+        "id",
+        "size_m",
+        "center_m",
+        "orientation_wxyz"
+      ],
+      "additionalProperties": false
+    },
     "thruster": {
       "type": "object",
       "properties": {
         "id": {
           "$ref": "common.schema.json#/$defs/name"
         },
+        "frame": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Thruster frame: thrust acts at its origin along its +X. Replaces position_m and direction."
+        },
         "position_m": {
           "$ref": "common.schema.json#/$defs/vector3",
-          "description": "COM-relative."
+          "description": "In the body frame (COM-relative)."
         },
         "direction": {
           "$ref": "common.schema.json#/$defs/vector3",
@@ -113,12 +145,10 @@
       "required": [
         "id",
         "type",
-        "position_m",
-        "direction",
         "parameters"
       ],
       "additionalProperties": false,
-      "description": "List order is the native actuator index; ROS array order is bridge-owned.",
+      "description": "List order is the native actuator index; ROS array order is bridge-owned. Placed by `frame`, or by `position_m` and `direction` (a semantic check).",
       "x-typed": "thruster"
     },
     "safety": {

@@ -19,7 +19,7 @@ assets:                         # every file the pack uses
 - {id: body_mesh, path: assets/body.glb}
 
 body: {...}                     # mass, inertia, hydrodynamics
-frames: {...}                   # rigid frame tree rooted at the centre of mass
+frames: {...}                   # rigid frame tree; names the physics body (centre of mass)
 collision_boxes: [...]
 thrusters: [...]
 safety: {...}
@@ -56,28 +56,34 @@ The same Fossen model is used by the MPC controller, so these numbers matter.
 
 ```yaml
 frames:
-  root: com                      # the physics body; everything else hangs off it
+  root: origin                   # the datum you measure from (Talos: a screw on the camera cage, the CAD origin)
+  body: com                      # the physics body, i.e. the centre of mass; defaults to the root
   transforms:
-  - {parent: com, child: cad, position_m: [0.157, -0.04, 0.048], orientation_wxyz: [1, 0, 0, 0]}
-  - {parent: cad, child: base_link, position_m: [-0.14, 0.03, -0.09], orientation_wxyz: [1, 0, 0, 0]}
-  - {parent: cad, child: imu_mount, position_m: [...], orientation_wxyz: [...]}
-  - {parent: cad, child: ffc_mount, ...}
+  - {parent: origin, child: base_link, position_m: [-0.14, 0.03, -0.09], orientation_wxyz: [1, 0, 0, 0]}
+  - {parent: origin, child: com, position_m: [-0.157, 0.04, -0.048], orientation_wxyz: [1, 0, 0, 0]}
+  - {parent: origin, child: imu_mount, position_m: [...], orientation_wxyz: [...]}
+  - {parent: origin, child: thruster_VUS, ...}
+  - {parent: origin, child: ffc_mount, ...}
 ```
 
 Name a frame for every sensor, mechanism, visual and camera optical frame. How these names appear in ROS TF is
 set by the bridge's `frame_names`.
 
+Root the tree at whatever you measure from and list the centre of mass as one more frame: when the COM moves,
+only its transform changes. Resolving a scenario re-roots the tree at `body`, so the simulator always works in
+COM coordinates. A tree rooted directly at the COM (`root: com`, no `body`) works too.
+
 ## Thrusters
 
-List them in actuator order (the bridge maps your ROS array order onto it). Positions and directions are
+List them in actuator order (the bridge maps your ROS array order onto it). A thruster acts at the origin of
+its `frame`, along that frame's +X. Instead of a frame you can give `position_m` and a unit `direction`, both
 relative to the COM.
 
 ```yaml
 thrusters:
 - id: VUS
   type: lagged_force
-  position_m: [0.023, -0.409, 0.29]
-  direction: [1, 0, 0]               # unit thrust axis
+  frame: thruster_VUS
   parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300,
                forward_limit_n: 28, reverse_limit_n: 28, deadband_n: 0, forward_scale: 1, reverse_scale: 1,
                efficiency: 1, propeller_radius_m: 0.05}
@@ -106,7 +112,7 @@ rate that doesn't divide it evenly samples on the nearest steps.
 | `imu`, `attitude` | the two halves separately | as above |
 | `fog` | single-axis rate gyro | `axes`, `gyro_noise` |
 | `reference_velocity` | DVL velocity (as the UWRT DVL driver reports it) | `velocity_noise`, `reported_variance` |
-| `reference_altitude` | depth (as the UWRT depth driver reports it) | `target_position_body_m`, `noise` |
+| `reference_altitude` | depth (as the UWRT depth driver reports it) | `target_frame` (or COM-relative `target_position_body_m`), `noise` |
 | `dvl`, `pressure` | raw bottom-track DVL / pressure sensor models | see `libraries/sensors` |
 | `stereo_camera` | RGB, depth, point cloud | `resolution_px`, `intrinsics_left/right`, `baseline_m`, `right_frame`, `outputs` |
 
@@ -143,7 +149,7 @@ a mechanism type (`tasks.yaml` `requires`).
 
 ```yaml
 visuals:
-- {asset: body_mesh, frame: cad, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: body_mesh, frame: origin, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
 ```
 
 `.glb`, `.dae` and `.obj` load; textures are PNG next to the mesh. The viewer's rotor animation and status
@@ -152,8 +158,8 @@ lights are set in `content/viewer/*_thruster_visuals.yaml` and `*_status_lights.
 ## Collisions and scoring geometry
 
 ```yaml
-collision_boxes:                 # COM-relative boxes that hit the pool walls and course
-- {id: hull, size_m: [0.35, 0.83, 0.55], center_m: [0, 0, 0.07], orientation_wxyz: [1, 0, 0, 0]}
+collision_boxes:                 # boxes that hit the pool walls and course; frame defaults to the COM
+- {id: hull, frame: origin, size_m: [0.35, 0.83, 0.55], center_m: [-0.157, 0.04, 0.022], orientation_wxyz: [1, 0, 0, 0]}
 scoring_envelope:                # what tasks test for "passed through the gate", "surfaced", ...
   collision_boxes: [hull]
   points:

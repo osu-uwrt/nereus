@@ -39,6 +39,23 @@
     "markings": {
       "$ref": "#/$defs/markings"
     },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/fixture_box"
+          },
+          {
+            "$ref": "#/$defs/fixture_recess"
+          },
+          {
+            "$ref": "#/$defs/fixture_mesh"
+          }
+        ]
+      },
+      "description": "Fittings drawn by the viewer and cameras: meshes from the pool's assets (stairs, rails, raised grates), solid boxes, and recesses cut into the walls (stair wells). Flat details (vents, flush grates) are markings."
+    },
     "metadata": {
       "type": "object",
       "description": "Free non-executable annotations preserved verbatim by load/save; never interpreted."
@@ -214,6 +231,38 @@
         "on_walls": {
           "type": "boolean",
           "description": "Continue each line up both end walls, floor to water surface (default false)."
+        },
+        "targets": {
+          "type": "object",
+          "properties": {
+            "stem_m": {
+              "$ref": "#/$defs/vector2",
+              "description": "[bottom, top] of the stem, m relative to the water surface."
+            },
+            "bar_z_m": {
+              "type": "number",
+              "description": "Height of the crossbar, m relative to the water surface."
+            },
+            "bar_length_m": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "width_m": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Stroke width in m."
+            },
+            "color_rgb": {
+              "$ref": "#/$defs/rgb"
+            }
+          },
+          "required": [
+            "stem_m",
+            "bar_z_m",
+            "bar_length_m"
+          ],
+          "additionalProperties": false,
+          "description": "A target on both end walls above each line: a vertical stem and a crossbar (a plus or a T)."
         }
       },
       "anyOf": [
@@ -304,6 +353,157 @@
         "to"
       ],
       "additionalProperties": false
+    },
+    "fixture_box": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "type": {
+          "const": "box"
+        },
+        "center_m": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 3,
+          "description": "Pool-local [x, y] to rest on the floor at that point, or [x, y, z] with z relative to the water surface."
+        },
+        "size_m": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Length along its +x, width, height, in m."
+        },
+        "top_size_m": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Top face [length, width], no larger than the base: the four sides slope in (a raised grate). Omitted: a plain box."
+        },
+        "rpy_deg": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "[roll, pitch, yaw] in degrees about the box's x, y, z axes (applied yaw, then pitch, then roll); default level."
+        },
+        "color_rgb": {
+          "$ref": "#/$defs/rgb",
+          "description": "Plain colour; omitted, the box takes the pool's tile finish."
+        },
+        "side_color_rgb": {
+          "$ref": "#/$defs/rgb",
+          "description": "Colour of the sloped sides; omitted, color_rgb."
+        },
+        "contact": {
+          "type": "boolean",
+          "description": "Also a static contact box for the robot and props (default false)."
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "center_m",
+        "size_m"
+      ],
+      "additionalProperties": false,
+      "description": "A solid box in the pool."
+    },
+    "fixture_recess": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "type": {
+          "const": "recess"
+        },
+        "wall": {
+          "enum": [
+            "x_min",
+            "x_max",
+            "y_min",
+            "y_max"
+          ],
+          "description": "The wall at x = 0, x = length, y = 0 or y = width."
+        },
+        "from": {
+          "$ref": "#/$defs/vector2"
+        },
+        "to": {
+          "$ref": "#/$defs/vector2"
+        },
+        "depth_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "How far the opening goes into the wall, m."
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "wall",
+        "from",
+        "to",
+        "depth_m"
+      ],
+      "additionalProperties": false,
+      "description": "An opening into a wall between opposite corners [coordinate along the wall, z relative to the water surface], lined with the pool's tiles. Drawn only: contacts treat the wall as solid."
+    },
+    "fixture_mesh": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "type": {
+          "const": "mesh"
+        },
+        "asset": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Id of a mesh in the pool's assets (metres, Z up)."
+        },
+        "center_m": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 3,
+          "description": "Where the mesh origin goes: pool-local [x, y] on the floor at that point, or [x, y, z] with z relative to the water surface."
+        },
+        "rpy_deg": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "[roll, pitch, yaw] in degrees (applied yaw, then pitch, then roll); default as authored."
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "asset",
+        "center_m"
+      ],
+      "additionalProperties": false,
+      "description": "A mesh from the pool's assets, drawn only (no contacts)."
     }
   }
 }

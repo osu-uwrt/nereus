@@ -44,6 +44,38 @@ lighting:
 
 The robot collides with `collision_boxes`; the viewer draws the floor, walls, deck and coping from `parameters`.
 
+### Sloped floor
+
+A floor that changes depth along the pool (a dive well, a shallow end) is a `floor_profile` in `parameters`:
+depth below the water at points along one axis, constant across the other, joined by a monotone cubic so flat
+stretches stay flat and a curve never overshoots its end depths.
+
+```yaml
+parameters:
+  length_m: 25.0
+  depth_m: 5.1816               # the deepest point of the profile
+  floor_profile:
+    along: x                    # or y
+    points_m: [[0, 5.1816], [9.3, 5.1816], [15.3, 4.2672], [25, 4.2672]]   # [position, depth], 0..length
+  # ...
+collision_boxes:                # walls only: the floor's contact boxes are generated from the profile
+- ...
+```
+
+A floor that also rises toward a side wall takes a list of profiles; at each point the floor is the shallowest
+of them, so a deep flat area can slope up toward several walls (here toward the shallow end and the far side):
+
+```yaml
+  floor_profile:
+  - {along: x, points_m: [[0, 5.18], [16, 5.18], [25, 4.27]]}
+  - {along: y, points_m: [[0, 5.18], [14, 5.18], [17, 4.6]]}
+```
+
+The same floor is used by the viewer and cameras (the floor mesh, lines draped over it, walls meeting it), by
+the DVL's range to the bottom, by vehicle and prop contacts, and by the task runtime's floor checks. Validation
+rejects a profile that does not span the pool, a `depth_m` that is not the floor's deepest point, a flat floor box
+alongside it, and `sphere_pool` contacts (use `box_scene`).
+
 ### Lane lines and finish
 
 Painted lines are data, not part of the renderer: a pool without `markings` has a plain tiled floor. Everything
@@ -61,6 +93,7 @@ markings:
     inset_m: 2.0                   # stop short of the end walls
     ends: t                        # a bar across both ends (t_length_m, default 1 m)
     on_walls: true                 # continue each line up both end walls to the surface
+    targets: {stem_m: [-1, 0], bar_z_m: -0.5, bar_length_m: 0.9}   # a plus/T target on both end walls per line
   lines:                           # any other floor stripe, at any angle
   - {from: [4, 2], to: [12, 5], ends: [t, none], width_m: 0.3, color_rgb: [0.6, 0.1, 0.1]}
   wall_lines:
@@ -73,6 +106,32 @@ surface:                           # optional; these are the defaults
 ```
 
 Validation rejects stripes that leave the surface they are painted on (T bars may overhang).
+
+### Fixtures
+
+Raised or recessed fittings are `fixtures`; flat details such as vents and flush drains are better drawn as
+markings. A `box` is a solid block: given `[x, y]` it rests on the floor at that point (following a sloped
+floor), given `[x, y, z]` it is placed with z relative to the water surface; `rpy_deg` tilts it (a sloping
+handrail). Without `color_rgb` it takes the
+pool's tile finish; `contact: true` also makes it a static contact box for the robot and props. A `recess`
+cuts an opening into a wall, between two corners given as `[coordinate along the wall, z]`, lined with tiles;
+one reaching the deck opens through the deck as well (a stair well). Recesses are drawn only (contacts treat the
+wall as solid).
+
+A `mesh` places one of the pool's `assets` (OBJ or COLLADA, metres, Z up) the same way: on the floor at `[x, y]`
+or at `[x, y, z]`, turned by `rpy_deg`. Detailed fittings (stairs, rails, grates) are best as meshes; a small
+generator script next to them keeps their dimensions editable (see the RPAC dive well's `assets/make_meshes.py`).
+A box can also slope its sides in to a smaller `top_size_m`.
+
+```yaml
+assets:
+- {id: stairs, path: assets/stairs.obj}
+fixtures:
+- {id: stairs, type: mesh, asset: stairs, center_m: [12, 0, 0]}
+- {id: drain, type: box, center_m: [21.5, 2.1], size_m: [1.2, 0.6, 0.03], color_rgb: [0.8, 0.85, 0.85]}
+- {id: stair_well, type: recess, wall: y_min, from: [22.0, -1.2], to: [23.0, 0.3], depth_m: 0.45}
+- {id: stair_tread_1, type: box, center_m: [22.5, -0.2, -0.3], size_m: [1.0, 0.25, 0.05]}
+```
 
 ## Scenario
 
