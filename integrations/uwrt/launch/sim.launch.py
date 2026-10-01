@@ -50,9 +50,10 @@ CONTROLLER_ARGS = {
 def _processes(context):
     rmw = LC("rmw").perform(context)
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
-    output = LC("output").perform(context) or f"/tmp/nereus_sim/{time.strftime('%Y%m%d-%H%M%S')}"
+    # The resolver and simulator run in the repository root: relative paths mean the caller's directory.
+    output = os.path.abspath(LC("output").perform(context) or f"/tmp/nereus_sim/{time.strftime('%Y%m%d-%H%M%S')}")
     Path(output).parent.mkdir(parents=True, exist_ok=True)
-    scenario = LC("scenario").perform(context)
+    scenario = os.path.abspath(LC("scenario").perform(context))
     binary = LC("bridge_binary").perform(context)
     resolved = f"{output}.resolved.json"
     subprocess.run(
