@@ -61,8 +61,23 @@ std::filesystem::path canonical(const std::filesystem::path &path) {
 Sampler parseSampler(const Json &item, const std::string &where) {
     Sampler s;
     s.type = item.at("type").get<std::string>();
-    if (s.type != "approach" && s.type != "overhead" && s.type != "free")
+    if (s.type != "approach" && s.type != "overhead" && s.type != "free" && s.type != "fixed")
         fail(where, "unknown sampler type '" + s.type + "'");
+    if (s.type == "fixed") {
+        const auto &pose = item.at("world_from_root");
+        const auto &q = pose.at("orientation_wxyz");
+        s.world_from_root.translation = vector3(pose.at("position_m"), where + ".world_from_root.position_m");
+        if (!q.is_array() || q.size() != 4)
+            fail(where + ".world_from_root.orientation_wxyz", "expected [w, x, y, z]");
+        s.world_from_root.rotation = Eigen::Quaterniond(number(q.at(0), where), number(q.at(1), where),
+                                                        number(q.at(2), where), number(q.at(3), where));
+        try {
+            spatial::validate(s.world_from_root); // used as given (no renormalization), so records reproduce it
+        } catch (const std::exception &error) {
+            fail(where + ".world_from_root", error.what());
+        }
+        s.target_frame = optionalString(item, "target_frame");
+    }
     if (item.contains("frame")) {
         const auto &frame = item.at("frame");
         s.frames.clear();
@@ -298,7 +313,14 @@ Job parseJob(const Json &d) {
         block.count = item.at("count").get<std::int64_t>();
         if (block.count < 0)
             fail("samples", "negative count");
-        block.sampler = parseSampler(item.at("sampler"), "samples[" + std::to_string(index++) + "].sampler");
+        block.sampler = parseSampler(item.at("sampler"), "samples[" + std::to_string(index) + "].sampler");
+        if (item.contains("environment") && !item.at("environment").is_null()) {
+            const auto environment = item.at("environment").get<std::int64_t>();
+            if (environment < 0)
+                fail("samples[" + std::to_string(index) + "].environment", "must be >= 0");
+            block.environment = static_cast<std::size_t>(environment);
+        }
+        ++index;
         job.samples.push_back(std::move(block));
     }
 
@@ -322,6 +344,10 @@ Job parseJob(const Json &d) {
         total += item.weight;
     if (!z.sweep && !(total > 0))
         fail("randomize.environments", "weights must sum to a positive number");
+    for (std::size_t i = 0; i < job.samples.size(); ++i)
+        if (job.samples[i].environment && *job.samples[i].environment >= z.environments.size())
+            fail("samples[" + std::to_string(i) + "].environment",
+                 "index " + std::to_string(*job.samples[i].environment) + " beyond randomize.environments");
     const auto placement = r.value("placement", Json::object());
     z.task_yaw_deg = std::abs(placement.value("task_yaw_deg", 0.0));
     z.task_offset_m = std::abs(placement.value("task_offset_m", 0.0));

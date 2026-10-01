@@ -90,6 +90,11 @@ Eigen::Quaterniond attitude(double yaw, double pitch_up, double roll) {
 PoseDraw samplePose(const Sampler &s, Stream &rng, const std::map<std::string, Pose> &frames, const PoolFrame &pool,
                     const Pose &root_from_optical) {
     PoseDraw draw;
+    if (s.type == "fixed") {
+        draw.world_from_root = s.world_from_root;
+        draw.frame = s.target_frame.value_or("");
+        return draw;
+    }
     const double zTop = surfaceWorldZ(pool) - kSurfaceMarginM;
     if (s.type == "free") {
         const double margin = .5;

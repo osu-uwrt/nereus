@@ -5,7 +5,8 @@
 #include <nereus/rendering/scene.hpp>
 
 namespace nereus::datasets {
-// Weighted mode: the sample stream's FIRST draw picks by cumulative weight. Sweep mode:
+// A block's `environment` index wins (no draw). Weighted mode: the sample stream's FIRST draw picks by cumulative
+// weight. Sweep mode:
 // ((k - block start) / scenarios) mod n, no draw. Call first on a fresh stream.
 std::size_t selectEnvironment(const Job &, std::int64_t k, Stream &);
 

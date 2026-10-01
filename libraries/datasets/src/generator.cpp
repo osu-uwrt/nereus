@@ -519,7 +519,9 @@ Json Generator::render(std::int64_t k) {
     std::string targetFrame;
     r::LabelCapture full;
     LabelStats fullStats;
-    while (attempts < acc.max_attempts) {
+    // A fixed pose is judged once: rejected means skipped (§11.1).
+    const std::int64_t maxAttempts = block.sampler.type == "fixed" ? 1 : acc.max_attempts;
+    while (attempts < maxAttempts) {
         ++attempts;
         const auto draw = samplePose(block.sampler, rng, frames, s.pool, s.root_from_optical);
         if (!draw.world_from_root) {
@@ -618,7 +620,7 @@ Json Generator::render(std::int64_t k) {
     const auto cameraFromWorld = spatial::inverse(*camera);
     for (const auto &task : s.task_order)
         tasks[task] = {{"camera_from_task", poseJson(spatial::compose(cameraFromWorld, d.world_from_task.at(task)))}};
-    d.record["target_frame"] = block.task ? Json(targetFrame) : Json();
+    d.record["target_frame"] = targetFrame.empty() ? Json() : Json(targetFrame);
     Json record = {{"format", "nereus.dataset_record.v1"},
                    {"dataset", job_.dataset},
                    {"sample", k},

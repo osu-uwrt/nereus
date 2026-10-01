@@ -5,6 +5,8 @@
 namespace nereus::datasets {
 std::size_t selectEnvironment(const Job &job, std::int64_t k, Stream &rng) {
     const auto &list = job.randomize.environments;
+    if (const auto forced = job.block(k).environment) // §11.1: the block's environment, no draw
+        return *forced;
     // Sweep: scenario = k mod S, so stepping the environment every S samples gives every scenario every
     // environment.
     if (job.randomize.sweep)

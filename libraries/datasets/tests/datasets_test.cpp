@@ -147,6 +147,7 @@ TEST(DatasetEnvironment, WeightedSelectionUsesTheFirstDraw) {
     auto document = minimalJob();
     document["randomize"]["environments"] = Json::parse(R"([{"id": "clear", "weight": 3}, {"id": "murky", "weight": 1},
                                                             {"id": "never", "weight": 0}])");
+    document["samples"][0]["count"] = 8000; // selection looks up k's block
     const auto job = ds::parseJob(document);
     ASSERT_EQ(job.randomize.environments.size(), 3u);
     EXPECT_FALSE(job.randomize.sweep);
@@ -180,6 +181,39 @@ TEST(DatasetEnvironment, SweepCyclesWithinEachBlock) {
     }
     document["randomize"]["environment_mode"] = "random";
     EXPECT_THROW(ds::parseJob(document), std::runtime_error);
+}
+
+TEST(DatasetEnvironment, BlockEnvironmentIsForced) {
+    auto document = minimalJob(); // blocks: 3 torpedo (k 0-2), 2 background (k 3-4)
+    document["randomize"]["environments"] = Json::parse(R"([{"id": "a"}, {"id": "b", "weight": 0}])");
+    document["samples"][1]["environment"] = 1;
+    const auto job = ds::parseJob(document);
+    for (std::int64_t k = 0; k < 5; ++k) {
+        ds::Stream rng(job.seed, k), fresh(job.seed, k);
+        EXPECT_EQ(ds::selectEnvironment(job, k, rng), k < 3 ? 0u : 1u) << k;
+        if (k >= 3) {
+            EXPECT_EQ(rng.uniform(), fresh.uniform()); // forced: no draw consumed
+        }
+    }
+    document["samples"][1]["environment"] = 2;
+    EXPECT_THROW(ds::parseJob(document), std::runtime_error);
+}
+
+TEST(DatasetJob, FixedSampler) {
+    auto document = minimalJob();
+    document["samples"][0]["sampler"] = Json::parse(R"({"type": "fixed", "target_frame": "board",
+        "world_from_root": {"position_m": [1, 2, -1], "orientation_wxyz": [0.6, 0, 0, 0.8]}})");
+    const auto job = ds::parseJob(document);
+    const auto &sampler = job.samples[0].sampler;
+    ds::Stream rng(1, 0), fresh(1, 0);
+    const auto draw = ds::samplePose(sampler, rng, {}, flatPool(), forwardMount());
+    ASSERT_TRUE(draw.world_from_root);
+    EXPECT_EQ(draw.world_from_root->translation, Eigen::Vector3d(1, 2, -1));
+    EXPECT_EQ(draw.world_from_root->rotation.coeffs(), Eigen::Quaterniond(.6, 0, 0, .8).coeffs());
+    EXPECT_EQ(draw.frame, "board");
+    EXPECT_EQ(rng.uniform(), fresh.uniform()); // no pose randomness
+    document["samples"][0]["sampler"]["world_from_root"]["orientation_wxyz"] = {1, 0, 0, 1};
+    EXPECT_THROW(ds::parseJob(document), std::runtime_error); // not a unit quaternion
 }
 
 TEST(DatasetEnvironment, SweepGivesEveryScenarioEveryEnvironment) {
@@ -731,6 +765,41 @@ TEST(DatasetEndToEnd, AcceptanceScaleDoesNotChangeOutput) {
         EXPECT_EQ(x.value("attempts", 0), y.value("attempts", 0)) << k;
     }
     expectSameOutputs(quarter, full);
+    std::filesystem::remove_all(root);
+}
+
+// A fixed sampler reproduces a recorded pose exactly (and, with the same k, the same image); a rejected fixed
+// pose is skipped after one attempt.
+TEST(DatasetEndToEnd, FixedSamplerReproducesRecordedPose) {
+    if (!std::filesystem::exists(NEREUS_RESOLVED_TALOS))
+        GTEST_SKIP() << "resolved Talos fixture missing (run the session_resolve_talos test)";
+    const auto root = std::filesystem::temp_directory_path() / "nereus_datasets_fixed";
+    const auto first = freshOutput(root / "first"), second = freshOutput(root / "second");
+    auto generator = makeGenerator(talosJob(first));
+    if (!generator)
+        GTEST_SKIP() << "no EGL";
+    ASSERT_EQ(generator->render(0).at("status"), "accepted");
+    const auto recorded = Json::parse(slurp(first / "records" / "torpedo_000000.json"));
+    auto job = talosJob(second);
+    job["samples"][0]["count"] = 2;
+    job["samples"][0]["sampler"] = {
+        {"type", "fixed"}, {"world_from_root", recorded.at("robot").at("world_from_root")}, {"target_frame", "task"}};
+    job["samples"].push_back(Json::parse(R"({"task": "torpedo", "count": 1, "sampler": {"type": "fixed",
+        "world_from_root": {"position_m": [0, 0, 5], "orientation_wxyz": [1, 0, 0, 0]}}})"));
+    auto fixed = makeGenerator(job);
+    ASSERT_EQ(fixed->render(0).at("status"), "accepted");
+    const auto again = Json::parse(slurp(second / "records" / "torpedo_000000.json"));
+    EXPECT_EQ(again.at("robot"), recorded.at("robot"));
+    EXPECT_EQ(again.at("camera"), recorded.at("camera"));
+    EXPECT_EQ(again.at("instances"), recorded.at("instances"));
+    EXPECT_EQ(again.at("attempts"), 1);
+    EXPECT_EQ(again.at("randomization").at("target_frame"), "task");
+    EXPECT_EQ(slurp(second / "images" / "torpedo_000000.jpg"), slurp(first / "images" / "torpedo_000000.jpg"));
+    const auto skipped = fixed->render(2); // above the water
+    EXPECT_EQ(skipped.at("status"), "skipped");
+    EXPECT_EQ(skipped.at("attempts"), 1);
+    EXPECT_EQ(skipped.at("reasons").size(), 1u);
+    EXPECT_FALSE(std::filesystem::exists(second / "records" / "torpedo_000002.json"));
     std::filesystem::remove_all(root);
 }
 

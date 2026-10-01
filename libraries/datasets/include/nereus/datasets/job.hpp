@@ -3,6 +3,7 @@
 // from which scenarios, through which camera, which parts are labelled, how views are accepted and how each
 // sample's appearance is randomized. Parsing validates the fields the renderer reads; paths stay absolute.
 #include <nereus/session/scenario.hpp>
+#include <nereus/spatial/frames.hpp>
 
 #include <Eigen/Core>
 
@@ -26,19 +27,23 @@ struct Range {
 };
 
 struct Sampler {
-    std::string type;                        // approach | overhead | free
+    std::string type;                        // approach | overhead | free | fixed
     std::vector<std::string> frames{"task"}; // one picked uniformly per attempt
     Eigen::Vector3d offset = Eigen::Vector3d::Zero(), facing = Eigen::Vector3d::UnitX();
     Range range_m{1, 3}, elevation_deg{0, 0}, altitude_m{1, 2}, depth_m{.5, 3};
     double bearing_deg = 0, aim_jitter_deg = 0, roll_deg = 0, pitch_deg = 0, max_aim_pitch_deg = 20, radius_m = 0;
     bool both_sides = false;
     std::optional<double> yaw_deg; // overhead: fixed robot yaw instead of U(0, 360)
+    // fixed (§11.1): this exact robot pose, one acceptance attempt; target_frame is copied to the record.
+    spatial::Pose world_from_root;
+    std::optional<std::string> target_frame;
 };
 
 struct SampleBlock {
     std::optional<std::string> task; // empty: background
     std::int64_t count = 0;
     Sampler sampler;
+    std::optional<std::size_t> environment; // forces randomize.environments[i] (no draw consumed)
 };
 
 struct CameraSpec {
