@@ -2,6 +2,7 @@
 
     ros2 launch integrations/uwrt/launch/robot.launch.py [robot_only:=true] [rmw:=<rmw implementation>]
         [pool:=robosub|rpac] [scenario:=<pack folder>] [config:=<viewer host yaml>]
+        [nvidia:=auto|true|false]
 
 Resolves the scenario pack (robot model, cameras, frames, panels) with
 `python -m nereus.packs resolve` and runs nereus-viewer with --pose-source estimate:
@@ -11,6 +12,7 @@ robot_only:=true hides the simulated pool and course layout (it does not match a
 The robot must be reachable with the same RMW / ROS_DOMAIN_ID (Zenoh: a router connected to the robot's).
 """
 
+import ctypes.util
 import os
 import subprocess
 import sys
@@ -40,6 +42,17 @@ def _scenario(context):
     return str(ROOT / "content/packs/scenarios" / POOLS[pool or "robosub"])
 
 
+def _gpu_env(context):
+    """PRIME render offload for the viewer: on a hybrid laptop GLX opens windows on the integrated GPU unless
+    asked for NVIDIA (the simulator's EGL cameras already pick NVIDIA). auto: offload when the NVIDIA GLX
+    driver is installed."""
+    mode = LC("nvidia").perform(context).lower()
+    if mode not in ("auto", "true", "false"):
+        raise RuntimeError(f"nvidia:= must be auto, true or false (got '{mode}')")
+    if mode == "false" or (mode == "auto" and not ctypes.util.find_library("GLX_nvidia")):
+        return {}
+    return {"__NV_PRIME_RENDER_OFFLOAD": "1", "__GLX_VENDOR_LIBRARY_NAME": "nvidia"}
+
 
 def _processes(context):
     rmw = LC("rmw").perform(context)
@@ -58,7 +71,8 @@ def _processes(context):
         command += ["--config", os.path.abspath(config)]
     if LC("robot_only").perform(context).lower() in ("true", "1", "yes"):
         command.append("--robot-only")
-    actions.append(ExecuteProcess(cmd=command, cwd=str(ROOT), output="screen", name="pool_viewer"))
+    actions.append(ExecuteProcess(cmd=command, cwd=str(ROOT), output="screen", name="pool_viewer",
+                                  additional_env=_gpu_env(context)))
     return actions
 
 
@@ -74,6 +88,8 @@ def generate_launch_description():
                               description="viewer host yaml (default: content/viewer/talos_uwrt_host.yaml)"),
         DeclareLaunchArgument("viewer_binary", default_value=str(ROOT / "build/ros-viewer/nereus-viewer"),
                               description="nereus-viewer executable"),
+        DeclareLaunchArgument("nvidia", default_value="auto",
+                              description="viewer on the NVIDIA GPU via PRIME offload: auto | true | false"),
         DeclareLaunchArgument("rmw", default_value="",
                               description="RMW for the viewer (e.g. rmw_zenoh_cpp); empty keeps the shell's"),
         OpaqueFunction(function=_processes),
