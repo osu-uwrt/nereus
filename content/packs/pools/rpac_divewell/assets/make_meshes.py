@@ -1,10 +1,11 @@
 """Build the RPAC dive well's fixture meshes (OBJ, metres, Z up, water surface at z = 0).
 
 Run from anywhere: python3 make_meshes.py. Writes next to this file:
-- tower_stairs.obj: the staircase in the well between the tower pillars (treads and two handrails). Origin at
-  the well's centre on the wall face; the pool is +y, the well runs back to y = -1.8.
-- ladder.obj: the shallow-end ladder (two grab rails over the edge, toe holds on the wall). Origin on the wall
-  face at the ladder's centre; the pool is +y, the deck -y.
+- tower_stairs.obj: the staircase in the well between the tower pillars (a landing, treads and three
+  handrails). Origin at the well's centre on the wall face; the pool is +y, the well runs back to y = -1.8, and
+  -x is the deep-end side.
+- ladder.obj: a wall ladder (two grab rails over the edge, toe holds on the wall). Origin on the wall face at
+  the ladder's centre; the pool is +y, the deck -y.
 - raised_grates.obj: a row of three raised square drain grates along x. Origin on the floor at the row's centre.
 - wall_vent.obj: a slatted square vent on a wall. Origin at its centre on the wall face; it faces +y.
 - floor_vent.obj: a flush slotted square vent. Origin at its centre on the floor; it faces +z.
@@ -24,6 +25,8 @@ COLORS = {
     "grate_side": (0.3, 0.45, 0.5),
     "vent": (0.05, 0.12, 0.16),
     "slat": (0.3, 0.5, 0.55),
+    "floor_vent": (0.75, 0.86, 0.87),
+    "floor_slot": (0.12, 0.2, 0.24),
 }
 
 
@@ -148,17 +151,28 @@ def _cross(a, b):
 
 
 def tower_stairs() -> Mesh:
-    """Five treads stepping back from the well floor (z = -1.22) up toward the deck, 0.3 m runs, with a dark
-    nosing on each; two handrails from posts on the deck behind the well, sloping down with the stairs and
-    dropping straight into the water at the front."""
+    """A landing at deck level against the back of the well, then five treads stepping down toward the pool
+    (0.25 m runs, 0.25 m risers) to the well floor at z = -1.22, each with a dark nosing. Three handrails run
+    down the flight 0.9 m above the nosings, each from a hooped top on the landing with a post to a tread
+    halfway down: the deep-end-side one ends on a tread above the bottom, the other two drop to the well floor
+    at the front."""
     m = Mesh()
-    half, back, floor = 1.05, 1.8, -1.22
-    for k, top in enumerate([-1.01, -0.81, -0.55, -0.29, 0.02], start=1):
-        front = -0.3 * k
-        m.box("tread", (-half, -back, floor), (half, front, top))
+    half, back, floor, landing, run = 1.05, 1.8, -1.22, 1.5, 0.25
+    rise = (DECK - floor) / 6
+    m.box("tread", (-half, -back, floor), (half, -landing, DECK))
+    for k in range(1, 6):
+        top, front = DECK - rise * k, -landing + run * k
+        m.box("tread", (-half, -landing + run * (k - 1), floor), (half, front, top))
         m.box("nosing", (-half, front - 0.05, top), (half, front, top + 0.002))
-    for x in (-0.29, 0.41):
-        m.tube("steel", [(x, -1.95, DECK), (x, -1.95, 1.2), (x, -0.15, 0.15), (x, -0.15, floor + 0.01)])
+    slope = rise / run
+
+    def nosing_z(y: float) -> float:
+        return DECK - slope * (y + landing)
+
+    for x, end, foot in ((-0.6, -0.8, DECK - rise * 3), (0.0, -0.15, floor), (0.75, -0.15, floor)):
+        m.tube("steel", [(x, -1.72, DECK), (x, -1.72, DECK + 0.95), (x, -landing, nosing_z(-landing) + 0.9),
+                         (x, end, nosing_z(end) + 0.9), (x, end, foot)])
+        m.tube("steel", [(x, -1.1, nosing_z(-1.1) + 0.9), (x, -1.1, DECK - rise * 2)])
     return m
 
 
@@ -193,11 +207,12 @@ def wall_vent() -> Mesh:
 
 
 def floor_vent() -> Mesh:
-    """0.40 m square flush vent: dark, with three light slats, 3 mm off the floor."""
+    """0.40 m square flush vent: pale like the lines, with three dark slots, 3 mm off the floor."""
     m = Mesh()
-    m.polygon("vent", [(-0.2, -0.2, 0.003), (0.2, -0.2, 0.003), (0.2, 0.2, 0.003), (-0.2, 0.2, 0.003)])
+    m.polygon("floor_vent", [(-0.2, -0.2, 0.003), (0.2, -0.2, 0.003), (0.2, 0.2, 0.003), (-0.2, 0.2, 0.003)])
     for y in (-0.1, 0.0, 0.1):
-        m.box("slat", (-0.17, y - 0.008, 0.0), (0.17, y + 0.008, 0.006))
+        m.polygon("floor_slot", [(-0.16, y - 0.02, 0.004), (0.16, y - 0.02, 0.004), (0.16, y + 0.02, 0.004),
+                                 (-0.16, y + 0.02, 0.004)])
     return m
 
 
