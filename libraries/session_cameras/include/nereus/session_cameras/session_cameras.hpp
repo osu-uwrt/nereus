@@ -53,7 +53,7 @@ struct Options {
     bool always = false;                     // render every pack output regardless of demand
     std::map<std::string, int> jpeg_quality; // sensor id -> JPEG quality for colour outputs (absent: none)
     bool sensor_noise = true;                // overridden by the scenario's sensor_noise when present
-    int supersample = 2;                     // colour/depth anti-aliasing (rendering::Appearance::supersample), 1..4
+    int supersample = 1;                     // colour/depth anti-aliasing (rendering::Appearance::supersample), 1..4
 };
 
 struct Products {

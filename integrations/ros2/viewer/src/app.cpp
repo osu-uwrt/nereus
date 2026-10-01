@@ -118,7 +118,7 @@ struct ObserverSettings {
     bool water = true, walls = true, floor = true, reflections = false, shadows = true;
     int lighting = 0; // 0 follows the scene, 1 indoor, 2 outdoor, 3 sterile
     float exposure = 1, brightness = 1, ambient = 1;
-    int antialiasing = 2; // supersampling factor of the observer view and camera cards (1 = off)
+    int antialiasing = 1; // supersampling factor of the observer view and camera cards (1 = off)
     void resetLighting() {
         shadows = true;
         lighting = 0;

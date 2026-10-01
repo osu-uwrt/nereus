@@ -9,7 +9,7 @@
 The simulator (build/ros-viewer/.../nereus-sim) runs the scenario resolved with
 `python -m nereus.packs resolve`; cameras:=false passes --no-cameras and
 always_cameras:=true renders every camera output regardless of subscribers. camera_supersample sets the
-camera anti-aliasing factor (empty: the simulator's default, 2x; 1 turns it off).
+camera anti-aliasing factor (empty: the simulator's default, off; 2..4 supersample).
 
 The controller arguments pass through to riptide_bringup2 (mission_stack.launch.py); empty keeps bringup's
 default controller. MPC on the simulator plant: active_control_model:=mpc mpc_model:=sim.
