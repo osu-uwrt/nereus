@@ -269,8 +269,8 @@ def pool(data: dict[str, Any]) -> list[str]:
 
 
 def _pool_fixtures(fixtures: list[dict[str, Any]], parameters: dict[str, Any], problems: list[str]) -> None:
-    """Boxes stand in or at the pool (up to 1 m into the walls and 2 m above the deck, for stairs and
-    rails); recesses open within their wall."""
+    """Boxes stand in or at the pool (up to 3 m beyond the walls, the deck the viewer draws, and 2 m above
+    it, for stairs and rails); recesses open within their wall."""
     duplicates((item["id"] for item in fixtures), "fixture", problems)
     length, width = parameters["length_m"], parameters["width_m"]
     deck = parameters["deck_height_m"]
@@ -280,7 +280,7 @@ def _pool_fixtures(fixtures: list[dict[str, Any]], parameters: dict[str, Any], p
             center = fixture["center_m"]
             if len(center) == 2 and not (_between(center[0], 0, length) and _between(center[1], 0, width)):
                 problems.append(f"{where}/center_m: ({center[0]:g}, {center[1]:g}) is outside the pool floor")
-            if not (_between(center[0], -1, length + 1) and _between(center[1], -1, width + 1)):
+            if not (_between(center[0], -3, length + 3) and _between(center[1], -3, width + 3)):
                 problems.append(f"{where}/center_m: ({center[0]:g}, {center[1]:g}) is outside the pool")
             if len(center) == 3 and not _between(center[2], -parameters["depth_m"], deck + 2):
                 problems.append(

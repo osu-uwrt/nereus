@@ -463,10 +463,10 @@ class PoolFixtureTests(PackRejectionCase):
     def test_box_outside_the_pool(self) -> None:
         self.add_fixtures(
             "- {id: grate, type: box, center_m: [10.5, 2], size_m: [1, 1, 0.1]}\n"
-            "- {id: rail, type: box, center_m: [12, 2, 0], size_m: [1, 1, 0.1]}\n"
+            "- {id: rail, type: box, center_m: [14, 2, 0], size_m: [1, 1, 0.1]}\n"
         )
         self.assert_load_rejects("pool", "/fixtures/0/center_m: (10.5, 2) is outside the pool floor")
-        self.assert_load_rejects("pool", "/fixtures/1/center_m: (12, 2) is outside the pool")
+        self.assert_load_rejects("pool", "/fixtures/1/center_m: (14, 2) is outside the pool")
 
     def test_box_far_above_the_deck(self) -> None:
         self.add_fixtures("- {id: rail, type: box, center_m: [5, 2, 2.5], size_m: [1, 1, 0.1]}\n")
