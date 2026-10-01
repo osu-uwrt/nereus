@@ -9,7 +9,7 @@ description: Ohio State RPAC dive well, 25 m x 56 ft, 17 ft deep rising to 14 ft
 
 type: rectangular_pool
 parameters:
-  length_m: 25.0
+  length_m: 25.22                # 82.7 ft: fitted to the pool video (the published area / 56 ft gives 82.8)
   width_m: 17.0688             # 56 ft
   depth_m: 5.1816              # 17 ft
   deck_height_m: 0.3048        # above water
@@ -19,73 +19,80 @@ parameters:
   current_m_s: [0.0, 0.0, 0.0]
   current_oscillation_amplitude_m_s: [0.0, 0.0, 0.0]
   current_oscillation_frequency_hz: 0.0
-  # 17 ft at the deep end, flat through the fourth cross line (15.7 m), curving up to 14 ft.
+  # 17 ft at the deep end, flat to just past the fourth cross line, then rising steadily to 14 ft at the
+  # shallow wall (fitted to the pool video; the deck depth markers read 16'9" and 15'6" along the slope).
   floor_profile:
     along: x
-    points_m: [[0, 5.1816], [15.7, 5.1816], [21.5, 4.2672], [25.0, 4.2672]]
+    points_m: [[0, 5.1816], [15.98, 5.1816], [22.67, 4.592], [23.47, 4.492], [25.22, 4.2672]]
 
 # Static wall boxes in pool coordinates, depth + deck + 1 m tall; the floor's boxes come from the profile.
 collision_boxes:
 - {id: west_wall, size_m: [1, 19.0688, 6.4864], center_m: [-0.5, 8.5344, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
-- {id: east_wall, size_m: [1, 19.0688, 6.4864], center_m: [25.5, 8.5344, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
-- {id: south_wall, size_m: [25.0, 1, 6.4864], center_m: [12.5, -0.5, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
-- {id: north_wall, size_m: [25.0, 1, 6.4864], center_m: [12.5, 17.5688, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
+- {id: east_wall, size_m: [1, 19.0688, 6.4864], center_m: [25.72, 8.5344, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
+- {id: south_wall, size_m: [25.22, 1, 6.4864], center_m: [12.61, -0.5, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
+- {id: north_wall, size_m: [25.22, 1, 6.4864], center_m: [12.61, 17.5688, -2.4384], orientation_wxyz: [1, 0, 0, 0]}
 
-# White lines on a dark blue bottom.
+# White lines on a dark blue bottom; positions fitted to the pool video.
 markings:
   color_rgb: [0.85, 0.93, 0.95]
   width_m: 0.254
-  # Eight lap lines centred in 7 ft lanes (first 3.5 ft from the y = 0 wall), T ends at both ends.
+  # Eight lap lines centred in 7 ft lanes (first 3.5 ft from the y = 0 wall), T ends 1.6 m off the end walls.
   lane_grid:
     along_x: {count: 8, spacing_m: 2.1336}
-    inset_m: 2.0
+    inset_m: 1.61
     ends: t
-    t_length_m: 1.0
+    t_length_m: 1.04
   lines:
-  # Cross lines, 14 ft + 12.5 ft apart from the deep wall, 20 ft long, staggered across the lanes.
-  - {from: [4.2672, 1.9], to: [4.2672, 7.996]}
-  - {from: [8.0772, 2.6], to: [8.0772, 8.696]}
-  - {from: [11.8872, 3.1], to: [11.8872, 9.196]}
-  - {from: [15.6972, 1.7], to: [15.6972, 7.796]}
+  # The dive stations' lines off the platform (y = 0) wall: 14 ft + 12.5 ft apart from the deep wall, 20 ft long.
+  - {from: [4.2672, 2.031], to: [4.2672, 8.127]}
+  - {from: [8.0772, 2.568], to: [8.0772, 8.664]}
+  - {from: [11.8872, 3.148], to: [11.8872, 9.244]}
+  - {from: [15.6972, 1.806], to: [15.6972, 8.057]}
   # Diving lines beside lap lines 4 and 6 at the shallow end.
-  - {from: [18.5, 8.0], to: [23.0, 8.0]}
-  - {from: [18.5, 11.0], to: [23.0, 11.0]}
-  # One plus-shaped target on the shallow-end wall above each lap line: a stem and a crossbar.
+  - {from: [19.85, 7.936], to: [23.61, 7.936]}
+  - {from: [18.02, 10.988], to: [23.53, 10.988]}
+  # A dark plus-shaped target above each lap line on the shallow-end wall: a stem from the waterline down
+  # to 0.97 m and a 0.91 m crossbar at 0.46 m.
   wall_lines:
-  - {wall: x_max, from: [1.0668, -1.4], to: [1.0668, -0.25]}
-  - {wall: x_max, from: [0.8168, -0.5], to: [1.3168, -0.5]}
-  - {wall: x_max, from: [3.2004, -1.4], to: [3.2004, -0.25]}
-  - {wall: x_max, from: [2.9504, -0.5], to: [3.4504, -0.5]}
-  - {wall: x_max, from: [5.334, -1.4], to: [5.334, -0.25]}
-  - {wall: x_max, from: [5.084, -0.5], to: [5.584, -0.5]}
-  - {wall: x_max, from: [7.4676, -1.4], to: [7.4676, -0.25]}
-  - {wall: x_max, from: [7.2176, -0.5], to: [7.7176, -0.5]}
-  - {wall: x_max, from: [9.6012, -1.4], to: [9.6012, -0.25]}
-  - {wall: x_max, from: [9.3512, -0.5], to: [9.8512, -0.5]}
-  - {wall: x_max, from: [11.7348, -1.4], to: [11.7348, -0.25]}
-  - {wall: x_max, from: [11.4848, -0.5], to: [11.9848, -0.5]}
-  - {wall: x_max, from: [13.8684, -1.4], to: [13.8684, -0.25]}
-  - {wall: x_max, from: [13.6184, -0.5], to: [14.1184, -0.5]}
-  - {wall: x_max, from: [16.002, -1.4], to: [16.002, -0.25]}
-  - {wall: x_max, from: [15.752, -0.5], to: [16.252, -0.5]}
+  - {wall: x_max, from: [1.0668, -0.965], to: [1.0668, 0.0], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [0.6118, -0.46], to: [1.5218, -0.46], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [3.2004, -0.965], to: [3.2004, 0.0], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [2.7454, -0.46], to: [3.6554, -0.46], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [5.334, -0.965], to: [5.334, 0.0], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [4.879, -0.46], to: [5.789, -0.46], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [7.4676, -0.965], to: [7.4676, 0.0], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [7.0126, -0.46], to: [7.9226, -0.46], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [9.6012, -0.965], to: [9.6012, 0.0], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [9.1462, -0.46], to: [10.0562, -0.46], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [11.7348, -0.965], to: [11.7348, 0.0], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [11.2798, -0.46], to: [12.1898, -0.46], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [13.8684, -0.965], to: [13.8684, 0.0], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [13.4134, -0.46], to: [14.3234, -0.46], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [16.002, -0.965], to: [16.002, 0.0], color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [15.547, -0.46], to: [16.457, -0.46], color_rgb: [0.05, 0.12, 0.16]}
+  # A dark band around the walls about 1.2 m down.
+  - {wall: x_min, from: [0, -1.18], to: [17.0688, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [0, -1.18], to: [17.0688, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: y_min, from: [0, -1.18], to: [25.22, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: y_max, from: [0, -1.18], to: [25.22, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
 
 surface:
-  tile_rgb: [0.2, 0.42, 0.58]
+  tile_rgb: [0.1, 0.42, 0.42]
   tile_size_m: 0.0508
 
-# Water colour and attenuation seen by the simulated cameras.
+# Clear indoor water, matched to the pool video: lines stay visible the length of the pool.
 water_optics:
-  tint_rgb: [0.025, 0.22, 0.29]
-  distance_scale: 1.88
-  distance_power: 0.40
+  tint_rgb: [0.01, 0.34, 0.44]
+  distance_scale: 1.0
+  distance_power: 1.0
   clear_distance_m: 0.0
-  scattering: 0.458
-  absorption_per_m_rgb: [0.648, 0.145, 0.025]
+  scattering: 0.035
+  absorption_per_m_rgb: [0.45, 0.05, 0.04]
 
 # Indoor natatorium: fixed overhead light, sun angles unused.
 lighting:
   profile: indoor
-  direct_light: 1.0
+  direct_light: 0.7
   ambient_light: 0.8
   sun_azimuth_deg: 225.0
   sun_elevation_deg: 55.0
