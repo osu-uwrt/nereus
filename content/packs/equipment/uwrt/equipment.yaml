@@ -1,0 +1,17 @@
+# UWRT team equipment: gear the team sets up at any pool. This pack says what each item is; a scenario places it
+# (equipment_placements) relative to the world, the pool, a task or another item.
+kind: equipment
+id: uwrt
+description: UWRT gear set up at the pool, the AprilTag calibration board.
+
+assets:
+- {id: calibration_board, path: assets/calibration_board.obj}
+
+items:
+- id: calibration_board
+  description: 2 ft x 3 ft, 3 mm dibond sign with tag36h11 id 0; the datum line is 18 in above the tag centre.
+  asset: calibration_board   # origin at the centre of the back (mounting) face, printed face along +X
+  frames:
+  # Tag centre on the printed face, in apriltag_ros's tag frame (tag36h11:0): x right and y up as seen from the
+  # front, z out of the face. Measured from the print: 0.1178 m below the board centre.
+  - {id: tag, position_m: [0.003, 0.0, -0.1178], orientation_wxyz: [0.5, 0.5, 0.5, 0.5]}

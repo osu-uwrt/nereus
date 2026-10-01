@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "equipment pack",
+  "description": "Authoritative loader definition: published JSON Schemas and the type registry are generated from this corpus. A team's own gear (calibration boards, markers): what each item is, not where it goes. Scenarios place items with equipment_placements. Drawn by the viewer and cameras; no contacts, tasks or scoring.",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "const": "equipment"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/name"
+    },
+    "description": {
+      "type": "string"
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/asset"
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item"
+      },
+      "minItems": 1
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Free non-executable annotations preserved verbatim by load/save; never interpreted."
+    }
+  },
+  "required": [
+    "kind",
+    "id",
+    "assets",
+    "items"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "item": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/name"
+        },
+        "description": {
+          "type": "string"
+        },
+        "asset": {
+          "$ref": "common.schema.json#/$defs/name",
+          "description": "Mesh in this pack's assets; its origin is the item origin."
+        },
+        "frames": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/named_pose"
+          },
+          "description": "Named frames on the item (item-origin coordinates), referenced as <placement id>/<frame id>."
+        }
+      },
+      "required": [
+        "id",
+        "asset"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

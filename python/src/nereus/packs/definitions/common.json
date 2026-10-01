@@ -113,22 +113,43 @@
       "exclusiveMaximum": 360,
       "description": "Rotation about world +Z in degrees, stored as in the source to avoid hand-rounded radians."
     },
+    "frame_ref": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_]*(/[A-Za-z][A-Za-z0-9_]*)?$",
+      "maxLength": 257,
+      "description": "A scenario frame: world, pool, a task id, an equipment placement id, or <equipment placement id>/<item frame id>."
+    },
+    "rpy_deg": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "[roll, pitch, yaw] in degrees about x, y, z (applied yaw, then pitch, then roll; R = Rz Ry Rx), as tf2's static_transform_publisher takes them."
+    },
     "upright_placement": {
       "type": "object",
       "properties": {
+        "relative_to": {
+          "$ref": "#/$defs/frame_ref",
+          "description": "Frame the pose is measured in; default world."
+        },
         "position_m": {
           "$ref": "#/$defs/vector3"
         },
         "yaw_deg": {
           "$ref": "#/$defs/yaw_deg"
+        },
+        "rpy_deg": {
+          "$ref": "#/$defs/rpy_deg"
         }
       },
       "required": [
-        "position_m",
-        "yaw_deg"
+        "position_m"
       ],
       "additionalProperties": false,
-      "description": "Upright scenario placement in the world frame (yaw only), as used by the native world placement."
+      "description": "Scenario placement: position_m and yaw_deg (or rpy_deg) in `relative_to`. Pools and tasks must end up upright in the world (a semantic check)."
     },
     "frame": {
       "type": "object",

@@ -39,7 +39,9 @@ std::map<std::string, std::map<std::string, fs::path>> resolveAssets(const YAML:
     std::map<std::string, std::map<std::string, fs::path>> result;
     const auto given = doc["asset_paths"];
     fs::path packDir;
-    for (const char *role : {"robot", "pool", "tasks"}) {
+    for (const char *role : {"robot", "pool", "tasks", "equipment"}) {
+        if (!doc[role]) // the equipment pack is optional
+            continue;
         for (const auto &asset : doc[role]["assets"]) {
             const auto id = asset["id"].as<std::string>();
             if (given && given[role] && given[role][id]) {

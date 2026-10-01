@@ -58,7 +58,8 @@ content/packs/scenarios/<name>/scenario.yaml   picks a robot, pool, tasks and br
    ├── robots/<robot>/robot.yaml     physics, frames, thrusters, sensors, mechanisms, visuals
    ├── pools/<pool>/pool.yaml        pool size, walls, water, lighting
    ├── tasks/<set>/tasks.yaml        task files, scoring rules, scorecard UI
-   └── bridges/<bridge>/bridge.yaml  ROS topics, services, TF and message field mapping
+   ├── bridges/<bridge>/bridge.yaml  ROS topics, services, TF and message field mapping
+   └── equipment/<team>/equipment.yaml  optional team gear the scenario places (UWRT: the AprilTag board)
         │  python -m nereus.packs resolve   (validates, writes one resolved.json)
         ▼
 nereus-sim resolved.json  ◄── ROS 2 ──►  your robot stack   ◄── ROS 2 ──►  nereus-viewer
@@ -66,7 +67,7 @@ nereus-sim resolved.json  ◄── ROS 2 ──►  your robot stack   ◄─�
 
 | Folder | Contents |
 | --- | --- |
-| `content/packs/` | Robot, pool, task, bridge and scenario packs (the config you edit) |
+| `content/packs/` | Robot, pool, task, bridge, equipment and scenario packs (the config you edit) |
 | `content/viewer/` | Viewer layout, panels and topics |
 | `libraries/` | C++ simulation, sensors, session (tasks, props), rendering, cameras |
 | `integrations/ros2/` | Simulator bridge and pool viewer |

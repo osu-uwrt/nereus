@@ -22,7 +22,7 @@ from ruamel.yaml.events import (
     SequenceStartEvent,
 )
 
-PACK_KINDS = ("robot", "pool", "tasks", "bridge", "scenario")
+PACK_KINDS = ("robot", "pool", "tasks", "bridge", "equipment", "scenario")
 DOCUMENT_KINDS = PACK_KINDS + ("task",)
 
 

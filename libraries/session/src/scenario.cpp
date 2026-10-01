@@ -40,6 +40,7 @@ ResolvedScenario parseResolvedScenario(const Json &document) {
     result.pool = member(document, "pool");
     result.tasks = member(document, "tasks");
     result.bridge = document.value("bridge", Json());
+    result.equipment = document.value("equipment", Json());
     result.task_definitions = member(document, "task_definitions");
     result.run_options = document.value("run_options", Json::object());
     if (!result.task_definitions.is_array())

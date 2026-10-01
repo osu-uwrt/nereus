@@ -112,7 +112,7 @@ void dropSimulatorPanels(YAML::Node &document) {
 // Observer-only look: never touches the bridge's sensor renders.
 struct Look {
     rendering::Appearance appearance;
-    bool tag = true;
+    bool equipment = true; // equipment pack visuals in the observer view
 };
 struct ObserverSettings {
     bool water = true, walls = true, floor = true, reflections = false, shadows = true;
@@ -607,13 +607,12 @@ void App::loadScenario(const std::string &json) {
     }
     SceneModelOptions options;
     options.config = config_;
-    options.configDirectory = configDir_;
     options.robotOnly = opt_.robotOnly;
     model_ = std::make_unique<SceneModel>(*scenario_, options, thrusters_, lights_);
     ros_->attach(*scenario_, config_, lights_, thrusters_, !demoMode_);
     loadMappingMarkers();
     look_.appearance = scenario_->appearance;
-    look_.tag = lookup(config_, {"calibration_board", "visible"}).as<bool>(true);
+    look_.equipment = lookup(config_, {"equipment_visible"}).as<bool>(true);
     cards_.assign(scenario_->cameras.size(), {});
     cardDue_.assign(cards_.size(), 0.);
     cardVisible_.assign(cards_.size(), 1);
@@ -832,7 +831,7 @@ VisualState App::buildState() {
     for (const auto &light : lights_.lights)
         state.lightColor.push_back(light.state.color(now));
     state.claw = demoMode_ ? std::array<float, 2>{0.f, 0.f} : ros_->claw;
-    state.showBoard = look_.tag;
+    state.showEquipment = look_.equipment;
     state.showWalls = observer_.walls;
     state.showFloor = observer_.floor;
     if (robotGhost_ && haveEstimate_)
@@ -1345,7 +1344,9 @@ void App::drawSceneSettingsPopup() {
         if (ImGui::BeginTabItem("Lighting")) {
             sectionHeading("UNDERWATER OPTICS");
             auto &a = look_.appearance;
-            ImGui::Checkbox("Calibration board", &look_.tag);
+            ImGui::Checkbox("Team equipment", &look_.equipment);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("The equipment pack (calibration board) in this view; camera cards always show it.");
             ImGui::SetNextItemWidth(width * .17f);
             ImGui::SliderFloat("Caustics", &a.caustics, 0, 1, "%.2f");
             ImGui::SameLine();
@@ -2000,11 +2001,11 @@ void App::renderLocalCards(double t, const rendering::Scene &mainScene) {
     PhaseTimer timer{profiler_, Phase::Cards, profileSync()};
     rendering::Scene ownScene;
     // The robot's camera sees the simulated pool and course whatever the observer hides or overlays.
-    const bool observerOnly =
-        !observer_.walls || !observer_.floor || courseFromMapping() || (robotGhost_ && haveEstimate_) || mappingGhost_;
+    const bool observerOnly = !observer_.walls || !observer_.floor || !look_.equipment || courseFromMapping() ||
+                              (robotGhost_ && haveEstimate_) || mappingGhost_;
     if (observerOnly || opt_.legacyCards) {
         auto state = buildState();
-        state.showWalls = state.showFloor = state.showCourse = true;
+        state.showWalls = state.showFloor = state.showCourse = state.showEquipment = true;
         state.ghostBody.reset();
         state.markers.erase(std::remove_if(state.markers.begin(), state.markers.end(),
                                            [](const MarkerDraw &m) { return m.observerOnly; }),

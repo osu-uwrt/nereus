@@ -8,6 +8,7 @@ robot: ../../robots/talos
 pool: ../../pools/robosub_2026
 tasks: ../../tasks/robosub_2026
 bridge: ../../bridges/uwrt_talos
+equipment: ../../equipment/uwrt
 
 seed: 7
 timestep_s: 0.002   # physics step
@@ -21,6 +22,10 @@ world_frame: map
 pool_placement:
   position_m: [0.0, 19.5136, 0.0]
   yaw_deg: -90.0
+
+# The calibration board on the pool's y = 0 side wall at the map origin, datum line at the waterline.
+equipment_placements:
+- {item: calibration_board, relative_to: pool, position_m: [19.5136, 0.0, -0.3394], yaw_deg: 90.0}
 
 # Task poses, matching the robot's prior map (riptide_mapping2 config.yaml).
 task_placements:

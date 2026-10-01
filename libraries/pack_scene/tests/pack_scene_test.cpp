@@ -45,6 +45,25 @@ TEST(PackScene, ComposesPoolTasksAndRobot) {
     EXPECT_LT((first.transform.cast<double>() - expected).cwiseAbs().maxCoeff(), 1e-6);
 }
 
+// The equipment pack's board is the last static instance, where the scenario hangs it (on the pool's y = 0 wall at
+// the map origin, back face on the wall), with the board texture; a scenario without equipment has none.
+TEST(PackScene, EquipmentVisualsAreLastInTheWorldFrame) {
+    ps::PackScene pack(talos());
+    ASSERT_EQ(pack.equipmentInstances(), (std::vector<std::size_t>{pack.staticScene().instances.size() - 1}));
+    const auto &board = pack.staticScene().instances.back();
+    const Eigen::Vector3f position = board.transform.topRightCorner<3, 1>();
+    const Eigen::Matrix3f rotation = board.transform.topLeftCorner<3, 3>();
+    EXPECT_LT((position - Eigen::Vector3f(0, 0, -.3394f)).norm(), 1e-6f);
+    EXPECT_TRUE(rotation.isIdentity(1e-6f));
+    EXPECT_EQ(texturedWith(pack.staticScene(), "calibration_board"), 1u);
+    EXPECT_EQ(pack.describe().at("equipment_visuals"), 1);
+    auto without = talos();
+    without.equipment = nullptr;
+    ps::PackScene bare(without);
+    EXPECT_TRUE(bare.equipmentInstances().empty());
+    EXPECT_EQ(bare.staticScene().instances.size(), pack.staticScene().instances.size() - 1);
+}
+
 TEST(PackScene, DynamicInstancesAndOverrides) {
     ps::PackScene pack(talos());
     ASSERT_FALSE(pack.propVisuals().empty()); // table props name display meshes

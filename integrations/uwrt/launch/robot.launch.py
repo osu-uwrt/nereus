@@ -27,15 +27,18 @@ ROOT = Path(__file__).resolve().parents[3]
 def _processes(context):
     rmw = LC("rmw").perform(context)
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
+    # The resolver and viewer run in the repository root: relative paths mean the caller's directory.
+    scenario = os.path.abspath(LC("scenario").perform(context))
+    config = LC("config").perform(context)
     resolved = str(Path(tempfile.gettempdir()) / "nereus_robot_resolved.json")
     subprocess.run(
-        [sys.executable, "-m", "nereus.packs", "resolve", LC("scenario").perform(context), "-o", resolved],
+        [sys.executable, "-m", "nereus.packs", "resolve", scenario, "-o", resolved],
         check=True, cwd=str(ROOT),
         env={**os.environ, "PYTHONPATH": os.pathsep.join([str(ROOT / "python/src"), os.environ.get("PYTHONPATH", "")])})
     command = [LC("viewer_binary").perform(context), "--scenario", resolved, "--pose-source", "estimate",
                "--use-sim-time", "false"]
-    if LC("config").perform(context):
-        command += ["--config", LC("config").perform(context)]
+    if config:
+        command += ["--config", os.path.abspath(config)]
     if LC("robot_only").perform(context).lower() in ("true", "1", "yes"):
         command.append("--robot-only")
     actions.append(ExecuteProcess(cmd=command, cwd=str(ROOT), output="screen", name="pool_viewer"))

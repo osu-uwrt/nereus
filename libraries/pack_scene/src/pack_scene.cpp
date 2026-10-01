@@ -221,6 +221,7 @@ PackScene::PackScene(const session::ResolvedScenario &resolved, Options options)
     appearance_ = appearanceFrom(resolved_.pool, options_.strict);
     buildPool();
     buildTasks();
+    buildEquipment();
     for (const auto &visual : resolved_.robot.value("visuals", Json::array())) {
         RobotVisual item;
         item.asset = visual.at("asset").get<std::string>();
@@ -512,6 +513,19 @@ void PackScene::buildTasks() {
     }
 }
 
+void PackScene::buildEquipment() {
+    if (resolved_.equipment.is_null())
+        return;
+    // The pack tool resolves every equipment placement into the world frame (`placed`); drawn only, no contacts.
+    for (const auto &placed : resolved_.equipment.at("placed")) {
+        auto item = instance("equipment", placed.at("asset").get<std::string>(), toMatrix(placement(placed)));
+        if (!item.mesh)
+            continue; // non-strict: skipped and warned by mesh()
+        equipment_.push_back(static_.instances.size());
+        static_.instances.push_back(std::move(item));
+    }
+}
+
 r::Scene PackScene::compose(const Matrix4d &world_from_root, const std::vector<r::Instance> &dynamic,
                             const std::vector<RobotOverride> &overrides,
                             const std::map<std::string, bool> &latched) const {
@@ -545,6 +559,7 @@ Json PackScene::describe() const {
     return {{"pool", pool_record_},
             {"static_instances", static_.instances.size()},
             {"robot_visuals", robot_.size()},
+            {"equipment_visuals", equipment_.size()},
             {"cutouts", cutouts_},
             {"texture_overrides", textures_},
             {"moving_props_with_visuals", props},
