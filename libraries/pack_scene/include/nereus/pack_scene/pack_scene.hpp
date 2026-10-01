@@ -8,6 +8,7 @@
 // The object is immutable after construction except for the mesh cache, which is locked, so
 // compose()/mesh() may be called from several threads.
 #include <nereus/rendering/scene.hpp>
+#include <nereus/session/pool.hpp>
 #include <nereus/session/scenario.hpp>
 #include <nereus/spatial/frames.hpp>
 
@@ -33,7 +34,9 @@ spatial::Pose placement(const session::Json &item);
 spatial::Pose upright(const session::Json &position_m, double yaw_deg);
 // Painted stripes of a pool pack's `markings` (pool-local): lane_grid along_x then along_y lines and their
 // wall continuations, then `lines`, then `wall_lines`; each T end follows its stripe as a separate bar.
+// Wall stripes run down to `floor` where they meet their wall; the first form builds it from the document.
 std::vector<rendering::PoolStripe> poolStripes(const session::Json &pool);
+std::vector<rendering::PoolStripe> poolStripes(const session::Json &pool, const simulation::PoolFloor &floor);
 
 struct RobotVisual {
     std::string asset, frame;

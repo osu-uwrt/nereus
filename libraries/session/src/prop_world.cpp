@@ -1,6 +1,7 @@
 // Prop contact world on Bullet's C++ API. Props are base-only btMultiBody bodies in a
 // btMultiBodyDynamicsWorld (the layout the reference recordings were made with) rather than
 // btRigidBody, which keeps the integration, damping, contact and constraint code paths identical.
+#include <nereus/session/pool.hpp>
 #include <nereus/session/prop_world.hpp>
 
 #include "obj_mesh.hpp"
@@ -505,20 +506,13 @@ PropWorld::Impl::Impl(const ResolvedScenario &resolved, const std::string &task_
     const spatial::FixedFrames fixed(resolved.robot.at("frames").at("root").get<std::string>(), edges);
     mount = poseMatrix(fixed.fromRoot(claws[0]->at("frame").get<std::string>()));
 
-    const Json &pool = resolved.pool.at("parameters");
+    const PoolModel pool = poolModel(resolved.pool);
     const Json &pool_placement = resolved.scenario.at("pool_placement");
-    const double water_level = pool.at("water_level_m").get<double>();
-    const double depth = pool.at("depth_m").get<double>();
-    surface_z = water_level + pool_placement.at("position_m").at(2).get<double>();
+    surface_z = pool.surface_z + pool_placement.at("position_m").at(2).get<double>();
     const Matrix4 pool_from_world = yawMatrix(pool_placement);
-    // A pool floor is either its generated profile boxes or the box whose top sits at the flat floor.
-    for (const auto &b : poolCollisionBoxes(resolved.pool)) {
-        const Vec3 center = vec3(b.at("center_m"), "center_m");
-        const Vec3 size = vec3(b.at("size_m"), "size_m");
-        pool_boxes.push_back(
-            {pool_from_world * poseOf(b.at("center_m"), b.at("orientation_wxyz")), size / 2,
-             b.value("floor", false) || std::abs(center.z() + size.z() / 2 - (water_level - depth)) < 1e-3});
-    }
+    // Landings on a floor box (PoolContactBox::floor) are reported as on the floor.
+    for (const auto &b : pool.contacts)
+        pool_boxes.push_back({pool_from_world * matrixFrom(b.center, b.orientation), b.size / 2, b.floor});
     build();
 }
 

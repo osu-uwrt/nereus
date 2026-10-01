@@ -3,6 +3,7 @@
 // counters and the run_score document builder. Reports ticks/s of the C++ session.
 #include "session_test_util.hpp"
 
+#include <nereus/session/pool.hpp>
 #include <rules/registry.hpp>
 
 #include <gtest/gtest.h>
@@ -303,15 +304,19 @@ TEST(Session, TheRobotRestsOnTheRpacSlope) {
     for (const auto &task : scenario.task_definitions)
         task_ids.push_back(task.at("id").get<std::string>());
     Session s(scenario, createRuntime(scenario, &sensors), rules, SessionOptions{&task_ids, true});
-    // Pool corner at world (-2, -3.97): drop the robot onto the slope, 21 m from the deep wall.
-    const auto floor = poolFloor(scenario.pool);
-    const double depth = floor.depthAt({21, 8.5});
+    // Drop the robot onto the slope, 21 m from the deep wall (the pool is placed unrotated).
+    const auto &placement = scenario.scenario.at("pool_placement");
+    ASSERT_EQ(placement.at("yaw_deg").get<double>(), 0);
+    const auto &corner = placement.at("position_m");
+    const auto pool = poolModel(scenario.pool);
+    const double depth = pool.floor.depthAt({21, 8.5});
     ASSERT_LT(depth, 5.0);
+    const double floor_z = pool.surface_z + corner.at(2).get<double>() - depth;
     nereus::simulation::BodyState body;
-    body.position = {21 - 2, 8.5 - 3.97, -depth + .05};
+    body.position = {21 + corner.at(0).get<double>(), 8.5 + corner.at(1).get<double>(), floor_z + .05};
     body.linear_velocity = {0, 0, -.5};
     s.place(body, false);
     for (int i = 0; i < 500; ++i)
         s.advance();
-    EXPECT_GT(s.advance().snapshot.body.position.z(), -depth);
+    EXPECT_GT(s.advance().snapshot.body.position.z(), floor_z);
 }

@@ -1,4 +1,5 @@
 #include <nereus/pack_scene/pack_scene.hpp>
+#include <nereus/session/pool.hpp>
 
 #include <gtest/gtest.h>
 
@@ -315,7 +316,10 @@ TEST(PackScene, RpacDiveWellBuildsItsSlopedFloor) {
         shallowest = std::min(shallowest, -v.position.z());
     }
     EXPECT_NEAR(deepest, 5.1816, 1e-4); // 17 ft
-    EXPECT_NEAR(shallowest, floor.depthAt({25.22, 17}), 1e-4);
+    // The shallow end's far corner.
+    const auto &dimensions = resolved.pool.at("parameters");
+    EXPECT_NEAR(shallowest,
+                floor.depthAt({dimensions.at("length_m").get<double>(), dimensions.at("width_m").get<double>()}), 1e-4);
     EXPECT_LT(shallowest, 4.6);
     EXPECT_TRUE(pack.describe().at("pool").contains("floor_profile"));
 }

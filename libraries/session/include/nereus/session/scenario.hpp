@@ -3,13 +3,11 @@
 // bridge's resolved.json layout plus `asset_paths`. Validation is the pack tool's job; this
 // loader only checks the fields it reads. Pack documents stay JSON: robot/pool/task data is
 // consumed by the component that owns it, never by name switches.
-#include <nereus/simulation/floor_profile.hpp>
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
 #include <map>
 #include <string>
-#include <vector>
 
 namespace nereus::session {
 using Json = nlohmann::json;
@@ -29,30 +27,4 @@ struct ResolvedScenario {
 // Throws std::runtime_error with file/field context.
 ResolvedScenario loadResolvedScenario(const std::filesystem::path &resolved_json);
 ResolvedScenario parseResolvedScenario(const Json &document);
-
-// A pool document's floor: its `parameters.floor_profile` (one profile or a list, the floor being the
-// shallowest of them), or flat at `depth_m`.
-simulation::PoolFloor poolFloor(const Json &pool);
-// A pool document's `box` fixtures, placed: pool-local centre (z relative to the water surface; a box given
-// only x, y rests on the floor at its centre), size, orientation (pool from box; rpy_deg about the box's x,
-// y, z axes applied yaw, pitch, roll).
-struct PoolFixtureBox {
-    std::string id;
-    Eigen::Vector3d center = Eigen::Vector3d::Zero(), size = Eigen::Vector3d::Ones();
-    Eigen::Quaterniond orientation = Eigen::Quaterniond::Identity();
-    bool on_floor = false, contact = false;
-};
-std::vector<PoolFixtureBox> poolFixtureBoxes(const Json &pool);
-// A pool document's `mesh` fixtures, placed like boxes: `center` is the mesh origin (on the floor at x, y when
-// only those are given), `asset` the pool asset id.
-struct PoolFixtureMesh {
-    std::string id, asset;
-    Eigen::Vector3d center = Eigen::Vector3d::Zero();
-    Eigen::Quaterniond orientation = Eigen::Quaterniond::Identity();
-    bool on_floor = false;
-};
-std::vector<PoolFixtureMesh> poolFixtureMeshes(const Json &pool);
-// A pool document's static contact boxes (pool-local): its `collision_boxes`, one box per floor segment
-// (flagged `"floor": true`) when the floor is profiled, and its `box` fixtures with `contact: true`.
-Json poolCollisionBoxes(const Json &pool);
 } // namespace nereus::session

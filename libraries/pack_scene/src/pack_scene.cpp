@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -107,24 +108,26 @@ rendering::Appearance appearanceFrom(const Json &pool, bool strict) {
 } // namespace
 
 std::vector<r::PoolStripe> poolStripes(const Json &pool) {
+    if (!pool.contains("markings"))
+        return {};
+    return poolStripes(pool, session::poolFloor(pool));
+}
+
+std::vector<r::PoolStripe> poolStripes(const Json &pool, const simulation::PoolFloor &floor) {
     std::vector<r::PoolStripe> out;
     if (!pool.contains("markings"))
         return out;
     const auto &markings = pool.at("markings");
     const auto &p = pool.at("parameters");
-    const float length = p.at("length_m").get<float>(), width = p.at("width_m").get<float>(),
-                depth = p.at("depth_m").get<float>();
+    const float length = p.at("length_m").get<float>(), width = p.at("width_m").get<float>();
     const StripeStyle base = styled(markings, {});
     // Floor depth where a wall meets the floor, `at` metres along the wall.
-    const auto profiled = p.contains("floor_profile") ? std::optional(session::poolFloor(pool)) : std::nullopt;
     const auto wallDepth = [&](r::PoolSide side, float at) {
-        if (!profiled)
-            return depth;
         const Eigen::Vector2d xy = side == r::PoolSide::XMin   ? Eigen::Vector2d(0, at)
                                    : side == r::PoolSide::XMax ? Eigen::Vector2d(length, at)
                                    : side == r::PoolSide::YMin ? Eigen::Vector2d(at, 0)
                                                                : Eigen::Vector2d(at, width);
-        return static_cast<float>(profiled->depthAt(xy));
+        return static_cast<float>(floor.depthAt(xy));
     };
     if (markings.contains("lane_grid")) {
         const auto &grid = markings.at("lane_grid");
@@ -299,63 +302,60 @@ void PackScene::buildPool() {
         if (surface.contains("waterline_band_m"))
             geometry.waterline_band = vector2(surface.at("waterline_band_m"));
     }
-    geometry.markings = pack_scene::poolStripes(pool);
-    if (p.contains("floor_profile")) {
-        const auto floor = session::poolFloor(pool);
-        for (const auto &profile : floor.profiles()) {
+    const auto model = session::poolModel(pool);
+    geometry.markings = pack_scene::poolStripes(pool, model.floor);
+    if (model.profiled)
+        for (const auto &profile : model.floor.profiles()) {
             r::FloorSlope slope;
             slope.along_x = profile.axis() == simulation::FloorProfile::Axis::X;
             for (const auto &vertex : profile.polyline())
                 slope.polyline.push_back(vertex.cast<float>());
             geometry.floor_profiles.push_back(std::move(slope));
         }
-    }
-    const float surface = p.at("water_level_m").get<float>();
-    for (const auto &fixture : session::poolFixtureBoxes(pool)) {
-        r::PoolBox box;
-        box.center = fixture.center.cast<float>() - Eigen::Vector3f(0, 0, surface);
-        box.size = fixture.size.cast<float>();
-        box.rotation = fixture.orientation.toRotationMatrix().cast<float>();
-        box.on_floor = fixture.on_floor;
-        geometry.boxes.push_back(box);
-    }
-    if (pool.contains("fixtures")) {
-        std::size_t box = 0;
-        for (const auto &fixture : pool.at("fixtures")) {
-            const auto type = fixture.at("type").get<std::string>();
-            if (type == "box") {
-                // Without a colour a box takes the pool's tile finish.
-                auto &placed = geometry.boxes.at(box++);
-                if (fixture.contains("color_rgb"))
-                    placed.color = rgb(fixture.at("color_rgb"));
-                else
-                    placed.tiled = true;
-                if (fixture.contains("top_size_m"))
-                    placed.top = vector2(fixture.at("top_size_m"));
-                if (fixture.contains("side_color_rgb"))
-                    placed.side_color = rgb(fixture.at("side_color_rgb"));
-            } else if (type == "recess") {
-                r::PoolRecess recess;
-                recess.side = wallSide(fixture.at("wall").get<std::string>());
-                recess.from = vector2(fixture.at("from"));
-                recess.to = vector2(fixture.at("to"));
-                recess.depth = fixture.at("depth_m").get<float>();
-                geometry.recesses.push_back(recess);
-            }
+    // One pass over the fixtures, in document order: each box takes its placement from the model (by id; the
+    // pack tool keeps fixture ids unique) and its finish from the document; recesses come straight from it.
+    std::map<std::string, const session::PoolFixtureBox *> placedBoxes;
+    for (const auto &box : model.boxes)
+        placedBoxes[box.id] = &box;
+    const float surface = static_cast<float>(model.surface_z);
+    for (const auto &fixture : pool.value("fixtures", Json::array())) {
+        const auto type = fixture.at("type").get<std::string>();
+        if (type == "box") {
+            const auto &placed = *placedBoxes.at(fixture.at("id").get<std::string>());
+            r::PoolBox box;
+            box.center = placed.center.cast<float>() - Eigen::Vector3f(0, 0, surface);
+            box.size = placed.size.cast<float>();
+            box.rotation = placed.orientation.toRotationMatrix().cast<float>();
+            box.on_floor = placed.on_floor;
+            // Without a colour a box takes the pool's tile finish.
+            if (fixture.contains("color_rgb"))
+                box.color = rgb(fixture.at("color_rgb"));
+            else
+                box.tiled = true;
+            if (fixture.contains("top_size_m"))
+                box.top = vector2(fixture.at("top_size_m"));
+            if (fixture.contains("side_color_rgb"))
+                box.side_color = rgb(fixture.at("side_color_rgb"));
+            geometry.boxes.push_back(box);
+        } else if (type == "recess") {
+            r::PoolRecess recess;
+            recess.side = wallSide(fixture.at("wall").get<std::string>());
+            recess.from = vector2(fixture.at("from"));
+            recess.to = vector2(fixture.at("to"));
+            recess.depth = fixture.at("depth_m").get<float>();
+            geometry.recesses.push_back(recess);
         }
     }
     r::PoolLayout layout;
     static_ = r::makePoolScene(geometry, &layout);
-    pool_instances_ = static_.instances.size();
     pool_stripes_ = geometry.markings;
     pool_floor_ = std::move(layout.floor);
     pool_walls_ = std::move(layout.walls);
     // Mesh fixtures from the pool's own assets (stairs, rails, grates), after the generated pool geometry.
-    for (const auto &fixture : session::poolFixtureMeshes(pool)) {
+    for (const auto &fixture : model.meshes) {
         Matrix4d pool_from_mesh = Matrix4d::Identity();
         pool_from_mesh.topLeftCorner<3, 3>() = fixture.orientation.toRotationMatrix();
-        pool_from_mesh.topRightCorner<3, 1>() =
-            fixture.center - Eigen::Vector3d(0, 0, p.at("water_level_m").get<double>());
+        pool_from_mesh.topRightCorner<3, 1>() = fixture.center - Eigen::Vector3d(0, 0, model.surface_z);
         auto placed =
             instance("pool", fixture.asset,
                      Matrix4d(geometry.local_to_world.cast<double>()) *
