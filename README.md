@@ -41,6 +41,7 @@ with little memory. Python-only setup is just `uv sync`. Run the tools with `uv 
 ```sh
 # Simulator + UWRT stack + viewer
 ros2 launch integrations/uwrt/launch/sim.launch.py
+#   pool:=rpac  (robosub default; scenario:=<pack folder> for any other)
 #   stack:=false  viewer:=false  cameras:=false  rmw:=rmw_zenoh_cpp
 #   active_control_model:=mpc mpc_model:=sim     (MPC controller on the simulator plant)
 

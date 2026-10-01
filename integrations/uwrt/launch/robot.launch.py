@@ -1,7 +1,7 @@
 """Real-robot operator interface: the pool viewer against a running Talos (no simulator, no stack).
 
     ros2 launch integrations/uwrt/launch/robot.launch.py [robot_only:=true] [rmw:=<rmw implementation>]
-        [scenario:=<pack folder>] [config:=<viewer host yaml>]
+        [pool:=robosub|rpac] [scenario:=<pack folder>] [config:=<viewer host yaml>]
 
 Resolves the scenario pack (robot model, cameras, frames, panels) with
 `python -m nereus.packs resolve` and runs nereus-viewer with --pose-source estimate:
@@ -22,13 +22,27 @@ from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.substitutions import LaunchConfiguration as LC
 
 ROOT = Path(__file__).resolve().parents[3]
+# pool:=<name> picks the matching UWRT scenario; scenario:=<folder> picks any pack instead.
+POOLS = {"robosub": "talos_uwrt", "rpac": "talos_uwrt_rpac"}
+
+
+def _scenario(context):
+    scenario, pool = LC("scenario").perform(context), LC("pool").perform(context)
+    if scenario and pool:
+        raise RuntimeError("pass pool:= or scenario:=, not both")
+    if scenario:
+        return os.path.abspath(scenario)
+    if (pool or "robosub") not in POOLS:
+        raise RuntimeError(f"unknown pool '{pool}' (known: {', '.join(POOLS)})")
+    return str(ROOT / "content/packs/scenarios" / POOLS[pool or "robosub"])
+
 
 
 def _processes(context):
     rmw = LC("rmw").perform(context)
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
     # The resolver and viewer run in the repository root: relative paths mean the caller's directory.
-    scenario = os.path.abspath(LC("scenario").perform(context))
+    scenario = _scenario(context)
     config = LC("config").perform(context)
     resolved = str(Path(tempfile.gettempdir()) / "nereus_robot_resolved.json")
     subprocess.run(
@@ -47,8 +61,10 @@ def _processes(context):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("scenario", default_value=str(ROOT / "content/packs/scenarios/talos_uwrt"),
-                              description="scenario pack folder (robot model, cameras, frames)"),
+        DeclareLaunchArgument("pool", default_value="",
+                              description=f"pool to run in: {' | '.join(POOLS)} (empty: robosub)"),
+        DeclareLaunchArgument("scenario", default_value="",
+                              description="scenario pack folder (robot model, cameras, frames); overrides pool"),
         DeclareLaunchArgument("robot_only", default_value="false",
                               description="hide the simulated pool and course; draw only the robot"),
         DeclareLaunchArgument("config", default_value="",

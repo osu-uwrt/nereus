@@ -1,7 +1,7 @@
 """One-command UWRT simulation: nereus-sim + the UWRT robot stack + the pool viewer.
 
     ros2 launch integrations/uwrt/launch/sim.launch.py [stack:=false] [viewer:=false]
-        [scenario:=<pack folder>] [output:=<run dir>] [rmw:=<rmw implementation>]
+        [pool:=robosub|rpac] [scenario:=<pack folder>] [output:=<run dir>] [rmw:=<rmw implementation>]
         [cameras:=true|false] [always_cameras:=true|false] [camera_supersample:=1..4]
         [active_control_model:=mpc] [mpc_model:=sim|<name>|<path>] [mpc_odom_topic:=simulator/ground_truth]
         [mpc_state_source:=sensors|odometry]
@@ -48,13 +48,28 @@ CONTROLLER_ARGS = {
 }
 
 
+# pool:=<name> picks the matching UWRT scenario; scenario:=<folder> picks any pack instead.
+POOLS = {"robosub": "talos_uwrt", "rpac": "talos_uwrt_rpac"}
+
+
+def _scenario(context):
+    scenario, pool = LC("scenario").perform(context), LC("pool").perform(context)
+    if scenario and pool:
+        raise RuntimeError("pass pool:= or scenario:=, not both")
+    if scenario:
+        return os.path.abspath(scenario)
+    if (pool or "robosub") not in POOLS:
+        raise RuntimeError(f"unknown pool '{pool}' (known: {', '.join(POOLS)})")
+    return str(ROOT / "content/packs/scenarios" / POOLS[pool or "robosub"])
+
+
 def _processes(context):
     rmw = LC("rmw").perform(context)
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
     # The resolver and simulator run in the repository root: relative paths mean the caller's directory.
     output = os.path.abspath(LC("output").perform(context) or f"/tmp/nereus_sim/{time.strftime('%Y%m%d-%H%M%S')}")
     Path(output).parent.mkdir(parents=True, exist_ok=True)
-    scenario = os.path.abspath(LC("scenario").perform(context))
+    scenario = _scenario(context)
     binary = LC("bridge_binary").perform(context)
     resolved = f"{output}.resolved.json"
     subprocess.run(
@@ -83,7 +98,9 @@ def _processes(context):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("scenario", default_value=str(ROOT / "content/packs/scenarios/talos_uwrt")),
+        DeclareLaunchArgument("pool", default_value="",
+                              description=f"pool to run in: {' | '.join(POOLS)} (empty: robosub)"),
+        DeclareLaunchArgument("scenario", default_value="", description="scenario pack folder (overrides pool)"),
         DeclareLaunchArgument("output", default_value=""),
         DeclareLaunchArgument("stack", default_value="true", description="launch the UWRT stack"),
         DeclareLaunchArgument("viewer", default_value="true", description="launch the pool viewer"),
