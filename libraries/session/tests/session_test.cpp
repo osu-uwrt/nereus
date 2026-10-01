@@ -294,3 +294,24 @@ TEST(Session, GraspedPropStaysInTheClawWhileCarried) {
         EXPECT_LT(drift, .003) << "yaw " << deg << ": grasped bandage moved relative to the claw";
     }
 }
+
+TEST(Session, TheRobotRestsOnTheRpacSlope) {
+    const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_RPAC);
+    const RulesRegistry rules = nereus::rules::standardRules();
+    const std::vector<std::string> sensors; // contacts only
+    std::vector<std::string> task_ids;
+    for (const auto &task : scenario.task_definitions)
+        task_ids.push_back(task.at("id").get<std::string>());
+    Session s(scenario, createRuntime(scenario, &sensors), rules, SessionOptions{&task_ids, true});
+    // Pool corner at world (-2, -3.97): drop the robot onto the slope, 21 m from the deep wall.
+    const auto floor = poolFloor(scenario.pool);
+    const double depth = floor.depthAt({21, 8.5});
+    ASSERT_LT(depth, 5.0);
+    nereus::simulation::BodyState body;
+    body.position = {21 - 2, 8.5 - 3.97, -depth + .05};
+    body.linear_velocity = {0, 0, -.5};
+    s.place(body, false);
+    for (int i = 0; i < 500; ++i)
+        s.advance();
+    EXPECT_GT(s.advance().snapshot.body.position.z(), -depth);
+}

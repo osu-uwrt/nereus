@@ -287,7 +287,8 @@ void PackScene::buildPool() {
     }
     geometry.markings = pack_scene::poolStripes(pool);
     if (p.contains("floor_profile")) {
-        for (const auto &profile : session::poolFloor(pool).profiles()) {
+        const auto floor = session::poolFloor(pool);
+        for (const auto &profile : floor.profiles()) {
             r::FloorSlope slope;
             slope.along_x = profile.axis() == simulation::FloorProfile::Axis::X;
             for (const auto &vertex : profile.polyline())

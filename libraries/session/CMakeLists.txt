@@ -38,6 +38,13 @@ if(BUILD_TESTING)
       ${Python_EXECUTABLE} -m nereus.packs resolve
       ${PROJECT_SOURCE_DIR}/content/packs/scenarios/talos_uwrt -o ${nereus_resolved_talos})
   set_tests_properties(session_resolve_talos PROPERTIES FIXTURES_SETUP session_resolved)
+  # The same robot in the RPAC dive well: a sloped (profiled) floor.
+  set(nereus_resolved_rpac ${CMAKE_BINARY_DIR}/session_fixtures/talos_uwrt_rpac_resolved.json)
+  add_test(NAME session_resolve_rpac
+    COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH=${PROJECT_SOURCE_DIR}/python/src
+      ${Python_EXECUTABLE} -m nereus.packs resolve
+      ${PROJECT_SOURCE_DIR}/content/packs/scenarios/talos_uwrt_rpac -o ${nereus_resolved_rpac})
+  set_tests_properties(session_resolve_rpac PROPERTIES FIXTURES_SETUP session_resolved)
   file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/session_fixtures)
   file(GLOB nereus_session_tests CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/*_test.cpp)
   foreach(test_source ${nereus_session_tests})
@@ -45,7 +52,7 @@ if(BUILD_TESTING)
     add_executable(session_${test_name} ${test_source})
     target_compile_definitions(session_${test_name} PRIVATE
       NEREUS_SOURCE_DIR="${PROJECT_SOURCE_DIR}" NEREUS_SESSION_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
-      NEREUS_RESOLVED_TALOS="${nereus_resolved_talos}")
+      NEREUS_RESOLVED_TALOS="${nereus_resolved_talos}" NEREUS_RESOLVED_RPAC="${nereus_resolved_rpac}")
     target_link_libraries(session_${test_name} PRIVATE nereus_rules GTest::gtest_main)
     nereus_project_options(session_${test_name})
     gtest_discover_tests(session_${test_name} DISCOVERY_MODE PRE_TEST

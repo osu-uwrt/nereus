@@ -270,3 +270,19 @@ TEST(PackScene, ProfiledFloorDrapesStripesAndMeetsTheWalls) {
     geometry.floor_profiles[1].polyline.back().x() = 7;
     EXPECT_THROW(r::makePoolScene(geometry), std::invalid_argument);
 }
+
+TEST(PackScene, RpacDiveWellBuildsItsSlopedFloor) {
+    const auto resolved = rs::loadResolvedScenario(NEREUS_RESOLVED_RPAC);
+    ps::PackScene pack(resolved);
+    const auto floor = rs::poolFloor(resolved.pool);
+    const auto &mesh = pack.staticScene().instances.at(0).mesh->submeshes.at(0);
+    float deepest = 0, shallowest = 100;
+    for (const auto &v : mesh.vertices) {
+        deepest = std::max(deepest, -v.position.z());
+        shallowest = std::min(shallowest, -v.position.z());
+    }
+    EXPECT_NEAR(deepest, 5.1816, 1e-4); // 17 ft
+    EXPECT_NEAR(shallowest, floor.depthAt({25.22, 17}), 1e-4);
+    EXPECT_LT(shallowest, 4.6);
+    EXPECT_TRUE(pack.describe().at("pool").contains("floor_profile"));
+}
