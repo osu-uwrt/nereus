@@ -22,6 +22,7 @@ from ._document import (
     read_yaml,
 )
 from ._frames import express_in_body
+from ._placements import resolve_placements
 
 FORMAT = "nereus.resolved_scenario"
 FORMAT_VERSION = 1
@@ -75,6 +76,8 @@ def _check(document: PackDocument, hashes: dict[Path, str]) -> list[str]:
         problems += semantics.task(data, None)
     elif kind == "bridge":
         problems += semantics.bridge(data)
+    elif kind == "equipment":
+        problems += semantics.equipment(data)
     problems = _prefixed(document.path, problems)
     if kind == "tasks" and not problems:
         problems += _includes(document, data, hashes)
@@ -127,6 +130,7 @@ class ResolvedScenario:
     run_options: dict[str, Any]
     sources: list[Path]
     source_sha256: dict[Path, str] = field(default_factory=dict)
+    equipment: dict[str, Any] | None = None
 
     def changed_sources(self) -> list[Path]:
         """Sources whose current bytes differ from those resolved (or that disappeared)."""
@@ -140,9 +144,12 @@ class ResolvedScenario:
         return changed
 
     def asset_paths(self) -> dict[str, dict[str, str]]:
-        """Absolute path of every declared, present asset, per selected pack (robot/pool/tasks)."""
+        """Absolute path of every declared, present asset, per selected pack (robot/pool/tasks/equipment)."""
         result: dict[str, dict[str, str]] = {}
-        for role, document in (("robot", self.robot), ("pool", self.pool), ("tasks", self.tasks)):
+        roles = [("robot", self.robot), ("pool", self.pool), ("tasks", self.tasks)]
+        if self.equipment is not None:
+            roles.append(("equipment", self.equipment))
+        for role, document in roles:
             root = (self.path.parent / self.scenario[role]).resolve()
             root = root if root.is_dir() else root.parent
             result[role] = {
@@ -163,6 +170,7 @@ class ResolvedScenario:
             "tasks": self.tasks,
             "task_definitions": self.task_definitions,
             "bridge": self.bridge,
+            **({"equipment": self.equipment} if self.equipment is not None else {}),
             "run_options": self.run_options,
             "sources": [
                 {
@@ -220,7 +228,7 @@ def resolve_scenario(path: Path) -> ResolvedScenario:
     data = scenario.plain()
     problems: list[str] = []
     documents: dict[str, PackDocument] = {}
-    for role in ("robot", "pool", "tasks", "bridge"):
+    for role in ("robot", "pool", "tasks", "bridge", "equipment"):
         if role not in data:
             continue
         try:
@@ -252,6 +260,11 @@ def resolve_scenario(path: Path) -> ResolvedScenario:
     problems += _prefixed(scenario.path, semantics.scenario_pool(data, documents["pool"].plain()))
     if problems:
         raise PackError(problems)
+    equipment = documents["equipment"].plain() if "equipment" in documents else None
+    task_ids = [item["id"] for item in definitions]
+    problems += _prefixed(scenario.path, resolve_placements(data, task_ids, equipment))
+    if problems:
+        raise PackError(problems)
 
     return ResolvedScenario(
         path=scenario.path,
@@ -260,6 +273,7 @@ def resolve_scenario(path: Path) -> ResolvedScenario:
         pool=documents["pool"].plain(),
         tasks=tasks_data,
         bridge=bridge,
+        equipment=equipment,
         task_definitions=definitions,
         run_options=options,
         sources=list(hashes),

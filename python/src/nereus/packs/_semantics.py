@@ -609,6 +609,18 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
 # ------------------------------------------------------------------ bridge
 
 
+def equipment(data: dict[str, Any]) -> list[str]:
+    problems: list[str] = []
+    asset_ids = {item["id"] for item in data["assets"]}
+    duplicates((item["id"] for item in data["items"]), "item", problems)
+    for item in data["items"]:
+        if item["asset"] not in asset_ids:
+            problems.append(f"/items/{item['id']}/asset: unknown asset '{item['asset']}'")
+        duplicates((frame["id"] for frame in item.get("frames", [])), f"{item['id']} frame", problems)
+    _quaternions(data, "", problems)
+    return problems
+
+
 def bridge(data: dict[str, Any]) -> list[str]:
     """Internal bridge references; robot bindings are checked by ``bridge_binding``."""
     problems: list[str] = []

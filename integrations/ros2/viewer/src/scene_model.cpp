@@ -88,29 +88,6 @@ SceneModel::SceneModel(const Scenario &scenario, const SceneModelOptions &option
         if (it != scenario.robotAssets.end())
             payloadMesh_ = it->second;
     }
-
-    // Calibration board: local +X is the printed face normal.
-    const auto board = lookup(options.config, {"calibration_board"});
-    if (board && board["texture"]) {
-        const auto texture = options.configDirectory / board["texture"].as<std::string>();
-        const auto size = board["size_m"];
-        const float hw = size[0].as<float>() / 2, hh = size[1].as<float>() / 2;
-        auto asset = std::make_shared<r::MeshAsset>();
-        r::Submesh sub;
-        sub.vertices = {{{0, -hw, -hh}, {1, 0, 0}, {0, 0}},
-                        {{0, hw, -hh}, {1, 0, 0}, {1, 0}},
-                        {{0, hw, hh}, {1, 0, 0}, {1, 1}},
-                        {{0, -hw, hh}, {1, 0, 0}, {0, 1}}};
-        sub.indices = {0, 1, 2, 0, 2, 3};
-        sub.material.diffuse_texture = texture;
-        asset->submeshes.push_back(std::move(sub));
-        asset->minimum = {0, -hw, -hh};
-        asset->maximum = {0, hw, hh};
-        board_ = asset;
-        boardPose_ = poseQuat(vec3(board["position_m"]), glm::quat(1, 0, 0, 0));
-        if (board["yaw_deg"])
-            boardPose_ = pose(vec3(board["position_m"]), {0, 0, glm::radians(board["yaw_deg"].as<float>())});
-    }
 }
 
 std::vector<glm::mat4> SceneModel::payloadMounts(const std::string &mechanism) const {
@@ -135,8 +112,6 @@ r::Scene SceneModel::build(const VisualState &state) const {
         into.push_back(std::move(instance));
     };
     std::vector<r::Instance> dynamic;
-    if (board_ && state.showBoard)
-        add(dynamic, board_, boardPose_);
     // Rotor spin and claw travel replace the reset placement of those robot visuals.
     std::vector<pack_scene::RobotOverride> overrides;
     for (std::size_t i = 0; i < animation_.size(); ++i) {
@@ -213,8 +188,13 @@ r::Scene SceneModel::build(const VisualState &state) const {
             scene.instances[i].visible = false;
         scene.water.reset();
     }
+    const auto &equipment = pack_->equipmentInstances(); // the last static instances
     if (!state.showCourse) // task visuals follow the pool instances in the static scene
-        for (std::size_t i = pack_->poolInstanceCount(); i < pack_->staticScene().instances.size(); ++i)
+        for (std::size_t i = pack_->poolInstanceCount();
+             i < (equipment.empty() ? pack_->staticScene().instances.size() : equipment.front()); ++i)
+            scene.instances[i].visible = false;
+    if (!state.showEquipment)
+        for (const auto i : equipment)
             scene.instances[i].visible = false;
     if (!state.showFloor)
         for (const auto i : pack_->poolFloorInstances())

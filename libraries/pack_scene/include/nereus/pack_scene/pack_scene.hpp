@@ -1,6 +1,7 @@
 #pragma once
 // Renderer scene composition from a resolved scenario: pool, task static visuals (with UV
-// cutouts and per-visual texture overrides), robot visuals, plus caller-posed dynamic instances.
+// cutouts and per-visual texture overrides), equipment visuals, robot visuals, plus caller-posed
+// dynamic instances.
 // One implementation shared by the ROS viewer and the simulator's cameras.
 //
 // Robot poses are the robot frame root (`robot.frames.root`, the physics COM) in the scenario
@@ -74,9 +75,13 @@ class PackScene {
     const rendering::Appearance &appearance() const {
         return appearance_;
     }
-    // Pool geometry (floor, walls, decks, coping) and task visuals; static for the run.
+    // Pool geometry (floor, walls, decks, coping), task visuals, then equipment visuals; static for the run.
     const rendering::Scene &staticScene() const {
         return static_;
+    }
+    // staticScene() indices of the equipment pack's visuals (the last static instances).
+    const std::vector<std::size_t> &equipmentInstances() const {
+        return equipment_;
     }
     // The first poolInstanceCount() instances of staticScene() are the pool (floor, 4 walls, ...).
     std::size_t poolInstanceCount() const {
@@ -110,7 +115,7 @@ class PackScene {
         return props_;
     }
 
-    // Cached mesh of a declared pack asset ("robot" | "pool" | "tasks"); optional texture asset id
+    // Cached mesh of a declared pack asset ("robot" | "pool" | "tasks" | "equipment"); optional texture asset id
     // of the same pack replaces the diffuse texture of every submesh. Throws when strict and the
     // asset is unusable, else returns null and records a warning.
     std::shared_ptr<const rendering::MeshAsset> mesh(const std::string &role, const std::string &asset,
@@ -146,7 +151,7 @@ class PackScene {
     rendering::Appearance appearance_;
     rendering::Scene static_;
     std::size_t pool_instances_ = 0;
-    std::vector<std::size_t> pool_floor_, pool_walls_;
+    std::vector<std::size_t> pool_floor_, pool_walls_, equipment_;
     std::vector<rendering::PoolStripe> pool_stripes_;
     std::vector<RobotVisual> robot_;
     std::vector<PropVisual> props_;
@@ -160,5 +165,6 @@ class PackScene {
     void warn(const std::string &) const;
     void buildPool();
     void buildTasks();
+    void buildEquipment();
 };
 } // namespace nereus::pack_scene

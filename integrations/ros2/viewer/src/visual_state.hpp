@@ -29,7 +29,7 @@ struct VisualState {
     std::vector<MarkerDraw> markers;
     std::map<std::string, bool> indicatorLatched;              // task indicator region -> latched (magnet target LEDs)
     std::vector<glm::mat4> loadedPayloads;                     // world poses (body already applied), unit length scaled
-    bool showBoard = true, showWalls = true, showFloor = true; // walls include the deck and coping
+    bool showEquipment = true, showWalls = true, showFloor = true; // walls include the deck and coping
     bool showCourse = true; // the pack's task visuals (false: the course comes from mapping markers)
 };
 } // namespace nereus::ros_viewer::host

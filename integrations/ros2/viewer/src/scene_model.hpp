@@ -1,7 +1,8 @@
 // Composes the renderer scene (pool, course, robot, mechanisms, lights) from a Scenario and the
 // per-frame VisualState. Pool, task visuals (cutouts, texture overrides) and robot visuals come from
-// nereus_pack_scene, the same composition the simulator's cameras use; this class adds the viewer-only
-// content (rotor/claw animation, status lights, calibration board, markers, payloads).
+// nereus_pack_scene, the same composition the simulator's cameras use (equipment such as the calibration
+// board included); this class adds the viewer-only content (rotor/claw animation, status lights, markers,
+// payloads).
 #pragma once
 #include "scenario.hpp"
 #include "status_lights.hpp"
@@ -21,7 +22,6 @@ struct ExtraVisual {
 };
 struct SceneModelOptions {
     YAML::Node config;                     // host viewer document
-    std::filesystem::path configDirectory; // for relative resources (calibration board texture)
     bool robotOnly = false;                // hide pool, water and course visuals (real-robot use)
 };
 class SceneModel {
@@ -62,8 +62,7 @@ class SceneModel {
     std::vector<RobotAnimation> animation_; // parallel to pack_->robotVisuals()
     Eigen::Matrix4d baseFromRoot_ = Eigen::Matrix4d::Identity();
     std::vector<std::pair<std::shared_ptr<const rendering::MeshAsset>, glm::mat4>> extras_; // base_link poses
-    std::shared_ptr<const rendering::MeshAsset> box_, board_;
-    glm::mat4 boardPose_{1};
+    std::shared_ptr<const rendering::MeshAsset> box_;
     std::filesystem::path payloadMesh_;
     mutable std::map<std::filesystem::path, std::shared_ptr<const rendering::MeshAsset>> cache_;
     mutable std::vector<std::string> warnings_;

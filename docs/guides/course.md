@@ -143,6 +143,7 @@ robot: ../../robots/my_auv           # folders, relative to this file
 pool: ../../pools/my_pool
 tasks: ../../tasks/robosub_2026
 bridge: ../../bridges/my_stack        # optional: only the ROS simulator needs it
+equipment: ../../equipment/my_team    # optional: your own gear at the pool (see below)
 seed: 7                               # all sensor noise is reproducible from this
 timestep_s: 0.002                     # physics step
 sensor_noise: true
@@ -169,6 +170,55 @@ run:
 Every task in the task pack needs exactly one placement; to run only some tasks, use a task pack whose
 `tasks:` lists just those files. Positions are in the world frame (`map`); a task's local frame (its origin and
 +x, see [tasks](tasks.md)) is placed with `position_m` and `yaw_deg`.
+
+## Equipment
+
+Gear your team brings to the pool (a calibration board, a marker) goes in an equipment pack
+(`content/packs/equipment/<id>/equipment.yaml`), which a scenario selects with `equipment:`. The pack says what
+each item is: its mesh (drawn by the viewer and the simulated cameras, no contacts) and any named frames on it.
+
+```yaml
+kind: equipment
+id: my_team
+assets:
+- {id: board, path: assets/board.obj}        # OBJ/MTL with an external texture, like other pack meshes
+items:
+- id: board
+  asset: board                               # the mesh origin is the item origin
+  frames:
+  - {id: tag, position_m: [0.003, 0, -0.118], orientation_wxyz: [0.5, 0.5, 0.5, 0.5]}
+```
+
+The scenario places items, with `equipment_placements`, like anything else (see the next section):
+
+```yaml
+equipment_placements:
+- {item: board, relative_to: pool, position_m: [0.0, 5.334, -0.34]}   # optional id: (default the item id)
+```
+
+## Placing things relative to each other
+
+Every scenario placement (`pool_placement`, `task_placements`, `equipment_placements`, `initial`) may say what it
+is measured from with `relative_to`: `world` (the default), `pool`, a task id, an equipment placement id, or one
+of that item's frames as `<placement id>/<frame id>`. Orientations are `yaw_deg`, or `rpy_deg`
+([roll, pitch, yaw], applied yaw, then pitch, then roll, as `static_transform_publisher` takes them); pools and
+tasks must still come out upright in the world.
+
+Normally the world is the root and the pool is placed in it. A scenario can instead place the world itself with
+`world_placement`, dropping `pool_placement`: the pool becomes the root. UWRT's RPAC scenario does this to mirror
+the robot, whose map origin comes from the AprilTag:
+
+```yaml
+equipment_placements:
+- {item: calibration_board, relative_to: pool, position_m: [0.0, 5.334, -0.3394]}   # deep-end wall, lap line 3
+world_placement: {relative_to: calibration_board/tag, position_m: [0.0, 0.4572, 0.0], rpy_deg: [-90, -90, 0]}
+task_placements:                                                                      # map coordinates
+- {task: gate, position_m: [4.810167, -2.217889, -0.75], yaw_deg: 170.645069}
+```
+
+Moving the board then moves the map and the course with it, as it would on the robot. Cycles and unknown frames
+are rejected. Resolving writes every placement into world coordinates, so the simulator and viewer only see world
+poses.
 
 Tip: match your stack's mapping priors. The Talos scenario places each task exactly where
 `riptide_mapping`'s `init_data` puts the corresponding `*_frame`, so the simulated course and the robot's map

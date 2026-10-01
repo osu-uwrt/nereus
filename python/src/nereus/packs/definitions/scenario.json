@@ -26,6 +26,10 @@
       "$ref": "common.schema.json#/$defs/pack_path",
       "description": "Optional: headless runs omit the bridge."
     },
+    "equipment": {
+      "$ref": "common.schema.json#/$defs/pack_path",
+      "description": "Optional: an equipment pack (the team's gear, placed by equipment_placements)."
+    },
     "seed": {
       "type": "integer",
       "minimum": 0,
@@ -44,8 +48,13 @@
       "$ref": "common.schema.json#/$defs/name",
       "description": "World frame id: ENU, +Z up, z = 0 at the water surface."
     },
+    "world_placement": {
+      "$ref": "common.schema.json#/$defs/upright_placement",
+      "description": "Optional: the world frame placed in another scenario frame (e.g. the map origin your stack derives from a calibration tag). Replaces pool_placement: the pool becomes the root."
+    },
     "pool_placement": {
-      "$ref": "common.schema.json#/$defs/upright_placement"
+      "$ref": "common.schema.json#/$defs/upright_placement",
+      "description": "Pool-local frame in the world. Omit it to make the pool the root that world_placement hangs from."
     },
     "task_placements": {
       "type": "array",
@@ -55,20 +64,61 @@
           "task": {
             "$ref": "common.schema.json#/$defs/name"
           },
+          "relative_to": {
+            "$ref": "common.schema.json#/$defs/frame_ref",
+            "description": "Default world."
+          },
           "position_m": {
             "$ref": "common.schema.json#/$defs/vector3"
           },
           "yaw_deg": {
             "$ref": "common.schema.json#/$defs/yaw_deg"
+          },
+          "rpy_deg": {
+            "$ref": "common.schema.json#/$defs/rpy_deg"
           }
         },
         "required": [
           "task",
-          "position_m",
-          "yaw_deg"
+          "position_m"
         ],
         "additionalProperties": false
       }
+    },
+    "equipment_placements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/name",
+            "description": "Frame name of this placement; default the item id."
+          },
+          "item": {
+            "$ref": "common.schema.json#/$defs/name",
+            "description": "Item of the selected equipment pack."
+          },
+          "relative_to": {
+            "$ref": "common.schema.json#/$defs/frame_ref",
+            "description": "Default world."
+          },
+          "position_m": {
+            "$ref": "common.schema.json#/$defs/vector3"
+          },
+          "yaw_deg": {
+            "$ref": "common.schema.json#/$defs/yaw_deg"
+          },
+          "rpy_deg": {
+            "$ref": "common.schema.json#/$defs/rpy_deg"
+          }
+        },
+        "required": [
+          "item",
+          "position_m"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Equipment items set up for this run; each is a frame others may be placed relative to."
     },
     "contacts": {
       "type": "object",
@@ -100,6 +150,10 @@
     "initial": {
       "type": "object",
       "properties": {
+        "relative_to": {
+          "$ref": "common.schema.json#/$defs/frame_ref",
+          "description": "Frame the start pose is measured in; default world."
+        },
         "frame": {
           "$ref": "common.schema.json#/$defs/name",
           "description": "Robot frame whose world pose is given (native state frame: com)."
@@ -169,7 +223,6 @@
     "timestep_s",
     "sensor_noise",
     "world_frame",
-    "pool_placement",
     "task_placements",
     "contacts",
     "initial",

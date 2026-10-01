@@ -8,20 +8,22 @@ robot: ../../robots/talos
 pool: ../../pools/rpac_divewell
 tasks: ../../tasks/robosub_2026
 bridge: ../../bridges/uwrt_talos
+equipment: ../../equipment/uwrt
 
 seed: 7
 timestep_s: 0.002   # physics step
 sensor_noise: true
 
-# World = the robot's `map` frame: ENU, +Z up, z = 0 at the water surface. Placements are
-# upright (yaw about world +Z only).
+# World = the robot's `map` frame: ENU, +Z up. Pools and tasks are upright (yaw about world +Z only).
 world_frame: map
 
-# Pool corner pose in the world: pool +x along map +x, the robot start 2 m out from the deep-end wall, and the
-# course centred across the width (the gate's outer leg and the bins end up ~0.2 m and ~0.8 m off the side walls).
-pool_placement:
-  position_m: [-2.0, -3.97, 0.0]
-  yaw_deg: 0.0
+# Laid out as at the pool: the calibration board hangs on the deep-end wall, centred on lap line 3, with its datum
+# line at the waterline; the map is where the UWRT stack puts it from the tag (riptide_hardware apriltag.launch.py:
+# estimated_origin_frame 0.4572 m along tag +y, yaw 0, pitch -90, roll -90); the course is in map coordinates.
+# Moving the board moves the map and the course with it, as on the robot.
+equipment_placements:
+- {item: calibration_board, relative_to: pool, position_m: [0.0, 5.334, -0.3394]}
+world_placement: {relative_to: calibration_board/tag, position_m: [0.0, 0.4572, 0.0], rpy_deg: [-90, -90, 0]}
 
 # Task poses, matching the robot's prior map (riptide_mapping2 config.yaml).
 task_placements:
@@ -42,7 +44,7 @@ contacts:
 # robot.safety.
 initial:
   frame: com
-  position_m: [0, 0, -1]
+  position_m: [2, 0, -1]   # 2 m out from the board
   orientation_wxyz: [1, 0, 0, 0]
   linear_velocity_m_s: [0, 0, 0]
   angular_velocity_rad_s: [0, 0, 0]

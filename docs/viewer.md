@@ -69,7 +69,8 @@ stack actually receives.
 - **Localization estimate** (sim only): *Robot ghost* draws the EKF estimate as a translucent robot. *Control
   gizmo* and *Follow* each centre on the estimate or the true robot. Commands always go to the controller in its
   estimate frame.
-- **Lighting**: the observer's lighting, independent of what the cameras see.
+- **Lighting**: the observer's lighting, independent of what the cameras see. *Team equipment* hides the
+  scenario's equipment pack (the calibration board) in this view only; camera cards always show it.
 
 **Scene settings** has the simulator's mechanism buttons, lighting and water appearance; **Simulation settings**
 sets the speed (pause, 1x, faster), **Sync sim** to the estimate and **Reset sim**.

@@ -32,3 +32,13 @@ First version for the team.
   the `frame` they are measured in and the altitude sensor can report a `target_frame`. Resolving re-roots the tree at the body, so the runtime is unchanged. Talos is
   now measured from `origin` (the camera-cage screw `talos.yaml` uses, formerly the `cad` frame), with
   `com` as one of its frames.
+- Equipment packs: a team's own gear (`content/packs/equipment/<id>`): meshes with optional named frames,
+  selected by a scenario with `equipment:` and placed with `equipment_placements`. The viewer and the simulated
+  cameras draw them. UWRT's AprilTag calibration board (now a 3 mm dibond sign with a `tag` frame in
+  apriltag_ros's axes) moves there from the viewer config, so the simulator's published camera images contain
+  the tag.
+- Scenario placements can be relative to each other: `relative_to` names `world`, `pool`, a task, an equipment
+  placement or an item frame; `rpy_deg` gives full orientations; `world_placement` places the world itself and
+  makes the pool the root. Resolving writes everything in world coordinates. The RPAC scenario hangs the board on
+  the deep-end wall over lap line 3 and places the map from the tag as the UWRT stack does, so the course moves
+  with the board; the robot starts 2 m out from it.

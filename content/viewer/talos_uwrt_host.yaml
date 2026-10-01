@@ -114,12 +114,9 @@ payloads:
 magnet_lights:
   led_radiance: 60
 
-# Real calibration board (printed face normal = local +X). Toggle: Scene settings > Lighting.
-calibration_board:
-  texture: assets/calibration_board.png
-  size_m: [0.6096, 0.9144]
-  position_m: [0.002, 0.0, -0.345]
-  visible: true
+# The scenario's equipment pack (the calibration board) in the observer view at startup. Toggle: Scene settings >
+# Lighting > Team equipment. Camera cards always show it, like the simulator's cameras.
+equipment_visible: true
 
 # Fallback task `ui` block (task pack `ui`, when present, overrides key by key). `focus` and
 # `demo_targets` name landmarks (task placements/frames) and presets above; names the scenario cannot
