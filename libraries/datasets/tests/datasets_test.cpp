@@ -1,3 +1,4 @@
+#include <nereus/datasets/environment.hpp>
 #include <nereus/datasets/generator.hpp>
 #include <nereus/datasets/job.hpp>
 #include <nereus/datasets/mesh_parts.hpp>
@@ -10,6 +11,7 @@
 
 #include <cmath>
 #include <fstream>
+#include <set>
 #include <sstream>
 
 namespace ds = nereus::datasets;
@@ -120,8 +122,12 @@ TEST(DatasetJob, ParsesBlocksNamesAndParts) {
     EXPECT_TRUE(job.visuals[0].split);
     EXPECT_EQ(job.visuals[0].materials.at("Red"), "pole_red");
     EXPECT_TRUE(job.labelled.count({"slalom", "pole_red"}));
-    EXPECT_FALSE(job.randomize.exposure.has_value());
-    EXPECT_DOUBLE_EQ(job.randomize.tint_scale->hi, 1.1);
+    // A pre-§10 job: the top-level water/lighting/image/time_s become the one environment.
+    ASSERT_EQ(job.randomize.environments.size(), 1u);
+    EXPECT_FALSE(job.randomize.environments[0].exposure.has_value());
+    EXPECT_DOUBLE_EQ(job.randomize.environments[0].tint_scale->hi, 1.1);
+    EXPECT_TRUE(job.acceptance.reject_fragments);
+    EXPECT_EQ(job.acceptance.min_fragment_px, 25);
     auto bad = minimalJob();
     bad["samples"][0]["sampler"]["type"] = "orbit";
     EXPECT_THROW(ds::parseJob(bad), std::runtime_error);
@@ -135,6 +141,128 @@ TEST(DatasetJob, PlacementGroups) {
     EXPECT_EQ(job.randomize.placement_groups[0][1], "table");
     document["randomize"]["placement"]["groups"] = Json::parse(R"([["surface", "table"], ["table"]])");
     EXPECT_THROW(ds::parseJob(document), std::runtime_error);
+}
+
+TEST(DatasetEnvironment, WeightedSelectionUsesTheFirstDraw) {
+    auto document = minimalJob();
+    document["randomize"]["environments"] = Json::parse(R"([{"id": "clear", "weight": 3}, {"id": "murky", "weight": 1},
+                                                            {"id": "never", "weight": 0}])");
+    const auto job = ds::parseJob(document);
+    ASSERT_EQ(job.randomize.environments.size(), 3u);
+    EXPECT_FALSE(job.randomize.sweep);
+    int counts[3] = {};
+    for (std::int64_t k = 0; k < 8000; ++k) {
+        ds::Stream rng(job.seed, k), fresh(job.seed, k);
+        const auto picked = ds::selectEnvironment(job, k, rng);
+        ++counts[picked];
+        // Exactly one draw, the stream's first: the next draw is the fresh stream's second.
+        const double first = fresh.uniform();
+        EXPECT_EQ(rng.uniform(), fresh.uniform());
+        EXPECT_EQ(picked, first * 4 < 3 ? 0u : 1u);
+    }
+    EXPECT_NEAR(counts[0] / 8000.0, .75, .02);
+    EXPECT_NEAR(counts[1] / 8000.0, .25, .02);
+    EXPECT_EQ(counts[2], 0);
+}
+
+TEST(DatasetEnvironment, SweepCyclesWithinEachBlock) {
+    auto document = minimalJob(); // one scenario; blocks: 3 torpedo (k 0-2), 5 background (k 3-7)
+    document["randomize"]["environments"] = Json::parse(R"([{"id": "a"}, {"id": "b"}])");
+    document["randomize"]["environment_mode"] = "sweep";
+    document["samples"][1]["count"] = 5;
+    const auto job = ds::parseJob(document);
+    EXPECT_TRUE(job.randomize.sweep);
+    const std::vector<std::size_t> expected = {0, 1, 0, 0, 1, 0, 1, 0};
+    for (std::int64_t k = 0; k < 8; ++k) {
+        ds::Stream rng(job.seed, k), fresh(job.seed, k);
+        EXPECT_EQ(ds::selectEnvironment(job, k, rng), expected[std::size_t(k)]) << k;
+        EXPECT_EQ(rng.uniform(), fresh.uniform()); // no draw consumed
+    }
+    document["randomize"]["environment_mode"] = "random";
+    EXPECT_THROW(ds::parseJob(document), std::runtime_error);
+}
+
+TEST(DatasetEnvironment, SweepGivesEveryScenarioEveryEnvironment) {
+    auto document = minimalJob(); // one block of 8 torpedo samples, 2 scenarios, 2 environments
+    document["scenarios"].push_back({{"id", "s2"}, {"resolved", "/tmp/s2.json"}});
+    document["samples"] = {document["samples"][0]};
+    document["samples"][0]["count"] = 8;
+    document["randomize"]["environments"] = Json::parse(R"([{"id": "a"}, {"id": "b"}])");
+    document["randomize"]["environment_mode"] = "sweep";
+    const auto job = ds::parseJob(document);
+    std::set<std::pair<std::int64_t, std::size_t>> seen; // (scenario, environment)
+    for (std::int64_t k = 0; k < 8; ++k) {
+        ds::Stream rng(job.seed, k);
+        const auto environment = ds::selectEnvironment(job, k, rng);
+        EXPECT_EQ(environment, std::size_t((k / 2) % 2)) << k;
+        seen.emplace(k % 2, environment);
+    }
+    EXPECT_EQ(seen.size(), 4u);
+}
+
+TEST(DatasetEnvironment, RejectsNegativeAndOutOfRangeValues) {
+    const auto parse = [](const char *environment) {
+        auto document = minimalJob();
+        document["randomize"]["environments"] = Json::array({Json::parse(environment)});
+        return ds::parseJob(document);
+    };
+    EXPECT_NO_THROW(parse(R"({"id": "ok", "water": {"tint_rgb": [0, [0.2, 1], 0.5], "scattering": [0, 0.3]}})"));
+    for (const char *bad :
+         {R"({"id": "e", "water": {"scattering_scale": [-0.1, 1]}})",
+          R"({"id": "e", "water": {"absorption_per_m_rgb": [0.1, -0.2, 0.3]}})",
+          R"({"id": "e", "water": {"tint_rgb": [0.1, [0.2, 1.2], 0.3]}})",
+          R"({"id": "e", "water": {"scattering": -0.1}})", R"({"id": "e", "lighting": {"exposure": [-1, 1]}})",
+          R"({"id": "e", "lighting": {"glare": -0.5}})",
+          R"({"id": "e", "lighting": {"ambient_light_scale": [-0.2, 1]}})",
+          R"({"id": "e", "image": {"blur_px": [-1, 0]}})"}) {
+        try {
+            parse(bad);
+            ADD_FAILURE() << "accepted " << bad;
+        } catch (const std::runtime_error &error) {
+            EXPECT_NE(std::string(error.what()).find("'e'"), std::string::npos) << error.what();
+        }
+    }
+}
+
+TEST(DatasetEnvironment, WaterIsRelativeToThePoolUnlessAbsolute) {
+    nereus::rendering::Appearance pool;
+    pool.water.tint = {.1f, .5f, .9f};
+    pool.water.absorption = {.2f, .1f, .05f};
+    pool.water.scattering = .458f;
+    pool.water.distance_scale = 2;
+    pool.direct_light = 2;
+    pool.outdoor = false;
+    auto document = minimalJob();
+    document["randomize"]["environments"] = Json::parse(R"([
+      {"id": "scaled", "water": {"tint_scale": [2, 2], "absorption_scale": 1.5, "scattering_scale": [2, 2],
+                                 "distance_scale_scale": 0.5},
+       "lighting": {"direct_light_scale": 0.5, "glare": [0.2, 0.2], "profile": "outdoor", "exposure": [0.7, 0.9]},
+       "image": {"noise_sigma": 2}, "time_s": [5, 5]},
+      {"id": "absolute", "water": {"scattering_scale": 3, "scattering": 0.3, "tint_rgb": [0.2, [0.3, 0.3], 0.4],
+                                   "absorption_per_m_rgb": [0.5, 0.6, 0.7]}}])");
+    const auto job = ds::parseJob(document);
+    ds::Stream rng(1, 0);
+    const auto scaled = ds::drawEnvironment(job.randomize.environments[0], pool, rng);
+    const auto &w = scaled.appearance.water;
+    EXPECT_FLOAT_EQ(w.scattering, .916f);
+    EXPECT_FLOAT_EQ(w.tint.x(), .2f);
+    EXPECT_FLOAT_EQ(w.tint.z(), 1.f); // clamped
+    EXPECT_FLOAT_EQ(w.absorption.x(), .3f);
+    EXPECT_FLOAT_EQ(w.distance_scale, 1.f);
+    EXPECT_FLOAT_EQ(scaled.appearance.direct_light, 1.f);
+    EXPECT_FLOAT_EQ(scaled.appearance.glare, .2f);
+    EXPECT_TRUE(scaled.appearance.outdoor);
+    EXPECT_GE(scaled.appearance.exposure, .7f);
+    EXPECT_LE(scaled.appearance.exposure, .9f);
+    EXPECT_DOUBLE_EQ(scaled.noise_sigma, 2);
+    EXPECT_FLOAT_EQ(scaled.time, 5);
+    EXPECT_EQ(scaled.record.at("lighting").at("profile"), "outdoor");
+    const auto absolute = ds::drawEnvironment(job.randomize.environments[1], pool, rng);
+    EXPECT_FLOAT_EQ(absolute.appearance.water.scattering, .3f); // the override wins over the scale
+    EXPECT_FLOAT_EQ(absolute.appearance.water.tint.y(), .3f);
+    EXPECT_FLOAT_EQ(absolute.appearance.water.absorption.z(), .7f);
+    EXPECT_FALSE(absolute.appearance.outdoor); // the pool's profile
+    EXPECT_FLOAT_EQ(absolute.appearance.direct_light, 2.f);
 }
 
 TEST(DatasetIntrinsics, ScalingKeepsFieldOfViewAndCropsCentre) {
@@ -356,6 +484,32 @@ TEST(DatasetParts, TexturePartMaps) {
     EXPECT_EQ(parts.parts[2].piece, 1);
 }
 
+TEST(DatasetOutput, ComponentsAndFragments) {
+    r::LabelCapture capture;
+    capture.width = 20, capture.height = 10;
+    capture.ids.assign(200, 0);
+    capture.depth.assign(200, .9755f);
+    const std::uint32_t a = 1u << 8 | 1, b = 2u << 8 | 1;
+    const auto paint = [&](std::uint32_t key, int x0, int y0, int w, int h) {
+        for (int y = y0; y < y0 + h; ++y)
+            for (int x = x0; x < x0 + w; ++x)
+                capture.ids[std::size_t(y) * 20 + std::size_t(x)] = key;
+    };
+    paint(a, 0, 0, 6, 5);  // 30 px
+    paint(a, 8, 0, 6, 5);  // 30 px, separated by a 2 px gap
+    paint(a, 16, 8, 2, 1); // 2 px crumb
+    paint(b, 0, 6, 3, 3);  // 9 px
+    paint(b, 3, 9, 3, 1);  // touches the first block diagonally only: one 8-connected component
+    auto stats = ds::analyzeLabels(capture, .05f, 100.f, .2f);
+    ds::measureComponents(capture, stats);
+    EXPECT_EQ(stats.keys.at(a).components, (std::vector<std::int64_t>{30, 30, 2}));
+    EXPECT_EQ(stats.keys.at(b).components, (std::vector<std::int64_t>{12}));
+    EXPECT_TRUE(stats.keys.at(a).fragmented(25, 25));
+    EXPECT_FALSE(stats.keys.at(a).fragmented(25, 31));  // pieces below min_fragment_px are crumbs
+    EXPECT_FALSE(stats.keys.at(a).fragmented(100, 25)); // below min_visible_px: ignored
+    EXPECT_FALSE(stats.keys.at(b).fragmented(1, 1));
+}
+
 TEST(DatasetOutput, LabelStatsIdMapAndPng16) {
     r::LabelCapture capture;
     capture.width = 4, capture.height = 3;
@@ -516,6 +670,13 @@ TEST(DatasetEndToEnd, TalosTorpedoDeterministicAcrossShards) {
             EXPECT_LE(instance.at("depth_m").at("median").get<double>(), 5.0);
         }
         EXPECT_EQ(a.at("camera").at("width"), 320);
+        EXPECT_EQ(a.at("environment"), "default");
+        EXPECT_EQ(a.at("environment_index"), 0);
+        for (const auto &instance : a.at("instances")) {
+            EXPECT_GE(instance.at("components").get<int>(), 1);
+            EXPECT_LE(instance.at("largest_component_px").get<std::int64_t>(),
+                      instance.at("pixels").get<std::int64_t>());
+        }
     }
     // Resume: a complete sample is skipped without rendering; one missing its image is rendered again, identically.
     EXPECT_EQ(single->render(0).at("status"), "existing");

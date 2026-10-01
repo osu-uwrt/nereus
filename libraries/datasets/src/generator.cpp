@@ -1,3 +1,4 @@
+#include <nereus/datasets/environment.hpp>
 #include <nereus/datasets/generator.hpp>
 #include <nereus/datasets/output.hpp>
 
@@ -42,10 +43,6 @@ r::View viewFor(const Pose &world_from_optical, const cameras::Intrinsics &k) {
     view.projection = k.projection();
     view.eye = world_from_optical.translation.cast<float>();
     return view;
-}
-
-Json vec3Json(const Eigen::Vector3f &v) {
-    return {v.x(), v.y(), v.z()};
 }
 
 // Part-map PNG value at uv (0, 0): the bottom-left pixel (diffuse row convention).
@@ -350,31 +347,16 @@ Json Generator::render(std::int64_t k) {
         throw std::runtime_error("scenario '" + s.id + "' has no task '" + *block.task + "'");
     Stream rng(job_.seed, k);
 
-    // Per-sample randomization (absent keys keep the pool's values).
+    // Environment first (weighted mode: the stream's first draw), then its values relative to the pool pack.
     const auto &z = job_.randomize;
+    const std::size_t environmentIndex = selectEnvironment(job_, k, rng);
+    const auto &environment = z.environments[environmentIndex];
+    auto drawn = drawEnvironment(environment, s.pack->appearance(), rng);
     Draw d;
-    d.appearance = s.pack->appearance();
-    auto &a = d.appearance;
-    if (z.tint_scale)
-        for (int c = 0; c < 3; ++c)
-            a.water.tint[c] = std::clamp(float(a.water.tint[c] * rng.uniform(*z.tint_scale)), 0.f, 1.f);
-    if (z.absorption_scale)
-        a.water.absorption *= float(rng.uniform(*z.absorption_scale));
-    if (z.scattering)
-        a.water.scattering = float(rng.uniform(*z.scattering));
-    if (z.caustics)
-        a.caustics = float(rng.uniform(*z.caustics));
-    if (z.exposure)
-        a.exposure = float(rng.uniform(*z.exposure));
-    if (z.direct_light_scale)
-        a.direct_light *= float(rng.uniform(*z.direct_light_scale));
-    if (z.ambient_light_scale)
-        a.ambient_light *= float(rng.uniform(*z.ambient_light_scale));
-    if (z.sun_azimuth_deg)
-        a.sun_azimuth = float(rng.uniform(*z.sun_azimuth_deg));
-    if (z.sun_elevation_deg)
-        a.sun_elevation = float(rng.uniform(*z.sun_elevation_deg));
-    d.time = z.time_s ? float(rng.uniform(*z.time_s)) : 0.f;
+    d.appearance = drawn.appearance;
+    d.time = drawn.time;
+    d.noise_sigma = drawn.noise_sigma;
+    d.blur_px = drawn.blur_px;
     Json placementRecord = Json::object();
     // One draw per group (when its first member comes up in task order) or per ungrouped task.
     std::map<std::string, const std::vector<std::string> *> groupOf;
@@ -422,24 +404,11 @@ Json Generator::render(std::int64_t k) {
         d.latched[region] = rng.chance(z.latched_probability);
         indicatorRecord[region] = d.latched[region];
     }
-    d.noise_sigma = z.noise_sigma ? rng.uniform(*z.noise_sigma) : 0.0;
-    d.blur_px = z.blur_px ? rng.uniform(*z.blur_px) : 0.0;
     d.noise_seed = rng.bits();
-    d.record = {{"water",
-                 {{"tint_rgb", vec3Json(a.water.tint)},
-                  {"absorption_per_m_rgb", vec3Json(a.water.absorption)},
-                  {"scattering", a.water.scattering}}},
-                {"lighting",
-                 {{"caustics", a.caustics},
-                  {"exposure", a.exposure},
-                  {"direct_light", a.direct_light},
-                  {"ambient_light", a.ambient_light},
-                  {"sun_azimuth_deg", a.sun_azimuth},
-                  {"sun_elevation_deg", a.sun_elevation}}},
-                {"time_s", d.time},
-                {"placement", placementRecord},
-                {"latched", indicatorRecord},
-                {"image", {{"noise_sigma", d.noise_sigma}, {"blur_px", d.blur_px}}}};
+    d.record = std::move(drawn.record);
+    d.record["environment"] = environment.id;
+    d.record["placement"] = placementRecord;
+    d.record["latched"] = indicatorRecord;
 
     // Task deltas (world), applied to static task visuals and props.
     std::map<std::string, Eigen::Matrix4d> delta;
@@ -507,6 +476,18 @@ Json Generator::render(std::int64_t k) {
             return "no_target";
         if (!block.task && labelledPixels > acc.background_max_labelled_px)
             return "labelled_in_background";
+        // Components for the record; the fragment rule (§10.1) last, on labelled instances only.
+        measureComponents(capture, stats);
+        if (acc.reject_fragments)
+            for (const auto &[key, item] : stats.keys) {
+                const auto found = s.keys.find(key);
+                if (found == s.keys.end())
+                    continue;
+                const auto &entry = s.entries[found->second.first];
+                if (job_.labelled.count({entry.origin.task, entry.parts.parts[found->second.second].part}) &&
+                    item.fragmented(acc.min_visible_px, acc.min_fragment_px))
+                    return "fragmented";
+            }
         return {};
     };
     // A9 prefilter at reduced resolution: rejects only views whose target is clearly too small (below half the
@@ -576,6 +557,8 @@ Json Generator::render(std::int64_t k) {
     log["attempts"] = attempts;
     log["reasons"] = reasons;
     log["scenario_index"] = scenarioIndex;
+    log["environment"] = environment.id;
+    log["environment_index"] = environmentIndex;
     if (!root) {
         log["status"] = "skipped";
         log["timings_ms"] = {{"label", labelMs}, {"total", msSince(started)}};
@@ -624,7 +607,9 @@ Json Generator::render(std::int64_t k) {
              {"pixels", item.pixels},
              {"bbox_xywh", {item.min_x, item.min_y, item.max_x - item.min_x + 1, item.max_y - item.min_y + 1}},
              {"depth_m", {{"min", *lo}, {"median", item.medianDepth()}, {"max", *hi}}},
-             {"truncated", item.truncated}});
+             {"truncated", item.truncated},
+             {"components", item.components.size()},
+             {"largest_component_px", item.components.empty() ? 0 : item.components.front()}});
     }
     const auto ids = encodePng16(idMap(full, table), K.width, K.height);
     const double encodeMs = msSince(encodeStart);
@@ -641,6 +626,8 @@ Json Generator::render(std::int64_t k) {
                    {"task", block.task ? Json(*block.task) : Json()},
                    {"scenario", s.id},
                    {"scenario_index", scenarioIndex},
+                   {"environment", environment.id},
+                   {"environment_index", environmentIndex},
                    {"attempts", attempts},
                    {"image", imageRel},
                    {"ids", idsRel},

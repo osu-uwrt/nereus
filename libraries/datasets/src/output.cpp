@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstring>
 #include <fcntl.h>
+#include <functional>
 #include <limits>
 #include <stdexcept>
 #include <unistd.h>
@@ -74,6 +75,38 @@ double KeyStats::medianDepth() const {
     const auto middle = copy.begin() + static_cast<std::ptrdiff_t>(copy.size() / 2);
     std::nth_element(copy.begin(), middle, copy.end());
     return *middle;
+}
+
+bool KeyStats::fragmented(std::int64_t min_visible_px, std::int64_t min_fragment_px) const {
+    if (pixels < min_visible_px)
+        return false;
+    int large = 0;
+    for (const auto size : components)
+        large += size >= min_fragment_px;
+    return large >= 2;
+}
+
+void measureComponents(const rendering::LabelCapture &capture, LabelStats &stats) {
+    const int w = capture.width, h = capture.height;
+    for (auto &[key, item] : stats.keys) {
+        item.components.clear();
+        if (item.pixels == 0)
+            continue;
+        // Mask of this key inside its (top-down) bounding box.
+        const int bw = item.max_x - item.min_x + 1, bh = item.max_y - item.min_y + 1;
+        cv::Mat mask(bh, bw, CV_8UC1);
+        for (int y = 0; y < bh; ++y) {
+            const auto *row = capture.ids.data() + static_cast<std::size_t>(h - 1 - (item.min_y + y)) * w;
+            auto *out = mask.ptr<std::uint8_t>(y);
+            for (int x = 0; x < bw; ++x)
+                out[x] = row[item.min_x + x] == key ? 1 : 0;
+        }
+        cv::Mat labels, sizes, centroids;
+        const int count = cv::connectedComponentsWithStats(mask, labels, sizes, centroids, 8, CV_32S);
+        for (int c = 1; c < count; ++c)
+            item.components.push_back(sizes.at<int>(c, cv::CC_STAT_AREA));
+        std::sort(item.components.begin(), item.components.end(), std::greater<>());
+    }
 }
 
 LabelStats analyzeLabels(const rendering::LabelCapture &capture, float near_plane, float far_plane, float near_m,

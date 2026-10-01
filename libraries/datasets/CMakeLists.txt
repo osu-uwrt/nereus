@@ -2,7 +2,8 @@
 # pose sampling, label-pass acceptance, randomized RGB through the robot pack's camera model, 16-bit id maps and
 # per-sample records. No ROS, no physics, no window. The executable is nereus-dataset-render.
 find_package(OpenCV 4 REQUIRED COMPONENTS core imgproc imgcodecs)
-add_library(nereus_datasets src/job.cpp src/sampling.cpp src/mesh_parts.cpp src/output.cpp src/generator.cpp)
+add_library(nereus_datasets src/job.cpp src/sampling.cpp src/environment.cpp src/mesh_parts.cpp src/output.cpp
+  src/generator.cpp)
 add_library(Nereus::datasets ALIAS nereus_datasets)
 set_target_properties(nereus_datasets PROPERTIES EXPORT_NAME datasets)
 target_include_directories(nereus_datasets PUBLIC

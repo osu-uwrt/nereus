@@ -6,6 +6,8 @@
 
 #include <Eigen/Core>
 
+#include <array>
+
 #include <cstdint>
 #include <filesystem>
 #include <map>
@@ -62,20 +64,35 @@ struct VisualPart {
 struct Acceptance {
     double max_range_m = 5, near_m = .2, max_near_fraction = .02;
     std::int64_t min_target_px = 150, max_attempts = 200, background_max_labelled_px = 0;
+    // §10.1: reject views where a labelled instance (>= min_visible_px) has >= 2 8-connected components of
+    // >= min_fragment_px each ("allow" keeps them).
+    bool reject_fragments = true;
+    std::int64_t min_fragment_px = 25, min_visible_px = 25;
 };
 
-// Every key optional: an absent key leaves the pool's value (no randomization).
+// One appearance environment (§10.2), fully merged by the planner. Every value: fixed or uniform in [lo, hi].
+// Water is relative to the pool pack's calibrated values (scales) unless an absolute override is given; an
+// absent key keeps the pool's value.
+struct Environment {
+    std::string id = "default";
+    double weight = 1;
+    std::optional<Range> tint_scale, absorption_scale, scattering_scale, distance_scale_scale; // tint: per channel
+    std::optional<std::array<Range, 3>> tint_rgb, absorption_per_m_rgb;                        // absolute
+    std::optional<Range> scattering;                                                           // absolute
+    std::optional<Range> caustics, exposure, sun_azimuth_deg, sun_elevation_deg, glare;        // absolute
+    std::optional<Range> direct_light_scale, ambient_light_scale;
+    std::optional<std::string> profile; // indoor | outdoor (overrides the pool's)
+    std::optional<Range> time_s, noise_sigma, blur_px;
+};
+
 struct Randomize {
-    std::optional<Range> tint_scale, absorption_scale, scattering;
-    std::optional<Range> caustics, exposure, direct_light_scale, ambient_light_scale, sun_azimuth_deg,
-        sun_elevation_deg;
-    std::optional<Range> time_s;
+    std::vector<Environment> environments{Environment{}}; // >= 1
+    bool sweep = false; // environment_mode: weighted (first draw of the sample's stream) | sweep (cycle per block)
     double task_yaw_deg = 0, task_offset_m = 0; // rigid jitter of each task about its origin (±, disc radius)
     // Tasks that move together: one drawn yaw/offset per group, about the group's first task's origin (e.g. the
     // table under the octagon). Tasks in no group move alone.
     std::vector<std::vector<std::string>> placement_groups;
     double latched_probability = 0;
-    std::optional<Range> noise_sigma, blur_px;
 };
 
 struct Job {
@@ -94,6 +111,7 @@ struct Job {
     std::int64_t sampleCount() const;
     // Block of global sample k (blocks are contiguous in document order).
     const SampleBlock &block(std::int64_t k) const;
+    std::int64_t blockStart(std::int64_t k) const; // global index of the first sample of k's block
     // `<task or "background">_<k zero-padded to 6>`.
     std::string name(std::int64_t k) const;
 };

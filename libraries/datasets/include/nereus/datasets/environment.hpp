@@ -1,0 +1,21 @@
+#pragma once
+// Appearance environments (§10.2): per-sample selection and the drawn appearance relative to the pool pack.
+#include <nereus/datasets/job.hpp>
+#include <nereus/datasets/sampling.hpp>
+#include <nereus/rendering/scene.hpp>
+
+namespace nereus::datasets {
+// Weighted mode: the sample stream's FIRST draw picks by cumulative weight. Sweep mode:
+// ((k - block start) / scenarios) mod n, no draw. Call first on a fresh stream.
+std::size_t selectEnvironment(const Job &, std::int64_t k, Stream &);
+
+struct EnvironmentDraw {
+    rendering::Appearance appearance;
+    float time = 0;
+    double noise_sigma = 0, blur_px = 0;
+    Json record; // water, lighting, time_s, image: the values drawn
+};
+// Draws an environment's values on top of the pool pack's appearance: water scales (tint per channel, absorption,
+// scattering, distance scale) unless absolute overrides are given; lighting absolute values and scales; profile.
+EnvironmentDraw drawEnvironment(const Environment &, const rendering::Appearance &pool, Stream &);
+} // namespace nereus::datasets
