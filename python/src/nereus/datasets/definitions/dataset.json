@@ -159,6 +159,12 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 100
+        },
+        "supersample": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4,
+          "description": "Samples per pixel along each axis, averaged in linear light (anti-aliasing); 1 = off."
         }
       },
       "additionalProperties": false

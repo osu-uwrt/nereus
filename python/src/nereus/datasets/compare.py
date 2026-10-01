@@ -447,6 +447,7 @@ class Options:
     settings: list[str] = field(default_factory=list)
     labels: bool = True
     resolution: str = "960x600"
+    supersample: int | None = None
     renderer: Path | None = None
     workers: int = 2
     force: bool = False
@@ -494,7 +495,9 @@ def compare(dataset: Path, out: Path, options: Options) -> list[Path]:
 
     # Stage 1: views under the first environment at its middle.
     views_dir = out / "views"
-    overrides = Overrides(tasks=tasks, count=1, resolution=options.resolution)
+    overrides = Overrides(
+        tasks=tasks, count=1, resolution=options.resolution, supersample=options.supersample
+    )
     planned = plan(spec.path, views_dir, overrides)
     job = planned.job
     blocks = view_blocks(job, options.views)

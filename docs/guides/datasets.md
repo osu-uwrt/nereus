@@ -108,7 +108,8 @@ labels: ../../labels/uwrt           # label pack folder or file
 model: ffc                          # camera + classes + range from the label pack
 scenarios: [../../scenarios/talos_uwrt]   # samples go round-robin across these (one tasks pack)
 seed: 1
-image: {resolution_px: native, crop: center, format: jpg, jpeg_quality: 92}   # or [w, h]
+image: {resolution_px: native, crop: center, format: jpg, jpeg_quality: 92,   # or [w, h]
+        supersample: 2}             # anti-aliasing: n x n samples per pixel, averaged; 1 = off
 robot_visuals: true                 # draw the robot (claw / hull in view)
 split: {train: 0.8, val: 0.2, test: 0.0}
 tasks:

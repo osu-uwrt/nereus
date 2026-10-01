@@ -26,6 +26,7 @@ def _overrides(arguments: argparse.Namespace) -> Overrides:
         elevation_deg=arguments.elevation_deg,
         altitude_m=arguments.altitude_m,
         resolution=arguments.resolution,
+        supersample=arguments.supersample,
         seed=arguments.seed,
         environments=arguments.environment,
         environment_mode=arguments.environment_mode,
@@ -116,6 +117,7 @@ def _run_environments(arguments: argparse.Namespace) -> int:
         settings=arguments.set or [],
         labels=arguments.labels,
         resolution=arguments.resolution,
+        supersample=arguments.supersample,
         renderer=_path(arguments.renderer),
         workers=arguments.workers,
         force=arguments.force,
@@ -157,6 +159,9 @@ def _spec_options(parser: argparse.ArgumentParser) -> None:
         "--altitude-m", nargs=2, type=float, metavar=("LOW", "HIGH"), help="overhead altitude"
     )
     parser.add_argument("--resolution", help="native or WIDTHxHEIGHT")
+    parser.add_argument(
+        "--supersample", type=int, help="anti-aliasing samples per pixel per axis (1 = off)"
+    )
     parser.add_argument("--seed", type=int, help="dataset seed")
     parser.add_argument(
         "--environment",
@@ -233,6 +238,9 @@ def main(argv: list[str] | None = None) -> int:
         "--labels", action=argparse.BooleanOptionalAction, default=True, help="label overlays"
     )
     grid.add_argument("--resolution", default="960x600", help="native or WIDTHxHEIGHT")
+    grid.add_argument(
+        "--supersample", type=int, help="anti-aliasing samples per pixel per axis (1 = off)"
+    )
     grid.add_argument("--renderer", help="nereus-dataset-render executable")
     grid.add_argument("--workers", type=int, default=2, help="parallel renderer shards")
     grid.add_argument("--force", action="store_true", help="reuse an --out made for another spec")

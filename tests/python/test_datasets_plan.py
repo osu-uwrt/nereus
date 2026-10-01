@@ -94,6 +94,7 @@ class PlanTests(unittest.TestCase):
                 "crop": "center",
                 "format": "png",
                 "jpeg_quality": 92,
+                "supersample": 2,
                 "robot_visuals": True,
             },
         )
@@ -188,6 +189,8 @@ class PlanTests(unittest.TestCase):
         self.assertNotIn("range_m", table["sampler"])
         self.assertEqual(job["camera"]["resolution_px"], [960, 600])
         self.assertEqual(job["seed"], 3)
+        supersampled = plan(self.root / "spec", self.out, Overrides(supersample=3)).job
+        self.assertEqual(supersampled["camera"]["supersample"], 3)
 
     def test_override_rejections(self) -> None:
         def fails(overrides: Overrides) -> list[str]:
@@ -199,6 +202,7 @@ class PlanTests(unittest.TestCase):
         self.assertIn("--altitude-m", fails(Overrides(tasks=["torpedo"], altitude_m=[1, 2]))[0])
         self.assertIn("range low", fails(Overrides(range_m=[3, 1]))[0])
         self.assertIn("--resolution", fails(Overrides(resolution="wide"))[0])
+        self.assertIn("--supersample", fails(Overrides(supersample=5))[0])
         only_background = apply_overrides(
             {"tasks": {"t": {"count": 1, "sampler": {"type": "free"}}}, "background": {}},
             Overrides(tasks=["background"]),

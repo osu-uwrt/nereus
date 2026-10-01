@@ -43,6 +43,8 @@ IMAGE_DEFAULTS: dict[str, Any] = {
     "crop": "center",
     "format": "jpg",
     "jpeg_quality": 92,
+    # Samples per pixel along each axis, averaged like a sensor pixel (anti-aliasing); 1 = off.
+    "supersample": 2,
 }
 SPLIT_DEFAULTS = {"train": 0.8, "val": 0.2, "test": 0.0}
 ACCEPTANCE_DEFAULTS: dict[str, Any] = {
@@ -77,6 +79,7 @@ class Overrides:
     elevation_deg: list[float] | None = None
     altitude_m: list[float] | None = None
     resolution: str | None = None  # "native" or "WxH"
+    supersample: int | None = None
     seed: int | None = None
     environments: list[str] | None = None  # globs over expanded environment ids
     environment_mode: str | None = None  # weighted | sweep
@@ -147,6 +150,10 @@ def apply_overrides(dataset: dict[str, Any], overrides: Overrides) -> dict[str, 
             sampler[key] = value
     if overrides.resolution is not None:
         data.setdefault("image", {})["resolution_px"] = parse_resolution(overrides.resolution)
+    if overrides.supersample is not None:
+        if not 1 <= overrides.supersample <= 4:
+            raise PackError(f"--supersample: {overrides.supersample} is not 1..4")
+        data.setdefault("image", {})["supersample"] = overrides.supersample
     if overrides.seed is not None:
         data["seed"] = overrides.seed
     return data
@@ -319,6 +326,7 @@ def plan(dataset_path: Path, out: Path, overrides: Overrides | None = None) -> P
             "crop": image["crop"],
             "format": image["format"],
             "jpeg_quality": image["jpeg_quality"],
+            "supersample": image["supersample"],
             "robot_visuals": data.get("robot_visuals", True),
         },
         "parts": _job_parts(parts, place),
