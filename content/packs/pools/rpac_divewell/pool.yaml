@@ -161,8 +161,9 @@ markings:
 
 # Raised and recessed fittings (fitted to the pool videos).
 fixtures:
-# Two raised drain grates in the first lane off the platform wall: a light 2.31 x 0.75 m frame, 4 cm proud,
-# crossed by three rows of paired slots 0.79 m apart, with a line of slots along each long edge.
+# Three raised drain grates in the first lane off the platform wall, one between each pair of cross lines: a
+# light 2.31 x 0.75 m frame, 4 cm proud, crossed by three rows of paired slots 0.79 m apart, with a line of
+# slots along each long edge. The deep-end one (between the first two cross lines) is placed from photos.
 - {id: grate_a, type: box, center_m: [13.785, 1.865], size_m: [2.31, 0.75, 0.04], color_rgb: [0.72, 0.85, 0.86]}
 - {id: grate_a_row0l, type: box, center_m: [12.76, 1.695], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
 - {id: grate_a_row0r, type: box, center_m: [12.76, 2.035], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
@@ -181,7 +182,15 @@ fixtures:
 - {id: grate_b_row2r, type: box, center_m: [9.83, 2.035], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
 - {id: grate_b_edge_lo, type: box, center_m: [9.295, 1.54], size_m: [2.11, 0.04, 0.042], color_rgb: [0.05, 0.12, 0.16]}
 - {id: grate_b_edge_hi, type: box, center_m: [9.295, 2.19], size_m: [2.11, 0.04, 0.042], color_rgb: [0.05, 0.12, 0.16]}
-# Steps recessed into the platform wall at mid-length: a well 2.1 m wide and 0.4 m deep from the deck down to
+- {id: grate_c, type: box, center_m: [6.175, 1.865], size_m: [2.31, 0.75, 0.04], color_rgb: [0.72, 0.85, 0.86]}
+- {id: grate_c_row0l, type: box, center_m: [5.15, 1.695], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_c_row0r, type: box, center_m: [5.15, 2.035], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_c_row1l, type: box, center_m: [5.94, 1.695], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_c_row1r, type: box, center_m: [5.94, 2.035], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_c_row2l, type: box, center_m: [6.73, 1.695], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_c_row2r, type: box, center_m: [6.73, 2.035], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_c_edge_lo, type: box, center_m: [6.175, 1.54], size_m: [2.11, 0.04, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_c_edge_hi, type: box, center_m: [6.175, 2.19], size_m: [2.11, 0.04, 0.042], color_rgb: [0.05, 0.12, 0.16]}
 # 1.22 m, three treads climbing back into it, and two grab rails down to its floor.
 - {id: stair_well, type: recess, wall: y_min, from: [10.9, -1.22], to: [13.0, 0.3048], depth_m: 0.4}
 - {id: stair_step_1, type: box, center_m: [11.95, -0.25, -1.115], size_m: [2.1, 0.3, 0.21]}
@@ -191,6 +200,33 @@ fixtures:
 - {id: stair_rail_1_top, type: box, center_m: [11.73, -0.33, 0.82], size_m: [0.045, 0.6, 0.045], color_rgb: [0.75, 0.77, 0.78]}
 - {id: stair_rail_2, type: box, center_m: [12.4, -0.06, -0.2], size_m: [0.045, 0.045, 2.04], color_rgb: [0.75, 0.77, 0.78]}
 - {id: stair_rail_2_top, type: box, center_m: [12.4, -0.33, 0.82], size_m: [0.045, 0.6, 0.045], color_rgb: [0.75, 0.77, 0.78]}
+# Stairs into the pool from the deck between the tower pillars, cut back into the platform wall: an open well
+# 2.1 m wide and 1.8 m deep from the deck down to 1.22 m, five treads stepping back up to the deck, and two
+# handrails sloping with them that bend straight down into the water.
+- {id: tower_stairs, type: recess, wall: y_min, from: [10.9, -1.22], to: [13.0, 0.3048], depth_m: 1.8}
+- {id: tower_stairs_tread_1, type: box, center_m: [11.95, -1.05, -1.115], size_m: [2.1, 1.5, 0.21]}
+- {id: tower_stairs_tread_2, type: box, center_m: [11.95, -1.2, -1.015], size_m: [2.1, 1.2, 0.41]}
+- {id: tower_stairs_tread_3, type: box, center_m: [11.95, -1.35, -0.885], size_m: [2.1, 0.9, 0.67]}
+- {id: tower_stairs_tread_4, type: box, center_m: [11.95, -1.5, -0.755], size_m: [2.1, 0.6, 0.93]}
+- {id: tower_stairs_tread_5, type: box, center_m: [11.95, -1.65, -0.6], size_m: [2.1, 0.3, 1.24]}
+- {id: tower_stairs_rail_1_drop, type: box, center_m: [11.66, -0.15, -0.605], size_m: [0.045, 0.045, 1.21], color_rgb: [0.75, 0.77, 0.78]}
+- {id: tower_stairs_rail_1, type: box, center_m: [11.66, -1.05, 0.6], size_m: [0.045, 2.1633, 0.045], rpy_deg: [-33.6901, 0, 0], color_rgb: [0.75, 0.77, 0.78]}
+- {id: tower_stairs_rail_1_post, type: box, center_m: [11.66, -1.95, 0.7524], size_m: [0.045, 0.045, 0.8952], color_rgb: [0.75, 0.77, 0.78]}
+- {id: tower_stairs_rail_2_drop, type: box, center_m: [12.36, -0.15, -0.605], size_m: [0.045, 0.045, 1.21], color_rgb: [0.75, 0.77, 0.78]}
+- {id: tower_stairs_rail_2, type: box, center_m: [12.36, -1.05, 0.6], size_m: [0.045, 2.1633, 0.045], rpy_deg: [-33.6901, 0, 0], color_rgb: [0.75, 0.77, 0.78]}
+- {id: tower_stairs_rail_2_post, type: box, center_m: [12.36, -1.95, 0.7524], size_m: [0.045, 0.045, 0.8952], color_rgb: [0.75, 0.77, 0.78]}
+# A ladder on the far side wall near the shallow end: toe steps recessed into the wall between two grab rails
+# that rise from the deck and arc over the edge into the water (holds located in the pool video).
+- {id: ladder_step_1, type: recess, wall: y_max, from: [23.4, -0.355], to: [23.7, -0.205], depth_m: 0.12}
+- {id: ladder_step_2, type: recess, wall: y_max, from: [23.4, -0.625], to: [23.7, -0.475], depth_m: 0.12}
+- {id: ladder_step_3, type: recess, wall: y_max, from: [23.4, -0.895], to: [23.7, -0.745], depth_m: 0.12}
+- {id: ladder_step_4, type: recess, wall: y_max, from: [23.4, -1.165], to: [23.7, -1.015], depth_m: 0.12}
+- {id: ladder_rail_1_post, type: box, center_m: [23.25, 17.5188, 0.6774], size_m: [0.045, 0.045, 0.7452], color_rgb: [0.75, 0.77, 0.78]}
+- {id: ladder_rail_1_top, type: box, center_m: [23.25, 17.2188, 1.05], size_m: [0.045, 0.645, 0.045], color_rgb: [0.75, 0.77, 0.78]}
+- {id: ladder_rail_1_drop, type: box, center_m: [23.25, 16.9188, 0.3], size_m: [0.045, 0.045, 1.5], color_rgb: [0.75, 0.77, 0.78]}
+- {id: ladder_rail_2_post, type: box, center_m: [23.85, 17.5188, 0.6774], size_m: [0.045, 0.045, 0.7452], color_rgb: [0.75, 0.77, 0.78]}
+- {id: ladder_rail_2_top, type: box, center_m: [23.85, 17.2188, 1.05], size_m: [0.045, 0.645, 0.045], color_rgb: [0.75, 0.77, 0.78]}
+- {id: ladder_rail_2_drop, type: box, center_m: [23.85, 16.9188, 0.3], size_m: [0.045, 0.045, 1.5], color_rgb: [0.75, 0.77, 0.78]}
 
 surface:
   tile_rgb: [0.1, 0.42, 0.42]
