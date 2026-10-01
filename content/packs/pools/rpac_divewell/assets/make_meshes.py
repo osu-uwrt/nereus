@@ -154,9 +154,10 @@ def _cross(a, b):
 def tower_stairs() -> Mesh:
     """A landing at deck level against the back of the well, then pool-stair treads stepping down toward the pool
     (0.3 m runs, 0.19 m risers, about 32 degrees, matching the handrail slope in the platform photo) to the well
-    floor at z = -1.22, each with a dark nosing. Three identical handrails (centre line, 0.45 m in from the
-    shallow-end side, close to the deep-end side) run down the flight 0.9 m above the nosings from a hooped top on
-    the landing, with a post to a tread partway down, and drop to the well floor at the front."""
+    floor at z = -1.22, each with a dark nosing. Three identical handrails, the outer two close to
+    the well's sides and the middle one off centre toward the shallow end (platform photo), run down the flight
+    0.9 m above the nosings from a hooped top on the landing, with a post to a tread partway down, and drop to the
+    well floor at the front."""
     m = Mesh()
     half, back, floor, run, risers = 1.05, WELL_DEPTH, -1.22, 0.3, 8
     rise = (DECK - floor) / risers
@@ -171,7 +172,7 @@ def tower_stairs() -> Mesh:
     def nosing_z(y: float) -> float:
         return DECK - rise / run * (y + landing)
 
-    for x in (-0.92, 0.0, 0.6):
+    for x in (-0.92, 0.25, 0.92):
         m.tube("steel", [(x, -back + 0.08, DECK), (x, -back + 0.08, DECK + 0.95),
                          (x, -landing, nosing_z(-landing) + 0.9), (x, -0.15, nosing_z(-0.15) + 0.9),
                          (x, -0.15, floor)])
