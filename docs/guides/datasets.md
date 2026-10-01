@@ -205,6 +205,38 @@ low turbidity, 20 %), `murky` (scattering ×1.3–1.8, more absorption, weak cau
 ×1.7 a board 4 m away is already faint, so murkier water would put labels on invisible objects) and `overcast`
 (weak sun, dim, noisier, 10 %).
 
+### Tuning environments
+
+To choose the ranges, look at the same robot views under every environment at the low, middle and high end of
+its ranges:
+
+```bash
+nereus-dataset environments content/packs/datasets/uwrt_ffc_2026 --out /tmp/looks
+nereus-dataset environments content/packs/datasets/uwrt_dfc_2026 --out /tmp/looks-dfc --task table \
+    --environment 'murky' --set water.scattering_scale=[1.5,2.2]   # try a value without editing the spec
+```
+
+Stage 1 renders `--views` views per task (default 3; each from an equal slice of the sampler's range or
+altitude, near to far) under the first environment at its middle, with no placement jitter and unlatched
+indicators. Stage 2 renders each view again at exactly the same robot pose under every environment variant:
+`min`, `mid` and `max` fix every `[low, high]` of the merged environment at its low end, middle or high end (all
+ranges together; fixed values stay; `time_s` always at its middle). `--set group.key=VALUE` (repeatable; a
+number, `[a, b]` or `[r, g, b]`) is laid over every environment before that.
+
+The result is one JPEG per task, `DIR/<task>.jpg`: rows are environment × variant, columns the views (the header
+gives each view's range or altitude and target frame). The left column lists what the renderer actually used
+for that row: water scattering, absorption, tint and distance scale, lighting profile, exposure, caustics,
+direct and ambient light, sun angles and glare, image noise and blur; water and light values also as amber
+multiples of the pool pack's calibrated values (`x1.55`), the units the spec is written in. Tiles carry the
+team's label overlays (`--no-labels` to turn them off) and their label count; a view that a variant made
+unacceptable shows `rejected:` with the renderer's reasons. `DIR/settings.json` holds the same values, the view
+poses and the record names; the renders stay in `DIR/views` and `DIR/grid`.
+
+Options: `--task T` (repeatable; default every task of the spec), `--views N`, `--environment ID` (repeatable,
+globs), `--variants min,mid,max`, `--set`, `--labels/--no-labels`, `--resolution` (default 960x600),
+`--renderer`, `--workers`. Re-running into the same folder starts fresh; a folder made for another spec is
+refused unless `--force`.
+
 ## Command line
 
 Install the tools with the `datasets` extra (OpenCV for export and previews; planning works without it) and
@@ -248,6 +280,7 @@ nereus-dataset preview ~/datasets/ffc/render --count 24
 | `render DIR` | run `nereus-dataset-render DIR/job.json --shard i/N` for `--workers` N (default 2) in parallel, streaming their progress; fails if any shard fails |
 | `export DIR --format F` | records -> one YOLO dataset (default `DIR/<format>`); `--labels` / `--model` re-export with another label pack or model |
 | `preview DIR` | contact sheet of `--count` samples (default 16): class-coloured masks, outlines, boxes, names; `--environment ID` (globs) for one look at a time |
+| `environments DATASET --out DIR` | the same views under every environment at its min / mid / max, one sheet per task (see [Tuning environments](#tuning-environments)) |
 | `check-classes LABELS --yolo-config PATH` | compare model class orders with a detector parameter file |
 
 `generate` and `plan` take the same overrides, applied to every selected task: `--task T` (repeatable; `background`

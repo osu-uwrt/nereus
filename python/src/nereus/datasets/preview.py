@@ -12,7 +12,7 @@ from numpy.typing import NDArray
 
 from nereus.packs import PackError
 
-from .export import class_map, cv2_module, label_record, read_ids, records
+from .export import Labelled, class_map, cv2_module, label_record, read_ids, records
 
 # BGR, well separated; class id picks one (cycled). Blues and cyans last: pool water is blue.
 # fmt: off
@@ -74,19 +74,30 @@ def _legend(names: list[str], width: int) -> Image:
     return legend
 
 
-def tile(render: Path, record: dict[str, Any], classes: Any, width: int) -> Image:
-    """One sample: overlay at full resolution, scaled to ``width``, then boxes and names."""
+def read_image(render: Path, record: dict[str, Any]) -> Image:
     cv2 = cv2_module()
     path = render / record["image"]
     loaded = cv2.imread(str(path), cv2.IMREAD_COLOR)
     if loaded is None:
         raise PackError(f"{path}: cannot read image")
-    image = np.asarray(loaded, dtype=np.uint8)
-    labelled = label_record(record, read_ids(render, record), classes)
-    overlay = image.copy()
+    return np.asarray(loaded, dtype=np.uint8)
+
+
+def overlay(
+    image: Image,
+    labelled: Labelled,
+    names: list[str],
+    width: int,
+    *,
+    alpha: float = ALPHA,
+    boxes: bool = True,
+) -> Image:
+    """Class-coloured masks blended at full resolution, scaled to ``width``, outlines and names."""
+    cv2 = cv2_module()
+    painted = image.copy()
     for label in labelled.labels:
-        overlay[label.mask] = colour(label.cls)
-    blended = np.asarray(cv2.addWeighted(overlay, ALPHA, image, 1 - ALPHA, 0), dtype=np.uint8)
+        painted[label.mask] = colour(label.cls)
+    blended = np.asarray(cv2.addWeighted(painted, alpha, image, 1 - alpha, 0), dtype=np.uint8)
     scale = width / image.shape[1]
     height = max(1, round(image.shape[0] * scale))
     small = np.asarray(cv2.resize(blended, (width, height), interpolation=cv2.INTER_AREA))
@@ -104,8 +115,17 @@ def tile(render: Path, record: dict[str, Any], classes: Any, width: int) -> Imag
             int(math.ceil((columns.max() + 1) * scale)),
             int(math.ceil((rows.max() + 1) * scale)),
         )
-        cv2.rectangle(small, (x0, y0), (x1 - 1, y1 - 1), colour(label.cls), 1)
-        _text(small, classes.names[label.cls], (x0, y0 - 2), colour(label.cls))
+        if boxes:
+            cv2.rectangle(small, (x0, y0), (x1 - 1, y1 - 1), colour(label.cls), 1)
+        _text(small, names[label.cls], (x0, y0 - 2), colour(label.cls))
+    return small
+
+
+def tile(render: Path, record: dict[str, Any], classes: Any, width: int) -> Image:
+    """One sample: overlay at full resolution, scaled to ``width``, then boxes and names."""
+    labelled = label_record(record, read_ids(render, record), classes)
+    small = overlay(read_image(render, record), labelled, classes.names, width)
+    height = small.shape[0]
     caption = f"{record['name']}  {len(labelled.labels)} labels"
     if labelled.dropped_small:
         caption += f", {labelled.dropped_small} < min px"

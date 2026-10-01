@@ -10,6 +10,7 @@ from nereus.packs import PackError
 
 from ._documents import load_document
 from ._mapping import class_order_problems
+from .compare import Options, compare
 from .export import FORMATS, export
 from .plan import Overrides, describe, plan
 from .preview import preview
@@ -106,6 +107,24 @@ def _run_preview(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _run_environments(arguments: argparse.Namespace) -> int:
+    options = Options(
+        tasks=arguments.task,
+        views=arguments.views,
+        environments=arguments.environment,
+        variants=[item.strip() for item in arguments.variants.split(",") if item.strip()],
+        settings=arguments.set or [],
+        labels=arguments.labels,
+        resolution=arguments.resolution,
+        renderer=_path(arguments.renderer),
+        workers=arguments.workers,
+        force=arguments.force,
+    )
+    for sheet in compare(Path(arguments.dataset), Path(arguments.out), options):
+        print(f"sheet -> {sheet}")
+    return 0
+
+
 def _run_check_classes(arguments: argparse.Namespace) -> int:
     labels = load_document(Path(arguments.labels), "labels")
     problems, notes = class_order_problems(labels.data, Path(arguments.yolo_config))
@@ -194,6 +213,30 @@ def main(argv: list[str] | None = None) -> int:
     preview_.add_argument("--out", help="image to write (default DIR/preview.jpg)")
     _label_options(preview_)
     preview_.set_defaults(run=_run_preview)
+
+    grid = commands.add_parser(
+        "environments", help="same views under every environment at its min / mid / max"
+    )
+    grid.add_argument("dataset", help="dataset folder (dataset.yaml) or file")
+    grid.add_argument("--out", required=True, help="output folder (sheets, views/, grid/)")
+    grid.add_argument("--task", action="append", help="only this task (repeatable)")
+    grid.add_argument("--views", type=int, default=3, help="views per task, near to far")
+    grid.add_argument("--environment", action="append", help="only these environments (globs)")
+    grid.add_argument("--variants", default="min,mid,max", help="range ends to show")
+    grid.add_argument(
+        "--set",
+        action="append",
+        metavar="GROUP.KEY=VALUE",
+        help="override a value in every environment, e.g. water.scattering_scale=[1.2,1.6]",
+    )
+    grid.add_argument(
+        "--labels", action=argparse.BooleanOptionalAction, default=True, help="label overlays"
+    )
+    grid.add_argument("--resolution", default="960x600", help="native or WIDTHxHEIGHT")
+    grid.add_argument("--renderer", help="nereus-dataset-render executable")
+    grid.add_argument("--workers", type=int, default=2, help="parallel renderer shards")
+    grid.add_argument("--force", action="store_true", help="reuse an --out made for another spec")
+    grid.set_defaults(run=_run_environments)
 
     check = commands.add_parser(
         "check-classes", help="compare model class order with a YOLO parameter file"

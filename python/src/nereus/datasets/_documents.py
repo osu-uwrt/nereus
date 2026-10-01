@@ -192,17 +192,23 @@ def environment_problems(randomize: dict[str, Any]) -> list[str]:
     )
     found, _ = environments.expand(randomize)
     for item in found:
-        where = f"/randomize/environments[{item['id']}]"
-        candidate = {key: value for key, value in item.items() if key != "weight"}
-        candidate["id"] = "x"  # expanded ids carry sweep values; the entry id was checked
-        for error in _environment_validator().iter_errors(candidate):
-            location = "/".join(str(part) for part in error.path)
-            problems.append(f"{where}/{location}: {error.message[:300]}")
-        _ordered(candidate, where, problems)
-        for group, pairs in environments.EXCLUSIVE.items():
-            for absolute, scale in pairs.items():
-                if absolute in item[group] and scale in item[group]:
-                    problems.append(f"{where}/{group}: set {absolute} or {scale}, not both")
+        problems += check_environment(item, f"/randomize/environments[{item['id']}]")
+    return problems
+
+
+def check_environment(item: dict[str, Any], where: str) -> list[str]:
+    """One merged environment: schema values, ordered ranges, one form per quantity."""
+    problems: list[str] = []
+    candidate = {key: value for key, value in item.items() if key != "weight"}
+    candidate["id"] = "x"  # expanded ids carry sweep values; entry ids are checked on their own
+    for error in _environment_validator().iter_errors(candidate):
+        location = "/".join(str(part) for part in error.path)
+        problems.append(f"{where}/{location}: {error.message[:300]}")
+    _ordered(candidate, where, problems)
+    for group, pairs in environments.EXCLUSIVE.items():
+        for absolute, scale in pairs.items():
+            if absolute in item.get(group, {}) and scale in item.get(group, {}):
+                problems.append(f"{where}/{group}: set {absolute} or {scale}, not both")
     return problems
 
 
