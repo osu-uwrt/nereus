@@ -289,7 +289,9 @@ def pool(data: dict[str, Any]) -> list[str]:
     return problems
 
 
-def _pool_fixtures(fixtures: list[dict[str, Any]], parameters: dict[str, Any], problems: list[str]) -> None:
+def _pool_fixtures(
+    fixtures: list[dict[str, Any]], parameters: dict[str, Any], problems: list[str]
+) -> None:
     """Boxes stand in or at the pool (up to 3 m beyond the walls, the deck the viewer draws, and 2 m above
     it, for stairs and rails); recesses open within their wall."""
     duplicates((item["id"] for item in fixtures), "fixture", problems)
@@ -299,10 +301,16 @@ def _pool_fixtures(fixtures: list[dict[str, Any]], parameters: dict[str, Any], p
         where = f"/fixtures/{index}"
         if fixture["type"] in ("box", "mesh"):
             center = fixture["center_m"]
-            if len(center) == 2 and not (_between(center[0], 0, length) and _between(center[1], 0, width)):
-                problems.append(f"{where}/center_m: ({center[0]:g}, {center[1]:g}) is outside the pool floor")
+            if len(center) == 2 and not (
+                _between(center[0], 0, length) and _between(center[1], 0, width)
+            ):
+                problems.append(
+                    f"{where}/center_m: ({center[0]:g}, {center[1]:g}) is outside the pool floor"
+                )
             if not (_between(center[0], -3, length + 3) and _between(center[1], -3, width + 3)):
-                problems.append(f"{where}/center_m: ({center[0]:g}, {center[1]:g}) is outside the pool")
+                problems.append(
+                    f"{where}/center_m: ({center[0]:g}, {center[1]:g}) is outside the pool"
+                )
             top = fixture.get("top_size_m")
             if top is not None and (top[0] > fixture["size_m"][0] or top[1] > fixture["size_m"][1]):
                 problems.append(f"{where}/top_size_m: the top must be no larger than the base")
@@ -314,7 +322,10 @@ def _pool_fixtures(fixtures: list[dict[str, Any]], parameters: dict[str, Any], p
         along = width if fixture["wall"] in ("x_min", "x_max") else length
         if fixture["from"][0] == fixture["to"][0] or fixture["from"][1] == fixture["to"][1]:
             problems.append(f"{where}: from and to must differ in both coordinates")
-        bottom = max(_floor_depth(parameters, fixture["wall"], end[0]) for end in (fixture["from"], fixture["to"]))
+        bottom = max(
+            _floor_depth(parameters, fixture["wall"], end[0])
+            for end in (fixture["from"], fixture["to"])
+        )
         _stripe(fixture, where, ("along the wall", 0, along), ("z", -bottom, deck), problems)
 
 
@@ -338,7 +349,10 @@ def _floor_profile(
         extent = parameters["length_m"] if profile["along"] == "x" else parameters["width_m"]
         positions = [point[0] for point in points]
         depths = [point[1] for point in points]
-        if abs(positions[0]) > POOL_EDGE_TOLERANCE or abs(positions[-1] - extent) > POOL_EDGE_TOLERANCE:
+        if (
+            abs(positions[0]) > POOL_EDGE_TOLERANCE
+            or abs(positions[-1] - extent) > POOL_EDGE_TOLERANCE
+        ):
             problems.append(
                 f"{where}/points_m: must run from 0 to {extent:g} m along {profile['along']}, "
                 f"not {positions[0]:g}..{positions[-1]:g} m"
@@ -368,8 +382,8 @@ def _floor_depth(parameters: dict[str, Any], wall: str, along: float) -> float:
     bounds it."""
     profiles = _floor_profiles(parameters)
     if not profiles:
-        return parameters["depth_m"]
-    bounds = []
+        return float(parameters["depth_m"])
+    bounds: list[float] = []
     for _, profile in profiles:
         points = profile["points_m"]
         across_axis = {"x": ("x_min", "x_max"), "y": ("y_min", "y_max")}[profile["along"]]
@@ -420,7 +434,9 @@ def _pool_markings(
     for index, line in enumerate(markings.get("wall_lines", [])):
         along = width if line["wall"] in ("x_min", "x_max") else length
         where = f"/markings/wall_lines/{index}"
-        bottom = max(_floor_depth(parameters, line["wall"], end[0]) for end in (line["from"], line["to"]))
+        bottom = max(
+            _floor_depth(parameters, line["wall"], end[0]) for end in (line["from"], line["to"])
+        )
         _stripe(line, where, ("along the wall", 0, along), ("z", -bottom, deck), problems)
 
 
@@ -616,7 +632,9 @@ def equipment(data: dict[str, Any]) -> list[str]:
     for item in data["items"]:
         if item["asset"] not in asset_ids:
             problems.append(f"/items/{item['id']}/asset: unknown asset '{item['asset']}'")
-        duplicates((frame["id"] for frame in item.get("frames", [])), f"{item['id']} frame", problems)
+        duplicates(
+            (frame["id"] for frame in item.get("frames", [])), f"{item['id']} frame", problems
+        )
     _quaternions(data, "", problems)
     return problems
 
@@ -738,7 +756,9 @@ def bridge_binding(data: dict[str, Any], robot_data: dict[str, Any]) -> list[str
 def scenario_pool(data: dict[str, Any], pool_data: dict[str, Any]) -> list[str]:
     """Scenario settings the selected pool cannot support."""
     if data["contacts"]["model"] == "sphere_pool" and "floor_profile" in pool_data["parameters"]:
-        return ["/contacts/model: sphere_pool needs a flat pool floor; use box_scene with a floor_profile"]
+        return [
+            "/contacts/model: sphere_pool needs a flat pool floor; use box_scene with a floor_profile"
+        ]
     return []
 
 
