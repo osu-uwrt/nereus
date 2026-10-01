@@ -22,6 +22,9 @@ from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.substitutions import LaunchConfiguration as LC
 
 ROOT = Path(__file__).resolve().parents[3]
+# The resolver needs the pack tools' dependencies, which ./build.sh installs into .venv; ros2 launch runs
+# under the system Python.
+PYTHON = str(ROOT / ".venv/bin/python") if (ROOT / ".venv/bin/python").exists() else sys.executable
 # pool:=<name> picks the matching UWRT scenario; scenario:=<folder> picks any pack instead.
 POOLS = {"robosub": "talos_uwrt", "rpac": "talos_uwrt_rpac"}
 
@@ -46,7 +49,7 @@ def _processes(context):
     config = LC("config").perform(context)
     resolved = str(Path(tempfile.gettempdir()) / "nereus_robot_resolved.json")
     subprocess.run(
-        [sys.executable, "-m", "nereus.packs", "resolve", scenario, "-o", resolved],
+        [PYTHON, "-m", "nereus.packs", "resolve", scenario, "-o", resolved],
         check=True, cwd=str(ROOT),
         env={**os.environ, "PYTHONPATH": os.pathsep.join([str(ROOT / "python/src"), os.environ.get("PYTHONPATH", "")])})
     command = [LC("viewer_binary").perform(context), "--scenario", resolved, "--pose-source", "estimate",

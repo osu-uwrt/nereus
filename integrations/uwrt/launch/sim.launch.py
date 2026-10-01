@@ -38,6 +38,9 @@ from launch.substitutions import LaunchConfiguration as LC
 
 ROOT = Path(__file__).resolve().parents[3]
 STACK = ROOT / "integrations/uwrt/acceptance/mission_stack.launch.py"
+# The resolver needs the pack tools' dependencies (ruamel.yaml, jsonschema), which ./build.sh installs into
+# .venv; ros2 launch itself runs under the system Python.
+PYTHON = str(ROOT / ".venv/bin/python") if (ROOT / ".venv/bin/python").exists() else sys.executable
 # Controller selection forwarded to mission_stack.launch.py (and on to riptide_bringup2); empty = its default.
 CONTROLLER_ARGS = {
     "active_control_model": "controller: 'mpc' runs riptide_mpc, anything else complete_controller",
@@ -73,7 +76,7 @@ def _processes(context):
     binary = LC("bridge_binary").perform(context)
     resolved = f"{output}.resolved.json"
     subprocess.run(
-        [sys.executable, "-m", "nereus.packs", "resolve", scenario, "-o", resolved],
+        [PYTHON, "-m", "nereus.packs", "resolve", scenario, "-o", resolved],
         check=True, cwd=str(ROOT),
         env={**os.environ, "PYTHONPATH": os.pathsep.join(
             [str(ROOT / "python/src"), os.environ.get("PYTHONPATH", "")])})
