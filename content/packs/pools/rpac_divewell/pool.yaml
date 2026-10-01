@@ -74,9 +74,10 @@ markings:
 
 # Raised and recessed fittings. The meshes are built by assets/make_meshes.py (edit and re-run it to change them).
 fixtures:
-# Raised drain grates in the first lane off the platform wall, rows of three: at the deep end starting just past
-# the lap lines' T bars (from the deck video), and between cross lines 2-3 and 3-4 (measured in the pool videos).
-- {id: grates_1, type: mesh, asset: raised_grates, center_m: [2.99, 1.865]}
+# Raised drain grates in the first lane off the platform wall, rows of three: at the deep end in the gap between
+# the lap lines' T bars and the first cross line's vent, touching neither (from the deck video), and between cross
+# lines 2-3 and 3-4 (measured in the pool videos).
+- {id: grates_1, type: mesh, asset: raised_grates, center_m: [2.915, 1.865]}
 - {id: grates_2, type: mesh, asset: raised_grates, center_m: [9.455, 1.865]}
 - {id: grates_3, type: mesh, asset: raised_grates, center_m: [13.785, 1.865]}
 # Stairs between the tower pillars: a well cut back 2.4 m into the platform wall and deck, down to 1.22 m, with a
