@@ -131,6 +131,14 @@ TEST(DatasetJob, ParsesBlocksNamesAndParts) {
     auto bad = minimalJob();
     bad["samples"][0]["sampler"]["type"] = "orbit";
     EXPECT_THROW(ds::parseJob(bad), std::runtime_error);
+    EXPECT_EQ(job.camera.supersample, 1) << "absent: no supersampling";
+    auto supersampled = minimalJob();
+    supersampled["camera"]["supersample"] = 3;
+    EXPECT_EQ(ds::parseJob(supersampled).camera.supersample, 3);
+    for (const int n : {0, 5}) {
+        supersampled["camera"]["supersample"] = n;
+        EXPECT_THROW(ds::parseJob(supersampled), std::runtime_error) << n;
+    }
 }
 
 TEST(DatasetJob, PlacementGroups) {
@@ -589,7 +597,7 @@ std::string slurp(const std::filesystem::path &path) {
     return text.str();
 }
 
-Json talosJob(const std::filesystem::path &out) {
+Json talosJob(const std::filesystem::path &out, int supersample = 1) {
     const std::string tasks = std::string(NEREUS_SOURCE_DIR) + "/content/packs/tasks/robosub_2026/assets/torpedo/";
     Json job = {
         {"format", "nereus.dataset_job.v1"},
@@ -597,7 +605,12 @@ Json talosJob(const std::filesystem::path &out) {
         {"seed", 11},
         {"output", out.string()},
         {"scenarios", {{{"id", "talos"}, {"resolved", NEREUS_RESOLVED_TALOS}}}},
-        {"camera", {{"sensor", "ffc"}, {"resolution_px", {320, 200}}, {"format", "jpg"}, {"jpeg_quality", 90}}},
+        {"camera",
+         {{"sensor", "ffc"},
+          {"resolution_px", {320, 200}},
+          {"format", "jpg"},
+          {"jpeg_quality", 90},
+          {"supersample", supersample}}},
         {"parts",
          {{"textures",
            {{{"texture", tasks + "Task4_ver1_Fixed.png"},
@@ -721,6 +734,41 @@ TEST(DatasetEndToEnd, TalosTorpedoDeterministicAcrossShards) {
     EXPECT_EQ(slurp(image), before);
     std::ofstream(one / "ids" / "torpedo_000001.png", std::ios::trunc).flush(); // empty id map
     EXPECT_EQ(single->render(1).at("status"), "accepted");
+    std::filesystem::remove_all(root);
+}
+
+// Supersampled RGB: still byte-identical across shards; the id maps (labels at the output resolution) are those
+// of the single-sample run, the images are not.
+TEST(DatasetEndToEnd, SupersampledTalosTorpedoDeterministicAcrossShards) {
+    if (!std::filesystem::exists(NEREUS_RESOLVED_TALOS))
+        GTEST_SKIP() << "resolved Talos fixture missing (run the session_resolve_talos test)";
+    const auto root = std::filesystem::temp_directory_path() / "nereus_datasets_e2e_supersample";
+    const auto one = freshOutput(root / "one"), two = freshOutput(root / "two"), plain = freshOutput(root / "plain");
+    auto single = makeGenerator(talosJob(one, 2));
+    if (!single)
+        GTEST_SKIP() << "no EGL";
+    for (std::int64_t k = 0; k < 2; ++k)
+        EXPECT_EQ(single->render(k).at("status"), "accepted");
+    for (const std::int64_t k : {1, 0}) {
+        auto shard = makeGenerator(talosJob(two, 2));
+        EXPECT_EQ(shard->render(k).at("status"), "accepted");
+    }
+    expectSameOutputs(one, two);
+    auto reference = makeGenerator(talosJob(plain));
+    for (std::int64_t k = 0; k < 2; ++k)
+        EXPECT_EQ(reference->render(k).at("status"), "accepted");
+    for (const char *name : {"torpedo_000000", "torpedo_000001"}) {
+        const auto record = Json::parse(slurp(one / "records" / (std::string(name) + ".json")));
+        EXPECT_EQ(record.at("camera").at("supersample"), 2);
+        EXPECT_EQ(Json::parse(slurp(plain / "records" / (std::string(name) + ".json"))).at("camera").at("supersample"),
+                  1);
+        EXPECT_EQ(slurp(one / "ids" / (std::string(name) + ".png")),
+                  slurp(plain / "ids" / (std::string(name) + ".png")))
+            << name;
+        EXPECT_NE(slurp(one / "images" / (std::string(name) + ".jpg")),
+                  slurp(plain / "images" / (std::string(name) + ".jpg")))
+            << name;
+    }
     std::filesystem::remove_all(root);
 }
 

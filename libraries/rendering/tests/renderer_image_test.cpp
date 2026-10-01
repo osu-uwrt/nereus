@@ -8,6 +8,7 @@
 #include <nereus/rendering/renderer.hpp>
 #include <png.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -150,6 +151,27 @@ r::Appearance plain() {
 
 std::size_t index(const r::ImageCapture &image, int column, int row_from_bottom) {
     return std::size_t(row_from_bottom) * image.width + column;
+}
+
+// The unit quad turned 20 degrees about the view axis (edges cross the pixel grid obliquely), tinted.
+r::Scene tiltedQuad(const Eigen::Vector4f &tint) {
+    auto s = scene(quad());
+    s.instances[0].transform.topLeftCorner<3, 3>() =
+        Eigen::AngleAxisf(20 * float(M_PI) / 180, Eigen::Vector3f::UnitX()).toRotationMatrix();
+    s.instances[0].tint = tint;
+    return s;
+}
+
+r::Appearance supersampled(int n, r::Appearance a = plain()) {
+    a.supersample = n;
+    return a;
+}
+
+// post.frag's tone curve and gamma on one linear HDR channel, as an 8-bit value.
+int toneMapped(float c, float exposure = 1) {
+    c *= exposure;
+    c = std::clamp((c * (2.51f * c + .03f)) / (c * (2.43f * c + .59f) + .14f), 0.f, 1.f);
+    return int(std::lround(std::pow(c, 1 / 2.2f) * 255));
 }
 } // namespace
 
@@ -420,4 +442,139 @@ TEST_F(RendererImage, AbandonContextReleasesCpuOwnersWithoutAContextAndIsTermina
     // This test deliberately abandons GPU names. The fixture destroys their owning
     // context after the suite, just as the offscreen host does after a lost context.
     glfwMakeContextCurrent(context->window);
+}
+
+TEST_F(RendererImage, SupersamplingAveragesEachBlockInLinearHdrBeforeToneMapping) {
+    const int w = 40, h = 30;
+    const auto frame =
+        renderer->draw(tiltedQuad(Eigen::Vector4f::Ones()), view(1.2f, 4.f / 3), supersampled(2), 0, w, h);
+    EXPECT_EQ(frame.width, w);
+    EXPECT_EQ(frame.depth_width, 2 * w);
+    EXPECT_EQ(frame.depth_height, 2 * h);
+    const auto full = renderer->capture();
+    ASSERT_EQ(full.width, w);
+    ASSERT_EQ(full.scene_width, 2 * w);
+    ASSERT_EQ(full.scene_height, 2 * h);
+    ASSERT_EQ(full.rgba.size(), std::size_t(w) * h * 4);
+    ASSERT_EQ(full.composite_rgba.size(), std::size_t(4 * w) * h * 4);
+    int mixed = 0;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+            for (int c = 0; c < 3; ++c) {
+                float sum = 0;
+                for (int dy = 0; dy < 2; ++dy)
+                    for (int dx = 0; dx < 2; ++dx)
+                        sum += full.composite_rgba[(std::size_t(2 * y + dy) * 2 * w + 2 * x + dx) * 4 + c];
+                const int expected = toneMapped(sum / 4);
+                ASSERT_NEAR(full.rgba[(std::size_t(y) * w + x) * 4 + c], expected, 1) << x << "," << y;
+                float lo = 1e9f, hi = 0;
+                for (int dy = 0; dy < 2; ++dy)
+                    for (int dx = 0; dx < 2; ++dx) {
+                        const float v = full.composite_rgba[(std::size_t(2 * y + dy) * 2 * w + 2 * x + dx) * 4 + c];
+                        lo = std::min(lo, v);
+                        hi = std::max(hi, v);
+                    }
+                mixed += c == 0 && hi - lo > .1f;
+            }
+    EXPECT_GT(mixed, 20) << "the quad's edges cover part of many blocks";
+}
+
+TEST_F(RendererImage, SupersamplingGivesHardEdgesIntermediateValues) {
+    // A low-contrast quad (below the single-sample edge smoothing threshold): at 1x every pixel is either
+    // the quad or the background; at 2x its edge pixels take values in between.
+    const auto tint = Eigen::Vector4f(.22f, .22f, .22f, 1);
+    const auto between = [&](int n) {
+        renderer->draw(tiltedQuad(tint), view(), supersampled(n), 0, 64, 64);
+        const auto image = renderer->captureImage(true, false);
+        const int background = image.rgb[3 * index(image, 0, 0)], inside = image.rgb[3 * index(image, 32, 32)];
+        EXPECT_GT(std::abs(inside - background), 12) << "quad and background must differ";
+        int count = 0;
+        for (std::size_t i = 0; i < image.rgb.size(); i += 3) {
+            const int v = image.rgb[i];
+            const double t = double(v - background) / (inside - background);
+            count += t > .2 && t < .8;
+        }
+        return count;
+    };
+    EXPECT_EQ(between(1), 0);
+    EXPECT_GT(between(2), 40);
+}
+
+TEST_F(RendererImage, SupersamplingKeepsSmoothShadingWithinOneLevel) {
+    r::PoolGeometry pool;
+    pool.dimensions = {4, 4, 2};
+    pool.tile_size = 0; // plain floor: nothing finer than a pixel
+    const auto render = [&](int n) {
+        renderer->draw(r::makePoolScene(pool), lookDown({2, 2, -1}), supersampled(n), 0, 64, 48);
+        return renderer->captureImage(true, false);
+    };
+    const auto one = render(1), two = render(2);
+    ASSERT_EQ(one.rgb.size(), two.rgb.size());
+    int largest = 0;
+    for (std::size_t i = 0; i < one.rgb.size(); ++i)
+        largest = std::max(largest, std::abs(int(one.rgb[i]) - int(two.rgb[i])));
+    EXPECT_LE(largest, 1);
+}
+
+TEST_F(RendererImage, SupersampledDepthIsOneSampleNearestThePixelCentre) {
+    // Fronto-parallel quad: its depth is the same everywhere, so away from its edges 2x and 3x read exactly
+    // the single-sample depth.
+    renderer->draw(scene(quad()), view(), plain(), 0, 48, 40);
+    const auto single = renderer->captureImage(false, true);
+    for (const int n : {2, 3, 4}) {
+        renderer->draw(scene(quad()), view(), supersampled(n), 0, 48, 40);
+        const auto image = renderer->captureImage(false, true);
+        ASSERT_EQ(image.width, 48);
+        ASSERT_EQ(image.depth.size(), 48u * 40);
+        EXPECT_EQ(image.depth[index(image, 24, 20)], single.depth[index(single, 24, 20)]) << n;
+        EXPECT_LT(image.depth[index(image, 24, 20)], 1.f);
+        EXPECT_EQ(image.depth[index(image, 1, 1)], 1.f) << "background";
+        // Every pixel, edges included, is exactly the opaque sample at block offset (n/2, n/2): one of the
+        // block's own values, never a blend of the two surfaces.
+        const auto full = renderer->capture();
+        ASSERT_EQ(full.scene_width, n * 48);
+        for (int y = 0; y < 40; ++y)
+            for (int x = 0; x < 48; ++x)
+                ASSERT_EQ(image.depth[index(image, x, y)],
+                          full.opaque_depth[std::size_t(n * y + n / 2) * full.scene_width + n * x + n / 2])
+                    << n << ": " << x << "," << y;
+    }
+    // A sloped plane's window depth is affine in the pixel position, so at 2x the sample a quarter pixel right
+    // of and above each centre reads the 1x depth interpolated a quarter of the way to the next pixels.
+    auto turned = scene(quad());
+    turned.instances[0].transform.topLeftCorner<3, 3>() =
+        Eigen::AngleAxisf(50 * float(M_PI) / 180, Eigen::Vector3f::UnitZ()).toRotationMatrix();
+    renderer->draw(turned, view(), plain(), 0, 48, 40);
+    const auto flat = renderer->captureImage(false, true);
+    renderer->draw(turned, view(), supersampled(2), 0, 48, 40);
+    const auto fine = renderer->captureImage(false, true);
+    for (const auto &[x, y] : {std::pair{24, 20}, std::pair{22, 18}, std::pair{26, 23}}) {
+        const float d = flat.depth[index(flat, x, y)];
+        const float dx = flat.depth[index(flat, x + 1, y)] - d, dy = flat.depth[index(flat, x, y + 1)] - d;
+        ASSERT_LT(d, 1.f);
+        ASSERT_GT(std::abs(dx), 1e-5f) << "the plane must be sloped";
+        // Within 5% of a pixel's depth step (rasterizer snapping); the centre itself is 25% away.
+        EXPECT_NEAR(fine.depth[index(fine, x, y)], d + .25f * (dx + dy), .05f * (std::abs(dx) + std::abs(dy)))
+            << x << "," << y;
+    }
+}
+
+TEST_F(RendererImage, SupersampleIsValidatedAndPreviewsHonourIt) {
+    GLint maximum = 0;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximum);
+    for (const int n : {0, 5, -1}) {
+        EXPECT_THROW(renderer->draw(scene(quad()), view(), supersampled(n), 0, 16, 16), std::invalid_argument) << n;
+        EXPECT_THROW(renderer->captureImage(), std::logic_error) << "failed draw invalidates frame";
+    }
+    EXPECT_THROW(renderer->draw(scene(quad()), view(), supersampled(2), 0, maximum / 2 + 1, 1), std::invalid_argument);
+    EXPECT_THROW(renderer->draw(scene(quad()), view(), supersampled(4), 0, 1, maximum / 4 + 1), std::invalid_argument);
+    auto preview = supersampled(3);
+    preview.preview = true;
+    const auto frame = renderer->draw(scene(quad()), view(), preview, 0, 20, 10);
+    EXPECT_EQ(frame.width, 20);
+    EXPECT_EQ(frame.height, 10);
+    EXPECT_EQ(frame.depth_width, 60);
+    EXPECT_EQ(frame.depth_height, 30);
+    const auto plainFrame = renderer->draw(scene(quad()), view(), plain(), 0, 20, 10);
+    EXPECT_EQ(plainFrame.depth_width, 20) << "the full frame keeps its own size";
 }

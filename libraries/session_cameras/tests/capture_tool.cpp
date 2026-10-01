@@ -1,6 +1,6 @@
 // Writes one always-mode capture as raw files for pixel comparison with pack_cameras.py
 // (tests/compare_pack_cameras.py). Usage:
-//   session_cameras_capture RESOLVED.json SENSOR X Y Z QW QX QY QZ TIME_S OUT_PREFIX [REPEAT]
+//   session_cameras_capture RESOLVED.json SENSOR X Y Z QW QX QY QZ TIME_S OUT_PREFIX [REPEAT] [SUPERSAMPLE]
 // Outputs OUT_PREFIX.rgb (uint8, top-down, h*w*3), .depth (float32 h*w), .json (size, timings).
 #include <nereus/session_cameras/session_cameras.hpp>
 
@@ -13,7 +13,7 @@ namespace sc = nereus::session_cameras;
 
 int main(int argc, char **argv) {
     if (argc < 12) {
-        std::cerr << "usage: " << argv[0] << " RESOLVED SENSOR X Y Z QW QX QY QZ TIME_S OUT [REPEAT]\n";
+        std::cerr << "usage: " << argv[0] << " RESOLVED SENSOR X Y Z QW QX QY QZ TIME_S OUT [REPEAT] [SUPERSAMPLE]\n";
         return 2;
     }
     try {
@@ -21,6 +21,8 @@ int main(int argc, char **argv) {
         sc::Options options;
         options.always = true;
         options.sensor_ids = {argv[2]};
+        if (argc > 13)
+            options.supersample = std::stoi(argv[13]);
         sc::SessionCameras cameras(resolved, options);
         nereus::spatial::Pose pose;
         pose.translation = {std::stod(argv[3]), std::stod(argv[4]), std::stod(argv[5])};

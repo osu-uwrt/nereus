@@ -567,10 +567,12 @@ Json Generator::render(std::int64_t k) {
         return log;
     }
 
-    // RGB through the camera model.
+    // RGB through the camera model, supersampled (the label passes above stay at the output resolution).
     const auto rgbStart = std::chrono::steady_clock::now();
     const auto &K = s.output;
-    auto image = host_->capture(scene, viewFor(*camera, K), d.appearance, d.time, K.width, K.height, true, false);
+    auto appearance = d.appearance;
+    appearance.supersample = job_.camera.supersample;
+    auto image = host_->capture(scene, viewFor(*camera, K), appearance, d.time, K.width, K.height, true, false);
     const double rgbMs = msSince(rgbStart);
     const auto encodeStart = std::chrono::steady_clock::now();
     postProcess(image.rgb, K.width, K.height, d.blur_px, d.noise_sigma, d.noise_seed);
@@ -641,6 +643,7 @@ Json Generator::render(std::int64_t k) {
                      {"fy", K.fy},
                      {"cx", K.cx},
                      {"cy", K.cy},
+                     {"supersample", job_.camera.supersample},
                      {"world_from_camera", poseJson(*camera)}}},
                    {"robot", {{"world_from_root", poseJson(*root)}}},
                    {"tasks", tasks},

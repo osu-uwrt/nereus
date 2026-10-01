@@ -2,13 +2,14 @@
 
     ros2 launch integrations/uwrt/launch/sim.launch.py [stack:=false] [viewer:=false]
         [scenario:=<pack folder>] [output:=<run dir>] [rmw:=<rmw implementation>]
-        [cameras:=true|false] [always_cameras:=true|false]
+        [cameras:=true|false] [always_cameras:=true|false] [camera_supersample:=1..4]
         [active_control_model:=mpc] [mpc_model:=sim|<name>|<path>] [mpc_odom_topic:=simulator/ground_truth]
         [mpc_state_source:=sensors|odometry]
 
 The simulator (build/ros-viewer/.../nereus-sim) runs the scenario resolved with
 `python -m nereus.packs resolve`; cameras:=false passes --no-cameras and
-always_cameras:=true renders every camera output regardless of subscribers.
+always_cameras:=true renders every camera output regardless of subscribers. camera_supersample sets the
+camera anti-aliasing factor (empty: the simulator's default, 2x; 1 turns it off).
 
 The controller arguments pass through to riptide_bringup2 (mission_stack.launch.py); empty keeps bringup's
 default controller. MPC on the simulator plant: active_control_model:=mpc mpc_model:=sim.
@@ -66,6 +67,8 @@ def _processes(context):
         command.append("--no-cameras")
     elif LC("always_cameras").perform(context).lower() in ("true", "1", "yes"):
         command.append("--always-cameras")
+    if LC("camera_supersample").perform(context):
+        command += ["--camera-supersample", LC("camera_supersample").perform(context)]
     actions.append(ExecuteProcess(cmd=command, cwd=str(ROOT), output="screen",
                                   sigterm_timeout="15", name="simulator"))
     actions.append(IncludeLaunchDescription(
@@ -90,6 +93,8 @@ def generate_launch_description():
         DeclareLaunchArgument("cameras", default_value="true", description="run camera acquisition"),
         DeclareLaunchArgument("always_cameras", default_value="false",
                               description="render cameras regardless of subscribers"),
+        DeclareLaunchArgument("camera_supersample", default_value="",
+                              description="camera anti-aliasing factor 1..4 (empty: the simulator's default)"),
         # Default: the shell's RMW (UWRT uses rmw_zenoh_cpp with a running `ros2 run rmw_zenoh_cpp
         # rmw_zenohd`). FastDDS showed 0.4-0.9 s reliable-delivery stalls of the simulator's /tf under
         # full-stack load with camera traffic; Zenoh delivered the same run without stalls.

@@ -118,12 +118,14 @@ struct ObserverSettings {
     bool water = true, walls = true, floor = true, reflections = false, shadows = true;
     int lighting = 0; // 0 follows the scene, 1 indoor, 2 outdoor, 3 sterile
     float exposure = 1, brightness = 1, ambient = 1;
+    int antialiasing = 2; // supersampling factor of the observer view and camera cards (1 = off)
     void resetLighting() {
         shadows = true;
         lighting = 0;
         exposure = brightness = ambient = 1;
     }
     rendering::Appearance apply(rendering::Appearance scene) const {
+        scene.supersample = antialiasing;
         scene.reflections = reflections;
         scene.shadows = scene.shadows && shadows;
         scene.exposure *= exposure;
@@ -1044,9 +1046,9 @@ void App::focusAtCursor(const SensorView &view, const rendering::RenderedFrame &
         glBindFramebuffer(GL_READ_FRAMEBUFFER, readFbo_);
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, frame.depth_texture, 0);
         float depth = 1;
+        const auto texel = depthTexel(uv, frame.depth_width, frame.depth_height);
         if (glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE)
-            glReadPixels(int(uv.x * float(frame.width)), frame.height - 1 - int(uv.y * float(frame.height)), 1, 1,
-                         GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+            glReadPixels(texel.x, texel.y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, GLuint(previous));
         if (!depthPoint(view.projection * view.view, uv, depth, point) &&
@@ -1459,6 +1461,17 @@ void App::toolbarPoolViewer() {
         ImGui::Checkbox("Surface reflections", &observer_.reflections);
         ImGui::Checkbox("Frame stats (F3)", &showProfile_);
         ImGui::SeparatorText("Viewer lighting");
+        int antialiasing = std::clamp(observer_.antialiasing, 1, 4) - 1;
+        ImGui::SetNextItemWidth(160);
+        if (ImGui::Combo("Anti-aliasing", &antialiasing,
+                         "Off\0"
+                         "2x\0"
+                         "3x\0"
+                         "4x\0"))
+            observer_.antialiasing = antialiasing + 1;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Supersampling of this view and the camera cards: each pixel averages n x n samples.\n"
+                              "Costs about n^2 in GPU time and memory; never changes the simulated camera images.");
         ImGui::BeginDisabled(observer_.lighting == 3);
         ImGui::Checkbox("Shadows", &observer_.shadows);
         ImGui::EndDisabled();
@@ -1830,6 +1843,10 @@ void App::drawInterface(double time, float dt) {
     const rendering::View renderView{toEigen(view.view), toEigen(view.projection),
                                      Eigen::Vector3f(view.eye.x, view.eye.y, view.eye.z)};
     auto appearance = observer_.apply(look_.appearance);
+    // A window too large for the supersampled targets falls back to fewer samples.
+    GLint maximumTexture = 0;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximumTexture);
+    appearance.supersample = std::clamp(int(maximumTexture) / std::max(rw, rh), 1, appearance.supersample);
     // Original viewer: a 3D focus disc at the orbit target while orbiting/zooming without Follow.
     if (mode_ == 0 && (orbitInteracting_ || opt_.showFocus) && !follow_)
         appearance.focus = Eigen::Vector3f(target_.x, target_.y, target_.z);
@@ -2038,6 +2055,7 @@ void App::renderLocalCards(double t, const rendering::Scene &mainScene) {
                                          Eigen::Vector3f(v.eye.x, v.eye.y, v.eye.z)};
         auto appearance = look_.appearance;
         appearance.preview = !opt_.legacyCards;
+        appearance.supersample = observer_.antialiasing;
         const auto frame = renderer_->draw(scene, renderView, appearance, float(t), w, h);
         auto &card = cards_[i];
         if (!card.rgb || card.rgbWidth != w || card.rgbHeight != h) {

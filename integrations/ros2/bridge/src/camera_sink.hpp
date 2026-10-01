@@ -43,6 +43,7 @@ class CameraSink {
 
 struct CameraSinkOptions {
     bool always{false}; // render every pack output regardless of subscribers (reproducible runs)
+    int supersample{2}; // anti-aliasing factor, 1..4 (session_cameras::Options::supersample)
 };
 class SessionPort;
 // Builds the camera runtime for the given camera sensor ids of a scenario; nullptr when this

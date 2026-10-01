@@ -3,20 +3,27 @@
 
 namespace nereus::rendering {
 struct RenderedFrame {
-    std::uint32_t color_texture =
-        0; // Borrowed GL texture; contents change on draw, ID invalidated by resize/destruction.
+    // Borrowed GL texture of the requested output size; contents change on draw, ID invalidated by
+    // resize/destruction.
+    std::uint32_t color_texture = 0;
     int width = 0, height = 0;
     std::uint32_t depth_texture = 0; // Borrowed read-only composite depth; same lifetime as color.
+    // depth_texture's size: Appearance::supersample x width/height (the scene passes' size).
+    int depth_width = 0, depth_height = 0;
 };
 struct Capture {
-    int width = 0, height = 0;
+    int width = 0, height = 0;             // rgba (the output)
+    int scene_width = 0, scene_height = 0; // opaque_* and composite_*: supersample x width/height
     // All rows start at the bottom (OpenGL convention). Depth is nonlinear [0,1].
     std::vector<std::uint8_t> rgba;
     std::vector<float> opaque_rgba, opaque_depth, composite_rgba, composite_depth;
 };
 // Sensor-sized readback: final tone-mapped RGB8 and opaque-pass depth (nonlinear [0,1],
 // before the water surface is composited). Rows start at the bottom; omitted outputs are
-// empty vectors.
+// empty vectors. Both are width x height. With Appearance::supersample n > 1 the depth is one
+// scene sample per n x n block, never an average across an edge: the sample at block offset
+// (n/2, n/2) (integer division), whose centre is the pixel centre for odd n and 1/(2n) pixel right of and
+// above it for even n.
 struct ImageCapture {
     int width = 0, height = 0;
     std::vector<std::uint8_t> rgb;
@@ -64,7 +71,8 @@ class Renderer {
     // Requires the most recent draw to have completed successfully.
     Capture capture() const; // Explicit synchronous readback; no per-frame CPU copy otherwise.
     // Requires the most recent draw to have completed successfully. Resets pixel-pack
-    // state like capture() and leaves framebuffer zero bound for reading.
+    // state like capture() and leaves framebuffer zero bound for reading. A supersampled depth readback
+    // first draws the per-pixel sample into an internal target (changing viewport, program and depth state).
     ImageCapture captureImage(bool color = true, bool depth = true) const;
     // labels: one per scene.instances entry (same order). Independent of draw(): may be called before or
     // after it, renders into its own target and leaves the last draw's frame and captures intact. Meshes and

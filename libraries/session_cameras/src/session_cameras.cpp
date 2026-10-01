@@ -135,6 +135,8 @@ SessionCameras::SessionCameras(const session::ResolvedScenario &resolved, Option
     : scene_(std::move(scene)), options_(std::move(options)), always_(options_.always) {
     const auto &scenarioJson = resolved.scenario;
     sensor_noise_ = scenarioJson.value("sensor_noise", options_.sensor_noise);
+    if (options_.supersample < 1 || options_.supersample > 4)
+        throw std::runtime_error("camera supersample must be 1..4");
     seed_ = scenarioJson.value("seed", std::uint64_t(0));
     if (!scene_)
         scene_ = std::make_shared<pack_scene::PackScene>(resolved);
@@ -460,6 +462,7 @@ Json SessionCameras::describe() const {
             {"sensor_noise", sensor_noise_},
             {"seed", seed_},
             {"always", always_},
+            {"supersample", options_.supersample},
             {"cameras", cameraRecords},
             {"scene", scene_->describe()}};
 }
@@ -489,6 +492,8 @@ Products SessionCameras::capture(Camera &c, const Job &job) {
     const bool wantColor[2] = {job.rgb_left, job.rgb_right};
     const bool wantDepth[2] = {job.depth_left, false};
     std::optional<rendering::View> views[2];
+    auto appearance = scene_->appearance();
+    appearance.supersample = options_.supersample;
     for (int eye = 0; eye < 2; ++eye)
         if (wantEye[eye])
             views[eye] = viewFor(eye); // validates before rendering
@@ -498,8 +503,8 @@ Products SessionCameras::capture(Camera &c, const Job &job) {
         for (int eye = 0; eye < 2; ++eye)
             if (wantEye[eye]) {
                 const auto &k = c.intrinsics[std::size_t(eye)];
-                raw[std::size_t(eye)] = host_->capture(scene, *views[eye], scene_->appearance(), time, k.width,
-                                                       k.height, wantColor[eye], wantDepth[eye]);
+                raw[std::size_t(eye)] = host_->capture(scene, *views[eye], appearance, time, k.width, k.height,
+                                                       wantColor[eye], wantDepth[eye]);
             }
     }
     const auto renderNs = nowNs() - renderStart;

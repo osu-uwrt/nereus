@@ -52,6 +52,7 @@ struct CameraSpec {
     std::string crop = "center", format = "jpg";
     int jpeg_quality = 92;
     bool robot_visuals = true;
+    int supersample = 1; // RGB anti-aliasing (rendering::Appearance::supersample), 1..4; labels never
 };
 
 struct TexturePart {

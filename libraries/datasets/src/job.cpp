@@ -252,6 +252,9 @@ Job parseJob(const Json &d) {
     if (job.camera.jpeg_quality < 0 || job.camera.jpeg_quality > 100)
         fail("camera.jpeg_quality", "0..100");
     job.camera.robot_visuals = camera.value("robot_visuals", true);
+    job.camera.supersample = camera.value("supersample", 1);
+    if (job.camera.supersample < 1 || job.camera.supersample > 4)
+        fail("camera.supersample", "1..4");
 
     const auto parts = d.value("parts", Json::object());
     for (const auto &item : parts.value("textures", Json::array())) {

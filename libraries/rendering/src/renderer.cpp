@@ -76,11 +76,13 @@ class Frustum {
   private:
     std::array<glm::vec4, 6> planes;
 };
-GLuint program(const std::filesystem::path &root, const std::string &name) {
+// `vertex` names another program's vertex shader to share (default: name.vert).
+GLuint program(const std::filesystem::path &root, const std::string &name, const std::string &vertex = {}) {
     const GLuint p = glCreateProgram();
     try {
         for (auto type : {GL_VERTEX_SHADER, GL_FRAGMENT_SHADER}) {
-            const auto path = root / (name + (type == GL_VERTEX_SHADER ? ".vert" : ".frag"));
+            const auto path =
+                root / (type == GL_VERTEX_SHADER ? (vertex.empty() ? name : vertex) + ".vert" : name + ".frag");
             std::ifstream input(path);
             if (!input)
                 throw std::runtime_error("missing shader: " + path.string());
@@ -475,14 +477,17 @@ struct Target {
 struct Frame {
     Target opaque, composite, final;
     std::array<Target, 2> bloom;
-    void resize(int w, int h) {
-        opaque.resize(w, h);
-        composite.resize(w, h);
+    int samples = 1; // supersampling: the scene passes (opaque, composite) are samples x final's size
+    void resize(int w, int h, int n) {
+        opaque.resize(n * w, n * h);
+        composite.resize(n * w, n * h);
         final.resize(w, h, false);
         for (auto &b : bloom)
             b.resize(std::max(1, w / 4), std::max(1, h / 4));
+        samples = n;
     }
     void swap(Frame &o) {
+        std::swap(samples, o.samples);
         opaque.swap(o.opaque);
         composite.swap(o.composite);
         final.swap(o.final);
@@ -553,8 +558,9 @@ bool affine(const Eigen::Matrix4f &m) {
 struct Renderer::Resources {
     // Every new owned GL object must also be zeroed by abandon() after context loss.
     GLuint sceneProgram = 0, waterProgram = 0, shadowProgram = 0, postProgram = 0, bloomProgram = 0, focusProgram = 0,
-           pointsProgram = 0, quad = 0, labelProgram = 0;
-    std::filesystem::path shaderRoot; // label.vert/frag compile on the first label pass
+           pointsProgram = 0, quad = 0, labelProgram = 0, depthSampleProgram = 0;
+    // label.vert/frag compile on the first label pass, depth_sample.frag on the first supersampled depth readback
+    std::filesystem::path shaderRoot;
     LabelTarget labelTarget;
     // Part maps referenced by the latest label pass (released when a later pass stops using them).
     struct PartMap {
@@ -642,6 +648,7 @@ struct Renderer::Resources {
     Frame f, preview;          // `preview` is swapped into `f` for Appearance::preview draws
     bool shadow_valid = false; // the shadow map holds a real (shadows-on) pass
     Target shadow, reflection;
+    Target depthSample; // output-sized depth picked from a supersampled frame for captureImage
     glm::mat4 lightMatrix{1}, poolToMap{1}, mapToPool{1};
     glm::vec3 poolSize{1}, center{0};
     float waterLevel = 0, ledRadiance = 60;
@@ -678,7 +685,7 @@ struct Renderer::Resources {
         for (auto &entry : pointBuffers)
             releasePoints(entry.second);
         for (auto id : {sceneProgram, waterProgram, shadowProgram, postProgram, bloomProgram, focusProgram,
-                        pointsProgram, labelProgram})
+                        pointsProgram, labelProgram, depthSampleProgram})
             if (id)
                 glDeleteProgram(id);
         if (quad)
@@ -686,7 +693,7 @@ struct Renderer::Resources {
     }
     void abandon() noexcept {
         sceneProgram = waterProgram = shadowProgram = postProgram = bloomProgram = focusProgram = pointsProgram = quad =
-            labelProgram = 0;
+            labelProgram = depthSampleProgram = 0;
         labelTarget.fbo = labelTarget.ids = labelTarget.depth = 0;
         for (auto &entry : partMaps)
             if (entry.second.texture)
@@ -697,7 +704,7 @@ struct Renderer::Resources {
         pointDraws.clear();
         for (auto *target :
              {&f.opaque, &f.composite, &f.final, &f.bloom[0], &f.bloom[1], &preview.opaque, &preview.composite,
-              &preview.final, &preview.bloom[0], &preview.bloom[1], &shadow, &reflection})
+              &preview.final, &preview.bloom[0], &preview.bloom[1], &shadow, &reflection, &depthSample})
             target->fbo = target->color = target->depth = 0;
         const auto forget = [](auto &meshes) {
             for (auto &mesh : meshes) {
@@ -770,6 +777,7 @@ struct Renderer::Resources {
     void shadows(const Look &look);
     void drawScene(const InternalView &camera, const Look &look, float time, bool clip = false);
     void render(const InternalView &camera, const Look &look, float time);
+    void sampleDepth();
 };
 void Renderer::Resources::shadows(const Look &look) {
     auto sun = look.outdoor ? look.sunDirection() : glm::normalize(glm::vec3(-.2f, -.1f, 1));
@@ -989,7 +997,8 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
         glDisable(GL_CULL_FACE);
         for (const auto &draw : pointDraws) {
             uniform(pointsProgram, "model", draw.model);
-            glUniform1f(glGetUniformLocation(pointsProgram, "pointSize"), draw.size);
+            // Sizes are output pixels; the scene passes are supersampled.
+            glUniform1f(glGetUniformLocation(pointsProgram, "pointSize"), draw.size * static_cast<float>(f.samples));
             glBindVertexArray(draw.vao);
             glDrawArrays(GL_POINTS, 0, draw.count);
         }
@@ -998,6 +1007,8 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
     }
     // Filter the HDR bright pass before tone mapping. A continuous low-resolution
     // blur avoids the replicated bars produced by sparse full-resolution rings.
+    // The bright pass taps are one output pixel apart (with supersampling each bilinear tap then averages
+    // part of a pixel's block; at 2x exactly its 2x2 samples), so the bloom does not shrink with the factor.
     glDisable(GL_DEPTH_TEST);
     glUseProgram(bloomProgram);
     integer(bloomProgram, "source", 0);
@@ -1013,9 +1024,9 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
         integer(bloomProgram, "extractBright", pass == 0);
         bindTexture(pass == 0 ? f.composite.color : f.bloom[(pass - 1) % 2].color, 0);
         glUniform2f(glGetUniformLocation(bloomProgram, "stepSize"),
-                    pass == 0 ? 1.f / static_cast<float>(f.composite.width)
+                    pass == 0 ? 1.f / static_cast<float>(f.final.width)
                               : (pass == 1 ? 1.f / static_cast<float>(f.bloom[0].width) : 0.f),
-                    pass == 0 ? 1.f / static_cast<float>(f.composite.height)
+                    pass == 0 ? 1.f / static_cast<float>(f.final.height)
                               : (pass == 2 ? 1.f / static_cast<float>(f.bloom[0].height) : 0.f));
         glDrawArrays(GL_TRIANGLES, 0, 3);
     }
@@ -1035,9 +1046,39 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
     uniform(postProgram, "glare", look.outdoor ? look.glare * look.directLight : 0.f);
     glUniform2f(glGetUniformLocation(postProgram, "texel"), 1.f / static_cast<float>(f.opaque.width),
                 1.f / static_cast<float>(f.opaque.height));
+    integer(postProgram, "samples", f.samples);
     glBindVertexArray(quad);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+// Output-sized depth from a supersampled frame: per pixel the one opaque-pass sample nearest its centre,
+// copied exactly (never an average, which would invent depths between an edge's two surfaces).
+void Renderer::Resources::sampleDepth() {
+    if (!depthSampleProgram)
+        depthSampleProgram = program(shaderRoot, "depth_sample", "post");
+    depthSample.resize(f.final.width, f.final.height, false, true);
+    glBindFramebuffer(GL_FRAMEBUFFER, depthSample.fbo);
+    glViewport(0, 0, depthSample.width, depthSample.height);
+    // The caller may have changed state since draw(); only what this full-screen depth write depends on.
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_RASTERIZER_DISCARD);
+    glDisable(GL_CULL_FACE);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glDepthRange(0, 1);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
+    glDepthMask(GL_TRUE);
+    glUseProgram(depthSampleProgram);
+    integer(depthSampleProgram, "sceneDepth", 0);
+    integer(depthSampleProgram, "samples", f.samples);
+    glBindSampler(0, 0);
+    bindTexture(f.opaque.depth, 0);
+    glBindVertexArray(quad);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+    glDepthFunc(GL_LESS);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 Renderer::Renderer(const std::filesystem::path &root) {
@@ -1079,6 +1120,10 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
         !view.eye.allFinite() || !affine(view.view) || !view.projection.allFinite() ||
         !view.projection.fullPivLu().isInvertible() || !scene.lighting_center.allFinite())
         throw std::invalid_argument("invalid render view, size or time");
+    if (a.supersample < 1 || a.supersample > 4)
+        throw std::invalid_argument("supersample must be 1..4");
+    if (width > maximum / a.supersample || height > maximum / a.supersample)
+        throw std::invalid_argument("supersampled size exceeds the maximum texture size");
     for (float value : {a.caustics, a.exposure, a.direct_light, a.ambient_light, a.glare, a.water.scattering,
                         a.water.distance_scale, a.water.clear_distance})
         if (!std::isfinite(value) || value < 0)
@@ -1176,7 +1221,7 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
         r.f.swap(r.preview);
         guard.swapped = true;
     }
-    r.f.resize(width, height);
+    r.f.resize(width, height, a.supersample);
     Look look{{vector(a.water.tint), vector(a.water.absorption), a.water.scattering, a.water.distance_scale,
                a.water.distance_power, a.water.clear_distance},
               a.caustics,
@@ -1203,7 +1248,7 @@ RenderedFrame Renderer::draw(const Scene &scene, const View &view, const Appeara
     checkGl("scene rendering");
     r.frame_valid = true;
     guard.success = true;
-    return {r.f.final.color, width, height, r.f.composite.depth};
+    return {r.f.final.color, width, height, r.f.composite.depth, r.f.composite.width, r.f.composite.height};
 }
 Capture Renderer::capture() const {
     if (!resources_)
@@ -1214,12 +1259,15 @@ Capture Renderer::capture() const {
     Capture result;
     result.width = f.final.width;
     result.height = f.final.height;
+    result.scene_width = f.opaque.width;
+    result.scene_height = f.opaque.height;
     const auto pixels = static_cast<std::size_t>(result.width) * result.height;
+    const auto samples = static_cast<std::size_t>(result.scene_width) * result.scene_height;
     result.rgba.resize(pixels * 4);
-    result.opaque_rgba.resize(pixels * 4);
-    result.composite_rgba.resize(pixels * 4);
-    result.opaque_depth.resize(pixels);
-    result.composite_depth.resize(pixels);
+    result.opaque_rgba.resize(samples * 4);
+    result.composite_rgba.resize(samples * 4);
+    result.opaque_depth.resize(samples);
+    result.composite_depth.resize(samples);
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
     glPixelStorei(GL_PACK_SWAP_BYTES, GL_FALSE);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
@@ -1229,8 +1277,8 @@ Capture Renderer::capture() const {
     const auto read = [&](const Target &target, std::vector<float> &color, std::vector<float> &depth) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, target.fbo);
         glReadBuffer(GL_COLOR_ATTACHMENT0);
-        glReadPixels(0, 0, result.width, result.height, GL_RGBA, GL_FLOAT, color.data());
-        glReadPixels(0, 0, result.width, result.height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
+        glReadPixels(0, 0, result.scene_width, result.scene_height, GL_RGBA, GL_FLOAT, color.data());
+        glReadPixels(0, 0, result.scene_width, result.scene_height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
     };
     read(f.opaque, result.opaque_rgba, result.opaque_depth);
     read(f.composite, result.composite_rgba, result.composite_depth);
@@ -1265,7 +1313,9 @@ ImageCapture Renderer::captureImage(bool color, bool depth) const {
     }
     if (depth) { // Opaque pass depth: the water surface never occludes sensor depth.
         result.depth.resize(pixels);
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, f.opaque.fbo);
+        if (f.samples > 1)
+            resources_->sampleDepth();
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, f.samples > 1 ? resources_->depthSample.fbo : f.opaque.fbo);
         glReadPixels(0, 0, result.width, result.height, GL_DEPTH_COMPONENT, GL_FLOAT, result.depth.data());
     }
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
