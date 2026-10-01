@@ -53,6 +53,13 @@ markings:
   # Diving lines beside lap lines 4 and 6 at the shallow end.
   - {from: [19.83, 7.936], to: [23.6, 7.936]}
   - {from: [18.02, 10.988], to: [23.52, 10.988]}
+  # Flush slotted inlets in the floor.
+  - {from: [15.32, 1.49], to: [15.74, 1.49], width_m: 0.39, color_rgb: [0.05, 0.12, 0.16]}
+  - {from: [15.35, 1.3925], to: [15.71, 1.3925], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
+  - {from: [15.35, 1.5875], to: [15.71, 1.5875], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
+  - {from: [11.725, 2.96], to: [12.175, 2.96], width_m: 0.3, color_rgb: [0.05, 0.12, 0.16]}
+  - {from: [11.755, 2.885], to: [12.145, 2.885], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
+  - {from: [11.755, 3.035], to: [12.145, 3.035], width_m: 0.015, color_rgb: [0.3, 0.5, 0.55]}
   # A dark plus-shaped target above each lap line on both end walls: a stem from the waterline down to
   # 0.97 m and a 0.91 m crossbar at 0.46 m, 0.3 m wide strokes (fitted on the shallow-end wall).
   wall_lines:
@@ -91,8 +98,93 @@ markings:
   # A dark band around the walls about 1.2 m down.
   - {wall: x_min, from: [0, -1.18], to: [17.0688, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
   - {wall: x_max, from: [0, -1.18], to: [17.0688, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
-  - {wall: y_min, from: [0, -1.18], to: [25.23, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: y_min, from: [0, -1.18], to: [10.9, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: y_min, from: [13.0, -1.18], to: [25.23, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
+  # Slatted vents 3.23 m down: on the shallow-end wall at the quarter points, on the side walls at
+  # 10, 15 and 20 m. The deep-end ones and the platform wall's 15 and 20 m ones are assumed (not in view).
+  - {wall: x_max, from: [4.12, -3.23], to: [4.4, -3.23], width_m: 0.28, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [4.13, -3.3], to: [4.39, -3.3], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_max, from: [4.13, -3.23], to: [4.39, -3.23], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_max, from: [4.13, -3.16], to: [4.39, -3.16], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_max, from: [8.36, -3.23], to: [8.64, -3.23], width_m: 0.28, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [8.37, -3.3], to: [8.63, -3.3], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_max, from: [8.37, -3.23], to: [8.63, -3.23], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_max, from: [8.37, -3.16], to: [8.63, -3.16], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_max, from: [12.66, -3.23], to: [12.94, -3.23], width_m: 0.28, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_max, from: [12.67, -3.3], to: [12.93, -3.3], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_max, from: [12.67, -3.23], to: [12.93, -3.23], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_max, from: [12.67, -3.16], to: [12.93, -3.16], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_min, from: [4.12, -3.23], to: [4.4, -3.23], width_m: 0.28, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_min, from: [4.13, -3.3], to: [4.39, -3.3], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_min, from: [4.13, -3.23], to: [4.39, -3.23], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_min, from: [4.13, -3.16], to: [4.39, -3.16], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_min, from: [8.36, -3.23], to: [8.64, -3.23], width_m: 0.28, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_min, from: [8.37, -3.3], to: [8.63, -3.3], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_min, from: [8.37, -3.23], to: [8.63, -3.23], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_min, from: [8.37, -3.16], to: [8.63, -3.16], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_min, from: [12.66, -3.23], to: [12.94, -3.23], width_m: 0.28, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: x_min, from: [12.67, -3.3], to: [12.93, -3.3], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_min, from: [12.67, -3.23], to: [12.93, -3.23], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: x_min, from: [12.67, -3.16], to: [12.93, -3.16], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_max, from: [9.97, -3.23], to: [10.25, -3.23], width_m: 0.28, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: y_max, from: [9.98, -3.3], to: [10.24, -3.3], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_max, from: [9.98, -3.23], to: [10.24, -3.23], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_max, from: [9.98, -3.16], to: [10.24, -3.16], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_max, from: [15.02, -3.23], to: [15.3, -3.23], width_m: 0.28, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: y_max, from: [15.03, -3.3], to: [15.29, -3.3], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_max, from: [15.03, -3.23], to: [15.29, -3.23], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_max, from: [15.03, -3.16], to: [15.29, -3.16], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_max, from: [19.89, -3.23], to: [20.17, -3.23], width_m: 0.28, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: y_max, from: [19.9, -3.3], to: [20.16, -3.3], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_max, from: [19.9, -3.23], to: [20.16, -3.23], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_max, from: [19.9, -3.16], to: [20.16, -3.16], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_min, from: [10.18, -3.23], to: [10.46, -3.23], width_m: 0.28, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: y_min, from: [10.19, -3.3], to: [10.45, -3.3], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_min, from: [10.19, -3.23], to: [10.45, -3.23], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_min, from: [10.19, -3.16], to: [10.45, -3.16], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_min, from: [15.02, -3.23], to: [15.3, -3.23], width_m: 0.28, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: y_min, from: [15.03, -3.3], to: [15.29, -3.3], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_min, from: [15.03, -3.23], to: [15.29, -3.23], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_min, from: [15.03, -3.16], to: [15.29, -3.16], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_min, from: [19.89, -3.23], to: [20.17, -3.23], width_m: 0.28, color_rgb: [0.05, 0.12, 0.16]}
+  - {wall: y_min, from: [19.9, -3.3], to: [20.16, -3.3], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_min, from: [19.9, -3.23], to: [20.16, -3.23], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
+  - {wall: y_min, from: [19.9, -3.16], to: [20.16, -3.16], width_m: 0.012, color_rgb: [0.3, 0.5, 0.55]}
   - {wall: y_max, from: [0, -1.18], to: [25.23, -1.18], width_m: 0.1, color_rgb: [0.05, 0.12, 0.16]}
+
+
+# Raised and recessed fittings (fitted to the pool videos).
+fixtures:
+# Two raised drain grates in the first lane off the platform wall: a light 2.31 x 0.75 m frame, 4 cm proud,
+# crossed by three rows of paired slots 0.79 m apart, with a line of slots along each long edge.
+- {id: grate_a, type: box, center_m: [13.785, 1.865], size_m: [2.31, 0.75, 0.04], color_rgb: [0.72, 0.85, 0.86]}
+- {id: grate_a_row0l, type: box, center_m: [12.76, 1.695], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_a_row0r, type: box, center_m: [12.76, 2.035], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_a_row1l, type: box, center_m: [13.55, 1.695], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_a_row1r, type: box, center_m: [13.55, 2.035], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_a_row2l, type: box, center_m: [14.34, 1.695], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_a_row2r, type: box, center_m: [14.34, 2.035], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_a_edge_lo, type: box, center_m: [13.785, 1.54], size_m: [2.11, 0.04, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_a_edge_hi, type: box, center_m: [13.785, 2.19], size_m: [2.11, 0.04, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_b, type: box, center_m: [9.295, 1.865], size_m: [2.31, 0.75, 0.04], color_rgb: [0.72, 0.85, 0.86]}
+- {id: grate_b_row0l, type: box, center_m: [8.27, 1.695], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_b_row0r, type: box, center_m: [8.27, 2.035], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_b_row1l, type: box, center_m: [9.06, 1.695], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_b_row1r, type: box, center_m: [9.06, 2.035], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_b_row2l, type: box, center_m: [9.83, 1.695], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_b_row2r, type: box, center_m: [9.83, 2.035], size_m: [0.06, 0.3, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_b_edge_lo, type: box, center_m: [9.295, 1.54], size_m: [2.11, 0.04, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+- {id: grate_b_edge_hi, type: box, center_m: [9.295, 2.19], size_m: [2.11, 0.04, 0.042], color_rgb: [0.05, 0.12, 0.16]}
+# Steps recessed into the platform wall at mid-length: a well 2.1 m wide and 0.4 m deep from the deck down to
+# 1.22 m, three treads climbing back into it, and two grab rails down to its floor.
+- {id: stair_well, type: recess, wall: y_min, from: [10.9, -1.22], to: [13.0, 0.3048], depth_m: 0.4}
+- {id: stair_step_1, type: box, center_m: [11.95, -0.25, -1.115], size_m: [2.1, 0.3, 0.21]}
+- {id: stair_step_2, type: box, center_m: [11.95, -0.3, -1.015], size_m: [2.1, 0.2, 0.41]}
+- {id: stair_step_3, type: box, center_m: [11.95, -0.35, -0.885], size_m: [2.1, 0.1, 0.67]}
+- {id: stair_rail_1, type: box, center_m: [11.73, -0.06, -0.2], size_m: [0.045, 0.045, 2.04], color_rgb: [0.75, 0.77, 0.78]}
+- {id: stair_rail_1_top, type: box, center_m: [11.73, -0.33, 0.82], size_m: [0.045, 0.6, 0.045], color_rgb: [0.75, 0.77, 0.78]}
+- {id: stair_rail_2, type: box, center_m: [12.4, -0.06, -0.2], size_m: [0.045, 0.045, 2.04], color_rgb: [0.75, 0.77, 0.78]}
+- {id: stair_rail_2_top, type: box, center_m: [12.4, -0.33, 0.82], size_m: [0.045, 0.6, 0.045], color_rgb: [0.75, 0.77, 0.78]}
 
 surface:
   tile_rgb: [0.1, 0.42, 0.42]
