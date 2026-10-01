@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <map>
 #include <string>
+#include <vector>
 
 namespace nereus::session {
 using Json = nlohmann::json;
@@ -32,7 +33,16 @@ ResolvedScenario parseResolvedScenario(const Json &document);
 // A pool document's floor: its `parameters.floor_profile` (one profile or a list, the floor being the
 // shallowest of them), or flat at `depth_m`.
 simulation::PoolFloor poolFloor(const Json &pool);
-// A pool document's static contact boxes (pool-local): its `collision_boxes`, plus one box per floor
-// segment, flagged `"floor": true`, when the floor is profiled.
+// A pool document's `box` fixtures, placed: pool-local centre (z relative to the water surface; a box given
+// only x, y rests on the floor at its centre), size, yaw about +Z.
+struct PoolFixtureBox {
+    std::string id;
+    Eigen::Vector3d center = Eigen::Vector3d::Zero(), size = Eigen::Vector3d::Ones();
+    double yaw = 0; // radians
+    bool on_floor = false, contact = false;
+};
+std::vector<PoolFixtureBox> poolFixtureBoxes(const Json &pool);
+// A pool document's static contact boxes (pool-local): its `collision_boxes`, one box per floor segment
+// (flagged `"floor": true`) when the floor is profiled, and its `box` fixtures with `contact: true`.
 Json poolCollisionBoxes(const Json &pool);
 } // namespace nereus::session

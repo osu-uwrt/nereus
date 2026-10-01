@@ -6,6 +6,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace nereus::rendering {
 namespace {
@@ -221,7 +222,7 @@ std::shared_ptr<const MeshAsset> makeBoxMesh() {
     result->maximum.setConstant(.5f);
     return result;
 }
-Scene makePoolScene(const PoolGeometry &p) {
+Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
     if (!p.dimensions.allFinite() || (p.dimensions.array() <= 0).any() || !std::isfinite(p.water_level) ||
         !std::isfinite(p.deck_height) || p.deck_height < 0 || !p.local_to_world.allFinite() ||
         !p.local_to_world.row(3).isApprox(Eigen::RowVector4f(0, 0, 0, 1)) ||
@@ -251,6 +252,15 @@ Scene makePoolScene(const PoolGeometry &p) {
             throw std::invalid_argument("pool floor profile must run from 0 to the pool extent with increasing "
                                         "positions and depths in (0, depth]");
     }
+    for (const auto &b : p.boxes)
+        if (!b.center.allFinite() || !b.size.allFinite() || (b.size.array() <= 0).any() || !std::isfinite(b.yaw) ||
+            !unitColor(b.color))
+            throw std::invalid_argument(
+                "pool boxes require a finite centre and yaw, a positive size and a unit colour");
+    for (const auto &r : p.recesses)
+        if (r.side == PoolSide::Floor || !r.from.allFinite() || !r.to.allFinite() || r.from.x() == r.to.x() ||
+            r.from.y() == r.to.y() || !std::isfinite(r.depth) || r.depth <= 0)
+            throw std::invalid_argument("pool recesses need a wall, distinct finite corners and a positive depth");
     Scene scene;
     const auto geometry = makeBoxMesh();
     const float length = p.dimensions.x(), width = p.dimensions.y(), depth = p.dimensions.z(), deck = p.deck_height;
@@ -288,12 +298,80 @@ Scene makePoolScene(const PoolGeometry &p) {
         for (float y : ys)
             xMin = std::max(xMin, floorDepth(p, 0, y)), xMax = std::max(xMax, floorDepth(p, length, y));
     }
-    box(at(length / 2, -.15f, (deck - yMin) / 2), {length, .3f, yMin + deck}, p.tile_color, SurfaceMaterial::Tiles);
-    box(at(length / 2, width + .15f, (deck - yMax) / 2), {length, .3f, yMax + deck}, p.tile_color,
-        SurfaceMaterial::Tiles);
-    box(at(-.15f, width / 2, (deck - xMin) / 2), {.3f, width, xMin + deck}, p.tile_color, SurfaceMaterial::Tiles);
-    box(at(length + .15f, width / 2, (deck - xMax) / 2), {.3f, width, xMax + deck}, p.tile_color,
-        SurfaceMaterial::Tiles);
+    // A wall as boxes in its own frame: `along` the wall, `into` it from the pool side, z. A wall cut by
+    // recesses keeps its first piece in its usual place; the other pieces and the recess linings follow
+    // the markings.
+    std::vector<std::pair<glm::mat4, glm::vec3>> extraWalls;
+    const auto wallBox = [&](PoolSide side, float a0, float a1, float n0, float n1, float z0, float z1) {
+        const float a = (a0 + a1) / 2, n = (n0 + n1) / 2, z = (z0 + z1) / 2;
+        switch (side) {
+        case PoolSide::YMin:
+            return std::pair{at(a, -n, z), glm::vec3(a1 - a0, n1 - n0, z1 - z0)};
+        case PoolSide::YMax:
+            return std::pair{at(a, width + n, z), glm::vec3(a1 - a0, n1 - n0, z1 - z0)};
+        case PoolSide::XMin:
+            return std::pair{at(-n, a, z), glm::vec3(n1 - n0, a1 - a0, z1 - z0)};
+        default:
+            return std::pair{at(length + n, a, z), glm::vec3(n1 - n0, a1 - a0, z1 - z0)};
+        }
+    };
+    const auto wall = [&](PoolSide side, float span, float bottom) {
+        std::vector<const PoolRecess *> cuts;
+        for (const auto &r : p.recesses)
+            if (r.side == side)
+                cuts.push_back(&r);
+        if (cuts.empty()) { // the original single box
+            const auto [matrix, size] = wallBox(side, 0, span, 0, .3f, -bottom, deck);
+            box(matrix, size, p.tile_color, SurfaceMaterial::Tiles);
+            return;
+        }
+        // Columns between recess edges; each keeps the wall's height minus the recesses crossing it.
+        std::vector<float> edges{0, span};
+        for (const auto *r : cuts)
+            for (float e : {r->from.x(), r->to.x()})
+                edges.push_back(std::clamp(e, 0.f, span));
+        std::sort(edges.begin(), edges.end());
+        edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+        bool first = true;
+        for (std::size_t i = 0; i + 1 < edges.size(); ++i) {
+            const float a0 = edges[i], a1 = edges[i + 1], mid = (a0 + a1) / 2;
+            std::vector<std::pair<float, float>> holes;
+            for (const auto *r : cuts)
+                if (std::min(r->from.x(), r->to.x()) < mid && mid < std::max(r->from.x(), r->to.x()))
+                    holes.emplace_back(std::min(r->from.y(), r->to.y()), std::max(r->from.y(), r->to.y()));
+            std::sort(holes.begin(), holes.end());
+            float z = -bottom;
+            const auto piece = [&](float z0, float z1) {
+                if (z1 <= z0)
+                    return;
+                const auto [matrix, size] = wallBox(side, a0, a1, 0, .3f, z0, z1);
+                if (first) {
+                    box(matrix, size, p.tile_color, SurfaceMaterial::Tiles);
+                    first = false;
+                } else {
+                    extraWalls.emplace_back(matrix, size);
+                }
+            };
+            for (const auto &[h0, h1] : holes)
+                piece(z, h0), z = std::max(z, h1);
+            piece(z, deck);
+        }
+        // Line each recess: back, ends, sill and (below the deck) lintel, .3 m thick like the walls.
+        for (const auto *r : cuts) {
+            const float a0 = std::min(r->from.x(), r->to.x()), a1 = std::max(r->from.x(), r->to.x());
+            const float z0 = std::min(r->from.y(), r->to.y()), z1 = std::max(r->from.y(), r->to.y()), d = r->depth;
+            extraWalls.push_back(wallBox(side, a0 - .3f, a1 + .3f, d, d + .3f, z0 - .3f, std::max(z1, deck)));
+            extraWalls.push_back(wallBox(side, a0 - .3f, a0, 0, d, z0 - .3f, std::max(z1, deck)));
+            extraWalls.push_back(wallBox(side, a1, a1 + .3f, 0, d, z0 - .3f, std::max(z1, deck)));
+            extraWalls.push_back(wallBox(side, a0, a1, 0, d, z0 - .3f, z0));
+            if (z1 < deck)
+                extraWalls.push_back(wallBox(side, a0, a1, 0, d, z1, z1 + .3f));
+        }
+    };
+    wall(PoolSide::YMin, length, yMin);
+    wall(PoolSide::YMax, length, yMax);
+    wall(PoolSide::XMin, width, xMin);
+    wall(PoolSide::XMax, width, xMax);
     for (float y : {-1.5f, width + 1.5f})
         box(at(length / 2, y < 0 ? -1.8f : width + 1.8f, deck - .15f), {length + 6.6f, 3, .3f}, {.73f, .76f, .73f},
             SurfaceMaterial::Deck);
@@ -304,6 +382,10 @@ Scene makePoolScene(const PoolGeometry &p) {
         box(at(length / 2, y, deck + .02f), {length, .22f, .055f}, {.9f, .91f, .86f});
     for (float x : {-.10f, length + .10f})
         box(at(x, width / 2, deck + .02f), {.22f, width, .055f}, {.9f, .91f, .86f});
+    PoolLayout groups;
+    groups.floor = {0};
+    for (std::size_t i = 1; i <= 12; ++i)
+        groups.walls.push_back(i);
     for (bool floor : {true, false})
         if (auto mesh = stripeMesh(p.markings, floor, length, width, depth, profiled ? &p : nullptr)) {
             Instance instance;
@@ -311,8 +393,21 @@ Scene makePoolScene(const PoolGeometry &p) {
             instance.transform = eigen(at(0, 0, 0));
             instance.material = SurfaceMaterial::Marking;
             instance.casts_shadow = false;
+            (floor ? groups.floor : groups.walls).push_back(scene.instances.size());
             scene.instances.push_back(std::move(instance));
         }
+    for (const auto &[matrix, size] : extraWalls) {
+        groups.walls.push_back(scene.instances.size());
+        box(matrix, size, p.tile_color, SurfaceMaterial::Tiles);
+    }
+    for (const auto &b : p.boxes) {
+        (b.on_floor ? groups.floor : groups.walls).push_back(scene.instances.size());
+        box(at(b.center.x(), b.center.y(), b.center.z()) * glm::rotate(glm::mat4(1), b.yaw, {0, 0, 1}),
+            {b.size.x(), b.size.y(), b.size.z()}, b.tiled ? p.tile_color : b.color,
+            b.tiled ? SurfaceMaterial::Tiles : SurfaceMaterial::Asset);
+    }
+    if (layout)
+        *layout = std::move(groups);
     auto surface = std::make_shared<MeshAsset>();
     Submesh mesh;
     mesh.vertices = {{{0, 0, 0}, {0, 0, 1}, {0, 0}},

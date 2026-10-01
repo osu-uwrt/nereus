@@ -444,6 +444,50 @@ class PoolFloorProfileTests(PackRejectionCase):
         self.assert_resolve_rejects("sphere_pool needs a flat pool floor")
 
 
+class PoolFixtureTests(PackRejectionCase):
+    """The fixture pool is 10 m x 5 m x 3 m deep with a 0.3 m deck."""
+
+    def add_fixtures(self, fixtures: str) -> None:
+        self.edit("pool/pool.yaml", "collision_boxes:\n", f"fixtures:\n{fixtures}collision_boxes:\n")
+
+    def test_boxes_and_recess_load(self) -> None:
+        self.add_fixtures(
+            "- {id: grate, type: box, center_m: [6, 2], size_m: [1.2, 0.6, 0.03], yaw_deg: 90, "
+            "color_rgb: [0.8, 0.8, 0.8], contact: true}\n"
+            "- {id: tread, type: box, center_m: [9.7, 0.2, -0.4], size_m: [0.8, 0.3, 0.05]}\n"
+            "- {id: stairs, type: recess, wall: y_min, from: [9, -1.2], to: [9.9, 0.3], depth_m: 0.5}\n"
+        )
+        load_pack(self.root / "pool")
+        resolve_scenario(self.scenario)
+
+    def test_box_outside_the_pool(self) -> None:
+        self.add_fixtures("- {id: grate, type: box, center_m: [11, 2], size_m: [1, 1, 0.1]}\n")
+        self.assert_load_rejects("pool", "/fixtures/0/center_m: (11, 2) is outside the pool")
+
+    def test_box_above_the_deck(self) -> None:
+        self.add_fixtures("- {id: rail, type: box, center_m: [5, 2, 0.5], size_m: [1, 1, 0.1]}\n")
+        self.assert_load_rejects("pool", "/fixtures/0/center_m: z 0.5 m is outside -3..0.3 m")
+
+    def test_recess_below_the_floor(self) -> None:
+        self.add_fixtures("- {id: well, type: recess, wall: x_max, from: [1, -3.5], to: [2, 0], depth_m: 0.5}\n")
+        self.assert_load_rejects("pool", "/fixtures/0/from: z -3.5 m is outside -3..0.3 m")
+
+    def test_recess_needs_an_area(self) -> None:
+        self.add_fixtures("- {id: well, type: recess, wall: x_max, from: [1, -1], to: [1, 0], depth_m: 0.5}\n")
+        self.assert_load_rejects("pool", "/fixtures/0: from and to must differ in both coordinates")
+
+    def test_duplicate_fixture_ids(self) -> None:
+        self.add_fixtures(
+            "- {id: a, type: box, center_m: [5, 2], size_m: [1, 1, 0.1]}\n"
+            "- {id: a, type: box, center_m: [6, 2], size_m: [1, 1, 0.1]}\n"
+        )
+        self.assert_load_rejects("pool", "fixture")
+
+    def test_unknown_fixture_type(self) -> None:
+        self.add_fixtures("- {id: a, type: ladder, center_m: [5, 2], size_m: [1, 1, 0.1]}\n")
+        self.assert_load_rejects("pool", "/fixtures/0")
+
+
 class FolderRejectionTests(PackRejectionCase):
     def test_folder_with_two_canonical_files(self) -> None:
         (self.root / "robot" / "pool.yaml").write_text(POOL, encoding="utf-8")

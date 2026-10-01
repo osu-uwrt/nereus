@@ -94,6 +94,26 @@ struct FloorSlope {
     bool along_x = true;
     std::vector<Eigen::Vector2f> polyline;
 };
+// A solid block in the pool (a raised floor grate, a stair tread, a grab rail), pool-local, z relative to
+// the water surface, turned `yaw` radians about +Z.
+struct PoolBox {
+    Eigen::Vector3f center = Eigen::Vector3f::Zero(), size = Eigen::Vector3f::Ones();
+    float yaw = 0;
+    Eigen::Vector3f color = {.68f, .85f, .87f};
+    bool tiled = false;    // the pool's tile finish (tile_color) instead of a plain colour
+    bool on_floor = false; // grouped with the floor (otherwise with the walls)
+};
+// An opening `depth` metres into a wall. from/to are opposite corners as (coordinate along the wall, z relative
+// to the water surface); the recess is lined with the pool's tiles.
+struct PoolRecess {
+    PoolSide side = PoolSide::YMin;
+    Eigen::Vector2f from = Eigen::Vector2f::Zero(), to = Eigen::Vector2f::Zero();
+    float depth = .3f;
+};
+// Which instances of a pool scene belong to the floor and to the walls (for showing or hiding them).
+struct PoolLayout {
+    std::vector<std::size_t> floor, walls;
+};
 struct PoolGeometry {
     Eigen::Vector3f dimensions = {50, 22.86f, 2.1336f};
     float water_level = 0, deck_height = .305288888f;
@@ -106,6 +126,8 @@ struct PoolGeometry {
     // Sloped floor: at each point the shallowest of these profiles. Empty: flat at dimensions.z(), which is
     // always the deepest point.
     std::vector<FloorSlope> floor_profiles;
+    std::vector<PoolBox> boxes;
+    std::vector<PoolRecess> recesses;
 };
 // Unit cube centered on origin, six separate normal/UV faces. CPU-only geometry.
 std::shared_ptr<const MeshAsset> makeBoxMesh();
@@ -113,5 +135,7 @@ std::shared_ptr<const MeshAsset> makeBoxMesh();
 // Instance order: floor, four walls, four decks, four coping strips, then one Marking instance for the
 // floor stripes and one for the wall stripes, each only when there are any. A profiled floor is a mesh
 // following the profile, floor stripes drape over it and each wall reaches the floor where it meets it.
-Scene makePoolScene(const PoolGeometry &parameters = {});
+// Recesses and boxes add instances after the markings: the rest of each wall cut by a recess, the recess
+// linings, then the boxes. `layout`, when given, receives the floor and wall instance indices.
+Scene makePoolScene(const PoolGeometry &parameters = {}, PoolLayout *layout = nullptr);
 } // namespace nereus::rendering

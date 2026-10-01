@@ -49,3 +49,34 @@ TEST(PoolFloor, ProfiledPoolsGenerateFlaggedFloorBoxes) {
     EXPECT_EQ(nereus::session::poolCollisionBoxes(pool).size(),
               1 + both.profiles()[0].polyline().size() - 1 + both.profiles()[1].polyline().size() - 1);
 }
+
+TEST(PoolFloor, FixtureBoxesRestOnTheFloorAndCanCollide) {
+    using nereus::session::Json;
+    const auto pool = Json::parse(R"({
+        "parameters": {"length_m": 20, "width_m": 8, "depth_m": 5, "water_level_m": 0.5,
+                       "floor_profile": {"along": "x", "points_m": [[0, 5], [10, 5], [20, 3]]}},
+        "collision_boxes": [],
+        "fixtures": [
+            {"id": "grate", "type": "box", "center_m": [15, 2], "size_m": [1.2, 0.6, 0.04], "yaw_deg": 90,
+             "contact": true},
+            {"id": "tread", "type": "box", "center_m": [5, 0.2, -0.6], "size_m": [1, 0.4, 0.05]},
+            {"id": "stairs", "type": "recess", "wall": "y_min", "from": [4, -1], "to": [6, 0.3], "depth_m": 0.4}
+        ]
+    })");
+    const auto boxes = nereus::session::poolFixtureBoxes(pool);
+    ASSERT_EQ(boxes.size(), 2u);
+    // On the sloped floor: its bottom at the floor under its centre (z relative to the pool frame).
+    const double floor = 0.5 - nereus::session::poolFloor(pool).depthAt({15, 2});
+    EXPECT_NEAR(boxes[0].center.z() - boxes[0].size.z() / 2, floor, 1e-12);
+    EXPECT_TRUE(boxes[0].on_floor);
+    EXPECT_NEAR(boxes[0].yaw, M_PI / 2, 1e-12);
+    EXPECT_DOUBLE_EQ(boxes[1].center.z(), 0.5 - 0.6); // given z is relative to the water surface
+    EXPECT_FALSE(boxes[1].on_floor);
+    // Only the contact box collides; the profiled floor's boxes follow it.
+    const auto contacts = nereus::session::poolCollisionBoxes(pool);
+    ASSERT_GE(contacts.size(), 2u);
+    EXPECT_EQ(contacts[0].at("id"), "grate");
+    EXPECT_NEAR(contacts[0].at("orientation_wxyz")[3].get<double>(), std::sin(M_PI / 4), 1e-12);
+    for (std::size_t k = 1; k < contacts.size(); ++k)
+        EXPECT_TRUE(contacts[k].at("floor").get<bool>());
+}

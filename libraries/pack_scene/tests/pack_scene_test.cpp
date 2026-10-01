@@ -297,3 +297,53 @@ TEST(PackScene, RpacDiveWellBuildsItsSlopedFloor) {
     EXPECT_LT(shallowest, 4.6);
     EXPECT_TRUE(pack.describe().at("pool").contains("floor_profile"));
 }
+
+TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
+    r::PoolGeometry geometry;
+    geometry.dimensions = {20, 8, 4};
+    geometry.deck_height = .3f;
+    r::PoolRecess recess;
+    recess.side = r::PoolSide::YMin; // the y = 0 wall
+    recess.from = {15, -1.2f};
+    recess.to = {16, .3f}; // up through the deck
+    recess.depth = .5f;
+    geometry.recesses = {recess};
+    r::PoolBox grate;
+    grate.center = {5, 2, -3.98f};
+    grate.size = {1.2f, .6f, .04f};
+    grate.on_floor = true;
+    r::PoolBox tread;
+    tread.center = {15.5f, -.25f, -.6f};
+    tread.size = {1, .5f, .05f};
+    geometry.boxes = {grate, tread};
+    r::PoolLayout layout;
+    const auto scene = r::makePoolScene(geometry, &layout);
+    // Nothing of the y = 0 wall's tiles is left inside the opening.
+    const auto inside = [&](const r::Instance &instance) {
+        const Eigen::Vector3f c = instance.transform.col(3).head<3>();
+        const Eigen::Vector3f half =
+            Eigen::Vector3f(instance.transform.col(0).head<3>().norm(), instance.transform.col(1).head<3>().norm(),
+                            instance.transform.col(2).head<3>().norm()) /
+            2;
+        // Overlap with the opening: x 15..16, y -0.49..0 (in front of the recess back), z -1.2..0.3.
+        return c.x() - half.x() < 16 - 1e-4f && c.x() + half.x() > 15 + 1e-4f && c.y() - half.y() < -1e-4f &&
+               c.y() + half.y() > -.49f && c.z() - half.z() < .3f - 1e-4f && c.z() + half.z() > -1.2f + 1e-4f;
+    };
+    std::size_t lining = 0;
+    for (const auto i : layout.walls) {
+        const auto &instance = scene.instances[i];
+        if (instance.material != r::SurfaceMaterial::Tiles)
+            continue;
+        EXPECT_FALSE(inside(instance)) << "wall instance " << i;
+        lining += i > 12;
+    }
+    EXPECT_GE(lining, 4u); // the wall's other pieces and the lining
+    // The tread sits in the opening, grouped with the walls; the grate with the floor.
+    EXPECT_EQ(layout.floor.back(), scene.instances.size() - 2);
+    EXPECT_EQ(layout.walls.back(), scene.instances.size() - 1);
+    EXPECT_TRUE(inside(scene.instances.back()));
+    // Without recesses or boxes the scene keeps its usual 13 boxes.
+    EXPECT_EQ(r::makePoolScene({}).instances.size(), 13u);
+    geometry.recesses[0].depth = 0;
+    EXPECT_THROW(r::makePoolScene(geometry), std::invalid_argument);
+}

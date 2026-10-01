@@ -20,6 +20,8 @@ First version for the team.
 - Sloped pool floors: `floor_profile` in a pool's parameters (depth at points along one axis, joined by
   a monotone cubic; a list of profiles takes the shallowest at each point). Rendering, cameras, the DVL, vehicle and prop contacts and task floor checks all
   follow it; flat pools behave exactly as before.
+- Pool `fixtures`: solid boxes (resting on the floor or placed, optionally colliding) and recesses
+  cut into the walls, drawn by the viewer and cameras.
 - `rpac_divewell` pool pack: Ohio State's RPAC dive well (25 m x 56 ft, 17 ft deep), with its eight
   lap lines, staggered cross lines, diving lines and end-wall targets.
 - `talos_uwrt_rpac` scenario: the RoboSub 2026 course at its prior-map poses, set in the RPAC dive

@@ -106,6 +106,22 @@ surface:                           # optional; these are the defaults
 
 Validation rejects stripes that leave the surface they are painted on (T bars may overhang).
 
+### Fixtures
+
+Raised or recessed fittings are `fixtures`; flat details such as vents and flush drains are better drawn as
+markings. A `box` is a solid block: given `[x, y]` it rests on the floor at that point (following a sloped
+floor), given `[x, y, z]` it is placed with z relative to the water surface. Without `color_rgb` it takes the
+pool's tile finish; `contact: true` also makes it a static contact box for the robot and props. A `recess`
+cuts an opening into a wall, between two corners given as `[coordinate along the wall, z]`, lined with tiles;
+it is drawn only (contacts treat the wall as solid).
+
+```yaml
+fixtures:
+- {id: drain, type: box, center_m: [21.5, 2.1], size_m: [1.2, 0.6, 0.03], color_rgb: [0.8, 0.85, 0.85]}
+- {id: stair_well, type: recess, wall: y_min, from: [22.0, -1.2], to: [23.0, 0.3], depth_m: 0.45}
+- {id: stair_tread_1, type: box, center_m: [22.5, -0.2, -0.3], size_m: [1.0, 0.25, 0.05]}
+```
+
 ## Scenario
 
 ```yaml

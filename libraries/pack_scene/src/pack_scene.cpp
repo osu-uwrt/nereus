@@ -296,20 +296,42 @@ void PackScene::buildPool() {
             geometry.floor_profiles.push_back(std::move(slope));
         }
     }
-    static_ = r::makePoolScene(geometry);
+    const float surface = p.at("water_level_m").get<float>();
+    for (const auto &fixture : session::poolFixtureBoxes(pool)) {
+        r::PoolBox box;
+        box.center = fixture.center.cast<float>() - Eigen::Vector3f(0, 0, surface);
+        box.size = fixture.size.cast<float>();
+        box.yaw = static_cast<float>(fixture.yaw);
+        box.on_floor = fixture.on_floor;
+        geometry.boxes.push_back(box);
+    }
+    if (pool.contains("fixtures")) {
+        std::size_t box = 0;
+        for (const auto &fixture : pool.at("fixtures")) {
+            const auto type = fixture.at("type").get<std::string>();
+            if (type == "box") {
+                // Without a colour a box takes the pool's tile finish.
+                auto &placed = geometry.boxes.at(box++);
+                if (fixture.contains("color_rgb"))
+                    placed.color = rgb(fixture.at("color_rgb"));
+                else
+                    placed.tiled = true;
+            } else if (type == "recess") {
+                r::PoolRecess recess;
+                recess.side = wallSide(fixture.at("wall").get<std::string>());
+                recess.from = vector2(fixture.at("from"));
+                recess.to = vector2(fixture.at("to"));
+                recess.depth = fixture.at("depth_m").get<float>();
+                geometry.recesses.push_back(recess);
+            }
+        }
+    }
+    r::PoolLayout layout;
+    static_ = r::makePoolScene(geometry, &layout);
     pool_instances_ = static_.instances.size();
-    // makePoolScene order: floor, 4 walls, 4 decks, 4 coping strips, floor stripes?, wall stripes?
     pool_stripes_ = geometry.markings;
-    pool_floor_ = {0};
-    pool_walls_.clear();
-    for (std::size_t i = 1; i <= 12; ++i)
-        pool_walls_.push_back(i);
-    std::size_t next = 13;
-    const auto onFloor = [](const r::PoolStripe &stripe) { return stripe.side == r::PoolSide::Floor; };
-    if (std::any_of(pool_stripes_.begin(), pool_stripes_.end(), onFloor))
-        pool_floor_.push_back(next++);
-    if (!std::all_of(pool_stripes_.begin(), pool_stripes_.end(), onFloor))
-        pool_walls_.push_back(next++);
+    pool_floor_ = std::move(layout.floor);
+    pool_walls_ = std::move(layout.walls);
     pool_record_ = {{"dimensions_m", {geometry.dimensions[0], geometry.dimensions[1], geometry.dimensions[2]}},
                     {"water_level_world_m", geometry.water_level},
                     {"deck_height_m", geometry.deck_height},

@@ -1,5 +1,6 @@
 #include <nereus/session/scenario.hpp>
 
+#include <cmath>
 #include <string>
 #include <utility>
 #include <vector>
@@ -30,8 +31,39 @@ simulation::PoolFloor poolFloor(const Json &pool) {
     return simulation::PoolFloor(std::move(profiles));
 }
 
+std::vector<PoolFixtureBox> poolFixtureBoxes(const Json &pool) {
+    std::vector<PoolFixtureBox> out;
+    if (!pool.contains("fixtures"))
+        return out;
+    const auto floor = poolFloor(pool);
+    const double surface = pool.at("parameters").at("water_level_m").get<double>();
+    for (const auto &fixture : pool.at("fixtures")) {
+        if (fixture.at("type").get<std::string>() != "box")
+            continue;
+        PoolFixtureBox box;
+        box.id = fixture.at("id").get<std::string>();
+        const auto &center = fixture.at("center_m"), &size = fixture.at("size_m");
+        box.size = {size.at(0).get<double>(), size.at(1).get<double>(), size.at(2).get<double>()};
+        box.on_floor = center.size() == 2;
+        const double x = center.at(0).get<double>(), y = center.at(1).get<double>();
+        box.center = {x, y,
+                      box.on_floor ? surface - floor.depthAt(Eigen::Vector2d(x, y)) + box.size.z() / 2
+                                   : surface + center.at(2).get<double>()};
+        box.yaw = fixture.value("yaw_deg", 0.0) * 3.14159265358979323846 / 180;
+        box.contact = fixture.value("contact", false);
+        out.push_back(std::move(box));
+    }
+    return out;
+}
+
 Json poolCollisionBoxes(const Json &pool) {
     Json boxes = pool.at("collision_boxes");
+    for (const auto &box : poolFixtureBoxes(pool))
+        if (box.contact)
+            boxes.push_back({{"id", box.id},
+                             {"size_m", {box.size.x(), box.size.y(), box.size.z()}},
+                             {"center_m", {box.center.x(), box.center.y(), box.center.z()}},
+                             {"orientation_wxyz", {std::cos(box.yaw / 2), 0.0, 0.0, std::sin(box.yaw / 2)}}});
     const Json &p = pool.at("parameters");
     if (!p.contains("floor_profile"))
         return boxes;

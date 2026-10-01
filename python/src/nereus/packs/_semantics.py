@@ -263,7 +263,30 @@ def pool(data: dict[str, Any]) -> list[str]:
         _floor_profile(data["parameters"], data["collision_boxes"], problems)
     if "markings" in data:
         _pool_markings(data["markings"], data["parameters"], problems)
+    if "fixtures" in data:
+        _pool_fixtures(data["fixtures"], data["parameters"], problems)
     return problems
+
+
+def _pool_fixtures(fixtures: list[dict[str, Any]], parameters: dict[str, Any], problems: list[str]) -> None:
+    """Boxes stand inside the pool; recesses open within their wall."""
+    duplicates((item["id"] for item in fixtures), "fixture", problems)
+    length, width = parameters["length_m"], parameters["width_m"]
+    deck = parameters["deck_height_m"]
+    for index, fixture in enumerate(fixtures):
+        where = f"/fixtures/{index}"
+        if fixture["type"] == "box":
+            center = fixture["center_m"]
+            if not (_between(center[0], 0, length) and _between(center[1], 0, width)):
+                problems.append(f"{where}/center_m: ({center[0]:g}, {center[1]:g}) is outside the pool")
+            if len(center) == 3 and not _between(center[2], -parameters["depth_m"], deck):
+                problems.append(f"{where}/center_m: z {center[2]:g} m is outside {-parameters['depth_m']:g}..{deck:g} m")
+            continue
+        along = width if fixture["wall"] in ("x_min", "x_max") else length
+        if fixture["from"][0] == fixture["to"][0] or fixture["from"][1] == fixture["to"][1]:
+            problems.append(f"{where}: from and to must differ in both coordinates")
+        bottom = max(_floor_depth(parameters, fixture["wall"], end[0]) for end in (fixture["from"], fixture["to"]))
+        _stripe(fixture, where, ("along the wall", 0, along), ("z", -bottom, deck), problems)
 
 
 def _floor_profiles(parameters: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
