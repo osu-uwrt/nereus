@@ -55,7 +55,8 @@
         "NEREUS_BUILD_SESSION_CAMERAS": "ON",
         "NEREUS_BUILD_ROS_BRIDGE": "ON",
         "NEREUS_BUILD_CAMERAS": "ON",
-        "NEREUS_BUILD_OFFSCREEN_RENDERER": "ON"
+        "NEREUS_BUILD_OFFSCREEN_RENDERER": "ON",
+        "NEREUS_BUILD_DATASETS": "ON"
       }
     },
     {
@@ -65,6 +66,24 @@
       "cacheVariables": {
         "NEREUS_BUILD_SESSION": "ON",
         "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "datasets",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build/datasets",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "NEREUS_BUILD_SIMULATION": "ON",
+        "NEREUS_BUILD_SCENE_RENDERER": "ON",
+        "NEREUS_BUILD_OFFSCREEN_RENDERER": "ON",
+        "NEREUS_BUILD_MESH_ASSETS": "ON",
+        "NEREUS_BUILD_CAMERAS": "ON",
+        "NEREUS_BUILD_SESSION": "ON",
+        "NEREUS_BUILD_PACK_SCENE": "ON",
+        "NEREUS_BUILD_DATASETS": "ON",
+        "NEREUS_BUILD_ROS_BRIDGE": "OFF",
+        "NEREUS_BUILD_ROS_VIEWER": "OFF"
       }
     }
   ],
@@ -93,6 +112,11 @@
       "name": "ros-viewer",
       "configurePreset": "ros-viewer",
       "jobs": 3
+    },
+    {
+      "name": "datasets",
+      "configurePreset": "datasets",
+      "jobs": 4
     }
   ],
   "testPresets": [
