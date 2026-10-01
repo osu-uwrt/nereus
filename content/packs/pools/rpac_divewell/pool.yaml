@@ -19,11 +19,10 @@ parameters:
   current_m_s: [0.0, 0.0, 0.0]
   current_oscillation_amplitude_m_s: [0.0, 0.0, 0.0]
   current_oscillation_frequency_hz: 0.0
-  # 17 ft at the deep end curving up to 14 ft. The curve's middle (12.3 m) matches the published volume
-  # (536,792 gal over 4,638 sq ft: 15.47 ft mean depth).
+  # 17 ft at the deep end, flat through the fourth cross line (15.7 m), curving up to 14 ft.
   floor_profile:
     along: x
-    points_m: [[0, 5.1816], [9.3, 5.1816], [15.3, 4.2672], [25.0, 4.2672]]
+    points_m: [[0, 5.1816], [15.7, 5.1816], [21.5, 4.2672], [25.0, 4.2672]]
 
 # Static wall boxes in pool coordinates, depth + deck + 1 m tall; the floor's boxes come from the profile.
 collision_boxes:
