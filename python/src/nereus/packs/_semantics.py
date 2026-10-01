@@ -269,7 +269,8 @@ def pool(data: dict[str, Any]) -> list[str]:
 
 
 def _pool_fixtures(fixtures: list[dict[str, Any]], parameters: dict[str, Any], problems: list[str]) -> None:
-    """Boxes stand inside the pool; recesses open within their wall."""
+    """Boxes stand in or at the pool (up to 1 m into the walls and 2 m above the deck, for stairs and
+    rails); recesses open within their wall."""
     duplicates((item["id"] for item in fixtures), "fixture", problems)
     length, width = parameters["length_m"], parameters["width_m"]
     deck = parameters["deck_height_m"]
@@ -277,10 +278,14 @@ def _pool_fixtures(fixtures: list[dict[str, Any]], parameters: dict[str, Any], p
         where = f"/fixtures/{index}"
         if fixture["type"] == "box":
             center = fixture["center_m"]
-            if not (_between(center[0], 0, length) and _between(center[1], 0, width)):
+            if len(center) == 2 and not (_between(center[0], 0, length) and _between(center[1], 0, width)):
+                problems.append(f"{where}/center_m: ({center[0]:g}, {center[1]:g}) is outside the pool floor")
+            if not (_between(center[0], -1, length + 1) and _between(center[1], -1, width + 1)):
                 problems.append(f"{where}/center_m: ({center[0]:g}, {center[1]:g}) is outside the pool")
-            if len(center) == 3 and not _between(center[2], -parameters["depth_m"], deck):
-                problems.append(f"{where}/center_m: z {center[2]:g} m is outside {-parameters['depth_m']:g}..{deck:g} m")
+            if len(center) == 3 and not _between(center[2], -parameters["depth_m"], deck + 2):
+                problems.append(
+                    f"{where}/center_m: z {center[2]:g} m is outside {-parameters['depth_m']:g}..{deck + 2:g} m"
+                )
             continue
         along = width if fixture["wall"] in ("x_min", "x_max") else length
         if fixture["from"][0] == fixture["to"][0] or fixture["from"][1] == fixture["to"][1]:

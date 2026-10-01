@@ -461,12 +461,16 @@ class PoolFixtureTests(PackRejectionCase):
         resolve_scenario(self.scenario)
 
     def test_box_outside_the_pool(self) -> None:
-        self.add_fixtures("- {id: grate, type: box, center_m: [11, 2], size_m: [1, 1, 0.1]}\n")
-        self.assert_load_rejects("pool", "/fixtures/0/center_m: (11, 2) is outside the pool")
+        self.add_fixtures(
+            "- {id: grate, type: box, center_m: [10.5, 2], size_m: [1, 1, 0.1]}\n"
+            "- {id: rail, type: box, center_m: [12, 2, 0], size_m: [1, 1, 0.1]}\n"
+        )
+        self.assert_load_rejects("pool", "/fixtures/0/center_m: (10.5, 2) is outside the pool floor")
+        self.assert_load_rejects("pool", "/fixtures/1/center_m: (12, 2) is outside the pool")
 
-    def test_box_above_the_deck(self) -> None:
-        self.add_fixtures("- {id: rail, type: box, center_m: [5, 2, 0.5], size_m: [1, 1, 0.1]}\n")
-        self.assert_load_rejects("pool", "/fixtures/0/center_m: z 0.5 m is outside -3..0.3 m")
+    def test_box_far_above_the_deck(self) -> None:
+        self.add_fixtures("- {id: rail, type: box, center_m: [5, 2, 2.5], size_m: [1, 1, 0.1]}\n")
+        self.assert_load_rejects("pool", "/fixtures/0/center_m: z 2.5 m is outside -3..2.3 m")
 
     def test_recess_below_the_floor(self) -> None:
         self.add_fixtures("- {id: well, type: recess, wall: x_max, from: [1, -3.5], to: [2, 0], depth_m: 0.5}\n")

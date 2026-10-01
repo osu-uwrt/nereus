@@ -316,6 +316,11 @@ TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
     tread.center = {15.5f, -.25f, -.6f};
     tread.size = {1, .5f, .05f};
     geometry.boxes = {grate, tread};
+    r::PoolStripe band; // across the wall either side of the recess
+    band.side = r::PoolSide::YMin;
+    band.from = {0, -1.5f};
+    band.to = {20, -1.5f};
+    geometry.markings = {band};
     r::PoolLayout layout;
     const auto scene = r::makePoolScene(geometry, &layout);
     // Nothing of the y = 0 wall's tiles is left inside the opening.
@@ -338,6 +343,15 @@ TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
         lining += i > 12;
     }
     EXPECT_GE(lining, 4u); // the wall's other pieces and the lining
+    // Every wall piece comes before the wall markings, which are drawn after the surface they lie on.
+    std::size_t markings = 0;
+    for (std::size_t i = 0; i < scene.instances.size(); ++i)
+        if (scene.instances[i].material == r::SurfaceMaterial::Marking)
+            markings = i;
+    for (const auto i : layout.walls)
+        if (scene.instances[i].material == r::SurfaceMaterial::Tiles) {
+            EXPECT_LT(i, markings);
+        }
     // The tread sits in the opening, grouped with the walls; the grate with the floor.
     EXPECT_EQ(layout.floor.back(), scene.instances.size() - 2);
     EXPECT_EQ(layout.walls.back(), scene.instances.size() - 1);

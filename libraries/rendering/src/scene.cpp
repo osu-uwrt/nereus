@@ -386,6 +386,11 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
     groups.floor = {0};
     for (std::size_t i = 1; i <= 12; ++i)
         groups.walls.push_back(i);
+    // Wall pieces before the markings: a decal is drawn after the surface it lies on.
+    for (const auto &[matrix, size] : extraWalls) {
+        groups.walls.push_back(scene.instances.size());
+        box(matrix, size, p.tile_color, SurfaceMaterial::Tiles);
+    }
     for (bool floor : {true, false})
         if (auto mesh = stripeMesh(p.markings, floor, length, width, depth, profiled ? &p : nullptr)) {
             Instance instance;
@@ -396,10 +401,6 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
             (floor ? groups.floor : groups.walls).push_back(scene.instances.size());
             scene.instances.push_back(std::move(instance));
         }
-    for (const auto &[matrix, size] : extraWalls) {
-        groups.walls.push_back(scene.instances.size());
-        box(matrix, size, p.tile_color, SurfaceMaterial::Tiles);
-    }
     for (const auto &b : p.boxes) {
         (b.on_floor ? groups.floor : groups.walls).push_back(scene.instances.size());
         box(at(b.center.x(), b.center.y(), b.center.z()) * glm::rotate(glm::mat4(1), b.yaw, {0, 0, 1}),

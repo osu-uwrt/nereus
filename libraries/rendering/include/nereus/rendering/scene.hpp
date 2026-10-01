@@ -135,7 +135,8 @@ std::shared_ptr<const MeshAsset> makeBoxMesh();
 // Instance order: floor, four walls, four decks, four coping strips, then one Marking instance for the
 // floor stripes and one for the wall stripes, each only when there are any. A profiled floor is a mesh
 // following the profile, floor stripes drape over it and each wall reaches the floor where it meets it.
-// Recesses and boxes add instances after the markings: the rest of each wall cut by a recess, the recess
-// linings, then the boxes. `layout`, when given, receives the floor and wall instance indices.
+// Recesses add the rest of each wall they cut and their linings after the coping strips, before the
+// markings (a decal must follow the surface it lies on); boxes follow the markings. `layout`, when given,
+// receives the floor and wall instance indices.
 Scene makePoolScene(const PoolGeometry &parameters = {}, PoolLayout *layout = nullptr);
 } // namespace nereus::rendering
