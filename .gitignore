@@ -18,3 +18,5 @@ compile_commands.json
 # Local tooling state
 /.claude/
 /collaboration_logs/
+graphify*
+.graphify*
