@@ -62,7 +62,18 @@ int main() {
                                                 return std::unique_ptr<Panel>(new HostItem(type, &drawLog));
                                             },
                                             true, std::string(type) != "detections"});
-    int created = 0;
+    int created = 0, telemetryReads = 0;
+    struct FakeTelemetry : Telemetry {
+        int *reads;
+        explicit FakeTelemetry(int *r) : reads(r) {}
+        TelemetryState state() override {
+            ++*reads;
+            return {{{"fog", "FOG", "40.0\u00B0C", "detail", Level::Ok}}};
+        }
+    };
+    r.providers.emplace("fake.telemetry",
+                        ProviderFactory{Kind::Telemetry, [](auto) {},
+                                        [&](auto, auto) { return std::make_shared<FakeTelemetry>(&telemetryReads); }});
     r.providers.emplace("fake.motion", ProviderFactory{Kind::Motion, [](auto) {},
                                                        [&](auto, auto) {
                                                            ++created;
@@ -214,6 +225,46 @@ ownership:
         bad["panels"].push_back(YAML::Load("{id: v, type: view}"));
         fails(bad);
     }
+    {
+        // header: toolbar items drawn in the header row, in order (Panel::header() defaults to toolbar()).
+        auto c3 = YAML::Load(text);
+        c3["header"] = YAML::Load("[{type: view}, {id: s, type: scene_settings}, {id: t, type: telemetry, "
+                                  "provider: telemetry}]");
+        c3["providers"]["telemetry"] = YAML::Load("{type: fake.telemetry, options: {}}");
+        Composition c(c3, ctx, r);
+        ImGui::CreateContext();
+        auto &io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.DisplaySize = {800, 600};
+        io.DeltaTime = 1.f / 30;
+        unsigned char *pixels;
+        int w, h;
+        io.Fonts->GetTexDataAsRGBA32(&pixels, &w, &h);
+        for (int frame = 0; frame < 2; ++frame) {
+            ImGui::NewFrame();
+            ImGui::Begin("t");
+            drawLog.clear();
+            ImGui::TextUnformatted("title");
+            c.drawHeader(700);
+            ImGui::End();
+            ImGui::Render();
+        }
+        const std::vector<std::string> drawn{"toolbar:view", "toolbar:scene_settings"};
+        assert(drawLog == drawn && telemetryReads == 2);
+        ImGui::DestroyContext();
+        auto bad = YAML::Load(text);
+        bad["header"] = YAML::Load("[{type: motion, provider: mission}]");
+        fails(bad);
+        bad["header"] = YAML::Load("[{type: nope}]");
+        fails(bad);
+        bad["header"] = YAML::Load("{type: view}");
+        fails(bad);
+    }
+    // SVO names: ~ is the robot's home, the camera id keeps cameras apart, the extension is kept or .svo2.
+    assert(recordingFile("~/svos/run", "ffc", "", "/home/ros") == "/home/ros/svos/run_ffc.svo2");
+    assert(recordingFile("/data/gate.svo", "dfc", "20261002_101500", "/home/ros") ==
+           "/data/gate_20261002_101500_dfc.svo");
+    assert(recordingFile("~other/x.svo2", "ffc", "", "/h") == "~other/x_ffc.svo2");
     const auto withToolbar = [&](const char *yaml) {
         auto c = YAML::Load(text);
         c["toolbar"] = YAML::Load(yaml);

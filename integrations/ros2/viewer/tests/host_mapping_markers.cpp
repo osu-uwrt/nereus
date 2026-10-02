@@ -4,6 +4,7 @@
 
 #include <fstream>
 
+using nereus::ros_viewer::host::hideMappingMarkers;
 using nereus::ros_viewer::host::loadMappingMarkers;
 
 namespace {
@@ -47,6 +48,32 @@ TEST(MappingMarkers, ReadsMeshMarkersInOrderLikeMarkerPublisher) {
     // scale applies after the pose: a unit point at x=1 lands at 1 + 2.
     const glm::vec4 p = markers[1].local * glm::vec4(1, 0, 0, 1);
     EXPECT_NEAR(p.x, 3, 1e-6);
+}
+
+TEST(MappingMarkers, HidesByFrameLabelOrMesh) {
+    const auto file = write(R"(/**/marker_publisher:
+  ros__parameters:
+    mesh_pkg: riptide_meshes
+    markers:
+      marker0: {mesh: slalom, frame: slalom_front_frame}
+      marker1: {mesh: slalom, frame: slalom_back_frame}
+      marker2: {mesh: table, frame: table_frame}
+      marker3: {mesh: bin, frame: bin}
+)");
+    auto markers = loadMappingMarkers(file, [](const std::string &) { return std::filesystem::path("/share"); });
+    std::filesystem::remove(file);
+    ASSERT_EQ(markers.size(), 4u);
+    EXPECT_EQ(markers[0].label, "slalom_front");
+    EXPECT_EQ(markers[3].label, "bin"); // no _frame suffix: the frame itself
+    for (const auto &marker : markers)
+        EXPECT_TRUE(marker.visible);
+    EXPECT_EQ(hideMappingMarkers(markers, {"slalom", "nope"}), std::vector<std::string>{"nope"});
+    EXPECT_FALSE(markers[0].visible); // a mesh name hides every copy
+    EXPECT_FALSE(markers[1].visible);
+    EXPECT_TRUE(markers[2].visible);
+    EXPECT_TRUE(hideMappingMarkers(markers, {"table_frame", "bin"}).empty()); // frame, label
+    EXPECT_FALSE(markers[2].visible);
+    EXPECT_FALSE(markers[3].visible);
 }
 
 TEST(MappingMarkers, LocalMeshFolderOverridesThePackage) {

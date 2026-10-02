@@ -14,7 +14,11 @@ const char *kDocument = R"json({
      {"parent": "cad", "child": "base_link", "position_m": [-0.1, 0, 0], "orientation_wxyz": [1, 0, 0, 0]},
      {"parent": "cad", "child": "cam_mount", "position_m": [0.3, 0, 0.1], "orientation_wxyz": [1, 0, 0, 0]},
      {"parent": "cam_mount", "child": "cam_optical", "position_m": [0, 0, 0], "orientation_wxyz": [0.5, -0.5, 0.5, -0.5]},
-     {"parent": "cad", "child": "launch_mount", "position_m": [0, 0.2, 0], "orientation_wxyz": [1, 0, 0, 0]}]},
+     {"parent": "cad", "child": "launch_mount", "position_m": [0, 0.2, 0], "orientation_wxyz": [1, 0, 0, 0]},
+     {"parent": "cad", "child": "thruster_b", "position_m": [0, 0, 0.3], "orientation_wxyz": [0.70710678, 0, 0, 0.70710678]}]},
+   "thrusters": [{"id": "B", "type": "lagged_force", "frame": "thruster_b"},
+                 {"id": "A", "type": "lagged_force", "position_m": [0, 0.5, 0], "direction": [0, 0, 1]},
+                 {"id": "C", "type": "lagged_force", "frame": "not_a_frame"}],
    "visuals": [{"asset": "body_mesh", "frame": "cad", "position_m": [0, 0, 0], "orientation_wxyz": [1, 0, 0, 0]}],
    "assets": [{"id": "body_mesh", "path": "assets/body.glb"}],
    "sensors": [
@@ -37,7 +41,7 @@ const char *kDocument = R"json({
      "parameters": {"visuals": [{"asset": "gate_mesh", "frame": "task", "position_m": [0, 0, 0], "orientation_wxyz": [1, 0, 0, 0]}]}}]}],
  "asset_paths": {"robot": {"body_mesh": "/abs/body.glb"}, "tasks": {"gate_mesh": "/abs/gate.dae"}},
  "bridge": {"namespace": "/bot", "frame_names": {"world": "map", "cam_mount": "bot/cam_link", "cam_optical": "bot/cam_optical"},
-   "thrusters": {"order": ["A", "B"]},
+   "thrusters": {"order": ["A", "B"], "input_scales": [1, 2]},
    "tf": {"publish": [{"parent": "map", "child": "simulator/bot/base_link", "native": "state:robot.reference_pose"}]},
    "streams": [
      {"id": "rgb", "direction": "publish", "topic": "cam/rgb/compressed", "native": "sensor:cam.rgb_left"},
@@ -55,6 +59,21 @@ TEST(HostScenario, ReadsFramesCamerasMechanismsAndLandmarks) {
     EXPECT_EQ(s.truthBaseFrame, "simulator/bot/base_link");
     EXPECT_EQ(s.estimateBaseFrame, "bot/base_link"); // not listed in frame_names: namespace/base id
     EXPECT_EQ(s.thrusterOrder, (std::vector<std::string>{"A", "B"}));
+    // Thruster mounts in base_link, keeping their ROS array index and bridge input scale. A: resolved form
+    // (body frame = the tree root `com`); B: a named frame's +X; C (not in the bridge order) is left out.
+    ASSERT_EQ(s.thrusterMounts.size(), 2u);
+    const auto &a = s.thrusterMounts[0], &b = s.thrusterMounts[1];
+    EXPECT_EQ(a.id, "A");
+    EXPECT_EQ(a.index, 0u);
+    EXPECT_NEAR(a.position.x, 0, 1e-6); // com and base_link coincide (+0.1 then -0.1)
+    EXPECT_NEAR(a.position.y, .5, 1e-6);
+    EXPECT_NEAR(a.axis.z, 1, 1e-6);
+    EXPECT_EQ(b.id, "B");
+    EXPECT_EQ(b.index, 1u);
+    EXPECT_NEAR(b.inputScale, 2, 1e-6);
+    EXPECT_NEAR(b.position.x, .1, 1e-6); // cad sits +0.1 from base_link
+    EXPECT_NEAR(b.position.z, .3, 1e-6);
+    EXPECT_NEAR(b.axis.y, 1, 1e-5); // yawed 90 deg: the force axis is base +Y
     // Pool placement: yaw 90 about Z at (1,2); water level raised by the placement height.
     EXPECT_NEAR(s.waterLevel, .5, 1e-6);
     const auto corner = s.poolToWorld * glm::vec4(10, 0, 0, 1);

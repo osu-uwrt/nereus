@@ -2,10 +2,11 @@
 # Depends on ROS messages, ImGui, glm and yaml-cpp only; no simulator types.
 set(_panel_sources
   panel_registry.cpp composition.cpp motion_panel.cpp mapping_panel.cpp actuator_panel.cpp
-  run_panel.cpp simulation_panel.cpp autonomy_panel.cpp pose_gizmo.cpp
+  run_panel.cpp simulation_panel.cpp autonomy_panel.cpp pose_gizmo.cpp telemetry_panel.cpp recording_panel.cpp
   ros_runtime.cpp standard_motion.cpp sim_run.cpp simulation_rate.cpp)
 if(NEREUS_ROS_VIEWER_UWRT)
-  list(APPEND _panel_sources uwrt_motion.cpp uwrt_autonomy.cpp uwrt_mapping.cpp uwrt_actuators.cpp)
+  list(APPEND _panel_sources uwrt_motion.cpp uwrt_autonomy.cpp uwrt_mapping.cpp uwrt_actuators.cpp
+    uwrt_telemetry.cpp uwrt_recording.cpp)
 endif()
 
 add_library(nereus_viewer_panels STATIC ${_panel_sources})
@@ -19,12 +20,18 @@ target_link_libraries(nereus_viewer_panels PUBLIC nereus_imgui nereus_glm yaml-c
   ${sensor_msgs_TARGETS} ${visualization_msgs_TARGETS} ${action_msgs_TARGETS} ${rcl_interfaces_TARGETS})
 if(NEREUS_ROS_VIEWER_UWRT)
   target_compile_definitions(nereus_viewer_panels PUBLIC NEREUS_VIEWER_UWRT=1)
-  target_link_libraries(nereus_viewer_panels PUBLIC ${riptide_msgs2_TARGETS})
+  target_link_libraries(nereus_viewer_panels PUBLIC ${riptide_msgs2_TARGETS} ${diagnostic_msgs_TARGETS})
   if(chameleon_tf_msgs_FOUND)
     target_compile_definitions(nereus_viewer_panels PUBLIC NEREUS_VIEWER_HAVE_CHAMELEON=1)
     target_link_libraries(nereus_viewer_panels PUBLIC ${chameleon_tf_msgs_TARGETS})
   else()
     message(STATUS "chameleon_tf_msgs not found: mapping calibration action compiled out")
+  endif()
+  if(zed_msgs_FOUND)
+    target_compile_definitions(nereus_viewer_panels PUBLIC NEREUS_VIEWER_HAVE_ZED=1)
+    target_link_libraries(nereus_viewer_panels PUBLIC ${zed_msgs_TARGETS})
+  else()
+    message(STATUS "zed_msgs not found: starting SVO recordings compiled out (stop and capture remain)")
   endif()
 endif()
 

@@ -97,7 +97,7 @@ void dropSimulatorPanels(YAML::Node &document) {
         for (const auto &name : gone)
             providers.remove(name);
     }
-    for (const char *group : {"panels", "toolbar", "overlays"}) {
+    for (const char *group : {"panels", "toolbar", "header", "overlays"}) {
         auto list = document[group];
         if (!list || !list.IsSequence())
             continue;
@@ -239,12 +239,14 @@ class App {
     void toolbarFocus();
     void loadMappingMarkers();
     void drawPointCloudSettings();
+    void drawMappingMeshList();
     void toolbarFollow();
     void toolbarLabels();
     void toolbarTf();
     void toolbarDetections();
     void drawDetectionSettings(bool includeEnable);
     void toolbarMpcPath();
+    void toolbarThrust();
     void toolbarPreviewTask();
     void drawCameraCard(std::size_t index, float width, float maxHeight);
     void drawCourseMap(float width, float height, bool interactive);
@@ -298,7 +300,8 @@ class App {
     ObserverSettings observer_;
     bool openTfPopup_ = false, openObserverPopup_ = false, openDepth_ = false;
     bool openSceneSettings_ = false, showTf_ = false, tfNames_ = true, tfTreeOpen_ = false, detections_ = false,
-         showMpc_ = false, largeMap_ = false, focusMap_ = false, demoMode_ = false;
+         showMpc_ = false, showThrust_ = false, largeMap_ = false, focusMap_ = false, demoMode_ = false;
+    float thrustScale_ = .05f; // arrow metres per newton (host yaml thrust_arrows.metres_per_newton)
     float tfAxisLength_ = .12f, mapZoom_ = 1, toolbarLeft_ = 0;
     int toolbarOldMode_ = 0;
     // Course source: 0 auto (pack layout with simulator truth, mapping markers otherwise), 1 pack, 2 mapping.
@@ -367,6 +370,10 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     showTf_ = opt_.showTf;
     detections_ = opt_.detections.value_or(lookup(config_, {"detections", "enabled"}).as<bool>(true));
     showMpc_ = opt_.mpcPath;
+    showThrust_ = opt_.thrust || lookup(config_, {"thrust_arrows", "enabled"}).as<bool>(false);
+    thrustScale_ = lookup(config_, {"thrust_arrows", "metres_per_newton"}).as<float>(.05f);
+    if (!std::isfinite(thrustScale_) || thrustScale_ <= 0)
+        throw std::runtime_error("thrust_arrows.metres_per_newton must be positive");
     if (!demoMode_) {
         rclcpp::init(argc, argv);
         // Without a simulator (real robot) there is no /clock: default to wall time.
@@ -765,6 +772,7 @@ void App::step(double t) {
     if (!demoMode_)
         ros_->capturePointClouds();
     ros_->captureMpc(showMpc_ && !demoMode_);
+    ros_->captureThrust(showThrust_ && !demoMode_);
     thrusters_.advance(clockSeconds());
     (void)t;
 }
@@ -818,6 +826,9 @@ void App::loadMappingMarkers() {
         const auto course = cfg["course"].as<std::string>("auto");
         courseMode_ = course == "pack" ? 1 : course == "mapping" ? 2 : 0;
         mappingGhost_ = cfg["ghost"].as<bool>(false);
+        for (const auto &name : host::hideMappingMarkers(mappingMarkers_, cfg["hidden"].as<std::vector<std::string>>(
+                                                                              std::vector<std::string>{})))
+            std::cerr << "nereus-viewer: mapping_markers.hidden: no marker frame, label or mesh '" << name << "'\n";
     } catch (const std::exception &error) {
         std::cerr << "nereus-viewer: mapping course disabled: " << error.what() << '\n';
         mappingMarkers_.clear();
@@ -852,7 +863,7 @@ VisualState App::buildState() {
     if (mappingCourse || (mappingGhost_ && ros_->truthActive()))
         for (const auto &marker : mappingMarkers_) {
             glm::mat4 frame;
-            if (!ros_->latestInFixed(marker.frame, frame))
+            if (!marker.visible || !ros_->latestInFixed(marker.frame, frame))
                 continue; // RViz does not draw a marker whose frame is unavailable
             MarkerDraw draw;
             draw.mesh = marker.path;
@@ -1438,6 +1449,7 @@ void App::toolbarPoolViewer() {
                 if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                     ImGui::SetTooltip("Draw the mapping estimate translucent over the simulator course.");
             }
+            drawMappingMeshList();
         }
         if (ros_->truthActive() && !demoMode_) { // simulator only: a real robot has the estimate alone
             ImGui::SeparatorText("Localization estimate");
@@ -1596,6 +1608,36 @@ void App::drawDetectionSettings(bool includeEnable) {
     drawPointCloudSettings();
 }
 
+// Per-mesh visibility of the mapping course (and ghost), folded by default: the stack lists ~25 markers.
+void App::drawMappingMeshList() {
+    const auto shown = std::count_if(mappingMarkers_.begin(), mappingMarkers_.end(),
+                                     [](const MappingMarker &marker) { return marker.visible; });
+    const std::string title = "Meshes (" + std::to_string(shown) + "/" + std::to_string(mappingMarkers_.size()) +
+                              " shown)###mapping_meshes";
+    if (!ImGui::TreeNode(title.c_str()))
+        return;
+    const auto setAll = [this](bool visible) {
+        for (auto &marker : mappingMarkers_)
+            marker.visible = visible;
+    };
+    if (ImGui::SmallButton("Show all"))
+        setAll(true);
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Hide all"))
+        setAll(false);
+    const float rows = std::min<float>(float(mappingMarkers_.size()), 10.5f);
+    ImGui::BeginChild("mapping_mesh_list", {260, rows * ImGui::GetFrameHeightWithSpacing()}, ImGuiChildFlags_Borders);
+    for (auto &marker : mappingMarkers_) {
+        ImGui::PushID(marker.name.c_str());
+        ImGui::Checkbox(marker.label.c_str(), &marker.visible);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Mesh %s at TF frame %s", marker.mesh.c_str(), marker.frame.c_str());
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
+    ImGui::TreePop();
+}
+
 // Point cloud layers from the host config: one toggle each (subscribes only while on) and a point size.
 void App::drawPointCloudSettings() {
     if (ros_->pointClouds.empty() || demoMode_)
@@ -1654,6 +1696,17 @@ void App::toolbarMpcPath() {
                           ros_->mpcTopic.c_str());
 }
 
+void App::toolbarThrust() {
+    if (demoMode_ || scenario_->thrusterMounts.empty())
+        return;
+    sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("Thrust").x);
+    ImGui::Checkbox("Thrust", &showThrust_);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Commanded thruster forces (%s) as arrows from each thruster along its axis,\n"
+                          "%.2f m per newton; nothing is drawn while the controller is not publishing.",
+                          ros_->thrustTopic.c_str(), thrustScale_);
+}
+
 void App::toolbarPreviewTask() {
     if (demoMode_ && !demoNames_.empty()) {
         ImGui::SameLine();
@@ -1690,6 +1743,7 @@ void App::registerHostItems() {
     add("labels", [this] { toolbarLabels(); });
     add("tf", [this] { toolbarTf(); });
     add("mpc_path", [this] { toolbarMpcPath(); });
+    add("thrust", [this] { toolbarThrust(); });
     add("preview_task", [this] { toolbarPreviewTask(); });
     add(
         "detections", [this] { toolbarDetections(); },
@@ -1729,6 +1783,8 @@ void App::drawInterface(double time, float dt) {
     ImGui::SameLine();
     ImGui::TextUnformatted(headerSubtitle.c_str());
     const float statusWidth = ImGui::CalcTextSize(status_.c_str()).x + 2 * ImGui::GetStyle().FramePadding.x;
+    if (composition_) // header items (robot telemetry, recording) sit just left of the status pill
+        composition_->drawHeader(W - 18 - statusWidth - ImGui::GetStyle().ItemSpacing.x);
     ImGui::SameLine(W - 18 - statusWidth);
     pill(status_, demoMode_ ? ImVec4(.94f, .73f, .35f, 1) : (ros_->poseFresh() ? cyan : muted));
     ImGui::Separator();
@@ -1885,6 +1941,8 @@ void App::drawInterface(double time, float dt) {
         drawDetections(ros_->placedDetections, vp, rect, ros_->detectionShow().truth && ros_->detectionShow().estimate);
     if (showMpc_ && !demoMode_)
         drawMpcPath(ros_->mpcPath, vp, rect);
+    if (showThrust_ && !demoMode_)
+        drawThrust(scenario_->thrusterMounts, ros_->thrust, body_, thrustScale_, vp, rect);
     if (composition_ && mode_ == 0) {
         panelView.projection = view.projection;
         panelView.view = view.view;

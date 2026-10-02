@@ -51,10 +51,13 @@ detections:
 # one riptide_meshes model per mapping TF frame). config: <package>/<path in its share> or a file path;
 # meshes: optional local folder of <mesh>/model.dae (default: the file's mesh_pkg). course: auto (pack layout with
 # simulator truth, mapping otherwise) | pack | mapping. ghost: draw the mapping estimate over the simulator course.
+# hidden: markers hidden at start, by TF frame (gate_frame), label (gate) or mesh (slalom: every post); toggle
+# each one in Pool Viewer > Course > Meshes.
 mapping_markers:
   config: riptide_rviz/config/markers.yaml
   course: auto
   ghost: false
+  hidden: []
 
 # PointCloud2 layers (Vision panel; off until enabled, subscribed only while on). Topics are relative to the
 # robot namespace; the simulator bridge publishes the camera clouds on the ZED driver's topics.
@@ -64,7 +67,7 @@ point_clouds:
   - {id: dfc, title: Down camera, topic: dfc/zed_node/point_cloud/cloud_registered, size: 2}
 
 # Visual-state streams, relative to the bridge namespace. Missing publishers are simply absent.
-# (thruster force and LED topics come from the two documents above.)
+# (the rotor animation and LED topics come from the two documents above.)
 topics:
   claw_joints: simulator/claw_joints
   magnet_lights: simulator/magnet_lights
@@ -72,6 +75,12 @@ topics:
   projectiles: simulator/projectiles
   detections: yolo_orientation/visualization_marker_array
   mpc_path: controller/mpc/predicted_path
+  thruster_forces: thruster_forces   # commanded forces (controller); the Thrust toggle draws them
+
+# Thrust toggle (toolbar): one arrow per thruster along its axis, like RViz's thruster wrench displays.
+thrust_arrows:
+  enabled: false            # on at start (CLI: --thrust)
+  metres_per_newton: 0.05   # arrow length; full thrust (28 N) is 1.4 m
 
 # Camera card names by robot-pack sensor id; sensors without an entry are titled by index and id.
 cameras:

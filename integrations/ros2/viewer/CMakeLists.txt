@@ -14,7 +14,11 @@ find_package(rcl_interfaces REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(riptide_msgs2 QUIET)
 find_package(chameleon_tf_msgs QUIET)
+find_package(zed_msgs QUIET)
 option(NEREUS_ROS_VIEWER_UWRT "Build the UWRT (riptide_msgs2) panel providers" ${riptide_msgs2_FOUND})
+if(NEREUS_ROS_VIEWER_UWRT)
+  find_package(diagnostic_msgs REQUIRED) # telemetry readings
+endif()
 
 find_package(glfw3 3.3 REQUIRED)
 find_package(OpenGL REQUIRED)

@@ -39,6 +39,24 @@ providers:
         - {id: close_claw, label: Close claw, topic: command/actuator/claw, type: bool, value: false, requires_armed: true}
         - {id: stop_claw, label: Stop claw, topic: command/actuator/claw_move_s, type: float32, value: 0, requires_armed: true}
         - {id: reload, label: Reload / disarm, topic: command/actuator/notify_reload, type: empty}
+  telemetry:
+    type: uwrt.telemetry
+    options:
+      # Thresholds as the RViz diagnostic overlay; timeouts as its gyro (2 s), diagnostics and battery (10 s)
+      # watchdogs. Battery: state of charge (warn/error below the percentage), one reading per side.
+      readings:
+        - {id: fog, label: FOG, source: gyro_status, topic: gyro/status, warn_c: 55, error_c: 75, timeout: 2}
+        - {id: cpu, label: CPU, source: diagnostic, topic: /diagnostics_agg,
+           status: "/Robot Diagnostics/Computers/Core Temperature", warn_c: 70, error_c: 85, timeout: 10}
+        - {id: port, label: PORT, source: battery, topic: state/battery, side: port, warn_pct: 50, error_pct: 20, timeout: 10}
+        - {id: stbd, label: STBD, source: battery, topic: state/battery, side: stbd, warn_pct: 50, error_pct: 20, timeout: 10}
+  recording:
+    type: uwrt.recording
+    options:
+      cameras:
+        - {id: ffc, label: FFC, start_service: ffc/zed_node/start_svo_rec, stop_service: ffc/zed_node/stop_svo_rec}
+        - {id: dfc, label: DFC, start_service: dfc/zed_node/start_svo_rec, stop_service: dfc/zed_node/stop_svo_rec}
+      capture_service: capture_image
   run:
     type: sim.run
     options:
@@ -72,6 +90,12 @@ panels:
     open: false
     options: {parent_frame: world, tag_frame: estimated_origin_frame, samples: 10}
   - {id: detections, type: detections, title: Vision, open: false}
+  - id: cameras
+    type: recording
+    title: Cameras
+    provider: recording
+    open: false
+    options: {path: "~/svos/run", home: /home/ros, timestamp: true}
   - id: actuators
     type: actuators
     title: Actuators
@@ -90,7 +114,7 @@ overlays:
       size_metres: 0.3
       hit_pixels: 20
 # Top bar, in order. Types: host items (scene_settings, pool_viewer, panels_menu, view, focus, follow, labels, tf,
-# detections, mpc_path, preview_task) and provider-backed tools (run, simulation; these name a provider).
+# detections, mpc_path, thrust, preview_task) and provider-backed tools (run, simulation; these name a provider).
 # Detection settings live in the sidebar "Vision" panel; add `- {type: detections}` here for a compact toggle.
 toolbar:
   - {type: scene_settings}
@@ -103,8 +127,14 @@ toolbar:
   - {type: labels}
   - {type: tf}
   - {type: mpc_path}
+  - {type: thrust}
   - {id: run, type: run, provider: run, options: {profile: task}}
   - {type: preview_task}
+# Header row, right-aligned beside the pose-source pill: always visible. Toolbar item types (provider-backed
+# ones draw their compact form): robot temperatures, and a REC chip per camera while it records.
+header:
+  - {id: telemetry, type: telemetry, provider: telemetry}
+  - {id: recording, type: recording, provider: recording}
 ownership:
   - motion: motion
     autonomy: mission

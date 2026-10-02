@@ -15,6 +15,10 @@ ImU32 rgba(float r, float g, float b, float a);
 void drawDetections(const std::vector<PlacedDetection> &, const glm::mat4 &viewProjection, const ScreenRect &,
                     bool both = false);
 void drawMpcPath(const std::vector<glm::mat4> &, const glm::mat4 &viewProjection, const ScreenRect &);
+// Thruster forces as arrows from each thruster along its axis, `metresPerNewton` long per newton (negative forces
+// point backwards), like RViz's wrench displays. `forces` is in bridge order; `body` is the drawn robot.
+void drawThrust(const std::vector<ThrusterMount> &, const std::vector<float> &forces, const glm::mat4 &body,
+                float metresPerNewton, const glm::mat4 &viewProjection, const ScreenRect &);
 struct TfOverlay {
     const TfSnapshot *snapshot = nullptr;
     float axisLength = .12f;

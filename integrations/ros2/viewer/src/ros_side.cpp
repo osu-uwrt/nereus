@@ -186,6 +186,9 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
     }
     detectionTopic = scenario.absolute(
         lookup(config, {"topics", "detections"}).as<std::string>("yolo_orientation/visualization_marker_array"));
+    thrustTopic = scenario.absolute(lookup(config, {"topics", "thruster_forces"}).as<std::string>("thruster_forces"));
+    thrustSub_.reset(); // captureThrust subscribes again on the new topic
+    thrust.clear();
     if (!live)
         return;
     const auto topic = [&](const char *key, const char *fallback) {
@@ -704,6 +707,26 @@ void RosSide::captureMpc(bool wanted) {
     }
     if (age > .5)
         mpcPath.clear(); // controller disabled or gone
+}
+
+void RosSide::captureThrust(bool wanted) {
+    wanted = wanted && live_ && scenario_ && !scenario_->thrusterMounts.empty();
+    if (wanted && !thrustSub_)
+        thrustSub_ = node_->create_subscription<std_msgs::msg::Float32MultiArray>(
+            thrustTopic, 10, [this](const std_msgs::msg::Float32MultiArray &msg) {
+                if (msg.data.size() != scenario_->thrusterOrder.size() ||
+                    !std::all_of(msg.data.begin(), msg.data.end(), [](float f) { return std::isfinite(f); })) {
+                    RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
+                                         "Ignoring invalid thruster forces on %s", thrustTopic.c_str());
+                    return;
+                }
+                thrust = msg.data;
+                thrustReceived_ = Clock::now();
+            });
+    else if (!wanted && thrustSub_)
+        thrustSub_.reset();
+    if (!wanted || std::chrono::duration<double>(Clock::now() - thrustReceived_).count() > .5)
+        thrust.clear(); // controller stopped publishing
 }
 
 void RosSide::captureTf(bool wanted, TfTree &tree, TfSnapshot &out) {

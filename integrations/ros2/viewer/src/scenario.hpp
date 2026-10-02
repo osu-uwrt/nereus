@@ -40,6 +40,14 @@ struct CutoutSpec {
     float halfSize = 0;
     std::vector<rendering::UvCutout> holes;
 };
+// A thruster in bridge (ROS force array) order: where it acts and its force axis in base_link, and the bridge
+// input scale (ROS value * scale = newtons).
+struct ThrusterMount {
+    std::string id;
+    std::size_t index = 0; // position in the ROS force array
+    glm::vec3 position{0}, axis{1, 0, 0};
+    float inputScale = 1;
+};
 struct TaskVisual {
     std::string task, prop, asset;
     glm::mat4 taskFromAsset{1}, world{1}; // world = task placement * taskFromAsset
@@ -60,6 +68,7 @@ struct Scenario {
     std::vector<SensorCamera> cameras;
     std::vector<RobotVisual> robotVisuals;
     std::vector<std::string> thrusterOrder;
+    std::vector<ThrusterMount> thrusterMounts; // thrusters of thrusterOrder the robot pack places
     std::map<std::string, Mechanism> mechanisms;
     std::vector<TaskVisual> taskVisuals;
     std::map<std::string, Landmark> landmarks;

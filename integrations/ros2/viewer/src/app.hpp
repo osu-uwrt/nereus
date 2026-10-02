@@ -24,7 +24,7 @@ struct Options {
     std::optional<bool> detections; // default: host yaml detections.enabled (on)
     bool keepDetections = false;    // ignore marker DELETEALL (host yaml detections.honor_delete_all: false)
     std::string detectionPlacement; // pose_source | truth | estimate | both (empty: host yaml)
-    bool showTf = false, mpcPath = false, showScorecard = false;
+    bool showTf = false, mpcPath = false, thrust = false, showScorecard = false;
     std::vector<std::string> open; // initial windows/popups: scene-settings, map, tf, pool-viewer
     std::vector<float> injectF;    // test aid: hover this window position and press F mid-run
     std::vector<float> orbit;      // optional initial orbit: yaw pitch distance (radians, metres)

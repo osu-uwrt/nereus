@@ -9,7 +9,7 @@
 
 namespace nereus::ros_viewer::panels {
 using Pose = glm::mat4;
-enum class Kind { Motion, Autonomy, Mapping, Actuators, Run, Simulation };
+enum class Kind { Motion, Autonomy, Mapping, Actuators, Run, Simulation, Telemetry, Recording };
 enum class Mode { Disabled, Position, Feedforward };
 struct Provider {
     virtual ~Provider() = default;
@@ -121,4 +121,44 @@ struct Simulation : Provider {
     virtual void sync() = 0;
     virtual void reset() = 0;
 };
+// Robot health readings shown at a glance (header chips): one value per configured source.
+enum class Level { Ok, Warn, Error, Stale };
+struct Reading {
+    std::string id, label, value = "--", detail = "Waiting for data";
+    Level level = Level::Stale;
+};
+struct TelemetryState {
+    std::vector<Reading> readings;
+};
+struct Telemetry : Provider {
+    Kind kind() const final {
+        return Kind::Telemetry;
+    }
+    virtual TelemetryState state() = 0;
+};
+// Camera recording (SVO) and still capture. `recording` is what this viewer started and saw confirmed; the
+// stack does not report it, so Stop stays available whenever the service is.
+struct RecordingCamera {
+    std::string id, label, file, message;
+    bool startReady = false, stopReady = false, recording = false, pending = false;
+    double elapsed = 0; // seconds since the confirmed start
+};
+struct RecordingState {
+    std::vector<RecordingCamera> cameras;
+    bool svoSupported = false, captureReady = false, capturing = false;
+    std::string captureMessage;
+};
+struct Recording : Provider {
+    Kind kind() const final {
+        return Kind::Recording;
+    }
+    virtual RecordingState state() = 0;
+    virtual void start(const std::string &camera, const std::string &file) = 0;
+    virtual void stop(const std::string &camera) = 0;
+    virtual void capture() = 0;
+};
+// SVO file for `camera`: `base` with a leading ~ replaced by `home`, then _<stamp> (when not empty) and
+// _<camera> before the extension (.svo2 unless `base` ends in .svo or .svo2), so cameras never share a file.
+std::string recordingFile(const std::string &base, const std::string &camera, const std::string &stamp,
+                          const std::string &home);
 } // namespace nereus::ros_viewer::panels

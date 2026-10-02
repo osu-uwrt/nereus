@@ -219,6 +219,34 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
         s.mechanisms[m.id] = std::move(m);
     }
 
+    // Thruster mounts in bridge order. Resolved documents give position_m and direction in the body frame (the
+    // frame tree root); an unresolved pack names a frame whose +X is the force axis.
+    const auto bodyRoot = robot["frames"]["root"].as<std::string>("");
+    for (std::size_t i = 0; i < s.thrusterOrder.size(); ++i)
+        for (const auto &item : robot["thrusters"]) {
+            if (item["id"].as<std::string>("") != s.thrusterOrder[i])
+                continue;
+            ThrusterMount mount;
+            mount.id = s.thrusterOrder[i];
+            mount.index = i;
+            const auto frame = item["frame"].as<std::string>("");
+            if (s.frames.has(frame)) {
+                const auto inBase = s.frames.relative(s.baseId, frame);
+                mount.position = glm::vec3(inBase[3]);
+                mount.axis = glm::vec3(inBase[0]);
+            } else if (item["position_m"] && item["direction"] && s.frames.has(bodyRoot)) {
+                const auto bodyInBase = s.frames.relative(s.baseId, bodyRoot);
+                mount.position = glm::vec3(bodyInBase * glm::vec4(vec3(item["position_m"]), 1));
+                mount.axis = glm::normalize(glm::vec3(bodyInBase * glm::vec4(vec3(item["direction"]), 0)));
+            } else
+                break;
+            const auto scales = s.bridge["thrusters"]["input_scales"];
+            if (scales && scales.IsSequence() && i < scales.size())
+                mount.inputScale = scales[i].as<float>();
+            s.thrusterMounts.push_back(std::move(mount));
+            break;
+        }
+
     // Camera sensors and their bridge topics.
     const auto streamFor = [&](const std::string &sensor, const std::string &output) -> std::string {
         const std::string key = "sensor:" + sensor + "." + output;

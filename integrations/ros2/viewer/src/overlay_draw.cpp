@@ -128,6 +128,39 @@ void drawMpcPath(const std::vector<glm::mat4> &path, const glm::mat4 &vp, const 
     draw->PopClipRect();
 }
 
+void drawThrust(const std::vector<ThrusterMount> &mounts, const std::vector<float> &forces, const glm::mat4 &body,
+                float metresPerNewton, const glm::mat4 &vp, const ScreenRect &rect) {
+    auto *draw = ImGui::GetWindowDrawList();
+    draw->PushClipRect(rect.position, {rect.position.x + rect.width, rect.position.y + rect.height}, true);
+    const ImU32 tint = IM_COL32(230, 70, 60, 235); // RViz's default force colour, brightened for the water
+    for (const auto &mount : mounts) {
+        if (mount.index >= forces.size())
+            continue;
+        const float length = forces[mount.index] * mount.inputScale * metresPerNewton;
+        if (std::abs(length) < 1e-3f)
+            continue;
+        const glm::vec4 at = body * glm::vec4(mount.position, 1), axis = body * glm::vec4(mount.axis, 0);
+        ImVec2 tail, tip;
+        if (!projectToScreen(vp, rect, at, tail) || !projectToScreen(vp, rect, at + axis * length, tip))
+            continue;
+        // Head of a fixed screen size (shortened arrows keep a readable head), at most half the arrow.
+        const ImVec2 screen{tip.x - tail.x, tip.y - tail.y};
+        const float pixels = std::sqrt(screen.x * screen.x + screen.y * screen.y);
+        if (pixels < 1) {
+            draw->AddCircleFilled(tail, 2.5f, tint);
+            continue;
+        }
+        const float head = std::min(10.f, pixels * .5f);
+        const ImVec2 unit{screen.x / pixels, screen.y / pixels};
+        const ImVec2 neck{tip.x - unit.x * head, tip.y - unit.y * head};
+        const ImVec2 wing{-unit.y * head * .5f, unit.x * head * .5f};
+        draw->AddCircleFilled(tail, 2.5f, tint);
+        draw->AddLine(tail, neck, tint, 2.5f);
+        draw->AddTriangleFilled(tip, {neck.x + wing.x, neck.y + wing.y}, {neck.x - wing.x, neck.y - wing.y}, tint);
+    }
+    draw->PopClipRect();
+}
+
 void drawTfAxes(const TfOverlay &tf, const glm::mat4 &vp, const ScreenRect &rect) {
     auto *draw = ImGui::GetWindowDrawList();
     draw->PushClipRect(rect.position, {rect.position.x + rect.width, rect.position.y + rect.height}, true);

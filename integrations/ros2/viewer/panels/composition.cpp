@@ -55,8 +55,8 @@ void validateSubstitutions(const YAML::Node &node, const Context &ctx) {
 } // namespace
 Composition::Composition(const YAML::Node &config, const Context &ctx, const Registry &registry) {
     keys(config,
-         {"sidebar_width", "sidebar_width_fraction", "sidebar_visible", "providers", "panels", "toolbar", "overlays",
-          "ownership"},
+         {"sidebar_width", "sidebar_width_fraction", "sidebar_visible", "providers", "panels", "toolbar", "header",
+          "overlays", "ownership"},
          "composition");
     sidebarShown = config["sidebar_visible"].as<bool>(true);
     if (config["sidebar_width"] && config["sidebar_width_fraction"])
@@ -95,7 +95,8 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
             if (registry.panels.count(item["type"].as<std::string>()))
                 toolbarConfig.push_back(item);
     const auto validateViews = [&](const char *name, const YAML::Node &items, const auto &factories) {
-        const bool isToolbar = std::string(name) == "toolbar";
+        // Header items are toolbar items drawn in the header row: same schema, ids default to the type.
+        const bool isToolbar = std::string(name) == "toolbar" || std::string(name) == "header";
         if (items && !items.IsSequence())
             throw std::invalid_argument(std::string(name) + ": expected a sequence");
         std::set<std::string> ids;
@@ -144,6 +145,7 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
     };
     validateViews("panels", config["panels"], registry.panels);
     validateViews("toolbar", toolbarConfig, registry.panels);
+    validateViews("header", config["header"], registry.panels);
     validateViews("overlays", config["overlays"], registry.overlays);
     if (config["ownership"] && !config["ownership"].IsSequence())
         throw std::invalid_argument("ownership must be a sequence");
@@ -209,6 +211,12 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
         toolbarInstances.push_back({id, item["title"].as<std::string>(id), item["visible"].as<bool>(true), true,
                                     registry.panels.at(type).create(binding(item))});
     }
+    for (const auto &item : config["header"]) {
+        const auto type = item["type"].as<std::string>();
+        const auto id = item["id"].as<std::string>(type);
+        headerInstances.push_back({id, item["title"].as<std::string>(id), item["visible"].as<bool>(true), true,
+                                   registry.panels.at(type).create(binding(item))});
+    }
     for (const auto &item : config["overlays"])
         overlays.push_back({item["id"].as<std::string>(), item["title"].as<std::string>(item["id"].as<std::string>()),
                             item["visible"].as<bool>(true),
@@ -249,6 +257,27 @@ void Composition::drawToolbar() {
             ImGui::PopID();
         }
 }
+void Composition::drawHeader(float right) {
+    if (headerInstances.empty())
+        return;
+    const float after = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x + ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SameLine(std::max(after, right - headerWidth));
+    ImGui::BeginGroup();
+    bool drawn = false; // items may draw nothing (e.g. no recording running); only space out drawn ones
+    for (auto &item : headerInstances)
+        if (item.visible) {
+            if (drawn)
+                ImGui::SameLine();
+            const auto before = ImGui::GetCursorPos();
+            ImGui::PushID(item.id.c_str());
+            item.panel->header();
+            ImGui::PopID();
+            const auto cursor = ImGui::GetCursorPos();
+            drawn = drawn || cursor.x != before.x || cursor.y != before.y;
+        }
+    ImGui::EndGroup();
+    headerWidth = ImGui::GetItemRectSize().x;
+}
 std::vector<std::string> Composition::toolbarIds() const {
     std::vector<std::string> ids;
     for (const auto &item : toolbarInstances)
@@ -263,9 +292,9 @@ std::vector<std::string> Composition::panelIds() const {
 }
 const std::vector<HostItemType> &hostItemTypes() {
     static const std::vector<HostItemType> types{
-        {"scene_settings", false}, {"pool_viewer", false}, {"view", false}, {"focus", false},
-        {"follow", false},         {"labels", false},      {"tf", false},   {"mpc_path", false},
-        {"preview_task", false},   {"detections", true}};
+        {"scene_settings", false}, {"pool_viewer", false},  {"view", false},     {"focus", false},
+        {"follow", false},         {"labels", false},       {"tf", false},       {"mpc_path", false},
+        {"thrust", false},         {"preview_task", false}, {"detections", true}};
     return types;
 }
 
@@ -302,7 +331,7 @@ void registerHostPlaceholders(Registry &registry) {
 YAML::Node defaultToolbar() {
     return YAML::Load("[{type: scene_settings}, {type: pool_viewer}, {type: panels_menu}, {type: view}, "
                       "{type: focus}, {type: follow}, {type: labels}, {type: tf}, "
-                      "{type: mpc_path}, {type: preview_task}]");
+                      "{type: mpc_path}, {type: thrust}, {type: preview_task}]");
 }
 void Composition::drawSidebar(float height) {
     ImGui::BeginChild("operator_sidebar", {sidebarWidth, height}, ImGuiChildFlags_Borders,

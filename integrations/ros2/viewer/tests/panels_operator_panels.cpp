@@ -1,6 +1,7 @@
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panels/ros_providers.hpp"
 #include <cassert>
+#include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
 #include <chameleon_tf_msgs/action/model_frame.hpp>
 #endif
@@ -11,6 +12,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <riptide_msgs2/msg/actuator_status.hpp>
+#include <riptide_msgs2/msg/battery_status.hpp>
+#include <riptide_msgs2/msg/gyro_status.hpp>
 #include <riptide_msgs2/msg/mapping_target_info.hpp>
 #include <riptide_msgs2/srv/mapping_target.hpp>
 #include <std_msgs/msg/bool.hpp>
@@ -21,6 +24,9 @@
 #include <thread>
 #include <unistd.h>
 #include <visualization_msgs/msg/marker_array.hpp>
+#ifdef NEREUS_VIEWER_HAVE_ZED
+#include <zed_msgs/srv/start_svo_rec.hpp>
+#endif
 using namespace nereus::ros_viewer::panels;
 using namespace std::chrono_literals;
 #ifdef NEREUS_VIEWER_HAVE_CHAMELEON // the tag-calibration action is optional
@@ -108,7 +114,18 @@ int main(int argc, char **argv) {
     config.remove("ownership");
     config["panels"] = YAML::Load(R"([
       {id: mapping, type: mapping, provider: mapping, options: {parent_frame: test_world, tag_frame: test_tag}},
-      {id: actuators, type: actuators, provider: actuators}])");
+      {id: actuators, type: actuators, provider: actuators},
+      {id: telemetry, type: telemetry, provider: telemetry},
+      {id: recording, type: recording, provider: recording,
+       options: {path: "~/svos/test", home: /home/test, timestamp: false}}])");
+    // Telemetry from the test namespace only (the configured CPU source is the global /diagnostics_agg).
+    auto readings = config["providers"]["telemetry"]["options"]["readings"];
+    readings[0]["timeout"] = .3;
+    readings[1]["topic"] = "diagnostics_agg";
+    readings[1]["timeout"] = .3;
+    readings[2]["timeout"] = .3;
+    readings[3]["timeout"] = .3;
+    config["providers"]["recording"]["options"]["request_timeout"] = .3;
     auto mapCfg = config["providers"]["mapping"]["options"];
     mapCfg["calibration_action"] = "calibration";
     mapCfg["reset_service"] = "reset";
@@ -134,6 +151,75 @@ ui:
     auto actuators = std::dynamic_pointer_cast<Actuators>(composition->providers().at("actuators"));
     auto run = std::dynamic_pointer_cast<Run>(composition->providers().at("run"));
     auto simulation = std::dynamic_pointer_cast<Simulation>(composition->providers().at("simulation"));
+    auto telemetry = std::dynamic_pointer_cast<Telemetry>(composition->providers().at("telemetry"));
+    auto recording = std::dynamic_pointer_cast<Recording>(composition->providers().at("recording"));
+    const auto reading = [&](const std::string &id) {
+        for (const auto &r : telemetry->state().readings)
+            if (r.id == id)
+                return r;
+        assert(false);
+        return Reading{};
+    };
+    assert(reading("fog").level == Level::Stale && reading("fog").value == "--" && reading("cpu").value == "--");
+    auto gyroPub = node->create_publisher<riptide_msgs2::msg::GyroStatus>("gyro/status", 10);
+    auto diagPub = node->create_publisher<diagnostic_msgs::msg::DiagnosticArray>("diagnostics_agg", 10);
+    riptide_msgs2::msg::GyroStatus gyroMsg;
+    gyroMsg.connected = gyroMsg.temp_good = gyroMsg.vsupply_good = gyroMsg.sldcurrent_good = true;
+    gyroMsg.diagsignal_good = gyroMsg.temp_within_cal = true;
+    gyroMsg.temperature = 41.54;
+    using Battery = riptide_msgs2::msg::BatteryStatus;
+    auto batteryPub = node->create_publisher<Battery>("state/battery", 10);
+    Battery portMsg, stbdMsg, unknownMsg; // both sides share the topic, told apart by `detect`
+    portMsg.detect = Battery::DETECT_PORT;
+    portMsg.soc = 87;
+    portMsg.pack_voltage = 24.1f;
+    portMsg.pack_current = -12.5f;
+    portMsg.time_to_dischg = 63;
+    portMsg.cell_name = "port_pack";
+    stbdMsg.detect = Battery::DETECT_STBD;
+    stbdMsg.soc = 35;
+    unknownMsg.detect = Battery::DETECT_NONE;
+    unknownMsg.soc = 1;
+    diagnostic_msgs::msg::DiagnosticArray diagMsg;
+    diagMsg.status.resize(2);
+    diagMsg.status[0].name = "/Robot Diagnostics/Computers"; // other statuses in the array are ignored
+    diagMsg.status[0].level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
+    auto &core = diagMsg.status[1];
+    core.name = "/Robot Diagnostics/Computers/Core Temperature";
+    core.message = "Max core temp 72.00 C";
+    for (const auto &[key, value] : std::initializer_list<std::pair<const char *, const char *>>{
+             {"CPU Temperature", "58.41 C"}, {"SOC 0 Temperature", "72.00 C"}}) {
+        diagnostic_msgs::msg::KeyValue pair;
+        pair.key = key;
+        pair.value = value;
+        core.values.push_back(pair);
+    }
+    // Recording: stop services (DFC never answers), the picture taker, and SVO start when zed_msgs exists.
+    int ffcStops = 0, captures = 0;
+    auto ffcStop = node->create_service<Reset>("ffc/zed_node/stop_svo_rec",
+                                               [&](Reset::Request::SharedPtr, Reset::Response::SharedPtr reply) {
+                                                   ++ffcStops;
+                                                   reply->success = true;
+                                               });
+    std::shared_ptr<rmw_request_id_t> dfcStopHeader;
+    auto dfcStop = node->create_service<Reset>(
+        "dfc/zed_node/stop_svo_rec",
+        [&](std::shared_ptr<rmw_request_id_t> header, Reset::Request::SharedPtr) { dfcStopHeader = header; });
+    auto captureService =
+        node->create_service<Reset>("capture_image", [&](Reset::Request::SharedPtr, Reset::Response::SharedPtr reply) {
+            ++captures;
+            reply->success = true;
+            reply->message = "Images saved - \nLeft: /tmp/left.png";
+        });
+#ifdef NEREUS_VIEWER_HAVE_ZED
+    using StartSvo = zed_msgs::srv::StartSvoRec;
+    std::string startedFile;
+    auto ffcStart = node->create_service<StartSvo>(
+        "ffc/zed_node/start_svo_rec", [&](StartSvo::Request::SharedPtr request, StartSvo::Response::SharedPtr reply) {
+            startedFile = request->svo_filename;
+            reply->success = true;
+        });
+#endif
     auto mappingPub = node->create_publisher<riptide_msgs2::msg::MappingTargetInfo>("mapping_state", 10);
     auto actuatorPub =
         node->create_publisher<riptide_msgs2::msg::ActuatorStatus>("state/actuator/status", rclcpp::SensorDataQoS());
@@ -196,6 +282,11 @@ ui:
                 mappingPub->publish(mappingMsg);
                 actuatorPub->publish(actuatorMsg);
                 scorePub->publish(scoreMsg);
+                gyroPub->publish(gyroMsg);
+                diagPub->publish(diagMsg);
+                batteryPub->publish(portMsg);
+                batteryPub->publish(stbdMsg);
+                batteryPub->publish(unknownMsg);
             }
             rclcpp::spin_some(node);
 #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
@@ -214,6 +305,83 @@ ui:
     assert(mapping->state().fresh);
 #endif
     assert(run->state().fresh && actuators->state().fresh);
+    // FOG: temperature and the driver's flags; CPU: the hottest core value with the status level.
+    assert(reading("fog").value == "41.5\u00B0C" && reading("fog").level == Level::Ok);
+    assert(reading("cpu").value == "72.0\u00B0C" && reading("cpu").level == Level::Warn);
+    assert(reading("cpu").detail.find("SOC 0 Temperature: 72.00 C") != std::string::npos);
+    assert(reading("port").value == "87%" && reading("port").level == Level::Ok);
+    assert(reading("port").detail.find("24.10 V, -12.50 A") != std::string::npos &&
+           reading("port").detail.find("63 min") != std::string::npos);
+    assert(reading("stbd").value == "35%" && reading("stbd").level == Level::Warn);
+    stbdMsg.soc = 19;
+    spin(.1);
+    assert(reading("stbd").level == Level::Error && reading("port").value == "87%");
+    // Both packs back to back, as the robot sends them: neither may displace the other.
+    portMsg.soc = 64;
+    stbdMsg.soc = 63;
+    for (int burst = 0; burst < 3; ++burst) {
+        batteryPub->publish(portMsg);
+        batteryPub->publish(stbdMsg);
+        spin(.1, false);
+    }
+    assert(reading("port").value == "64%" && reading("stbd").value == "63%");
+    stbdMsg.soc = 19;
+    gyroMsg.temperature = 60;
+    spin(.1);
+    assert(reading("fog").level == Level::Warn);
+    gyroMsg.temperature = 41;
+    gyroMsg.temp_within_cal = false;
+    spin(.1);
+    assert(reading("fog").level == Level::Warn && reading("fog").detail.find("calibration") != std::string::npos);
+    gyroMsg.temp_good = false;
+    spin(.1);
+    assert(reading("fog").level == Level::Error && reading("fog").detail.rfind("Overheating", 0) == 0);
+    gyroMsg.connected = false;
+    spin(.1);
+    assert(reading("fog").level == Level::Error && reading("fog").value == "--");
+    gyroMsg.connected = gyroMsg.temp_good = gyroMsg.temp_within_cal = true;
+    core.values.clear();
+    core.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
+    spin(.1);
+    assert(reading("cpu").value == "--" && reading("cpu").level == Level::Error && reading("fog").level == Level::Ok);
+    core.level = diagnostic_msgs::msg::DiagnosticStatus::STALE;
+    spin(.1);
+    assert(reading("cpu").level == Level::Stale);
+    // Recording and capture.
+    auto rec = recording->state();
+    assert(rec.captureReady && rec.cameras.size() == 2 && rec.cameras[0].stopReady && rec.cameras[1].stopReady);
+    recording->capture();
+    recording->capture(); // one request at a time
+    spin(.15);
+    rec = recording->state();
+    assert(captures == 1 && !rec.capturing && rec.captureMessage.rfind("Images saved", 0) == 0);
+    recording->stop("ffc");
+    spin(.15);
+    assert(ffcStops == 1 && recording->state().cameras[0].message == "Stopped");
+    recording->stop("dfc");
+    spin(.1);
+    assert(dfcStopHeader && recording->state().cameras[1].pending);
+    spin(.35);
+    assert(!recording->state().cameras[1].pending &&
+           recording->state().cameras[1].message.find("timed out") != std::string::npos);
+#ifdef NEREUS_VIEWER_HAVE_ZED
+    assert(recording->state().svoSupported && recording->state().cameras[0].startReady &&
+           !recording->state().cameras[1].startReady);
+    recording->start("ffc", "/home/test/svos/test_ffc.svo2");
+    spin(.15);
+    rec = recording->state();
+    assert(startedFile == "/home/test/svos/test_ffc.svo2" && rec.cameras[0].recording &&
+           rec.cameras[0].file == startedFile);
+    recording->start("ffc", "/other.svo2"); // already recording
+    spin(.1);
+    assert(startedFile == "/home/test/svos/test_ffc.svo2");
+    recording->stop("ffc");
+    spin(.15);
+    assert(ffcStops == 2 && !recording->state().cameras[0].recording);
+#else
+    recording->start("ffc", "/home/test/svos/test_ffc.svo2");
+    assert(!recording->state().svoSupported && !recording->state().cameras[0].pending);
+#endif
     assert(calCount == 0 && armCount == 0 && fireCount == 0 && resetCount == 0 && runCommands.empty());
     assert(simulation->state().connected && simulation->state().rate == 1 && speedRequests == 0);
     simulation->setRate(0);
@@ -370,6 +538,8 @@ ui:
     assert(runCommands.size() == 2);
     spin(.5, false);
     assert(!mapping->state().fresh && !actuators->state().fresh && !run->state().fresh);
+    assert(reading("fog").level == Level::Stale && reading("fog").value == "41.0\u00B0C"); // last value, muted
+    assert(reading("stbd").level == Level::Stale && reading("stbd").value == "19%");
     actuators->command("torpedo");
     run->command(YAML::Load("{action: stop}"));
     run->reset();
@@ -393,6 +563,9 @@ ui:
         ImGui::Begin("test");
         c.setWidth(300);
         c.drawToolbar();
+        ImGui::TextUnformatted("header");
+        c.drawHeader(300);
+        ImGui::NewLine();
         c.drawSidebar(800);
         c.drawWindows();
         ImGui::End();
@@ -455,6 +628,8 @@ ui:
     composition.reset();
     mapping.reset();
     actuators.reset();
+    telemetry.reset();
+    recording.reset();
     run.reset();
     simulation.reset();
     rclcpp::shutdown();

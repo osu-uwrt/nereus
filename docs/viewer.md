@@ -6,9 +6,12 @@ starts it for you; for the real robot use `ros2 launch integrations/uwrt/launch/
 ![Viewer with the robot in the pool](images/robot.jpg)
 
 - **Top bar**: view, focus and display toggles.
-- **Left sidebar**: robot control panels (Motion, Mapping, Vision, Actuators, Autonomy). Click a header to fold it.
+- **Left sidebar**: robot control panels (Motion, Mapping, Vision, Cameras, Actuators, Autonomy). Click a header
+  to fold it.
 - **Centre**: the 3D scene. The pill at the top right says where the robot pose comes from (`PHYSICS CONNECTED`
   in sim, `ROBOT (ESTIMATE)` on the real robot).
+- **Header chips**, left of that pill: the FOG and CPU temperatures and both batteries' charge (see below), and a
+  red `REC` chip per camera while it records.
 - **Right**: camera cards and the course map.
 
 ## Moving around
@@ -24,7 +27,20 @@ starts it for you; for the real robot use `ros2 launch integrations/uwrt/launch/
 | View → *ffc* / *dfc* | look through a robot camera |
 
 **Focus** jumps to the vehicle, a mechanism (Claw, Payloads) or a course element; **Follow** keeps the camera on
-the robot. **Labels** names course elements; **TF** draws frame axes; **MPC path** draws the MPC's predicted path.
+the robot. **Labels** names course elements; **TF** draws frame axes; **MPC path** draws the MPC's predicted path;
+**Thrust** draws the commanded thruster forces (`thruster_forces`) as red arrows from each thruster along its axis,
+like RViz's thruster wrenches (0.05 m per newton; nothing while the controller is not publishing).
+
+## Robot temperatures and batteries
+
+The header chips show the FOG temperature (`gyro/status`) and the hottest CPU core (the computer monitor's
+`Core Temperature` in `/diagnostics_agg`): cyan is fine, amber a warning (FOG 55 °C, CPU 70 °C), red an error (FOG
+75 °C, CPU 85 °C, or a fault the FOG driver or the computer monitor reports). Grey means no data: never received,
+or nothing for 2 s (FOG) / 10 s (CPU), when the last value stays shown. Hover a chip for the details.
+
+`PORT` and `STBD` are each battery's state of charge (`state/battery`), as in the RViz overlay: amber below 50 %,
+red below 20 %, grey after 10 s without a reading. Hover for the pack voltage, current, time to discharge and
+cell. In sim none of these publishers run, so all four chips stay grey.
 
 ## Driving the robot (Motion)
 
@@ -46,6 +62,16 @@ does kill: use one operator at a time.
 - **Mapping**: tag calibration, reset, and the mapping target (**Lock map**).
 - **Actuators**: arm/disarm, fire torpedoes, drop markers, open/close the claw, reload.
 
+## Cameras
+
+- **SVO recording**: the path is on the robot (`~` is `/home/ros`). Each camera records to its own file,
+  `<path>_<date>_<time>_<camera>.svo2` (untick *Add date and time* to drop the timestamp). **Start** calls the ZED
+  node's `start_svo_rec` (lossless); **Stop** calls `stop_svo_rec`. The viewer knows only the recordings it
+  started, so **Stop** works whenever the service is up, including for a recording started before a restart.
+  Starting needs `zed_msgs` when the viewer is built; without it the panel says so and only Stop works.
+- **Capture image**: the picture taker (`capture_image`) saves the newest front camera frame on the robot; the
+  reply lists the saved files.
+
 ## Vision
 
 - **Detections**: the detector's markers, placed where the object was seen. *Placement* (sim only) chooses
@@ -65,7 +91,9 @@ stack actually receives.
 - **Water, Pool walls & deck, Pool floor, Surface reflections**: visibility (camera cards always see the pool).
 - **Course**: *Auto* shows the simulator's course in sim and the mapping estimate on the real robot; *Mapping
   (RViz)* draws `riptide_meshes` models at the mapping TF frames, exactly as RViz does. *Mapping ghost* (sim)
-  overlays the mapping estimate translucent on the true course.
+  overlays the mapping estimate translucent on the true course. *Meshes* lists every mapping mesh by its TF frame:
+  untick one to hide it (course and ghost alike); `mapping_markers.hidden` in the host config sets which start
+  hidden.
 - **Localization estimate** (sim only): *Robot ghost* draws the EKF estimate as a translucent robot. *Control
   gizmo* and *Follow* each centre on the estimate or the true robot. Commands always go to the controller in its
   estimate frame.
@@ -93,9 +121,9 @@ All of it is YAML in `content/viewer/`:
 
 | File | Controls |
 | --- | --- |
-| `talos_uwrt_host.yaml` | topics, pose source and delays, estimate ghost/anchors, detections, `point_clouds`, `mapping_markers`, focus presets |
-| `talos_uwrt_panels.yaml` | `toolbar:` and sidebar `panels:` (order, titles, which are open), and the providers they talk to |
+| `talos_uwrt_host.yaml` | topics, pose source and delays, estimate ghost/anchors, detections, `point_clouds`, `mapping_markers`, `thrust_arrows`, focus presets |
+| `talos_uwrt_panels.yaml` | `toolbar:`, `header:` and sidebar `panels:` (order, titles, which are open), and the providers they talk to (telemetry readings and thresholds, recording services) |
 | `talos_uwrt_thruster_visuals.yaml`, `talos_uwrt_status_lights.yaml` | rotor animation and LED bars |
 
-Toolbar and sidebar items are listed by type; reorder or remove entries to change the layout. For command-line
+Toolbar, header and sidebar items are listed by type; reorder or remove entries to change the layout. For command-line
 options run `build/ros-viewer/nereus-viewer --help`.

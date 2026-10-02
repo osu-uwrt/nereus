@@ -28,6 +28,9 @@ struct Panel {
     virtual ~Panel() = default;
     virtual void toolbar() {} // compact actions when the sidebar is hidden
     virtual void pinned() {}  // critical controls remain accessible when collapsed
+    virtual void header() {   // compact form in the always-visible header row (composition `header:`)
+        toolbar();
+    }
     virtual void draw() = 0;
     virtual void drawWindows() {}
 };
@@ -79,6 +82,9 @@ class Composition {
     void drawSidebar(float height);
     // Draws the configured `toolbar:` items in order (the default list when the key is absent).
     void drawToolbar();
+    // Draws the configured `header:` items on the current line, right-aligned to end at window x `right`
+    // (never left of the previous item).
+    void drawHeader(float right);
     // Instance IDs of the toolbar / sidebar panels in display order.
     std::vector<std::string> toolbarIds() const;
     std::vector<std::string> panelIds() const;
@@ -122,7 +128,8 @@ class Composition {
     bool sidebarResized = false;
     bool sidebarShown = true;
     Providers sources;
-    std::vector<PanelInstance> panelInstances, toolbarInstances;
+    std::vector<PanelInstance> panelInstances, toolbarInstances, headerInstances;
+    float headerWidth = 0; // last frame's, for right alignment
     struct OverlayInstance {
         std::string id, title;
         bool visible;

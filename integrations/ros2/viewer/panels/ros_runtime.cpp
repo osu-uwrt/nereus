@@ -54,6 +54,8 @@ void RosProviders::registerFactories(Registry &registry) {
 #ifdef NEREUS_VIEWER_UWRT
     registerUwrtActuators(registry, factory);
     registerUwrtMapping(registry, factory);
+    registerUwrtTelemetry(registry, factory);
+    registerUwrtRecording(registry, factory);
 #endif
 }
 Pose poseMatrix(const geometry_msgs::msg::Transform &t) {

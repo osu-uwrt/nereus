@@ -23,7 +23,7 @@ void usage() {
            "  --orbit YAW PITCH DIST initial orbit angles (radians) and distance (metres) after the focus\n"
            "  --open NAME            open scene-settings, map, tf, pool-viewer or depth (camera cards) at start "
            "(repeatable)\n"
-           "  --show-tf --mpc-path --show-scorecard   initial toggle states\n"
+           "  --show-tf --mpc-path --thrust --show-scorecard   initial toggle states\n"
            "  --detections | --no-detections   detection overlay on/off at start (default on)\n"
            "  --keep-detections      ignore detector DELETEALL; observations live out their lifetime\n"
            "  --detections-placement MODE   pose_source (default) | truth | estimate | both; truth/both need the "
@@ -135,6 +135,8 @@ int main(int argc, char **argv) {
             options.detectionPlacement = value();
         else if (arg == "--mpc-path")
             options.mpcPath = true;
+        else if (arg == "--thrust")
+            options.thrust = true;
         else if (arg == "--show-scorecard")
             options.showScorecard = true;
         else if (arg == "--frames")

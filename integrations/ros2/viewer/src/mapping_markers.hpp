@@ -8,14 +8,17 @@
 #include <glm/gtc/quaternion.hpp>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <yaml-cpp/yaml.h>
 
 namespace nereus::ros_viewer::host {
 struct MappingMarker {
     std::string name, mesh, frame;
+    std::string label;          // display name: the frame without its "_frame" suffix (unique, unlike meshes)
     std::filesystem::path path; // resolved model.dae
     glm::mat4 local{1};         // pose (xyz, roll-pitch-yaw) * scale, in the marker frame
+    bool visible = true;        // operator toggle (Pool Viewer > Course > Meshes)
 };
 // `share(package)` resolves a ROS package share directory (used for the file's mesh_pkg unless `meshes`
 // names a local folder of <mesh>/model.dae). Marker entries whose mesh is a builtin shape (arrow,
@@ -41,6 +44,11 @@ loadMappingMarkers(const std::filesystem::path &file,
         marker.name = "marker" + std::to_string(i);
         marker.mesh = entry["mesh"].as<std::string>();
         marker.frame = entry["frame"].as<std::string>();
+        constexpr std::string_view suffix = "_frame";
+        marker.label = marker.frame.size() > suffix.size() &&
+                               marker.frame.compare(marker.frame.size() - suffix.size(), suffix.size(), suffix) == 0
+                           ? marker.frame.substr(0, marker.frame.size() - suffix.size())
+                           : marker.frame;
         if (marker.mesh == "arrow" || marker.mesh == "sphere" || marker.mesh == "cube")
             continue;
         marker.path = meshes / marker.mesh / "model.dae";
@@ -57,5 +65,22 @@ loadMappingMarkers(const std::filesystem::path &file,
         out.push_back(std::move(marker));
     }
     return out;
+}
+// Hides the markers each name matches: a frame, a label or a mesh (a mesh name hides every copy, e.g. all
+// slalom posts). Returns the names that matched nothing.
+inline std::vector<std::string> hideMappingMarkers(std::vector<MappingMarker> &markers,
+                                                   const std::vector<std::string> &names) {
+    std::vector<std::string> unknown;
+    for (const auto &name : names) {
+        bool found = false;
+        for (auto &marker : markers)
+            if (marker.frame == name || marker.label == name || marker.mesh == name) {
+                marker.visible = false;
+                found = true;
+            }
+        if (!found)
+            unknown.push_back(name);
+    }
+    return unknown;
 }
 } // namespace nereus::ros_viewer::host

@@ -26,6 +26,8 @@ void registerUwrtMotion(Registry &, const RuntimeFactory &);
 void registerUwrtAutonomy(Registry &, const RuntimeFactory &);
 void registerUwrtMapping(Registry &, const RuntimeFactory &);
 void registerUwrtActuators(Registry &, const RuntimeFactory &);
+void registerUwrtTelemetry(Registry &, const RuntimeFactory &);
+void registerUwrtRecording(Registry &, const RuntimeFactory &);
 void registerSimulationRate(Registry &, const RuntimeFactory &);
 void registerSimRun(Registry &, const RuntimeFactory &);
 void registerStandardMotion(Registry &, const RuntimeFactory &);
