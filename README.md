@@ -56,17 +56,15 @@ run** in the viewer before scoring.
 
 ## How it fits together
 
-```
-content/packs/scenarios/<name>/scenario.yaml   picks a robot, pool, tasks and bridge; places the course
-   ├── robots/<robot>/robot.yaml     physics, frames, thrusters, sensors, mechanisms, visuals
-   ├── pools/<pool>/pool.yaml        pool size, walls, water, lighting
-   ├── tasks/<set>/tasks.yaml        task files, scoring rules, scorecard UI
-   ├── bridges/<bridge>/bridge.yaml  ROS topics, services, TF and message field mapping
-   └── equipment/<team>/equipment.yaml  optional team gear the scenario places (UWRT: the AprilTag board)
-        │  python -m nereus.packs resolve   (validates, writes one resolved.json)
-        ▼
-nereus-sim resolved.json  ◄── ROS 2 ──►  your robot stack   ◄── ROS 2 ──►  nereus-viewer
-```
+![Nereus architecture: the scenario pack selects robot, pool, tasks, bridge and equipment packs, which
+nereus.packs resolve validates into one resolved.json. In simulation, nereus-sim loads it and talks to your robot
+stack and nereus-viewer over ROS 2. On the real robot there is no simulator: nereus-viewer loads resolved.json
+itself and talks to the robot. Synthetic datasets are planned, rendered and exported offline](docs/images/architecture.svg)
+
+Everything starts from the same resolved scenario. In simulation, `nereus-sim` runs it and the viewer shows
+simulator truth. On the real robot, the viewer loads it directly and draws the robot at its EKF estimate. The
+simulator, your robot stack and the viewer share no code, only ROS 2 topics. `←` marks the config each part
+reads.
 
 | Folder | Contents |
 | --- | --- |

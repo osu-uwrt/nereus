@@ -1,0 +1,244 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 812" width="1280" height="812" role="img" aria-labelledby="title desc">
+  <title id="title">Nereus architecture</title>
+  <desc id="desc">Config: the scenario pack selects robot, pool, tasks, bridge and equipment packs, and python -m nereus.packs resolve validates them into one resolved.json; the viewer has its own config in content/viewer. Simulation (sim.launch.py): nereus-sim loads resolved.json (session reads robot, pool, tasks and equipment; rules read tasks; cameras read robot cameras and course visuals; the ROS bridge reads the bridge pack) and talks to your robot stack and nereus-viewer over ROS 2 topics; the viewer gets the scenario from a latched topic and shows simulator truth. Real robot (robot.launch.py): no simulator; nereus-viewer loads resolved.json with --scenario and talks to the robot over ROS 2, drawing the robot at its EKF estimate. Offline: nereus-dataset plans, renders and exports YOLO datasets without ROS. Key: teal physics, amber rendering, blue ROS 2, red your robot, grey Python tooling, thin outlined boxes config files, bold outlined boxes processes and generated files; dashed blue lines are ROS 2 topics; solid arrows load or run the next step.</desc>
+  <style>
+    svg { --fg: #1f2328; --muted: #59636e; --rule: #d1d9e0; --box: #ffffff;
+          --phys: #0f7a6c; --rend: #b4690e; --ros: #2459c4; --ui: #7a3fb8; --robot: #bb0000; --py: #59636e; }
+    @media (prefers-color-scheme: dark) {
+      svg { --fg: #e6edf3; --muted: #9198a1; --rule: #3d444d; --box: #151b23;
+            --phys: #3fc2ae; --rend: #e7a14a; --ros: #7aa5ff; --ui: #b98af0; --robot: #ff6b6b; --py: #9198a1; }
+    }
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; fill: var(--fg); }
+    .h { font-size: 14px; font-weight: 600; text-anchor: middle; }
+    .s { font-size: 11.5px; fill: var(--muted); text-anchor: middle; }
+    .m { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 11px; text-anchor: middle; }
+    .mb { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; font-weight: 600; text-anchor: middle; }
+    .reads { fill: var(--muted); }
+    .region-label { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; font-weight: 600; letter-spacing: 1.2px; }
+    .region-sub { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: var(--muted); }
+    .lbl { font-size: 11px; fill: var(--muted); text-anchor: middle; }
+    .key { font-size: 12px; }
+    .region { fill: var(--fg); fill-opacity: .03; stroke: var(--fg); stroke-opacity: .28; stroke-width: 1.2; }
+    .cfg { fill: var(--box); stroke: var(--fg); stroke-opacity: .35; stroke-width: 1.2; }
+    .doc { fill: var(--box); stroke: var(--fg); stroke-width: 1.5; }
+    .proc { fill: var(--box); stroke: var(--fg); stroke-width: 1.5; }
+    .group { fill: none; stroke: var(--fg); stroke-opacity: .35; stroke-dasharray: 5 4; }
+    .phys { fill: var(--phys); fill-opacity: .1; stroke: var(--phys); stroke-width: 1.2; }
+    .rend { fill: var(--rend); fill-opacity: .1; stroke: var(--rend); stroke-width: 1.2; }
+    .ros  { fill: var(--ros);  fill-opacity: .1; stroke: var(--ros);  stroke-width: 1.2; }
+    .ui   { fill: var(--ui);   fill-opacity: .1; stroke: var(--ui);   stroke-width: 1.2; }
+    .robot{ fill: var(--robot);fill-opacity: .08; stroke: var(--robot); stroke-width: 1.4; }
+    .py   { fill: var(--py);   fill-opacity: .1; stroke: var(--py);   stroke-width: 1.2; }
+    .line { fill: none; stroke: var(--fg); stroke-width: 1.4; }
+    .topic { fill: none; stroke: var(--ros); stroke-width: 1.6; stroke-dasharray: 6 4; }
+    .head { fill: var(--fg); }
+    .head-ros { fill: var(--ros); }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-ros" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+
+  <!-- ================= CONFIG ================= -->
+  <rect class="region" x="12" y="12" width="1256" height="286" rx="12"/>
+  <text class="region-label" x="28" y="33">CONFIG</text>
+  <text class="region-sub" x="88" y="33">the YAML you edit, resolved before anything runs</text>
+
+  <rect class="cfg" x="28" y="50" width="210" height="140" rx="8"/>
+  <text class="h" x="133" y="74">Scenario pack</text>
+  <text class="m" x="133" y="94">scenarios/&lt;name&gt;/</text>
+  <text class="m" x="133" y="109">scenario.yaml</text>
+  <text class="s" x="133" y="136">picks the packs →</text>
+  <text class="s" x="133" y="153">places the course</text>
+  <text class="s" x="133" y="170">sets run options</text>
+  <line class="line" x1="238" y1="120" x2="256" y2="120" marker-end="url(#a)"/>
+
+  <rect class="group" x="258" y="46" width="994" height="148" rx="10"/>
+  <text class="lbl" x="755" y="62">content/packs/ · selected by the scenario</text>
+
+  <rect class="cfg" x="270" y="70" width="186" height="116" rx="6"/>
+  <text class="h" x="363" y="90">Robot</text>
+  <text class="m" x="363" y="106">robots/&lt;id&gt;/robot.yaml</text>
+  <text class="s" x="363" y="132">mass, drag, thrusters</text>
+  <text class="s" x="363" y="149">sensors, cameras</text>
+  <text class="s" x="363" y="166">mechanisms, visuals</text>
+
+  <rect class="cfg" x="466" y="70" width="186" height="116" rx="6"/>
+  <text class="h" x="559" y="90">Pool</text>
+  <text class="m" x="559" y="106">pools/&lt;id&gt;/pool.yaml</text>
+  <text class="s" x="559" y="132">size, walls, floor</text>
+  <text class="s" x="559" y="149">water, lighting</text>
+
+  <rect class="cfg" x="662" y="70" width="186" height="116" rx="6"/>
+  <text class="h" x="755" y="90">Tasks</text>
+  <text class="m" x="755" y="106">tasks/&lt;set&gt;/tasks.yaml</text>
+  <text class="s" x="755" y="132">props, task geometry</text>
+  <text class="s" x="755" y="149">scoring rules</text>
+  <text class="s" x="755" y="166">scorecard UI</text>
+
+  <rect class="cfg" x="858" y="70" width="186" height="116" rx="6"/>
+  <text class="h" x="951" y="90">Bridge</text>
+  <text class="m" x="951" y="106">bridges/&lt;id&gt;/bridge.yaml</text>
+  <text class="s" x="951" y="132">ROS topics, services</text>
+  <text class="s" x="951" y="149">TF frames</text>
+  <text class="s" x="951" y="166">message field mapping</text>
+
+  <rect class="cfg" x="1054" y="70" width="186" height="116" rx="6"/>
+  <text class="h" x="1147" y="90">Equipment</text>
+  <text class="m" x="1147" y="106">equipment/&lt;team&gt;/</text>
+  <text class="s" x="1147" y="132">optional team gear</text>
+  <text class="s" x="1147" y="149">the scenario places</text>
+  <text class="s" x="1147" y="166">(UWRT: AprilTag board)</text>
+
+  <line class="line" x1="133" y1="190" x2="133" y2="210" marker-end="url(#a)"/>
+  <line class="line" x1="500" y1="194" x2="500" y2="210" marker-end="url(#a)"/>
+
+  <rect class="py" x="28" y="212" width="600" height="70" rx="8"/>
+  <text class="mb" x="328" y="241">python -m nereus.packs resolve</text>
+  <text class="s" x="328" y="263">schema + cross-reference checks, file hashes, body-axis frames, course placement</text>
+  <line class="line" x1="628" y1="247" x2="678" y2="247" marker-end="url(#a)"/>
+  <text class="lbl" x="653" y="239">writes</text>
+
+  <rect class="doc" x="680" y="212" width="240" height="70" rx="8"/>
+  <text class="mb" x="800" y="241">resolved.json</text>
+  <text class="s" x="800" y="263">one validated, reproducible document</text>
+
+  <rect class="cfg" x="960" y="212" width="292" height="70" rx="8"/>
+  <text class="h" x="1106" y="236">Viewer config</text>
+  <text class="m" x="1106" y="254">content/viewer/*_host.yaml</text>
+  <text class="s" x="1106" y="272">window, topics, panel layout, status lights</text>
+
+  <!-- config -> runtime -->
+  <polyline class="line" points="740,282 740,316 200,316 200,374" marker-end="url(#a)"/>
+  <text class="lbl" x="470" y="310">nereus-sim resolved.json</text>
+  <line class="line" x1="905" y1="282" x2="905" y2="382" marker-end="url(#a)"/>
+  <text class="lbl" x="912" y="306" style="text-anchor:start">--scenario</text>
+  <line class="line" x1="1180" y1="282" x2="1180" y2="382" marker-end="url(#a)"/>
+  <path class="line" d="M1000,282 V328 H911 A6,6 0 0 0 899,328 H773 V398" marker-end="url(#a)"/>
+
+  <!-- ================= SIMULATION ================= -->
+  <rect class="region" x="12" y="340" width="850" height="316" rx="12"/>
+  <text class="region-label" x="28" y="361">SIMULATION</text>
+  <text class="region-sub" x="124" y="361">sim.launch.py</text>
+
+  <rect class="proc" x="28" y="376" width="344" height="234" rx="10"/>
+  <text class="mb" x="200" y="398">nereus-sim</text>
+
+  <rect class="phys" x="40" y="410" width="158" height="94" rx="6"/>
+  <text class="h" x="119" y="431">Session · physics</text>
+  <text class="s" x="119" y="448">dynamics, sensors,</text>
+  <text class="s" x="119" y="463">props, task runtime</text>
+  <text class="m reads" x="119" y="483">← robot, pool, tasks,</text>
+  <text class="m reads" x="119" y="497">equipment, run options</text>
+
+  <rect class="ros" x="204" y="410" width="158" height="94" rx="6"/>
+  <text class="h" x="283" y="431">ROS bridge</text>
+  <text class="s" x="283" y="448">topics, services, TF</text>
+  <text class="m reads" x="283" y="483">← bridge</text>
+
+  <rect class="phys" x="40" y="510" width="158" height="94" rx="6"/>
+  <text class="h" x="119" y="531">Rules</text>
+  <text class="s" x="119" y="548">competition scoring</text>
+  <text class="m reads" x="119" y="583">← tasks</text>
+
+  <rect class="rend" x="204" y="510" width="158" height="94" rx="6"/>
+  <text class="h" x="283" y="531">Cameras</text>
+  <text class="s" x="283" y="548">headless render</text>
+  <text class="m reads" x="283" y="568">← robot cameras,</text>
+  <text class="m reads" x="283" y="583">pool, course visuals</text>
+
+  <rect class="robot" x="468" y="420" width="160" height="150" rx="8"/>
+  <text class="h" x="548" y="446">Your robot stack</text>
+  <text class="s" x="548" y="466">runs unchanged</text>
+  <text class="s" x="548" y="498">UWRT: riptide</text>
+  <text class="s" x="548" y="514">controller, EKF,</text>
+  <text class="s" x="548" y="530">autonomy trees</text>
+
+  <line class="topic" x1="364" y1="440" x2="466" y2="440" marker-end="url(#r)"/>
+  <text class="lbl" x="415" y="432">sensors, images</text>
+  <line class="topic" x1="466" y1="472" x2="364" y2="472" marker-end="url(#r)"/>
+  <text class="lbl" x="415" y="488">thrust, actuators</text>
+
+  <rect class="proc" x="700" y="400" width="146" height="192" rx="10"/>
+  <text class="mb" x="773" y="422">nereus-viewer</text>
+  <text class="s" x="773" y="446">robot drawn at</text>
+  <text class="s" x="773" y="461">simulator truth</text>
+  <text class="s" x="773" y="484">all panels</text>
+  <text class="m reads" x="773" y="526">← scenario topic</text>
+  <text class="m reads" x="773" y="542">← viewer config</text>
+
+  <line class="topic" x1="630" y1="450" x2="698" y2="450" marker-end="url(#r)"/>
+  <text class="lbl" x="664" y="430">estimate,</text>
+  <text class="lbl" x="664" y="443">status</text>
+  <line class="topic" x1="698" y1="490" x2="630" y2="490" marker-end="url(#r)"/>
+  <text class="lbl" x="664" y="506">commands</text>
+
+  <polyline class="topic" points="290,612 290,632 773,632 773,594" marker-start="url(#r)" marker-end="url(#r)"/>
+  <text class="lbl" x="531" y="625">scenario document (latched), truth TF, props, images · run commands back</text>
+
+  <!-- ================= REAL ROBOT ================= -->
+  <rect class="region" x="878" y="340" width="390" height="316" rx="12"/>
+  <text class="region-label" x="894" y="361">REAL ROBOT</text>
+  <text class="region-sub" x="990" y="361">robot.launch.py · no simulator</text>
+
+  <rect class="proc" x="894" y="384" width="358" height="122" rx="10"/>
+  <text class="mb" x="1073" y="406">nereus-viewer</text>
+  <text class="s" x="1073" y="428">robot drawn at its EKF estimate, wall-clock time</text>
+  <text class="s" x="1073" y="445">simulator-only panels hidden</text>
+  <text class="s" x="1073" y="462">camera cards from the robot's topics</text>
+  <text class="m reads" x="1073" y="490">← resolved.json, viewer config</text>
+
+  <line class="topic" x1="1010" y1="508" x2="1010" y2="546" marker-end="url(#r)"/>
+  <text class="lbl" x="1002" y="531" style="text-anchor:end">commands</text>
+  <line class="topic" x1="1136" y1="546" x2="1136" y2="508" marker-end="url(#r)"/>
+  <text class="lbl" x="1144" y="531" style="text-anchor:start">estimate, images</text>
+
+  <rect class="robot" x="894" y="548" width="358" height="92" rx="8"/>
+  <text class="h" x="1073" y="573">Talos + your robot stack</text>
+  <text class="s" x="1073" y="593">real thrusters, IMU, DVL, depth, ZED cameras</text>
+  <text class="s" x="1073" y="610">riptide controller, EKF, autonomy</text>
+
+  <!-- ================= OFFLINE ================= -->
+  <rect class="region" x="12" y="674" width="1256" height="94" rx="12"/>
+  <text class="region-label" x="28" y="694">OFFLINE DATASETS</text>
+  <text class="region-sub" x="178" y="694">nereus-dataset · no ROS</text>
+
+  <rect class="cfg" x="28" y="704" width="230" height="54" rx="6"/>
+  <text class="h" x="143" y="725">Dataset + labels packs</text>
+  <text class="m" x="143" y="745">datasets/&lt;id&gt;/, labels/&lt;team&gt;/</text>
+  <line class="line" x1="258" y1="731" x2="298" y2="731" marker-end="url(#a)"/>
+
+  <rect class="py" x="300" y="704" width="200" height="54" rx="6"/>
+  <text class="mb" x="400" y="725">nereus-dataset plan</text>
+  <text class="s" x="400" y="745">samples camera views</text>
+  <line class="line" x1="500" y1="731" x2="538" y2="731" marker-end="url(#a)"/>
+
+  <rect class="doc" x="540" y="704" width="120" height="54" rx="6"/>
+  <text class="mb" x="600" y="736">job.json</text>
+  <line class="line" x1="660" y1="731" x2="698" y2="731" marker-end="url(#a)"/>
+
+  <rect class="rend" x="700" y="704" width="230" height="54" rx="6"/>
+  <text class="mb" x="815" y="725">nereus-dataset-render</text>
+  <text class="s" x="815" y="745">N headless shards</text>
+  <line class="line" x1="930" y1="731" x2="968" y2="731" marker-end="url(#a)"/>
+
+  <rect class="py" x="970" y="704" width="120" height="54" rx="6"/>
+  <text class="mb" x="1030" y="725">export</text>
+  <text class="s" x="1030" y="745">labels applied</text>
+  <line class="line" x1="1090" y1="731" x2="1128" y2="731" marker-end="url(#a)"/>
+
+  <rect class="doc" x="1130" y="704" width="122" height="54" rx="6"/>
+  <text class="h" x="1191" y="725">YOLO dataset</text>
+  <text class="s" x="1191" y="745">bbox, seg, OBB</text>
+
+  <!-- ================= KEY ================= -->
+  <rect class="phys" x="20" y="785" width="14" height="14" rx="3"/><text class="key" x="40" y="796">Physics</text>
+  <rect class="rend" x="109" y="785" width="14" height="14" rx="3"/><text class="key" x="129" y="796">Rendering</text>
+  <rect class="ros" x="213" y="785" width="14" height="14" rx="3"/><text class="key" x="233" y="796">ROS 2</text>
+  <rect class="robot" x="292" y="785" width="14" height="14" rx="3"/><text class="key" x="312" y="796">Your robot</text>
+  <rect class="py" x="402" y="785" width="14" height="14" rx="3"/><text class="key" x="422" y="796">Python tooling</text>
+  <rect class="cfg" x="531" y="785" width="14" height="14" rx="3"/><text class="key" x="551" y="796">Config file</text>
+  <rect class="doc" x="647" y="785" width="14" height="14" rx="3"/><text class="key" x="667" y="796">Process / generated file</text>
+  <line class="topic" x1="831" y1="792" x2="861" y2="792"/><text class="key" x="867" y="796">ROS 2 topic</text>
+  <line class="line" x1="961" y1="792" x2="989" y2="792" marker-end="url(#a)"/><text class="key" x="995" y="796">Loads / runs</text>
+</svg>
