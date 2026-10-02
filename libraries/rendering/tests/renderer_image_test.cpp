@@ -517,8 +517,11 @@ TEST_F(RendererImage, SupersamplingKeepsSmoothShadingWithinOneLevel) {
 }
 
 TEST_F(RendererImage, SupersampledDepthIsOneSampleNearestThePixelCentre) {
-    // Fronto-parallel quad: its depth is the same everywhere, so away from its edges 2x and 3x read exactly
-    // the single-sample depth.
+    // The copy writes the sampled depth back to a 24-bit buffer; drivers may round that by one step (llvmpipe
+    // does). Averaging across an edge would be off by thousands of steps.
+    constexpr float step = 1.f / 16777215;
+    // Fronto-parallel quad: its depth is the same everywhere, so away from its edges 2x and 3x read the
+    // single-sample depth.
     renderer->draw(scene(quad()), view(), plain(), 0, 48, 40);
     const auto single = renderer->captureImage(false, true);
     for (const int n : {2, 3, 4}) {
@@ -526,17 +529,17 @@ TEST_F(RendererImage, SupersampledDepthIsOneSampleNearestThePixelCentre) {
         const auto image = renderer->captureImage(false, true);
         ASSERT_EQ(image.width, 48);
         ASSERT_EQ(image.depth.size(), 48u * 40);
-        EXPECT_EQ(image.depth[index(image, 24, 20)], single.depth[index(single, 24, 20)]) << n;
+        EXPECT_NEAR(image.depth[index(image, 24, 20)], single.depth[index(single, 24, 20)], step) << n;
         EXPECT_LT(image.depth[index(image, 24, 20)], 1.f);
         EXPECT_EQ(image.depth[index(image, 1, 1)], 1.f) << "background";
-        // Every pixel, edges included, is exactly the opaque sample at block offset (n/2, n/2): one of the
-        // block's own values, never a blend of the two surfaces.
+        // Every pixel, edges included, is the opaque sample at block offset (n/2, n/2): one of the block's own
+        // values, never a blend of the two surfaces.
         const auto full = renderer->capture();
         ASSERT_EQ(full.scene_width, n * 48);
         for (int y = 0; y < 40; ++y)
             for (int x = 0; x < 48; ++x)
-                ASSERT_EQ(image.depth[index(image, x, y)],
-                          full.opaque_depth[std::size_t(n * y + n / 2) * full.scene_width + n * x + n / 2])
+                ASSERT_NEAR(image.depth[index(image, x, y)],
+                            full.opaque_depth[std::size_t(n * y + n / 2) * full.scene_width + n * x + n / 2], step)
                     << n << ": " << x << "," << y;
     }
     // A sloped plane's window depth is affine in the pixel position, so at 2x the sample a quarter pixel right
