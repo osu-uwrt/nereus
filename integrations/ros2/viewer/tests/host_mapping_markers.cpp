@@ -6,6 +6,8 @@
 
 using nereus::ros_viewer::host::hideMappingMarkers;
 using nereus::ros_viewer::host::loadMappingMarkers;
+using nereus::ros_viewer::host::mappingMarkerMatches;
+using nereus::ros_viewer::host::sortMappingMarkers;
 
 namespace {
 std::filesystem::path write(const std::string &text) {
@@ -74,6 +76,29 @@ TEST(MappingMarkers, HidesByFrameLabelOrMesh) {
     EXPECT_TRUE(hideMappingMarkers(markers, {"table_frame", "bin"}).empty()); // frame, label
     EXPECT_FALSE(markers[2].visible);
     EXPECT_FALSE(markers[3].visible);
+}
+
+TEST(MappingMarkers, SortsByLabelAndFiltersIgnoringCase) {
+    std::vector<nereus::ros_viewer::host::MappingMarker> markers(4);
+    const char *rows[][3] = {{"table", "table", "table_frame"},
+                             {"slalom_front", "slalom", "slalom_front_frame"},
+                             {"Gate", "gate", "gate_frame"},
+                             {"bin_vinyl1", "bin_vinyl", "bin_vinyl1_frame"}};
+    for (std::size_t i = 0; i < markers.size(); ++i) {
+        markers[i].label = rows[i][0];
+        markers[i].mesh = rows[i][1];
+        markers[i].frame = rows[i][2];
+    }
+    sortMappingMarkers(markers);
+    std::vector<std::string> order;
+    for (const auto &marker : markers)
+        order.push_back(marker.label);
+    EXPECT_EQ(order, (std::vector<std::string>{"bin_vinyl1", "Gate", "slalom_front", "table"}));
+    EXPECT_TRUE(mappingMarkerMatches(markers[1], ""));          // empty query: everything
+    EXPECT_TRUE(mappingMarkerMatches(markers[1], "GATE"));      // case
+    EXPECT_TRUE(mappingMarkerMatches(markers[0], "vinyl1_fr")); // frame
+    EXPECT_TRUE(mappingMarkerMatches(markers[2], "slalom"));    // mesh
+    EXPECT_FALSE(mappingMarkerMatches(markers[3], "gate"));
 }
 
 TEST(MappingMarkers, LocalMeshFolderOverridesThePackage) {

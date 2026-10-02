@@ -308,6 +308,7 @@ class App {
     std::vector<MappingMarker> mappingMarkers_;
     int courseMode_ = 0;
     bool mappingGhost_ = false;
+    char meshFilter_[64]{}; // Pool Viewer > Course > Meshes search
     bool courseFromMapping() const;
     // Simulator only (truth is the pose source): the localization estimate at its display time, drawn as a
     // translucent robot ghost; the control gizmo and Follow are anchored together on it or on the truth robot.
@@ -823,11 +824,12 @@ void App::loadMappingMarkers() {
             file = share(package) / file.lexically_relative(package);
         }
         mappingMarkers_ = host::loadMappingMarkers(file, share, cfg["meshes"].as<std::string>(""));
+        host::sortMappingMarkers(mappingMarkers_);
         const auto course = cfg["course"].as<std::string>("auto");
         courseMode_ = course == "pack" ? 1 : course == "mapping" ? 2 : 0;
         mappingGhost_ = cfg["ghost"].as<bool>(false);
-        for (const auto &name : host::hideMappingMarkers(mappingMarkers_, cfg["hidden"].as<std::vector<std::string>>(
-                                                                              std::vector<std::string>{})))
+        for (const auto &name : host::hideMappingMarkers(
+                 mappingMarkers_, cfg["hidden"].as<std::vector<std::string>>(std::vector<std::string>{})))
             std::cerr << "nereus-viewer: mapping_markers.hidden: no marker frame, label or mesh '" << name << "'\n";
     } catch (const std::exception &error) {
         std::cerr << "nereus-viewer: mapping course disabled: " << error.what() << '\n';
@@ -1612,28 +1614,39 @@ void App::drawDetectionSettings(bool includeEnable) {
 void App::drawMappingMeshList() {
     const auto shown = std::count_if(mappingMarkers_.begin(), mappingMarkers_.end(),
                                      [](const MappingMarker &marker) { return marker.visible; });
-    const std::string title = "Meshes (" + std::to_string(shown) + "/" + std::to_string(mappingMarkers_.size()) +
-                              " shown)###mapping_meshes";
+    const std::string title =
+        "Meshes (" + std::to_string(shown) + "/" + std::to_string(mappingMarkers_.size()) + " shown)###mapping_meshes";
     if (!ImGui::TreeNode(title.c_str()))
         return;
+    ImGui::SetNextItemWidth(260);
+    ImGui::InputTextWithHint("##mesh_filter", "Search label, mesh or frame", meshFilter_, sizeof(meshFilter_));
+    const bool filtering = meshFilter_[0] != 0;
+    // While filtering, the buttons act on the matches only.
     const auto setAll = [this](bool visible) {
         for (auto &marker : mappingMarkers_)
-            marker.visible = visible;
+            if (mappingMarkerMatches(marker, meshFilter_))
+                marker.visible = visible;
     };
-    if (ImGui::SmallButton("Show all"))
+    if (ImGui::SmallButton(filtering ? "Show matches" : "Show all"))
         setAll(true);
     ImGui::SameLine();
-    if (ImGui::SmallButton("Hide all"))
+    if (ImGui::SmallButton(filtering ? "Hide matches" : "Hide all"))
         setAll(false);
     const float rows = std::min<float>(float(mappingMarkers_.size()), 10.5f);
     ImGui::BeginChild("mapping_mesh_list", {260, rows * ImGui::GetFrameHeightWithSpacing()}, ImGuiChildFlags_Borders);
+    bool any = false;
     for (auto &marker : mappingMarkers_) {
+        if (!mappingMarkerMatches(marker, meshFilter_))
+            continue;
+        any = true;
         ImGui::PushID(marker.name.c_str());
         ImGui::Checkbox(marker.label.c_str(), &marker.visible);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Mesh %s at TF frame %s", marker.mesh.c_str(), marker.frame.c_str());
         ImGui::PopID();
     }
+    if (!any)
+        ImGui::TextDisabled("No mesh matches \"%s\"", meshFilter_);
     ImGui::EndChild();
     ImGui::TreePop();
 }

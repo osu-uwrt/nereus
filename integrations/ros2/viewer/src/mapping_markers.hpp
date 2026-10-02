@@ -2,6 +2,8 @@
 // one riptide_meshes model per mapping TF frame. The viewer reads the same file and draws each mesh at the
 // latest transform of its frame, so the course follows the mapping estimate exactly as RViz shows it.
 #pragma once
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <functional>
 #include <glm/gtc/matrix_transform.hpp>
@@ -65,6 +67,23 @@ loadMappingMarkers(const std::filesystem::path &file,
         out.push_back(std::move(marker));
     }
     return out;
+}
+inline std::string lowercase(std::string text) {
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    return text;
+}
+// Alphabetical by label, ignoring case (the operator's list; draw order does not matter).
+inline void sortMappingMarkers(std::vector<MappingMarker> &markers) {
+    std::stable_sort(markers.begin(), markers.end(), [](const MappingMarker &a, const MappingMarker &b) {
+        return lowercase(a.label) < lowercase(b.label);
+    });
+}
+// The list filter: `query` found in the label, mesh or frame, ignoring case; an empty query matches all.
+inline bool mappingMarkerMatches(const MappingMarker &marker, const std::string &query) {
+    const auto needle = lowercase(query);
+    return needle.empty() || lowercase(marker.label).find(needle) != std::string::npos ||
+           lowercase(marker.mesh).find(needle) != std::string::npos ||
+           lowercase(marker.frame).find(needle) != std::string::npos;
 }
 // Hides the markers each name matches: a frame, a label or a mesh (a mesh name hides every copy, e.g. all
 // slalom posts). Returns the names that matched nothing.
