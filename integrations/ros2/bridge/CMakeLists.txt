@@ -38,7 +38,7 @@ nereus_project_options(nereus-sim)
 if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
-  # Resolved Talos scenario written by the session library's fixture test (session_resolve_talos).
+  # The session library's frozen resolved Talos scenario (configured from its tests/fixtures).
   set(nereus_resolved_talos ${CMAKE_BINARY_DIR}/session_fixtures/talos_uwrt_resolved.json)
   file(GLOB nereus_bridge_tests CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/*_test.cpp)
   foreach(test_source ${nereus_bridge_tests})
@@ -48,7 +48,6 @@ if(BUILD_TESTING)
       NEREUS_SOURCE_DIR="${PROJECT_SOURCE_DIR}" NEREUS_RESOLVED_TALOS="${nereus_resolved_talos}")
     target_link_libraries(bridge_${test_name} PRIVATE nereus_bridge_core nereus_rules GTest::gtest_main)
     nereus_project_options(bridge_${test_name})
-    gtest_discover_tests(bridge_${test_name} DISCOVERY_MODE PRE_TEST
-      PROPERTIES FIXTURES_REQUIRED session_resolved)
+    gtest_discover_tests(bridge_${test_name} DISCOVERY_MODE PRE_TEST)
   endforeach()
 endif()

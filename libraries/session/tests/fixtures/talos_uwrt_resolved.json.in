@@ -1,0 +1,6239 @@
+{
+ "format": "nereus.resolved_scenario",
+ "version": 1,
+ "scenario_file": "scenario.yaml",
+ "scenario": {
+  "kind": "scenario",
+  "id": "talos_uwrt_repair_2026",
+  "description": "Talos and the UWRT stack on the RoboSub 2026 course.",
+  "robot": "../../robots/talos",
+  "pool": "../../pools/robosub_2026",
+  "tasks": "../../tasks/robosub_2026",
+  "bridge": "../../bridges/uwrt_talos",
+  "equipment": "../../equipment/uwrt",
+  "seed": 7,
+  "timestep_s": 0.002,
+  "sensor_noise": true,
+  "world_frame": "map",
+  "pool_placement": {
+   "position_m": [
+    0.0,
+    19.5136,
+    0.0
+   ],
+   "yaw_deg": -90.0
+  },
+  "equipment_placements": [
+   {
+    "item": "calibration_board",
+    "relative_to": "pool",
+    "position_m": [
+     19.5136,
+     0.0,
+     -0.3394
+    ],
+    "yaw_deg": 90.0
+   }
+  ],
+  "task_placements": [
+   {
+    "task": "gate",
+    "position_m": [
+     4.810167,
+     -2.217889,
+     -0.75
+    ],
+    "yaw_deg": 170.645069
+   },
+   {
+    "task": "torpedo",
+    "position_m": [
+     18.35222,
+     2.480545,
+     -1.372
+    ],
+    "yaw_deg": -169.835651
+   },
+   {
+    "task": "slalom",
+    "position_m": [
+     8.332382,
+     0.560795,
+     -1.3
+    ],
+    "yaw_deg": -152.691724
+   },
+   {
+    "task": "bins",
+    "position_m": [
+     13.408019,
+     12.324713,
+     -2.13
+    ],
+    "yaw_deg": -145.070841
+   },
+   {
+    "task": "surface",
+    "position_m": [
+     19.35704644774681,
+     9.087985574042571,
+     -0.3048
+    ],
+    "yaw_deg": -45.273547
+   },
+   {
+    "task": "table",
+    "position_m": [
+     19.290761,
+     9.007,
+     -1.54
+    ],
+    "yaw_deg": 89.039804
+   }
+  ],
+  "contacts": {
+   "model": "box_scene",
+   "restitution": 0.1,
+   "friction": 0.4
+  },
+  "initial": {
+   "frame": "com",
+   "position_m": [
+    0,
+    0,
+    -1
+   ],
+   "orientation_wxyz": [
+    1,
+    0,
+    0,
+    0
+   ],
+   "linear_velocity_m_s": [
+    0,
+    0,
+    0
+   ],
+   "angular_velocity_rad_s": [
+    0,
+    0,
+    0
+   ]
+  },
+  "run": {
+   "auto_start": false,
+   "options": {
+    "role": "repair",
+    "heading_coin": true,
+    "role_coin": true,
+    "pinger_task": "none",
+    "pinger_random": false
+   }
+  },
+  "timestep_ns": 2000000
+ },
+ "robot": {
+  "kind": "robot",
+  "id": "talos",
+  "description": "UWRT Talos AUV, physical plant + navigation sensors + cameras + mechanisms.",
+  "assets": [
+   {
+    "id": "body_mesh",
+    "path": "assets/visual/Talos3_body.glb"
+   },
+   {
+    "id": "rotor_VUS",
+    "path": "assets/visual/rotors/VUS.glb"
+   },
+   {
+    "id": "rotor_VUP",
+    "path": "assets/visual/rotors/VUP.glb"
+   },
+   {
+    "id": "rotor_HUS",
+    "path": "assets/visual/rotors/HUS.glb"
+   },
+   {
+    "id": "rotor_HUP",
+    "path": "assets/visual/rotors/HUP.glb"
+   },
+   {
+    "id": "rotor_HLS",
+    "path": "assets/visual/rotors/HLS.glb"
+   },
+   {
+    "id": "rotor_HLP",
+    "path": "assets/visual/rotors/HLP.glb"
+   },
+   {
+    "id": "rotor_VLS",
+    "path": "assets/visual/rotors/VLS.glb"
+   },
+   {
+    "id": "rotor_VLP",
+    "path": "assets/visual/rotors/VLP.glb"
+   },
+   {
+    "id": "claw_static_mesh",
+    "path": "assets/visual/claw/assembly_static.glb"
+   },
+   {
+    "id": "claw_left_mesh",
+    "path": "assets/visual/claw/assembly_left.glb"
+   },
+   {
+    "id": "claw_right_mesh",
+    "path": "assets/visual/claw/assembly_right.glb"
+   },
+   {
+    "id": "claw_left_pad_mesh",
+    "path": "assets/visual/claw/gripper.glb"
+   },
+   {
+    "id": "claw_right_pad_mesh",
+    "path": "assets/visual/claw/gripper_right.glb"
+   },
+   {
+    "id": "launcher_mesh",
+    "path": "assets/visual/payloads/launcher.glb"
+   },
+   {
+    "id": "projectile_mesh",
+    "path": "assets/visual/payloads/projectile.glb"
+   },
+   {
+    "id": "claw_pad_left",
+    "path": "assets/collision/claw_pad.obj"
+   },
+   {
+    "id": "claw_pad_right",
+    "path": "assets/collision/claw_pad_right.obj"
+   },
+   {
+    "id": "robot_magnet_mesh",
+    "path": "assets/visual/magnet/robot_magnet.glb"
+   }
+  ],
+  "body": {
+   "type": "marine_6dof",
+   "parameters": {
+    "mass_kg": 31.998,
+    "inertia_matrix": [
+     [
+      1.6315,
+      -0.0599,
+      -0.033
+     ],
+     [
+      -0.0599,
+      0.7341,
+      0.0427
+     ],
+     [
+      -0.033,
+      0.0427,
+      1.6332
+     ]
+    ],
+    "added_mass_matrix": [
+     [
+      33.76441573413407,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      7.138775954138664,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      14.375071388298007,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.062395054069073454,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.060232298657156735,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.30409901675615597
+     ]
+    ],
+    "linear_damping_matrix": [
+     [
+      34.945580177147725,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      27.992277245879045,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      40.36692194478054,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      9.910927173896203,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      3.0045521578787238,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      3.8668316289236078
+     ]
+    ],
+    "quadratic_damping": [
+     128.93885061269464,
+     96.24090039531974,
+     50.33885380673263,
+     2.7724251278046257,
+     1.4991943770654037,
+     5.138467615330231
+    ],
+    "damping_center_m": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "displaced_volume_m3": 0.0323621667640687,
+    "buoyancy_center_m": [
+     0.00775,
+     0.0,
+     0.01
+    ],
+    "buoyancy_radii_m": [
+     0.175,
+     0.415,
+     0.275
+    ],
+    "command_timeout_s": 0.5
+   }
+  },
+  "reference_frame": "base_link",
+  "frames": {
+   "root": "com",
+   "transforms": [
+    {
+     "parent": "origin",
+     "child": "base_link",
+     "position_m": [
+      -0.14,
+      0.03,
+      -0.09
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "parent": "com",
+     "child": "origin",
+     "position_m": [
+      0.157,
+      -0.04,
+      0.048
+     ],
+     "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "thruster_VUS",
+     "position_m": [
+      -0.134,
+      -0.369,
+      0.242
+     ],
+     "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "thruster_VUP",
+     "position_m": [
+      -0.134,
+      0.438,
+      0.242
+     ],
+     "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "thruster_HUS",
+     "position_m": [
+      -0.14,
+      -0.26,
+      0.141
+     ],
+     "orientation_wxyz": [
+      0.6532688037723191,
+      0.2704955304628238,
+      -0.27044044338085915,
+      0.6534018706749187
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "thruster_HUP",
+     "position_m": [
+      -0.14,
+      0.328,
+      0.141
+     ],
+     "orientation_wxyz": [
+      0.6532688037723191,
+      -0.2704955304628238,
+      -0.27044044338085915,
+      -0.6534018706749187
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "thruster_HLS",
+     "position_m": [
+      -0.14,
+      -0.26,
+      -0.141
+     ],
+     "orientation_wxyz": [
+      0.6532688037723191,
+      -0.2704955304628238,
+      0.27044044338085915,
+      0.6534018706749187
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "thruster_HLP",
+     "position_m": [
+      -0.14,
+      0.328,
+      -0.141
+     ],
+     "orientation_wxyz": [
+      0.6532688037723191,
+      0.2704955304628238,
+      0.27044044338085915,
+      -0.6534018706749187
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "thruster_VLS",
+     "position_m": [
+      -0.134,
+      -0.372,
+      -0.244
+     ],
+     "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "thruster_VLP",
+     "position_m": [
+      -0.134,
+      0.44,
+      -0.244
+     ],
+     "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "imu_mount",
+     "position_m": [
+      -0.25,
+      -0.1492,
+      0.0222
+     ],
+     "orientation_wxyz": [
+      0.0002095447747113296,
+      0.7071408059844668,
+      -0.7070726926576023,
+      -0.00020952459090689933
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "dvl_mount",
+     "position_m": [
+      -0.119,
+      0.034,
+      -0.25
+     ],
+     "orientation_wxyz": [
+      0.9238795446418628,
+      0.0,
+      0.0,
+      -0.3826834030792871
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "fog_mount",
+     "position_m": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "depth_mount",
+     "position_m": [
+      -0.305,
+      -0.125,
+      0.045
+     ],
+     "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "poker_mount",
+     "position_m": [
+      0.2286,
+      0.0127,
+      -0.17145
+     ],
+     "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "torpedoes_mount",
+     "position_m": [
+      0.048,
+      0.18200625,
+      -0.1324
+     ],
+     "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "droppers_mount",
+     "position_m": [
+      0.0,
+      0.17200625,
+      -0.1501
+     ],
+     "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "claw_mount",
+     "position_m": [
+      0.19,
+      0.034,
+      -0.3712
+     ],
+     "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "magnet_mount",
+     "position_m": [
+      -0.2946,
+      0.0475,
+      -0.391
+     ],
+     "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "hitch_mount",
+     "position_m": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "orientation_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "ffc_mount",
+     "position_m": [
+      -0.0195,
+      -0.0889,
+      0.02
+     ],
+     "orientation_wxyz": [
+      0.9996750202077826,
+      -0.004998416754581291,
+      0.024997083447914372,
+      0.00012498645879513106
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "dfc_mount",
+     "position_m": [
+      -0.24347,
+      -0.065568,
+      -0.15943
+     ],
+     "orientation_wxyz": [
+      0.5199427952056352,
+      0.5095974583371051,
+      0.48959879164377196,
+      -0.4798572114609425
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "claw_pinch",
+     "position_m": [
+      0.1845620038521386,
+      0.034362,
+      -0.4164364383477267
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "hydrophone_port",
+     "position_m": [
+      -0.305,
+      0.325,
+      -0.075
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "parent": "origin",
+     "child": "hydrophone_starboard",
+     "position_m": [
+      -0.315,
+      -0.325,
+      -0.075
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "parent": "ffc_mount",
+     "child": "ffc_left_optical",
+     "position_m": [
+      0,
+      0,
+      0
+     ],
+     "orientation_wxyz": [
+      0.5,
+      -0.5,
+      0.5,
+      -0.5
+     ]
+    },
+    {
+     "parent": "ffc_left_optical",
+     "child": "ffc_right_optical",
+     "position_m": [
+      0.04975591649077412,
+      0,
+      0
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "parent": "dfc_mount",
+     "child": "dfc_left_optical",
+     "position_m": [
+      0,
+      0,
+      0
+     ],
+     "orientation_wxyz": [
+      0.5,
+      -0.5,
+      0.5,
+      -0.5
+     ]
+    },
+    {
+     "parent": "dfc_left_optical",
+     "child": "dfc_right_optical",
+     "position_m": [
+      0.05030758651145167,
+      0,
+      0
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    }
+   ]
+  },
+  "visuals": [
+   {
+    "asset": "body_mesh",
+    "frame": "origin",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "rotor_VUS",
+    "frame": "origin",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "rotor_VUP",
+    "frame": "origin",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "rotor_HUS",
+    "frame": "origin",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "rotor_HUP",
+    "frame": "origin",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "rotor_HLS",
+    "frame": "origin",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "rotor_HLP",
+    "frame": "origin",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "rotor_VLS",
+    "frame": "origin",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "rotor_VLP",
+    "frame": "origin",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "claw_static_mesh",
+    "frame": "claw_pinch",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "claw_left_mesh",
+    "frame": "claw_pinch",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "claw_right_mesh",
+    "frame": "claw_pinch",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "claw_left_pad_mesh",
+    "frame": "claw_pinch",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "claw_right_pad_mesh",
+    "frame": "claw_pinch",
+    "position_m": [
+     0,
+     0,
+     0
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "asset": "robot_magnet_mesh",
+    "frame": "magnet_mount",
+    "position_m": [
+     0,
+     0,
+     0.05
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   }
+  ],
+  "collision_boxes": [
+   {
+    "id": "hull_0",
+    "size_m": [
+     0.35,
+     0.83,
+     0.55
+    ],
+    "center_m": [
+     0.0,
+     0.0,
+     0.07
+    ],
+    "orientation_wxyz": [
+     1.0,
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   {
+    "id": "hull_1",
+    "size_m": [
+     0.2,
+     0.05,
+     0.05
+    ],
+    "center_m": [
+     0.22999999999999998,
+     -0.2,
+     -0.09999999999999999
+    ],
+    "orientation_wxyz": [
+     1.0,
+     0.0,
+     0.0,
+     0.0
+    ]
+   }
+  ],
+  "thrusters": [
+   {
+    "id": "VUS",
+    "type": "lagged_force",
+    "parameters": {
+     "delay_s": 0.1,
+     "rise_time_s": 0.08,
+     "fall_time_s": 0.06,
+     "slew_rate_n_s": 300.0,
+     "forward_limit_n": 28.0,
+     "reverse_limit_n": 28.0,
+     "deadband_n": 0.0,
+     "forward_scale": 1.0,
+     "reverse_scale": 1.0,
+     "efficiency": 1.0,
+     "propeller_radius_m": 0.05
+    },
+    "position_m": [
+     0.022999999999999993,
+     -0.409,
+     0.29
+    ],
+    "direction": [
+     1.0,
+     0.0,
+     0.0
+    ]
+   },
+   {
+    "id": "VUP",
+    "type": "lagged_force",
+    "parameters": {
+     "delay_s": 0.1,
+     "rise_time_s": 0.08,
+     "fall_time_s": 0.06,
+     "slew_rate_n_s": 300.0,
+     "forward_limit_n": 28.0,
+     "reverse_limit_n": 28.0,
+     "deadband_n": 0.0,
+     "forward_scale": 1.0,
+     "reverse_scale": 1.0,
+     "efficiency": 1.0,
+     "propeller_radius_m": 0.05
+    },
+    "position_m": [
+     0.022999999999999993,
+     0.398,
+     0.29
+    ],
+    "direction": [
+     1.0,
+     0.0,
+     0.0
+    ]
+   },
+   {
+    "id": "HUS",
+    "type": "lagged_force",
+    "parameters": {
+     "delay_s": 0.1,
+     "rise_time_s": 0.08,
+     "fall_time_s": 0.06,
+     "slew_rate_n_s": 300.0,
+     "forward_limit_n": 28.0,
+     "reverse_limit_n": 28.0,
+     "deadband_n": 0.0,
+     "forward_scale": 1.0,
+     "reverse_scale": 1.0,
+     "efficiency": 1.0,
+     "propeller_radius_m": 0.05
+    },
+    "position_m": [
+     0.016999999999999987,
+     -0.3,
+     0.189
+    ],
+    "direction": [
+     -0.00014407603503774347,
+     0.7073882544949859,
+     0.7068251811053661
+    ]
+   },
+   {
+    "id": "HUP",
+    "type": "lagged_force",
+    "parameters": {
+     "delay_s": 0.1,
+     "rise_time_s": 0.08,
+     "fall_time_s": 0.06,
+     "slew_rate_n_s": 300.0,
+     "forward_limit_n": 28.0,
+     "reverse_limit_n": 28.0,
+     "deadband_n": 0.0,
+     "forward_scale": 1.0,
+     "reverse_scale": 1.0,
+     "efficiency": 1.0,
+     "propeller_radius_m": 0.05
+    },
+    "position_m": [
+     0.016999999999999987,
+     0.28800000000000003,
+     0.189
+    ],
+    "direction": [
+     -0.00014407603503774347,
+     -0.7073882544949859,
+     0.7068251811053661
+    ]
+   },
+   {
+    "id": "HLS",
+    "type": "lagged_force",
+    "parameters": {
+     "delay_s": 0.1,
+     "rise_time_s": 0.08,
+     "fall_time_s": 0.06,
+     "slew_rate_n_s": 300.0,
+     "forward_limit_n": 28.0,
+     "reverse_limit_n": 28.0,
+     "deadband_n": 0.0,
+     "forward_scale": 1.0,
+     "reverse_scale": 1.0,
+     "efficiency": 1.0,
+     "propeller_radius_m": 0.05
+    },
+    "position_m": [
+     0.016999999999999987,
+     -0.3,
+     -0.09299999999999999
+    ],
+    "direction": [
+     -0.00014407603503774347,
+     0.7073882544949859,
+     -0.7068251811053661
+    ]
+   },
+   {
+    "id": "HLP",
+    "type": "lagged_force",
+    "parameters": {
+     "delay_s": 0.1,
+     "rise_time_s": 0.08,
+     "fall_time_s": 0.06,
+     "slew_rate_n_s": 300.0,
+     "forward_limit_n": 28.0,
+     "reverse_limit_n": 28.0,
+     "deadband_n": 0.0,
+     "forward_scale": 1.0,
+     "reverse_scale": 1.0,
+     "efficiency": 1.0,
+     "propeller_radius_m": 0.05
+    },
+    "position_m": [
+     0.016999999999999987,
+     0.28800000000000003,
+     -0.09299999999999999
+    ],
+    "direction": [
+     -0.00014407603503774347,
+     -0.7073882544949859,
+     -0.7068251811053661
+    ]
+   },
+   {
+    "id": "VLS",
+    "type": "lagged_force",
+    "parameters": {
+     "delay_s": 0.1,
+     "rise_time_s": 0.08,
+     "fall_time_s": 0.06,
+     "slew_rate_n_s": 300.0,
+     "forward_limit_n": 28.0,
+     "reverse_limit_n": 28.0,
+     "deadband_n": 0.0,
+     "forward_scale": 1.0,
+     "reverse_scale": 1.0,
+     "efficiency": 1.0,
+     "propeller_radius_m": 0.05
+    },
+    "position_m": [
+     0.022999999999999993,
+     -0.412,
+     -0.196
+    ],
+    "direction": [
+     1.0,
+     0.0,
+     0.0
+    ]
+   },
+   {
+    "id": "VLP",
+    "type": "lagged_force",
+    "parameters": {
+     "delay_s": 0.1,
+     "rise_time_s": 0.08,
+     "fall_time_s": 0.06,
+     "slew_rate_n_s": 300.0,
+     "forward_limit_n": 28.0,
+     "reverse_limit_n": 28.0,
+     "deadband_n": 0.0,
+     "forward_scale": 1.0,
+     "reverse_scale": 1.0,
+     "efficiency": 1.0,
+     "propeller_radius_m": 0.05
+    },
+    "position_m": [
+     0.022999999999999993,
+     0.4,
+     -0.196
+    ],
+    "direction": [
+     1.0,
+     0.0,
+     0.0
+    ]
+   }
+  ],
+  "safety": {
+   "initially_killed": true,
+   "kill_stops_thrusters": true,
+   "commands_while_killed": "zero_force",
+   "kill_disarms_mechanisms": true,
+   "arming": {
+    "initially_armed": false,
+    "arm_rejected_while_killed": true,
+    "applies_to": [
+     "torpedo_launcher",
+     "dropper",
+     "claw"
+    ]
+   }
+  },
+  "sensors": [
+   {
+    "id": "imu",
+    "type": "ahrs",
+    "frame": "imu_mount",
+    "mount_frame": "imu_mount",
+    "rate_hz": 50,
+    "parameters": {
+     "inertial": {
+      "acceleration_noise": {
+       "white_stddev": [
+        0.016,
+        0.016,
+        0.016
+       ]
+      },
+      "gyro_noise": {
+       "white_stddev": [
+        0.00017453292519943296,
+        0.00017453292519943296,
+        0.00017453292519943296
+       ]
+      },
+      "reporting": {
+       "gravity_magnitude_m_s2": 9.755455,
+       "force_variance": [
+        0.01,
+        0.01,
+        0.01
+       ],
+       "angular_variance": [
+        0.01,
+        0.01,
+        0.01
+       ]
+      }
+     },
+     "attitude": {
+      "angle_stddev_rad": 0.008726646259971648,
+      "heading_drift_rad_s": 0.0,
+      "reported_variance": [
+       5e-05,
+       1e-05,
+       0.01
+      ]
+     }
+    },
+    "period_ns": 20000000,
+    "latency_ns": 0
+   },
+   {
+    "id": "fog",
+    "type": "fog",
+    "frame": "fog_mount",
+    "mount_frame": "fog_mount",
+    "rate_hz": 500,
+    "parameters": {
+     "axes": [
+      [
+       0,
+       0,
+       1
+      ]
+     ],
+     "gyro_noise": {
+      "white_stddev": [
+       0,
+       0,
+       0.00017453292519943296
+      ]
+     },
+     "reported_variance": [
+      0,
+      0,
+      3.0461741978670866e-08
+     ]
+    },
+    "period_ns": 2000000,
+    "latency_ns": 0
+   },
+   {
+    "id": "dvl",
+    "type": "reference_velocity",
+    "frame": "dvl_mount",
+    "mount_frame": "dvl_mount",
+    "rate_hz": 8,
+    "parameters": {
+     "reference_velocity_world_m_s": [
+      0,
+      0,
+      0
+     ],
+     "velocity_noise": {
+      "white_stddev": [
+       0.001,
+       0.001,
+       0.001
+      ]
+     },
+     "reported_variance": [
+      1e-06,
+      1e-06,
+      1e-06
+     ]
+    },
+    "period_ns": 125000000,
+    "latency_ns": 0
+   },
+   {
+    "id": "depth",
+    "type": "reference_altitude",
+    "frame": "world",
+    "mount_frame": "depth_mount",
+    "rate_hz": 20,
+    "parameters": {
+     "noise": {
+      "white_stddev": 0.01
+     },
+     "reported_variance": 0.0001,
+     "target_position_body_m": [
+      0.016999999999999987,
+      -0.010000000000000002,
+      -0.041999999999999996
+     ]
+    },
+    "period_ns": 50000000,
+    "latency_ns": 0
+   },
+   {
+    "id": "ffc",
+    "type": "stereo_camera",
+    "frame": "ffc_left_optical",
+    "mount_frame": "ffc_mount",
+    "enabled": true,
+    "rate_hz": 15,
+    "parameters": {
+     "baseline_m": 0.04975591649077412,
+     "right_frame": "ffc_right_optical",
+     "resolution_px": [
+      1920,
+      1200
+     ],
+     "intrinsics_left": {
+      "fx": 1863.9341697853888,
+      "fy": 1863.9341697853888,
+      "cx": 955.8471374511719,
+      "cy": 584.7962646484375
+     },
+     "intrinsics_right": {
+      "fx": 1863.9341697853888,
+      "fy": 1863.9341697853888,
+      "cx": 955.8471374511719,
+      "cy": 584.7962646484375
+     },
+     "outputs": [
+      "rgb_left",
+      "depth_left",
+      "camera_info",
+      "point_cloud"
+     ],
+     "depth": {
+      "min_range_m": 0.15,
+      "max_range_m": 4.0,
+      "noise": {
+       "base_sigma_m": 0.002,
+       "range_coefficient": 0.0015,
+       "range_exponent": 2.0,
+       "bias_m": 0.0,
+       "dropout": 0.005,
+       "range_dropout": 0.1,
+       "edge_dropout": 0.2,
+       "outliers": 0.002,
+       "correlation": 0.5,
+       "patch_size_px": 8
+      }
+     }
+    },
+    "period_ns": 66666667,
+    "latency_ns": 0
+   },
+   {
+    "id": "dfc",
+    "type": "stereo_camera",
+    "frame": "dfc_left_optical",
+    "mount_frame": "dfc_mount",
+    "enabled": true,
+    "rate_hz": 15,
+    "parameters": {
+     "baseline_m": 0.05030758651145167,
+     "right_frame": "dfc_right_optical",
+     "resolution_px": [
+      1920,
+      1200
+     ],
+     "intrinsics_left": {
+      "fx": 1857.5388723099845,
+      "fy": 1857.5388723099845,
+      "cx": 974.8830642700195,
+      "cy": 604.2220611572266
+     },
+     "intrinsics_right": {
+      "fx": 1857.5388723099845,
+      "fy": 1857.5388723099845,
+      "cx": 974.8830642700195,
+      "cy": 604.2220611572266
+     },
+     "outputs": [
+      "rgb_left",
+      "depth_left",
+      "camera_info",
+      "point_cloud"
+     ],
+     "depth": {
+      "min_range_m": 0.15,
+      "max_range_m": 4.0,
+      "noise": {
+       "base_sigma_m": 0.002,
+       "range_coefficient": 0.0015,
+       "range_exponent": 2.0,
+       "bias_m": 0.0,
+       "dropout": 0.005,
+       "range_dropout": 0.1,
+       "edge_dropout": 0.2,
+       "outliers": 0.002,
+       "correlation": 0.5,
+       "patch_size_px": 8
+      }
+     }
+    },
+    "period_ns": 66666667,
+    "latency_ns": 0
+   }
+  ],
+  "mechanisms": [
+   {
+    "id": "torpedo_launcher",
+    "type": "launcher",
+    "frame": "torpedoes_mount",
+    "parameters": {
+     "slots": [
+      {
+       "id": "slot_0",
+       "position_m": [
+        0.01594921,
+        -0.02560642,
+        -0.0218555
+       ],
+       "orientation_wxyz": [
+        1,
+        0,
+        0,
+        0
+       ]
+      },
+      {
+       "id": "slot_1",
+       "position_m": [
+        0.01594921,
+        0.00939685,
+        -0.0218555
+       ],
+       "orientation_wxyz": [
+        1,
+        0,
+        0,
+        0
+       ]
+      }
+     ],
+     "projectile": {
+      "model": "finned_rigid_body",
+      "length_m": 0.08299993,
+      "radius_m": 0.013,
+      "mass_kg": 0.01222,
+      "displaced_volume_m3": 1.2e-05,
+      "added_mass_kg": 0.003,
+      "drag_axial": 0.015,
+      "drag_lateral": 0.35,
+      "center_of_mass_m": 0.02,
+      "center_of_buoyancy_m": -0.02,
+      "center_of_drag_m": -0.025,
+      "angular_damping_n_m_s": 0.01,
+      "neutral_buoyancy": false,
+      "max_age_s": 30
+     },
+     "launch": {
+      "spring_energy_j": 0.047
+     },
+     "cooldown_s": 0.5,
+     "cooldown_group": "payload_release",
+     "capacity": 2
+    }
+   },
+   {
+    "id": "dropper",
+    "type": "dropper",
+    "frame": "droppers_mount",
+    "parameters": {
+     "slots": [
+      {
+       "id": "slot_0",
+       "position_m": [
+        -0.04337956,
+        -0.01560642,
+        -0.12296563
+       ],
+       "orientation_wxyz": [
+        0.7071067811865476,
+        0,
+        0.7071067811865476,
+        0
+       ]
+      },
+      {
+       "id": "slot_1",
+       "position_m": [
+        -0.04337956,
+        0.01939685,
+        -0.12296563
+       ],
+       "orientation_wxyz": [
+        0.7071067811865476,
+        0,
+        0.7071067811865476,
+        0
+       ]
+      }
+     ],
+     "projectile": {
+      "model": "fixed_axis_body",
+      "length_m": 0.08299993,
+      "radius_m": 0.013,
+      "mass_kg": 0.01488,
+      "displaced_volume_m3": 1.2e-05,
+      "added_mass_kg": 0.003,
+      "drag_axial": 0.015,
+      "drag_lateral": 0.35,
+      "neutral_buoyancy": false,
+      "max_age_s": 30
+     },
+     "launch": {
+      "spring_energy_j": 0.047
+     },
+     "cooldown_s": 0.5,
+     "cooldown_group": "payload_release",
+     "capacity": 2
+    }
+   },
+   {
+    "id": "claw",
+    "type": "claw",
+    "frame": "claw_pinch",
+    "parameters": {
+     "min_gap_m": 0.0012,
+     "max_gap_m": 0.14,
+     "jaw_speed_m_s": 0.033,
+     "completion_tolerance_m": 0.002,
+     "hold_force_n": 12.0,
+     "friction": 1.2,
+     "contact_margin_m": 0.001,
+     "grasp_dwell_s": 0.04,
+     "slip_distance_m": 0.025,
+     "pads": {
+      "left": "claw_pad_left",
+      "right": "claw_pad_right"
+     },
+     "timed_command": "signed_duration",
+     "initial_state": "closed"
+    }
+   },
+   {
+    "id": "magnet",
+    "type": "magnet",
+    "frame": "magnet_mount",
+    "parameters": {
+     "tip_position_m": [
+      0,
+      0,
+      0.05
+     ],
+     "actuated": false
+    }
+   }
+  ],
+  "scoring_envelope": {
+   "collision_boxes": [
+    "hull_0",
+    "hull_1"
+   ],
+   "points": [
+    {
+     "id": "magnet_tip",
+     "frame": "magnet_mount",
+     "position_m": [
+      0,
+      0,
+      0.05
+     ]
+    }
+   ]
+  }
+ },
+ "pool": {
+  "kind": "pool",
+  "id": "robosub_2026",
+  "description": "RoboSub 2026 competition pool.",
+  "type": "rectangular_pool",
+  "parameters": {
+   "length_m": 50.0,
+   "width_m": 22.86,
+   "depth_m": 2.1336,
+   "deck_height_m": 0.305288888,
+   "water_level_m": 0.0,
+   "water_density_kg_m3": 998.2,
+   "surface_pressure_pa": 101325,
+   "current_m_s": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "current_oscillation_amplitude_m_s": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "current_oscillation_frequency_hz": 0.1
+  },
+  "collision_boxes": [
+   {
+    "id": "floor",
+    "size_m": [
+     50.0,
+     22.86,
+     1
+    ],
+    "center_m": [
+     25.0,
+     11.43,
+     -2.6336
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "id": "west_wall",
+    "size_m": [
+     1,
+     24.86,
+     3.438888888
+    ],
+    "center_m": [
+     -0.5,
+     11.43,
+     -0.9141555559999999
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "id": "east_wall",
+    "size_m": [
+     1,
+     24.86,
+     3.438888888
+    ],
+    "center_m": [
+     50.5,
+     11.43,
+     -0.9141555559999999
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "id": "south_wall",
+    "size_m": [
+     50.0,
+     1,
+     3.438888888
+    ],
+    "center_m": [
+     25.0,
+     -0.5,
+     -0.9141555559999999
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "id": "north_wall",
+    "size_m": [
+     50.0,
+     1,
+     3.438888888
+    ],
+    "center_m": [
+     25.0,
+     23.36,
+     -0.9141555559999999
+    ],
+    "orientation_wxyz": [
+     1,
+     0,
+     0,
+     0
+    ]
+   }
+  ],
+  "markings": {
+   "color_rgb": [
+    0.093,
+    0.14,
+    0.16
+   ],
+   "width_m": 0.254,
+   "lane_grid": {
+    "along_x": {
+     "count": 8,
+     "spacing_m": 2.7432
+    },
+    "along_y": {
+     "count": 17,
+     "spacing_m": 2.7432
+    },
+    "inset_m": 2.0,
+    "ends": "t",
+    "t_length_m": 1.0,
+    "on_walls": true
+   }
+  },
+  "water_optics": {
+   "tint_rgb": [
+    0.025,
+    0.22,
+    0.29
+   ],
+   "distance_scale": 1.88,
+   "distance_power": 0.4,
+   "clear_distance_m": 0.0,
+   "scattering": 0.458,
+   "absorption_per_m_rgb": [
+    0.648,
+    0.145,
+    0.025
+   ]
+  },
+  "lighting": {
+   "profile": "outdoor",
+   "direct_light": 1.0,
+   "ambient_light": 0.8,
+   "sun_azimuth_deg": 225.0,
+   "sun_elevation_deg": 55.0,
+   "glare": 0.5
+  }
+ },
+ "tasks": {
+  "kind": "tasks",
+  "id": "robosub_2026",
+  "description": "RoboSub 2026 course tasks and scoring (Survey & Repair / Search & Rescue roles).",
+  "assets": [
+   {
+    "id": "gate_mesh",
+    "path": "assets/gate/model.dae"
+   },
+   {
+    "id": "gate_repair_mesh",
+    "path": "assets/gate_repair/model.dae"
+   },
+   {
+    "id": "gate_repair_texture",
+    "path": "assets/gate_repair/Task1_SurveyRepair_Fixed.png"
+   },
+   {
+    "id": "gate_rescue_mesh",
+    "path": "assets/gate_rescue/model.dae"
+   },
+   {
+    "id": "gate_rescue_texture",
+    "path": "assets/gate_rescue/Task1_SearchRescue_Fixed.png"
+   },
+   {
+    "id": "torpedo_mesh",
+    "path": "assets/torpedo/model.dae"
+   },
+   {
+    "id": "torpedo_texture",
+    "path": "assets/torpedo/Task4_ver1_Fixed.png"
+   },
+   {
+    "id": "table_mesh",
+    "path": "assets/table/table.obj"
+   },
+   {
+    "id": "basket_helmet_mesh",
+    "path": "assets/table/table_basket_helmet.obj"
+   },
+   {
+    "id": "basket_warning_mesh",
+    "path": "assets/table/table_basket_warning.obj"
+   },
+   {
+    "id": "pill_mesh",
+    "path": "assets/table/table_pill.obj"
+   },
+   {
+    "id": "bandage_mesh",
+    "path": "assets/table/table_bandage.obj"
+   },
+   {
+    "id": "nut_and_bolt_mesh",
+    "path": "assets/table/table_nut_and_bolt.obj"
+   },
+   {
+    "id": "plug_mesh",
+    "path": "assets/table/table_plug.obj"
+   },
+   {
+    "id": "slalom_mesh",
+    "path": "assets/slalom/model.dae"
+   },
+   {
+    "id": "bin_mesh",
+    "path": "assets/bin/model.dae"
+   },
+   {
+    "id": "bin_magnet_mesh",
+    "path": "assets/bin_magnet/model.dae"
+   },
+   {
+    "id": "bin_vinyl_mesh",
+    "path": "assets/bin_vinyl/model.dae"
+   },
+   {
+    "id": "bin_vinyl_blood_texture",
+    "path": "assets/bin_vinyl/Task3_Blood_Fixed.png"
+   },
+   {
+    "id": "bin_vinyl_fire_texture",
+    "path": "assets/bin_vinyl/Task3_Fire_Fixed.png"
+   },
+   {
+    "id": "octagon_buoy_mesh",
+    "path": "assets/octagon_buoy/model.dae"
+   },
+   {
+    "id": "octagon_buoy_texture",
+    "path": "assets/octagon_buoy/Task5_Search_Fixed.png"
+   },
+   {
+    "id": "octagon_compass_mesh",
+    "path": "assets/octagon_compass/model.dae"
+   },
+   {
+    "id": "octagon_compass_texture",
+    "path": "assets/octagon_compass/Task5_Survey_Fixed.png"
+   },
+   {
+    "id": "octagon_hammer_and_wrench_mesh",
+    "path": "assets/octagon_hammer_and_wrench/model.dae"
+   },
+   {
+    "id": "octagon_hammer_and_wrench_texture",
+    "path": "assets/octagon_hammer_and_wrench/Task5_Repair_Fixed.png"
+   },
+   {
+    "id": "octagon_sos_mesh",
+    "path": "assets/octagon_sos/model.dae"
+   },
+   {
+    "id": "octagon_sos_texture",
+    "path": "assets/octagon_sos/Task5_Rescue_Fixed.png"
+   },
+   {
+    "id": "table_visual",
+    "path": "assets/visual/table/model.dae"
+   },
+   {
+    "id": "basket_helmet_visual_task5_redcross_fixed",
+    "path": "assets/visual/table_basket_helmet/Task5_RedCross_Fixed.png"
+   },
+   {
+    "id": "basket_helmet_visual",
+    "path": "assets/visual/table_basket_helmet/model.dae"
+   },
+   {
+    "id": "basket_warning_visual_task5_warning_fixed",
+    "path": "assets/visual/table_basket_warning/Task5_Warning_Fixed.png"
+   },
+   {
+    "id": "basket_warning_visual",
+    "path": "assets/visual/table_basket_warning/model.dae"
+   },
+   {
+    "id": "pill_visual_task5_pill_fixed",
+    "path": "assets/visual/table_pill/Task5_Pill_Fixed.png"
+   },
+   {
+    "id": "pill_visual",
+    "path": "assets/visual/table_pill/model.dae"
+   },
+   {
+    "id": "bandage_visual_task5_bandaid_fixed",
+    "path": "assets/visual/table_bandage/Task5_BandAid_Fixed.png"
+   },
+   {
+    "id": "bandage_visual",
+    "path": "assets/visual/table_bandage/model.dae"
+   },
+   {
+    "id": "nut_and_bolt_visual_task5_nutbolt_fixed",
+    "path": "assets/visual/table_nut_and_bolt/Task5_NutBolt_Fixed.png"
+   },
+   {
+    "id": "nut_and_bolt_visual",
+    "path": "assets/visual/table_nut_and_bolt/model.dae"
+   },
+   {
+    "id": "plug_visual_task5_electric_fixed",
+    "path": "assets/visual/table_plug/Task5_Electric_Fixed.png"
+   },
+   {
+    "id": "plug_visual",
+    "path": "assets/visual/table_plug/model.dae"
+   },
+   {
+    "id": "crate_lattice_mesh",
+    "path": "assets/course/crate_lattice.glb"
+   },
+   {
+    "id": "crate_liner_mesh",
+    "path": "assets/course/crate_liner.glb"
+   },
+   {
+    "id": "octagon_ring_mesh",
+    "path": "assets/course/octagon_ring.glb"
+   },
+   {
+    "id": "magnet_housing_mesh",
+    "path": "assets/course/magnet_lights/housing.glb"
+   },
+   {
+    "id": "magnet_cover_mesh",
+    "path": "assets/course/magnet_lights/cover.glb"
+   },
+   {
+    "id": "magnet_leds_mesh",
+    "path": "assets/course/magnet_lights/leds.glb"
+   }
+  ],
+  "tasks": [
+   "gate.yaml",
+   "torpedo.yaml",
+   "table.yaml",
+   "slalom.yaml",
+   "bins.yaml",
+   "surface.yaml"
+  ],
+  "requires": [
+   {
+    "task": "torpedo",
+    "mechanism_type": "launcher",
+    "min_count": 1
+   },
+   {
+    "task": "bins",
+    "mechanism_type": "dropper",
+    "min_count": 1
+   },
+   {
+    "task": "bins",
+    "mechanism_type": "magnet",
+    "min_count": 1
+   },
+   {
+    "task": "table",
+    "mechanism_type": "claw",
+    "min_count": 1
+   }
+  ],
+  "run_options": [
+   {
+    "key": "role",
+    "type": "choice",
+    "choices": [
+     "repair",
+     "rescue"
+    ],
+    "default": "repair"
+   },
+   {
+    "key": "heading_coin",
+    "type": "bool",
+    "default": true
+   },
+   {
+    "key": "role_coin",
+    "type": "bool",
+    "default": true
+   },
+   {
+    "key": "pinger_task",
+    "type": "choice",
+    "choices": [
+     "none",
+     "deploy",
+     "restore"
+    ],
+    "default": "none"
+   },
+   {
+    "key": "pinger_random",
+    "type": "bool",
+    "default": false
+   }
+  ],
+  "scoring_rules": [
+   {
+    "name": "robosub_2026",
+    "parameters": {
+     "roles": {
+      "repair": {
+       "target_class": "fire",
+       "facing_icons": [
+        "compass",
+        "hammer_and_wrench"
+       ]
+      },
+      "rescue": {
+       "target_class": "blood",
+       "facing_icons": [
+        "buoy",
+        "sos"
+       ]
+      }
+     },
+     "award_policy": "max_per_row",
+     "eligibility": "gate_passed_and_not_ended",
+     "gate": {
+      "role_reference_frame": "gate_repair",
+      "style": {
+       "quarter_rad": 1.5707963267948966,
+       "epsilon_rad": 1e-06,
+       "max_quarters": 8,
+       "roll_pitch_first": true
+      }
+     },
+     "torpedo": {
+      "good_results": [
+       "success",
+       "wrong_target"
+      ],
+      "sequence_order": [
+       "large",
+       "small"
+      ],
+      "release_distance": {
+       "task": "torpedo",
+       "measure": "abs_local_x_of_projectile_tip"
+      }
+     },
+     "points": {
+      "pinger_first": 500,
+      "pinger_second": 1500,
+      "gate": 100,
+      "heading": 300,
+      "role": 150,
+      "slalom_same": 400,
+      "slalom_other": 200,
+      "slalom_depth": 200,
+      "bin": 300,
+      "bin_class": 500,
+      "torpedo": 600,
+      "distance_far": 400,
+      "distance_near": 200,
+      "distance_far_m": 0.4572,
+      "distance_near_m": 0.3048,
+      "sequence": 1400,
+      "light": 500,
+      "max_lights": 2,
+      "max_shots": 2,
+      "object_drop": 200,
+      "basket_correct": 700,
+      "basket_other": 500,
+      "surface": 800,
+      "object_surface": 400,
+      "facing_correct": 400,
+      "facing_other": 200,
+      "facing_count": 700,
+      "basket_count": 1000,
+      "basket_count_near": 500,
+      "home": 300,
+      "style_rp": 200,
+      "style_yaw": 100,
+      "max_style_quarters": 8
+     },
+     "feed": {
+      "kinds": {
+       "launcher": "torpedo",
+       "dropper": "dropper",
+       "claw": "claw"
+      },
+      "magnet_kind": "magnet",
+      "basket_names": {
+       "helmet_basket": "helmet",
+       "warning_basket": "warning"
+      }
+     },
+     "slalom": {
+      "rows": [
+       "slalom_front",
+       "slalom_middle",
+       "slalom_back"
+      ]
+     },
+     "bins": {
+      "mechanism_type": "dropper"
+     },
+     "table": {
+      "baskets": [
+       "helmet_basket",
+       "warning_basket"
+      ]
+     }
+    }
+   }
+  ],
+  "score_rows": [
+   {
+    "key": "gate",
+    "label": "Gate passage / heading / role / style"
+   },
+   {
+    "key": "slalom_front",
+    "label": "Slalom row 1"
+   },
+   {
+    "key": "slalom_middle",
+    "label": "Slalom row 2"
+   },
+   {
+    "key": "slalom_back",
+    "label": "Slalom row 3"
+   },
+   {
+    "key": "bins",
+    "label": "Bin markers"
+   },
+   {
+    "key": "lights",
+    "label": "Magnet lights"
+   },
+   {
+    "key": "torpedoes",
+    "label": "Torpedo openings"
+   },
+   {
+    "key": "sequence",
+    "label": "Torpedo sequence bonus"
+   },
+   {
+    "key": "distance",
+    "label": "Torpedo distance bonuses"
+   },
+   {
+    "key": "surface",
+    "label": "Surface inside octagon"
+   },
+   {
+    "key": "facing",
+    "label": "Surface facing image"
+   },
+   {
+    "key": "objects_surface",
+    "label": "Surface with objects"
+   },
+   {
+    "key": "objects_drop",
+    "label": "Release objects"
+   },
+   {
+    "key": "baskets",
+    "label": "Place objects in baskets"
+   },
+   {
+    "key": "basket_count",
+    "label": "Signal basket count with turns"
+   },
+   {
+    "key": "home",
+    "label": "Return through gate"
+   },
+   {
+    "key": "pinger_first",
+    "label": "Random pinger: first task"
+   },
+   {
+    "key": "pinger_second",
+    "label": "Random pinger: second task"
+   }
+  ],
+  "outcome_counters": [
+   "success",
+   "wrong_target",
+   "blocked",
+   "miss"
+  ],
+  "run_messages": {
+   "start": "Run started; pass the gate first",
+   "stop": "Run stopped",
+   "adjustment": "Manual adjustment updated",
+   "reset": "Tasks and run reset"
+  },
+  "ui": {
+   "title": "RoboSub 2026 scorecard",
+   "run_options": [
+    {
+     "key": "role",
+     "label": "Coin-flip role",
+     "type": "choice",
+     "default": "repair",
+     "choices": [
+      {
+       "value": "repair",
+       "label": "Survey & Repair"
+      },
+      {
+       "value": "rescue",
+       "label": "Search & Rescue"
+      }
+     ]
+    },
+    {
+     "key": "heading_coin",
+     "label": "Heading coin flip",
+     "type": "bool",
+     "default": true
+    },
+    {
+     "key": "role_coin",
+     "label": "Role coin flip",
+     "type": "bool",
+     "default": true
+    }
+   ],
+   "focus": [
+    "Course",
+    "Vehicle",
+    "gate",
+    "torpedo",
+    "bin",
+    "table",
+    "Payloads",
+    "Claw",
+    "octagon"
+   ],
+   "demo_targets": [
+    "gate",
+    "torpedo",
+    "bin",
+    "table"
+   ],
+   "manual_adjustment": true,
+   "score_note": "Pinger awards await future acoustic integration. No session countdown or automatic time bonus is applied to individual runs.",
+   "score_fields": [
+    {
+     "key": "basket_count",
+     "label": "Objects in both baskets"
+    },
+    {
+     "key": "time_bonus_eligible",
+     "label": "Time-bonus prerequisites met"
+    }
+   ],
+   "previews": {
+    "gate": {
+     "depth": 0.75
+    },
+    "bin": {
+     "depth": 0.55,
+     "camera": "dfc"
+    },
+    "table": {
+     "depth": 0.55,
+     "camera": "dfc"
+    }
+   },
+   "run_inspections": [
+    {
+     "label": "Inspect launcher",
+     "target": "Payloads"
+    },
+    {
+     "label": "Inspect claw",
+     "target": "Claw"
+    },
+    {
+     "label": "Inspect lights",
+     "target": "magnet_target1"
+    }
+   ],
+   "status_fields": [
+    {
+     "key": "role",
+     "label": "Role (gate side taken)"
+    },
+    {
+     "key": "intended_role",
+     "label": "Coin-flip role"
+    },
+    {
+     "key": "heading_bonus",
+     "label": "Heading coin bonus"
+    },
+    {
+     "key": "role_bonus",
+     "label": "Role coin bonus (gate side = coin-flip role)"
+    }
+   ],
+   "actions": []
+  }
+ },
+ "task_definitions": [
+  {
+   "kind": "task",
+   "id": "gate",
+   "description": "Start gate with role halves; forward pass and reverse (return-home) pass.",
+   "frames": [
+    {
+     "id": "gate_repair",
+     "position_m": [
+      0.0,
+      -0.75,
+      0.5
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "id": "gate_rescue",
+     "position_m": [
+      0.0,
+      0.75,
+      0.5
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    }
+   ],
+   "props": [
+    {
+     "id": "gate_structure",
+     "type": "static_body",
+     "parameters": {
+      "collision_boxes": [
+       {
+        "id": "top_bar",
+        "size_m": [
+         0.0762,
+         3.048,
+         0.0762
+        ],
+        "center_m": [
+         0,
+         0,
+         0.6096
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "id": "divider",
+        "size_m": [
+         0.0762,
+         0.0762,
+         0.6096
+        ],
+        "center_m": [
+         0,
+         0,
+         0.3048
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "id": "post_neg_y",
+        "size_m": [
+         0.0762,
+         0.0762,
+         1.524
+        ],
+        "center_m": [
+         0,
+         -1.524,
+         -0.1524
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "id": "post_pos_y",
+        "size_m": [
+         0.0762,
+         0.0762,
+         1.524
+        ],
+        "center_m": [
+         0,
+         1.524,
+         -0.1524
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       }
+      ],
+      "visuals": [
+       {
+        "asset": "gate_mesh",
+        "frame": "task",
+        "position_m": [
+         0.0,
+         -1.5,
+         0.0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "gate_repair_mesh",
+        "frame": "gate_repair",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "gate_rescue_mesh",
+        "frame": "gate_rescue",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "regions": [
+    {
+     "id": "gate_opening",
+     "type": "rectangular_portal",
+     "parameters": {
+      "plane": {
+       "axis": "x",
+       "offset_m": 0.0
+      },
+      "bounds_local": {
+       "abs_y_lt_m": 1.5,
+       "z_lt_m": 0.75
+      },
+      "world_floor_clearance": true,
+      "crossing_reference": "robot_reference_origin",
+      "fit_checks": [
+       "envelope_at_crossing_point_with_current_orientation",
+       "envelope_at_completion"
+      ],
+      "traversal": "full_envelope",
+      "approach_radius_m": 3.0,
+      "max_pose_step_m": 2.0
+     }
+    }
+   ],
+   "events": [
+    {
+     "id": "forward_pass",
+     "type": "pass_through",
+     "parameters": {
+      "region": "gate_opening",
+      "from_side": "positive",
+      "to_side": "negative",
+      "emits": [
+       "crossing_point_local",
+       "envelope_top_world"
+      ]
+     }
+    },
+    {
+     "id": "reverse_pass",
+     "type": "pass_through",
+     "parameters": {
+      "region": "gate_opening",
+      "from_side": "negative",
+      "to_side": "positive",
+      "emits": [
+       "crossing_point_local",
+       "envelope_top_world"
+      ]
+     }
+    },
+    {
+     "id": "structure_contact",
+     "type": "contact",
+     "parameters": {
+      "prop": "gate_structure",
+      "with": "robot"
+     }
+    }
+   ],
+   "scoring": []
+  },
+  {
+   "kind": "task",
+   "id": "torpedo",
+   "description": "Perforated torpedo board with two fire and two blood openings.",
+   "frames": [],
+   "props": [
+    {
+     "id": "board",
+     "type": "static_body",
+     "parameters": {
+      "collision_boxes": [
+       {
+        "id": "board_proxy",
+        "size_m": [
+         0.05,
+         1.2,
+         1.2
+        ],
+        "center_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       }
+      ],
+      "visuals": [
+       {
+        "asset": "torpedo_mesh",
+        "frame": "task",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       }
+      ],
+      "cutouts": {
+       "region": "panel",
+       "faces_local_x_m": [
+        0.0,
+        -0.004
+       ]
+      }
+     }
+    }
+   ],
+   "regions": [
+    {
+     "id": "panel",
+     "type": "perforated_panel",
+     "parameters": {
+      "plane": {
+       "axis": "x",
+       "offset_m": 0.0
+      },
+      "half_size_m": 0.3048,
+      "holes": [
+       {
+        "id": "fire_large",
+        "class": "fire",
+        "size": "large",
+        "uv": [
+         0.16142625,
+         0.58890478
+        ],
+        "radius_uv": 0.10469
+       },
+       {
+        "id": "fire_small",
+        "class": "fire",
+        "size": "small",
+        "uv": [
+         0.51378955,
+         0.81221886
+        ],
+        "radius_uv": 0.08365
+       },
+       {
+        "id": "blood_large",
+        "class": "blood",
+        "size": "large",
+        "uv": [
+         0.85499477,
+         0.14589262
+        ],
+        "radius_uv": 0.10469
+       },
+       {
+        "id": "blood_small",
+        "class": "blood",
+        "size": "small",
+        "uv": [
+         0.50045453,
+         0.18734768
+        ],
+        "radius_uv": 0.08365
+       }
+      ],
+      "projectile_clearance": {
+       "rule": "radius_over_axis_cosine",
+       "min_cosine": 0.1
+      }
+     }
+    }
+   ],
+   "events": [
+    {
+     "id": "hole_pass",
+     "type": "hit",
+     "parameters": {
+      "region": "panel",
+      "projectile_mechanism_type": "launcher",
+      "outcome": "pass",
+      "stop_projectile": false,
+      "emits": [
+       "hole_id",
+       "hole_class",
+       "hole_size",
+       "projectile_id",
+       "hit_point_local"
+      ]
+     }
+    },
+    {
+     "id": "panel_blocked",
+     "type": "hit",
+     "parameters": {
+      "region": "panel",
+      "projectile_mechanism_type": "launcher",
+      "outcome": "blocked",
+      "stop_projectile": true,
+      "emits": [
+       "projectile_id",
+       "hit_point_local"
+      ]
+     }
+    },
+    {
+     "id": "board_contact",
+     "type": "contact",
+     "parameters": {
+      "prop": "board",
+      "with": "robot"
+     }
+    }
+   ],
+   "scoring": []
+  },
+  {
+   "kind": "task",
+   "id": "table",
+   "description": "Table with four grabbable props and two baskets (helmet, warning); grasp, carry and drop.",
+   "frames": [
+    {
+     "id": "helmet_basket",
+     "position_m": [
+      0.40168,
+      0,
+      0.021457
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "id": "warning_basket",
+     "position_m": [
+      -0.40168,
+      0,
+      0.021457
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "id": "pill",
+     "position_m": [
+      -0.082859,
+      0.192053,
+      0.05
+     ],
+     "orientation_wxyz": [
+      0,
+      0,
+      0,
+      1
+     ]
+    },
+    {
+     "id": "bandage",
+     "position_m": [
+      -0.068547,
+      -0.133469,
+      0.03
+     ],
+     "orientation_wxyz": [
+      0,
+      0,
+      0,
+      1
+     ]
+    },
+    {
+     "id": "nut_and_bolt",
+     "position_m": [
+      0.15,
+      0.15,
+      0.05
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "id": "plug",
+     "position_m": [
+      0.21,
+      -0.21,
+      0.03
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    }
+   ],
+   "props": [
+    {
+     "id": "table_structure",
+     "type": "static_body",
+     "parameters": {
+      "collision_boxes": [
+       {
+        "id": "slab",
+        "size_m": [
+         0.635,
+         0.635,
+         0.01905
+        ],
+        "center_m": [
+         0,
+         0,
+         -0.009525
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       }
+      ],
+      "visuals": [
+       {
+        "asset": "table_visual",
+        "frame": "task",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "basket_helmet_visual",
+        "frame": "helmet_basket",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "basket_warning_visual",
+        "frame": "warning_basket",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       }
+      ],
+      "collision_meshes": [
+       {
+        "id": "table",
+        "asset": "table_mesh",
+        "frame": "task",
+        "lateral_friction": 0.7,
+        "restitution": 0.05
+       },
+       {
+        "id": "helmet_basket",
+        "asset": "basket_helmet_mesh",
+        "frame": "helmet_basket",
+        "lateral_friction": 0.7,
+        "restitution": 0.05
+       },
+       {
+        "id": "warning_basket",
+        "asset": "basket_warning_mesh",
+        "frame": "warning_basket",
+        "lateral_friction": 0.7,
+        "restitution": 0.05
+       }
+      ]
+     }
+    },
+    {
+     "id": "pill",
+     "type": "rigid_body",
+     "parameters": {
+      "frame": "pill",
+      "collision_asset": "pill_mesh",
+      "visual_asset": "pill_visual",
+      "mass_kg": 0.12,
+      "volume_m3": 9e-05,
+      "expected_region": "helmet_basket",
+      "lateral_friction": 0.8,
+      "spinning_friction": 0.003,
+      "rolling_friction": 0.001,
+      "restitution": 0.05,
+      "linear_damping": 0.02,
+      "angular_damping": 0.1,
+      "collision_margin_m": 0.0005,
+      "ccd_swept_sphere_radius_m": 0.008,
+      "contact_processing_threshold_m": 0.0
+     }
+    },
+    {
+     "id": "bandage",
+     "type": "rigid_body",
+     "parameters": {
+      "frame": "bandage",
+      "collision_asset": "bandage_mesh",
+      "visual_asset": "bandage_visual",
+      "mass_kg": 0.1,
+      "volume_m3": 7e-05,
+      "expected_region": "helmet_basket",
+      "lateral_friction": 0.8,
+      "spinning_friction": 0.003,
+      "rolling_friction": 0.001,
+      "restitution": 0.05,
+      "linear_damping": 0.02,
+      "angular_damping": 0.1,
+      "collision_margin_m": 0.0005,
+      "ccd_swept_sphere_radius_m": 0.008,
+      "contact_processing_threshold_m": 0.0
+     }
+    },
+    {
+     "id": "nut_and_bolt",
+     "type": "rigid_body",
+     "parameters": {
+      "frame": "nut_and_bolt",
+      "collision_asset": "nut_and_bolt_mesh",
+      "visual_asset": "nut_and_bolt_visual",
+      "mass_kg": 0.12,
+      "volume_m3": 9e-05,
+      "expected_region": "warning_basket",
+      "lateral_friction": 0.8,
+      "spinning_friction": 0.003,
+      "rolling_friction": 0.001,
+      "restitution": 0.05,
+      "linear_damping": 0.02,
+      "angular_damping": 0.1,
+      "collision_margin_m": 0.0005,
+      "ccd_swept_sphere_radius_m": 0.008,
+      "contact_processing_threshold_m": 0.0
+     }
+    },
+    {
+     "id": "plug",
+     "type": "rigid_body",
+     "parameters": {
+      "frame": "plug",
+      "collision_asset": "plug_mesh",
+      "visual_asset": "plug_visual",
+      "mass_kg": 0.1,
+      "volume_m3": 7e-05,
+      "expected_region": "warning_basket",
+      "lateral_friction": 0.8,
+      "spinning_friction": 0.003,
+      "rolling_friction": 0.001,
+      "restitution": 0.05,
+      "linear_damping": 0.02,
+      "angular_damping": 0.1,
+      "collision_margin_m": 0.0005,
+      "ccd_swept_sphere_radius_m": 0.008,
+      "contact_processing_threshold_m": 0.0
+     }
+    },
+    {
+     "id": "world",
+     "type": "contact_world",
+     "parameters": {
+      "gravity_m_s2": 9.81,
+      "solver_iterations": 60,
+      "rest_speed_m_s": 0.04,
+      "rest_time_s": 0.5,
+      "angular_drag_n_m_s_per_rad": 0.005,
+      "drag_coefficient": 0.5,
+      "claw_mechanism_type": "claw"
+     }
+    }
+   ],
+   "regions": [
+    {
+     "id": "helmet_basket",
+     "type": "box",
+     "parameters": {
+      "frame": "helmet_basket",
+      "half_extents_xy_m": [
+       0.087,
+       0.13
+      ],
+      "z_range_m": [
+       -0.001,
+       0.077
+      ],
+      "support_mesh": "helmet_basket"
+     }
+    },
+    {
+     "id": "warning_basket",
+     "type": "box",
+     "parameters": {
+      "frame": "warning_basket",
+      "half_extents_xy_m": [
+       0.087,
+       0.13
+      ],
+      "z_range_m": [
+       -0.001,
+       0.077
+      ],
+      "support_mesh": "warning_basket"
+     }
+    }
+   ],
+   "events": [
+    {
+     "id": "grasp",
+     "type": "attach",
+     "parameters": {
+      "mechanism_type": "claw",
+      "emits": [
+       "prop_id",
+       "mechanism_id"
+      ]
+     }
+    },
+    {
+     "id": "release",
+     "type": "detach",
+     "parameters": {
+      "mechanism_type": "claw",
+      "emits": [
+       "prop_id",
+       "mechanism_id",
+       "reason"
+      ]
+     }
+    },
+    {
+     "id": "basket_drop",
+     "type": "drop_into",
+     "parameters": {
+      "outcome": "in_region",
+      "regions": [
+       "helmet_basket",
+       "warning_basket"
+      ],
+      "emits": [
+       "prop_id",
+       "basket",
+       "expected_basket"
+      ]
+     }
+    },
+    {
+     "id": "object_dropped",
+     "type": "drop_into",
+     "parameters": {
+      "outcome": "elsewhere",
+      "regions": [
+       "helmet_basket",
+       "warning_basket"
+      ],
+      "surfaces": {
+       "floor": "floor",
+       "support": "table"
+      },
+      "emits": [
+       "prop_id"
+      ]
+     }
+    }
+   ],
+   "scoring": []
+  },
+  {
+   "kind": "task",
+   "id": "slalom",
+   "description": "Three slalom rows crossed on the reference origin; side and depth are scored by the rules.",
+   "frames": [
+    {
+     "id": "slalom_front",
+     "position_m": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "id": "slalom_middle",
+     "position_m": [
+      -2.127361,
+      0.693981,
+      0.0
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "id": "slalom_back",
+     "position_m": [
+      -4.231969,
+      0.117814,
+      0.0
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    }
+   ],
+   "props": [
+    {
+     "id": "poles",
+     "type": "static_body",
+     "parameters": {
+      "collision_boxes": [],
+      "visuals": [
+       {
+        "asset": "slalom_mesh",
+        "frame": "slalom_front",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "slalom_mesh",
+        "frame": "slalom_middle",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "slalom_mesh",
+        "frame": "slalom_back",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "regions": [
+    {
+     "id": "slalom_front",
+     "type": "rectangular_portal",
+     "parameters": {
+      "frame": "slalom_front",
+      "plane": {
+       "axis": "x",
+       "offset_m": 0.0
+      },
+      "bounds_local": {
+       "abs_y_lt_m": 1.55,
+       "z_lt_m": 0.474
+      },
+      "world_floor_clearance": false,
+      "crossing_reference": "robot_reference_origin",
+      "fit_checks": [
+       "reference_origin_at_crossing"
+      ],
+      "traversal": "reference_origin",
+      "depth_band_m": [
+       -0.81,
+       0.474
+      ],
+      "approach_radius_m": 3.0,
+      "max_pose_step_m": 2.0
+     }
+    },
+    {
+     "id": "slalom_middle",
+     "type": "rectangular_portal",
+     "parameters": {
+      "frame": "slalom_middle",
+      "plane": {
+       "axis": "x",
+       "offset_m": 0.0
+      },
+      "bounds_local": {
+       "abs_y_lt_m": 1.55,
+       "z_lt_m": 0.474
+      },
+      "world_floor_clearance": false,
+      "crossing_reference": "robot_reference_origin",
+      "fit_checks": [
+       "reference_origin_at_crossing"
+      ],
+      "traversal": "reference_origin",
+      "depth_band_m": [
+       -0.81,
+       0.474
+      ],
+      "approach_radius_m": 3.0,
+      "max_pose_step_m": 2.0
+     }
+    },
+    {
+     "id": "slalom_back",
+     "type": "rectangular_portal",
+     "parameters": {
+      "frame": "slalom_back",
+      "plane": {
+       "axis": "x",
+       "offset_m": 0.0
+      },
+      "bounds_local": {
+       "abs_y_lt_m": 1.55,
+       "z_lt_m": 0.474
+      },
+      "world_floor_clearance": false,
+      "crossing_reference": "robot_reference_origin",
+      "fit_checks": [
+       "reference_origin_at_crossing"
+      ],
+      "traversal": "reference_origin",
+      "depth_band_m": [
+       -0.81,
+       0.474
+      ],
+      "approach_radius_m": 3.0,
+      "max_pose_step_m": 2.0
+     }
+    }
+   ],
+   "events": [
+    {
+     "id": "front_pass",
+     "type": "pass_through",
+     "parameters": {
+      "region": "slalom_front",
+      "from_side": "positive",
+      "to_side": "negative",
+      "emits": [
+       "crossing_point_local",
+       "depth_overlap"
+      ]
+     }
+    },
+    {
+     "id": "middle_pass",
+     "type": "pass_through",
+     "parameters": {
+      "region": "slalom_middle",
+      "from_side": "positive",
+      "to_side": "negative",
+      "emits": [
+       "crossing_point_local",
+       "depth_overlap"
+      ]
+     }
+    },
+    {
+     "id": "back_pass",
+     "type": "pass_through",
+     "parameters": {
+      "region": "slalom_back",
+      "from_side": "positive",
+      "to_side": "negative",
+      "emits": [
+       "crossing_point_local",
+       "depth_overlap"
+      ]
+     }
+    }
+   ],
+   "scoring": []
+  },
+  {
+   "kind": "task",
+   "id": "bins",
+   "description": "Four vinyl-marked crates for dropper payloads and two magnet light targets.",
+   "frames": [
+    {
+     "id": "bin_vinyl1",
+     "position_m": [
+      0.474,
+      -0.122,
+      0.301
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "id": "bin_vinyl2",
+     "position_m": [
+      0.237,
+      0.347,
+      0.335
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "id": "bin_vinyl3",
+     "position_m": [
+      -0.21663,
+      -0.3466,
+      0.47036
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "id": "bin_vinyl4",
+     "position_m": [
+      -0.43325,
+      0.12206,
+      0.57196
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "id": "magnet_target1",
+     "position_m": [
+      0.76512,
+      0.37018,
+      0.25975
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "id": "magnet_target2",
+     "position_m": [
+      -0.70442,
+      -0.37018,
+      0.65
+     ],
+     "orientation_wxyz": [
+      0,
+      0,
+      0,
+      1
+     ]
+    }
+   ],
+   "props": [
+    {
+     "id": "bin_assembly",
+     "type": "static_body",
+     "parameters": {
+      "collision_boxes": [],
+      "visuals": [
+       {
+        "asset": "bin_mesh",
+        "frame": "task",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "bin_vinyl_mesh",
+        "frame": "bin_vinyl1",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ],
+        "texture": "bin_vinyl_blood_texture"
+       },
+       {
+        "asset": "bin_vinyl_mesh",
+        "frame": "bin_vinyl2",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ],
+        "texture": "bin_vinyl_fire_texture"
+       },
+       {
+        "asset": "bin_vinyl_mesh",
+        "frame": "bin_vinyl3",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ],
+        "texture": "bin_vinyl_fire_texture"
+       },
+       {
+        "asset": "bin_vinyl_mesh",
+        "frame": "bin_vinyl4",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ],
+        "texture": "bin_vinyl_blood_texture"
+       },
+       {
+        "asset": "crate_lattice_mesh",
+        "frame": "bin_vinyl1",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "crate_liner_mesh",
+        "frame": "bin_vinyl1",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ],
+        "material": "liner"
+       },
+       {
+        "asset": "crate_lattice_mesh",
+        "frame": "bin_vinyl2",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "crate_liner_mesh",
+        "frame": "bin_vinyl2",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ],
+        "material": "liner"
+       },
+       {
+        "asset": "crate_lattice_mesh",
+        "frame": "bin_vinyl3",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "crate_liner_mesh",
+        "frame": "bin_vinyl3",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ],
+        "material": "liner"
+       },
+       {
+        "asset": "crate_lattice_mesh",
+        "frame": "bin_vinyl4",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "crate_liner_mesh",
+        "frame": "bin_vinyl4",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ],
+        "material": "liner"
+       },
+       {
+        "asset": "magnet_housing_mesh",
+        "frame": "magnet_target1",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         0.9238795325112867,
+         0.0,
+         -0.3826834323650898,
+         0.0
+        ]
+       },
+       {
+        "asset": "magnet_cover_mesh",
+        "frame": "magnet_target1",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         0.9238795325112867,
+         0.0,
+         -0.3826834323650898,
+         0.0
+        ],
+        "material": "clear"
+       },
+       {
+        "asset": "magnet_leds_mesh",
+        "frame": "magnet_target1",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         0.9238795325112867,
+         0.0,
+         -0.3826834323650898,
+         0.0
+        ],
+        "material": "emissive",
+        "radiance": 200.0,
+        "indicator": {
+         "region": "magnet_target1",
+         "color_rgb": {
+          "red": [
+           1.0,
+           0.001,
+           0.002
+          ],
+          "green": [
+           0.002,
+           1.0,
+           0.004
+          ]
+         }
+        }
+       },
+       {
+        "asset": "magnet_housing_mesh",
+        "frame": "magnet_target2",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         0.9238795325112867,
+         0.0,
+         -0.3826834323650898,
+         0.0
+        ]
+       },
+       {
+        "asset": "magnet_cover_mesh",
+        "frame": "magnet_target2",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         0.9238795325112867,
+         0.0,
+         -0.3826834323650898,
+         0.0
+        ],
+        "material": "clear"
+       },
+       {
+        "asset": "magnet_leds_mesh",
+        "frame": "magnet_target2",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         0.9238795325112867,
+         0.0,
+         -0.3826834323650898,
+         0.0
+        ],
+        "material": "emissive",
+        "radiance": 200.0,
+        "indicator": {
+         "region": "magnet_target2",
+         "color_rgb": {
+          "red": [
+           1.0,
+           0.001,
+           0.002
+          ],
+          "green": [
+           0.002,
+           1.0,
+           0.004
+          ]
+         }
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "regions": [
+    {
+     "id": "bin_vinyl1",
+     "type": "open_crate",
+     "parameters": {
+      "frame": "bin_vinyl1",
+      "class": "blood",
+      "outer_width_m": 0.333248,
+      "inner_width_m": 0.3048,
+      "outer_height_m": 0.2794,
+      "base_thickness_m": 0.008128,
+      "liner_thickness_m": 0.004,
+      "liner_height_fraction": 0.5
+     }
+    },
+    {
+     "id": "bin_vinyl2",
+     "type": "open_crate",
+     "parameters": {
+      "frame": "bin_vinyl2",
+      "class": "fire",
+      "outer_width_m": 0.333248,
+      "inner_width_m": 0.3048,
+      "outer_height_m": 0.2794,
+      "base_thickness_m": 0.008128,
+      "liner_thickness_m": 0.004,
+      "liner_height_fraction": 0.5
+     }
+    },
+    {
+     "id": "bin_vinyl3",
+     "type": "open_crate",
+     "parameters": {
+      "frame": "bin_vinyl3",
+      "class": "fire",
+      "outer_width_m": 0.333248,
+      "inner_width_m": 0.3048,
+      "outer_height_m": 0.2794,
+      "base_thickness_m": 0.008128,
+      "liner_thickness_m": 0.004,
+      "liner_height_fraction": 0.5
+     }
+    },
+    {
+     "id": "bin_vinyl4",
+     "type": "open_crate",
+     "parameters": {
+      "frame": "bin_vinyl4",
+      "class": "blood",
+      "outer_width_m": 0.333248,
+      "inner_width_m": 0.3048,
+      "outer_height_m": 0.2794,
+      "base_thickness_m": 0.008128,
+      "liner_thickness_m": 0.004,
+      "liner_height_fraction": 0.5
+     }
+    },
+    {
+     "id": "magnet_target1",
+     "type": "proximity_target",
+     "parameters": {
+      "frame": "magnet_target1",
+      "face_orientation_wxyz": [
+       0.9238795325112867,
+       0.0,
+       -0.3826834323650898,
+       0.0
+      ],
+      "sensor_offset_m": [
+       -0.008,
+       0.0,
+       0.0
+      ],
+      "trigger_distance_m": 0.1524,
+      "dwell_s": 0.5,
+      "probe_mechanism_type": "magnet",
+      "indicator": {
+       "initial": "red",
+       "latched": "green"
+      }
+     }
+    },
+    {
+     "id": "magnet_target2",
+     "type": "proximity_target",
+     "parameters": {
+      "frame": "magnet_target2",
+      "face_orientation_wxyz": [
+       0.9238795325112867,
+       0.0,
+       -0.3826834323650898,
+       0.0
+      ],
+      "sensor_offset_m": [
+       -0.008,
+       0.0,
+       0.0
+      ],
+      "trigger_distance_m": 0.1524,
+      "dwell_s": 0.5,
+      "probe_mechanism_type": "magnet",
+      "indicator": {
+       "initial": "red",
+       "latched": "green"
+      }
+     }
+    }
+   ],
+   "events": [
+    {
+     "id": "bin_vinyl1_inside",
+     "type": "payload_landing",
+     "parameters": {
+      "region": "bin_vinyl1",
+      "projectile_mechanism_types": [
+       "launcher",
+       "dropper"
+      ],
+      "outcome": "inside"
+     }
+    },
+    {
+     "id": "bin_vinyl1_blocked",
+     "type": "payload_landing",
+     "parameters": {
+      "region": "bin_vinyl1",
+      "projectile_mechanism_types": [
+       "launcher",
+       "dropper"
+      ],
+      "outcome": "blocked"
+     }
+    },
+    {
+     "id": "bin_vinyl2_inside",
+     "type": "payload_landing",
+     "parameters": {
+      "region": "bin_vinyl2",
+      "projectile_mechanism_types": [
+       "launcher",
+       "dropper"
+      ],
+      "outcome": "inside"
+     }
+    },
+    {
+     "id": "bin_vinyl2_blocked",
+     "type": "payload_landing",
+     "parameters": {
+      "region": "bin_vinyl2",
+      "projectile_mechanism_types": [
+       "launcher",
+       "dropper"
+      ],
+      "outcome": "blocked"
+     }
+    },
+    {
+     "id": "bin_vinyl3_inside",
+     "type": "payload_landing",
+     "parameters": {
+      "region": "bin_vinyl3",
+      "projectile_mechanism_types": [
+       "launcher",
+       "dropper"
+      ],
+      "outcome": "inside"
+     }
+    },
+    {
+     "id": "bin_vinyl3_blocked",
+     "type": "payload_landing",
+     "parameters": {
+      "region": "bin_vinyl3",
+      "projectile_mechanism_types": [
+       "launcher",
+       "dropper"
+      ],
+      "outcome": "blocked"
+     }
+    },
+    {
+     "id": "bin_vinyl4_inside",
+     "type": "payload_landing",
+     "parameters": {
+      "region": "bin_vinyl4",
+      "projectile_mechanism_types": [
+       "launcher",
+       "dropper"
+      ],
+      "outcome": "inside"
+     }
+    },
+    {
+     "id": "bin_vinyl4_blocked",
+     "type": "payload_landing",
+     "parameters": {
+      "region": "bin_vinyl4",
+      "projectile_mechanism_types": [
+       "launcher",
+       "dropper"
+      ],
+      "outcome": "blocked"
+     }
+    },
+    {
+     "id": "magnet_target1_on",
+     "type": "activate",
+     "parameters": {
+      "region": "magnet_target1"
+     }
+    },
+    {
+     "id": "magnet_target2_on",
+     "type": "activate",
+     "parameters": {
+      "region": "magnet_target2"
+     }
+    }
+   ],
+   "scoring": []
+  },
+  {
+   "kind": "task",
+   "id": "surface",
+   "description": "Octagon surfacing, facing-image dwell and the basket-count turn judge.",
+   "frames": [
+    {
+     "id": "compass",
+     "position_m": [
+      0.0,
+      1.38,
+      0.0
+     ],
+     "orientation_wxyz": [
+      0.7071067811865476,
+      0.0,
+      0.0,
+      -0.7071067811865475
+     ]
+    },
+    {
+     "id": "hammer_and_wrench",
+     "position_m": [
+      0.0,
+      -1.38,
+      0.0
+     ],
+     "orientation_wxyz": [
+      0.7071067811865476,
+      0.0,
+      0.0,
+      0.7071067811865475
+     ]
+    },
+    {
+     "id": "buoy",
+     "position_m": [
+      -1.38,
+      0.0,
+      0.0
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "id": "sos",
+     "position_m": [
+      1.38,
+      0.0,
+      0.0
+     ],
+     "orientation_wxyz": [
+      0,
+      0,
+      0,
+      1
+     ]
+    },
+    {
+     "id": "octagon_ring",
+     "position_m": [
+      0.0,
+      0.0,
+      0.3048
+     ],
+     "orientation_wxyz": [
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    {
+     "id": "table_origin",
+     "position_m": [
+      0.010891616316147913,
+      -0.10408552483425264,
+      -1.2352
+     ],
+     "orientation_wxyz": [
+      0.3882125471904098,
+      0.0,
+      0.0,
+      0.9215698661544516
+     ]
+    }
+   ],
+   "props": [
+    {
+     "id": "octagon_signs",
+     "type": "static_body",
+     "parameters": {
+      "collision_boxes": [],
+      "visuals": [
+       {
+        "asset": "octagon_buoy_mesh",
+        "frame": "buoy",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "octagon_sos_mesh",
+        "frame": "sos",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "octagon_hammer_and_wrench_mesh",
+        "frame": "hammer_and_wrench",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "octagon_compass_mesh",
+        "frame": "compass",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       },
+       {
+        "asset": "octagon_ring_mesh",
+        "frame": "octagon_ring",
+        "position_m": [
+         0,
+         0,
+         0
+        ],
+        "orientation_wxyz": [
+         1,
+         0,
+         0,
+         0
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "regions": [
+    {
+     "id": "octagon",
+     "type": "surface",
+     "parameters": {
+      "shape": "regular_octagon",
+      "apothem_m": 1.3716,
+      "pipe_radius_m": 0.010668,
+      "breach_margin_m": 0.02,
+      "dwell_s": 0.5,
+      "max_pose_step_m": 2.0,
+      "facing": {
+       "targets": [
+        "compass",
+        "hammer_and_wrench",
+        "buoy",
+        "sos"
+       ],
+       "tolerance_deg": 15.0,
+       "dwell_s": 0.5
+      }
+     }
+    },
+    {
+     "id": "turn_zone",
+     "type": "turn_zone",
+     "parameters": {
+      "frame": "table_origin",
+      "radius_m": 3.0,
+      "max_pose_step_m": 2.0,
+      "turn_tolerance_deg": 30.0,
+      "settle_deg": 10.0,
+      "reversal_deg": 15.0,
+      "min_travel_deg": 30.0,
+      "dwell_s": 1.0,
+      "restart_events": [
+       {
+        "task": "table",
+        "id": "grasp"
+       },
+       {
+        "task": "table",
+        "id": "basket_drop"
+       }
+      ]
+     }
+    }
+   ],
+   "events": [
+    {
+     "id": "surfaced",
+     "type": "surface_reached",
+     "parameters": {
+      "region": "octagon"
+     }
+    },
+    {
+     "id": "surface_ended",
+     "type": "surface_lost",
+     "parameters": {
+      "region": "octagon"
+     }
+    },
+    {
+     "id": "facing_dwelled",
+     "type": "facing_reached",
+     "parameters": {
+      "region": "octagon"
+     }
+    },
+    {
+     "id": "facing_ended",
+     "type": "facing_lost",
+     "parameters": {
+      "region": "octagon"
+     }
+    },
+    {
+     "id": "breached",
+     "type": "breach",
+     "parameters": {
+      "region": "octagon"
+     }
+    },
+    {
+     "id": "rotation_judged",
+     "type": "rotation_judged",
+     "parameters": {
+      "region": "turn_zone"
+     }
+    }
+   ],
+   "scoring": []
+  }
+ ],
+ "bridge": {
+  "kind": "bridge",
+  "id": "uwrt_talos",
+  "description": "Talos <-> UWRT robot stack (controller, EKF, acoustics, perception, autonomy).",
+  "requires_robot": "talos",
+  "namespace": "/talos",
+  "node_name": "physics_simulator",
+  "frame_names": {
+   "world": "map",
+   "imu_mount": "talos/imu_link",
+   "fog_mount": "talos/fog_link",
+   "dvl_mount": "talos/dvl_link",
+   "ffc_mount": "talos/ffc_camera_link",
+   "dfc_mount": "talos/dfc_camera_link",
+   "ffc_left_optical": "talos/ffc_left_camera_optical_frame",
+   "ffc_right_optical": "talos/ffc_right_camera_optical_frame",
+   "dfc_left_optical": "talos/dfc_left_camera_optical_frame",
+   "dfc_right_optical": "talos/dfc_right_camera_optical_frame"
+  },
+  "clock": {
+   "topic": "/clock",
+   "epoch": "system_time_at_start",
+   "rate_hz": 500,
+   "reset_policy": "preserve_ros_epoch_and_time",
+   "real_time_factor": 1.0,
+   "qos": {
+    "history": "keep_last",
+    "depth": 10,
+    "reliability": "reliable",
+    "durability": "volatile"
+   }
+  },
+  "thrusters": {
+   "order": [
+    "VUS",
+    "VUP",
+    "HUS",
+    "HUP",
+    "HLS",
+    "HLP",
+    "VLS",
+    "VLP"
+   ],
+   "input_scales": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "reject": [
+    "wrong_length",
+    "nonfinite"
+   ]
+  },
+  "tf": {
+   "publish": [
+    {
+     "parent": "map",
+     "child": "simulator/talos/base_link",
+     "native": "state:robot.reference_pose",
+     "rate_hz": 100
+    }
+   ],
+   "static": [
+    {
+     "parent": "talos/ffc_camera_link",
+     "child": "talos/ffc_left_camera_optical_frame",
+     "from_frame": "ffc_mount",
+     "to_frame": "ffc_left_optical"
+    },
+    {
+     "parent": "talos/ffc_left_camera_optical_frame",
+     "child": "talos/ffc_right_camera_optical_frame",
+     "from_frame": "ffc_left_optical",
+     "to_frame": "ffc_right_optical"
+    },
+    {
+     "parent": "talos/dfc_camera_link",
+     "child": "talos/dfc_left_camera_optical_frame",
+     "from_frame": "dfc_mount",
+     "to_frame": "dfc_left_optical"
+    },
+    {
+     "parent": "talos/dfc_left_camera_optical_frame",
+     "child": "talos/dfc_right_camera_optical_frame",
+     "from_frame": "dfc_left_optical",
+     "to_frame": "dfc_right_optical"
+    },
+    {
+     "parent": "simulator/talos/base_link",
+     "child": "simulator/talos/origin",
+     "from_frame": "base_link",
+     "to_frame": "origin",
+     "truth": true
+    },
+    {
+     "parent": "simulator/talos/base_link",
+     "child": "simulator/talos/ffc_camera_link",
+     "from_frame": "base_link",
+     "to_frame": "ffc_mount",
+     "truth": true
+    },
+    {
+     "parent": "simulator/talos/ffc_camera_link",
+     "child": "simulator/talos/ffc_left_camera_optical_frame",
+     "from_frame": "ffc_mount",
+     "to_frame": "ffc_left_optical",
+     "truth": true
+    },
+    {
+     "parent": "simulator/talos/base_link",
+     "child": "simulator/talos/dfc_camera_link",
+     "from_frame": "base_link",
+     "to_frame": "dfc_mount",
+     "truth": true
+    },
+    {
+     "parent": "simulator/talos/dfc_camera_link",
+     "child": "simulator/talos/dfc_left_camera_optical_frame",
+     "from_frame": "dfc_mount",
+     "to_frame": "dfc_left_optical",
+     "truth": true
+    }
+   ],
+   "lookup": [
+    {
+     "parent": "world",
+     "child": "map"
+    },
+    {
+     "parent": "world",
+     "child": "odom"
+    }
+   ],
+   "never_publish": [
+    "talos/base_link",
+    "talos/imu_link",
+    "talos/fog_link",
+    "talos/dvl_link",
+    "talos/ffc_camera_link",
+    "talos/dfc_camera_link",
+    "world",
+    "odom",
+    "map"
+   ]
+  },
+  "kill": {
+   "command_stream": "software_kill",
+   "state_stream": "firmware_kill"
+  },
+  "reset": {
+   "robot_service": "reset_sim_to_start",
+   "tasks_service": "reset_tasks",
+   "full_service": "reset_scenario"
+  },
+  "placement": {
+   "set_service": "set_sim_pose",
+   "sync_service": "sync_sim_to_estimate",
+   "estimator_alignment": {
+    "client": "/talos/set_pose",
+    "service_type": "robot_localization/srv/SetPose",
+    "triggers": [
+     "startup",
+     "placement",
+     "reset_to_start",
+     "full_reset"
+    ],
+    "estimate_stream": "ekf_odometry",
+    "pose": "reference_frame",
+    "covariance_diagonal": 1e-06
+   }
+  },
+  "streams": [
+   {
+    "id": "thruster_forces",
+    "direction": "subscribe",
+    "topic": "thruster_forces",
+    "message_type": "std_msgs/msg/Float32MultiArray",
+    "native": "command:thrusters.set_forces",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "forces_n": {
+      "from": "data"
+     }
+    }
+   },
+   {
+    "id": "software_kill",
+    "direction": "subscribe",
+    "topic": "command/software_kill",
+    "message_type": "riptide_msgs2/msg/KillSwitchReport",
+    "native": "command:robot.set_killed",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "accept_if": [
+     {
+      "field": "kill_switch_id",
+      "equals": 1
+     }
+    ],
+    "fields": {
+     "killed": {
+      "from": "switch_asserting_kill"
+     }
+    }
+   },
+   {
+    "id": "ekf_odometry",
+    "direction": "subscribe",
+    "topic": "odometry/filtered",
+    "message_type": "nav_msgs/msg/Odometry",
+    "native": "estimate:latest",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "frame": {
+      "from": "header.frame_id"
+     },
+     "position_m": {
+      "from": "pose.pose.position"
+     },
+     "orientation_w": {
+      "from": "pose.pose.orientation.w"
+     },
+     "orientation_x": {
+      "from": "pose.pose.orientation.x"
+     },
+     "orientation_y": {
+      "from": "pose.pose.orientation.y"
+     },
+     "orientation_z": {
+      "from": "pose.pose.orientation.z"
+     }
+    }
+   },
+   {
+    "id": "torpedo_topic",
+    "direction": "subscribe",
+    "topic": "command/actuator/torpedo",
+    "message_type": "std_msgs/msg/Empty",
+    "native": "command:mechanisms.torpedo_launcher.fire",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {},
+    "reply_stream": "actuator_cmd_status"
+   },
+   {
+    "id": "dropper_topic",
+    "direction": "subscribe",
+    "topic": "command/actuator/dropper",
+    "message_type": "std_msgs/msg/Empty",
+    "native": "command:mechanisms.dropper.fire",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {},
+    "reply_stream": "actuator_cmd_status"
+   },
+   {
+    "id": "arm_topic",
+    "direction": "subscribe",
+    "topic": "command/actuator/arm",
+    "message_type": "std_msgs/msg/Bool",
+    "native": "command:mechanisms.set_armed",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "armed": {
+      "from": "data"
+     }
+    },
+    "reply_stream": "actuator_cmd_status"
+   },
+   {
+    "id": "reload_topic",
+    "direction": "subscribe",
+    "topic": "command/actuator/notify_reload",
+    "message_type": "std_msgs/msg/Empty",
+    "native": "command:mechanisms.reload_all",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {},
+    "reply_stream": "actuator_cmd_status"
+   },
+   {
+    "id": "claw_topic",
+    "direction": "subscribe",
+    "topic": "command/actuator/claw",
+    "message_type": "std_msgs/msg/Bool",
+    "native": "command:mechanisms.claw.command",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "open": {
+      "from": "data"
+     }
+    },
+    "reply_stream": "actuator_cmd_status"
+   },
+   {
+    "id": "claw_timed_move",
+    "direction": "subscribe",
+    "topic": "command/actuator/claw_move_s",
+    "message_type": "std_msgs/msg/Float32",
+    "native": "command:mechanisms.claw.timed_move",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "signed_duration_s": {
+      "from": "data"
+     }
+    },
+    "reply_stream": "actuator_cmd_status"
+   },
+   {
+    "id": "imu",
+    "direction": "publish",
+    "topic": "vectornav/imu",
+    "message_type": "sensor_msgs/msg/Imu",
+    "native": "sensor:imu",
+    "frame_id": "talos/imu_link",
+    "rate_hz": 50,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "header.stamp": {
+      "from": "sample.time"
+     },
+     "orientation.w": {
+      "from": "reading.attitude.orientation_wxyz[0]"
+     },
+     "orientation.x": {
+      "from": "reading.attitude.orientation_wxyz[1]"
+     },
+     "orientation.y": {
+      "from": "reading.attitude.orientation_wxyz[2]"
+     },
+     "orientation.z": {
+      "from": "reading.attitude.orientation_wxyz[3]"
+     },
+     "orientation_covariance": {
+      "from": "reading.attitude.covariance"
+     },
+     "angular_velocity": {
+      "from": "reading.inertial.angular_velocity"
+     },
+     "angular_velocity_covariance": {
+      "from": "reading.inertial.angular_covariance"
+     },
+     "linear_acceleration": {
+      "from": "reading.inertial.specific_force"
+     },
+     "linear_acceleration_covariance": {
+      "from": "reading.inertial.force_covariance"
+     }
+    }
+   },
+   {
+    "id": "fog",
+    "direction": "publish",
+    "topic": "gyro/twist",
+    "message_type": "geometry_msgs/msg/TwistWithCovarianceStamped",
+    "native": "sensor:fog",
+    "frame_id": "talos/fog_link",
+    "rate_hz": 500,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "header.stamp": {
+      "from": "sample.time"
+     },
+     "twist.twist.angular.z": {
+      "from": "reading.angular_rates[0]"
+     },
+     "twist.covariance[35]": {
+      "from": "reading.covariance[0][0]"
+     }
+    }
+   },
+   {
+    "id": "dvl",
+    "direction": "publish",
+    "topic": "dvl_twist",
+    "message_type": "geometry_msgs/msg/TwistWithCovarianceStamped",
+    "native": "sensor:dvl",
+    "frame_id": "talos/dvl_link",
+    "rate_hz": 8,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "header.stamp": {
+      "from": "sample.time"
+     },
+     "twist.twist.linear": {
+      "from": "reading.reference_relative_velocity"
+     },
+     "twist.covariance[0]": {
+      "from": "reading.covariance[0][0]"
+     },
+     "twist.covariance[7]": {
+      "from": "reading.covariance[1][1]"
+     },
+     "twist.covariance[14]": {
+      "from": "reading.covariance[2][2]"
+     }
+    }
+   },
+   {
+    "id": "depth",
+    "direction": "publish",
+    "topic": "depth/pose",
+    "message_type": "geometry_msgs/msg/PoseWithCovarianceStamped",
+    "native": "sensor:depth",
+    "frame_id": "map",
+    "rate_hz": 20,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "header.stamp": {
+      "from": "sample.time"
+     },
+     "pose.pose.position.z": {
+      "from": "reading.target_world_z"
+     },
+     "pose.pose.orientation.w": {
+      "constant": 1.0
+     },
+     "pose.covariance[14]": {
+      "from": "reading.variance"
+     }
+    }
+   },
+   {
+    "id": "firmware_kill",
+    "direction": "publish",
+    "topic": "state/kill",
+    "message_type": "std_msgs/msg/Bool",
+    "native": "event:robot.kill_changed",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "data": {
+      "from": "killed"
+     }
+    }
+   },
+   {
+    "id": "thruster_telemetry_0_3",
+    "direction": "publish",
+    "topic": "state/thrusters/telemetry",
+    "message_type": "riptide_msgs2/msg/DshotPartialTelemetry",
+    "native": "timer",
+    "frame_id": "",
+    "rate_hz": 2,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "start_thruster_num": {
+      "constant": 0
+     },
+     "disabled_flags": {
+      "constant": 0
+     },
+     "esc_telemetry[0].thruster_ready": {
+      "constant": true
+     },
+     "esc_telemetry[1].thruster_ready": {
+      "constant": true
+     },
+     "esc_telemetry[2].thruster_ready": {
+      "constant": true
+     },
+     "esc_telemetry[3].thruster_ready": {
+      "constant": true
+     }
+    }
+   },
+   {
+    "id": "thruster_telemetry_4_7",
+    "direction": "publish",
+    "topic": "state/thrusters/telemetry",
+    "message_type": "riptide_msgs2/msg/DshotPartialTelemetry",
+    "native": "timer",
+    "frame_id": "",
+    "rate_hz": 2,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "start_thruster_num": {
+      "constant": 4
+     },
+     "disabled_flags": {
+      "constant": 0
+     },
+     "esc_telemetry[0].thruster_ready": {
+      "constant": true
+     },
+     "esc_telemetry[1].thruster_ready": {
+      "constant": true
+     },
+     "esc_telemetry[2].thruster_ready": {
+      "constant": true
+     },
+     "esc_telemetry[3].thruster_ready": {
+      "constant": true
+     }
+    }
+   },
+   {
+    "id": "actuator_status",
+    "direction": "publish",
+    "topic": "state/actuator/status",
+    "message_type": "riptide_msgs2/msg/ActuatorStatus",
+    "native": "state:mechanisms",
+    "frame_id": "",
+    "rate_hz": 50,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "actuators_armed": {
+      "from": "armed"
+     },
+     "claw_state": {
+      "from": "claw.state",
+      "enum_map": {
+       "disarmed": 1,
+       "opening": 6,
+       "closing": 7,
+       "opened": 3,
+       "closed": 4
+      }
+     },
+     "rack_state": {
+      "constant": 2
+     },
+     "torpedo_state": {
+      "from": "torpedo_launcher.state",
+      "enum_map": {
+       "disarmed": 1,
+       "busy": 4,
+       "loaded": 3,
+       "empty": 5
+      }
+     },
+     "torpedo_available_count": {
+      "from": "torpedo_launcher.available"
+     },
+     "dropper_state": {
+      "from": "dropper.state",
+      "enum_map": {
+       "disarmed": 1,
+       "busy": 3,
+       "loaded": 2,
+       "empty": 4
+      }
+     },
+     "dropper_available_count": {
+      "from": "dropper.available"
+     }
+    }
+   },
+   {
+    "id": "actuator_busy",
+    "direction": "publish",
+    "topic": "state/actuator/busy",
+    "message_type": "std_msgs/msg/Bool",
+    "native": "state:mechanisms",
+    "frame_id": "",
+    "rate_hz": 50,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "data": {
+      "from": "any_busy"
+     }
+    }
+   },
+   {
+    "id": "actuator_cmd_status",
+    "direction": "publish",
+    "topic": "state/actuator/cmd_status",
+    "message_type": "std_msgs/msg/Bool",
+    "native": "event:mechanisms.command_result",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "data": {
+      "from": "accepted"
+     }
+    }
+   },
+   {
+    "id": "ffc_rgb_compressed",
+    "direction": "publish",
+    "topic": "ffc/zed_node/rgb/image_rect_color/compressed",
+    "message_type": "sensor_msgs/msg/CompressedImage",
+    "native": "sensor:ffc.rgb_left",
+    "frame_id": "talos/ffc_left_camera_optical_frame",
+    "rate_hz": 15,
+    "qos": {
+     "history": "keep_last",
+     "depth": 1,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "image": {
+     "compression": "jpeg",
+     "quality": 93,
+     "source_encoding": "rgb8",
+     "compressed_encoding": "bgr8"
+    },
+    "fields": {
+     "header.stamp": {
+      "from": "sample.time"
+     }
+    }
+   },
+   {
+    "id": "ffc_camera_info",
+    "direction": "publish",
+    "topic": "ffc/zed_node/rgb/camera_info",
+    "message_type": "sensor_msgs/msg/CameraInfo",
+    "native": "sensor:ffc.camera_info",
+    "frame_id": "talos/ffc_left_camera_optical_frame",
+    "rate_hz": 15,
+    "qos": {
+     "history": "keep_last",
+     "depth": 1,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "header.stamp": {
+      "from": "sample.time"
+     },
+     "width": {
+      "from": "info.width"
+     },
+     "height": {
+      "from": "info.height"
+     },
+     "k": {
+      "from": "info.k"
+     },
+     "p": {
+      "from": "info.p"
+     },
+     "distortion_model": {
+      "constant": "plumb_bob"
+     },
+     "d": {
+      "constant": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "r": {
+      "constant": [
+       1.0,
+       0.0,
+       0.0,
+       0.0,
+       1.0,
+       0.0,
+       0.0,
+       0.0,
+       1.0
+      ]
+     }
+    }
+   },
+   {
+    "id": "ffc_depth",
+    "direction": "publish",
+    "topic": "ffc/zed_node/depth/depth_registered",
+    "message_type": "sensor_msgs/msg/Image",
+    "native": "sensor:ffc.depth_left",
+    "frame_id": "talos/ffc_left_camera_optical_frame",
+    "rate_hz": 15,
+    "qos": {
+     "history": "keep_last",
+     "depth": 1,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "image": {
+     "encoding": "32FC1"
+    },
+    "fields": {
+     "header.stamp": {
+      "from": "sample.time"
+     }
+    }
+   },
+   {
+    "id": "ffc_point_cloud",
+    "direction": "publish",
+    "topic": "ffc/zed_node/point_cloud/cloud_registered",
+    "message_type": "sensor_msgs/msg/PointCloud2",
+    "native": "sensor:ffc.point_cloud",
+    "frame_id": "talos/ffc_left_camera_optical_frame",
+    "rate_hz": 5,
+    "qos": {
+     "history": "keep_last",
+     "depth": 1,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "point_cloud": {
+     "stride": 8
+    },
+    "fields": {
+     "header.stamp": {
+      "from": "sample.time"
+     }
+    }
+   },
+   {
+    "id": "dfc_rgb_compressed",
+    "direction": "publish",
+    "topic": "dfc/zed_node/rgb/image_rect_color/compressed",
+    "message_type": "sensor_msgs/msg/CompressedImage",
+    "native": "sensor:dfc.rgb_left",
+    "frame_id": "talos/dfc_left_camera_optical_frame",
+    "rate_hz": 15,
+    "qos": {
+     "history": "keep_last",
+     "depth": 1,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "image": {
+     "compression": "jpeg",
+     "quality": 93,
+     "source_encoding": "rgb8",
+     "compressed_encoding": "bgr8"
+    },
+    "fields": {
+     "header.stamp": {
+      "from": "sample.time"
+     }
+    }
+   },
+   {
+    "id": "dfc_camera_info",
+    "direction": "publish",
+    "topic": "dfc/zed_node/rgb/camera_info",
+    "message_type": "sensor_msgs/msg/CameraInfo",
+    "native": "sensor:dfc.camera_info",
+    "frame_id": "talos/dfc_left_camera_optical_frame",
+    "rate_hz": 15,
+    "qos": {
+     "history": "keep_last",
+     "depth": 1,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "header.stamp": {
+      "from": "sample.time"
+     },
+     "width": {
+      "from": "info.width"
+     },
+     "height": {
+      "from": "info.height"
+     },
+     "k": {
+      "from": "info.k"
+     },
+     "p": {
+      "from": "info.p"
+     },
+     "distortion_model": {
+      "constant": "plumb_bob"
+     },
+     "d": {
+      "constant": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "r": {
+      "constant": [
+       1.0,
+       0.0,
+       0.0,
+       0.0,
+       1.0,
+       0.0,
+       0.0,
+       0.0,
+       1.0
+      ]
+     }
+    }
+   },
+   {
+    "id": "dfc_depth",
+    "direction": "publish",
+    "topic": "dfc/zed_node/depth/depth_registered",
+    "message_type": "sensor_msgs/msg/Image",
+    "native": "sensor:dfc.depth_left",
+    "frame_id": "talos/dfc_left_camera_optical_frame",
+    "rate_hz": 15,
+    "qos": {
+     "history": "keep_last",
+     "depth": 1,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "image": {
+     "encoding": "32FC1"
+    },
+    "fields": {
+     "header.stamp": {
+      "from": "sample.time"
+     }
+    }
+   },
+   {
+    "id": "dfc_point_cloud",
+    "direction": "publish",
+    "topic": "dfc/zed_node/point_cloud/cloud_registered",
+    "message_type": "sensor_msgs/msg/PointCloud2",
+    "native": "sensor:dfc.point_cloud",
+    "frame_id": "talos/dfc_left_camera_optical_frame",
+    "rate_hz": 5,
+    "qos": {
+     "history": "keep_last",
+     "depth": 1,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "point_cloud": {
+     "stride": 8
+    },
+    "fields": {
+     "header.stamp": {
+      "from": "sample.time"
+     }
+    }
+   },
+   {
+    "id": "ground_truth",
+    "direction": "publish",
+    "topic": "simulator/ground_truth",
+    "message_type": "nav_msgs/msg/Odometry",
+    "native": "state:robot",
+    "frame_id": "map",
+    "rate_hz": 100,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "header.stamp": {
+      "from": "sim.time"
+     },
+     "child_frame_id": {
+      "constant": "simulator/talos/base_link"
+     },
+     "pose.pose.position": {
+      "from": "reference_pose.position"
+     },
+     "pose.pose.orientation.w": {
+      "from": "reference_pose.orientation_wxyz[0]"
+     },
+     "pose.pose.orientation.x": {
+      "from": "reference_pose.orientation_wxyz[1]"
+     },
+     "pose.pose.orientation.y": {
+      "from": "reference_pose.orientation_wxyz[2]"
+     },
+     "pose.pose.orientation.z": {
+      "from": "reference_pose.orientation_wxyz[3]"
+     },
+     "twist.twist.linear": {
+      "from": "reference_body_velocity"
+     },
+     "twist.twist.angular": {
+      "from": "body_angular_velocity"
+     }
+    }
+   },
+   {
+    "id": "run_command",
+    "direction": "subscribe",
+    "topic": "simulator/run_command",
+    "message_type": "std_msgs/msg/String",
+    "native": "command:runs.command",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "command_json": {
+      "from": "data"
+     }
+    }
+   },
+   {
+    "id": "reset_tasks_topic",
+    "direction": "subscribe",
+    "topic": "simulator/reset_tasks",
+    "message_type": "std_msgs/msg/Empty",
+    "native": "command:tasks.reset",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {}
+   },
+   {
+    "id": "run_score",
+    "direction": "publish",
+    "topic": "simulator/run_score",
+    "message_type": "std_msgs/msg/String",
+    "native": "state:run",
+    "format": "json",
+    "frame_id": "",
+    "rate_hz": 50,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {}
+   },
+   {
+    "id": "task_score",
+    "direction": "publish",
+    "topic": "simulator/task_score",
+    "message_type": "std_msgs/msg/String",
+    "native": "state:task_score",
+    "format": "json",
+    "frame_id": "",
+    "rate_hz": 50,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {}
+   },
+   {
+    "id": "task_events",
+    "direction": "publish",
+    "topic": "simulator/task_events",
+    "message_type": "std_msgs/msg/String",
+    "native": "event:tasks.feed",
+    "format": "json",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {}
+   },
+   {
+    "id": "actual_thruster_forces",
+    "direction": "publish",
+    "topic": "simulator/actual_thruster_forces",
+    "message_type": "std_msgs/msg/Float32MultiArray",
+    "native": "state:thrusters",
+    "frame_id": "",
+    "rate_hz": 100,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "data": {
+      "from": "forces_n"
+     }
+    }
+   },
+   {
+    "id": "claw_joints",
+    "direction": "publish",
+    "topic": "simulator/claw_joints",
+    "message_type": "std_msgs/msg/Float64MultiArray",
+    "native": "state:claws",
+    "frame_id": "",
+    "rate_hz": 50,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {
+     "data": {
+      "from": "claw.jaws_m"
+     }
+    }
+   },
+   {
+    "id": "magnet_lights",
+    "direction": "publish",
+    "topic": "simulator/magnet_lights",
+    "message_type": "visualization_msgs/msg/MarkerArray",
+    "native": "state:indicators",
+    "format": "marker_array",
+    "frame_id": "map",
+    "rate_hz": 50,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {},
+    "options": {
+     "shape": "sphere",
+     "scale_m": [
+      0.002,
+      0.044,
+      0.044
+     ],
+     "colors": {
+      "red": [
+       1.0,
+       0.0,
+       0.0,
+       1.0
+      ],
+      "green": [
+       0.0,
+       1.0,
+       0.0,
+       1.0
+      ]
+     }
+    }
+   },
+   {
+    "id": "task_objects",
+    "direction": "publish",
+    "topic": "simulator/task_objects",
+    "message_type": "visualization_msgs/msg/MarkerArray",
+    "native": "state:props",
+    "format": "marker_array",
+    "frame_id": "map",
+    "rate_hz": 50,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {},
+    "options": {
+     "held_frame_id": "talos/base_link"
+    }
+   },
+   {
+    "id": "projectiles",
+    "direction": "publish",
+    "topic": "simulator/projectiles",
+    "message_type": "visualization_msgs/msg/MarkerArray",
+    "native": "state:payloads",
+    "format": "marker_array",
+    "frame_id": "map",
+    "rate_hz": 50,
+    "qos": {
+     "history": "keep_last",
+     "depth": 10,
+     "reliability": "reliable",
+     "durability": "volatile"
+    },
+    "fields": {},
+    "options": {
+     "namespaces": {
+      "launcher": "torpedo",
+      "dropper": "dropper"
+     },
+     "loaded_suffix": "_loaded",
+     "mesh_asset": "projectile_mesh",
+     "color": [
+      0.65,
+      0.025,
+      0.035,
+      1.0
+     ],
+     "delete_all": true
+    }
+   },
+   {
+    "id": "scenario",
+    "direction": "publish",
+    "topic": "simulator/scenario",
+    "message_type": "std_msgs/msg/String",
+    "native": "event:scenario.description",
+    "format": "json",
+    "frame_id": "",
+    "rate_hz": 0,
+    "qos": {
+     "history": "keep_last",
+     "depth": 1,
+     "reliability": "reliable",
+     "durability": "transient_local"
+    },
+    "fields": {}
+   }
+  ],
+  "services": [
+   {
+    "id": "set_sim_pose",
+    "service": "set_sim_pose",
+    "service_type": "robot_localization/srv/SetPose",
+    "action": "command:robot.place",
+    "request": {
+     "frame": {
+      "from": "pose.header.frame_id"
+     },
+     "position_m": {
+      "from": "pose.pose.pose.position"
+     },
+     "orientation_w": {
+      "from": "pose.pose.pose.orientation.w"
+     },
+     "orientation_x": {
+      "from": "pose.pose.pose.orientation.x"
+     },
+     "orientation_y": {
+      "from": "pose.pose.pose.orientation.y"
+     },
+     "orientation_z": {
+      "from": "pose.pose.pose.orientation.z"
+     }
+    },
+    "response": {},
+    "placement": {
+     "pose_source": "request",
+     "keep_velocity": false,
+     "becomes_start_pose": true,
+     "align_estimator": true
+    }
+   },
+   {
+    "id": "sync_sim_to_estimate",
+    "service": "sync_sim_to_estimate",
+    "service_type": "std_srvs/srv/Trigger",
+    "action": "command:robot.place",
+    "request": {},
+    "response": {
+     "success": {
+      "from": "accepted"
+     },
+     "message": {
+      "from": "message"
+     }
+    },
+    "placement": {
+     "pose_source": "estimate",
+     "keep_velocity": true,
+     "becomes_start_pose": false,
+     "align_estimator": false
+    }
+   },
+   {
+    "id": "reset_sim_to_start",
+    "service": "reset_sim_to_start",
+    "service_type": "std_srvs/srv/Trigger",
+    "action": "command:robot.reset_to_start",
+    "request": {},
+    "response": {
+     "success": {
+      "from": "accepted"
+     },
+     "message": {
+      "from": "message"
+     }
+    }
+   },
+   {
+    "id": "arm",
+    "service": "command/actuator/arm",
+    "service_type": "std_srvs/srv/SetBool",
+    "action": "command:mechanisms.set_armed",
+    "request": {
+     "armed": {
+      "from": "data"
+     }
+    },
+    "response": {
+     "success": {
+      "from": "accepted"
+     },
+     "message": {
+      "from": "message"
+     }
+    }
+   },
+   {
+    "id": "fire_torpedo",
+    "service": "command/actuator/torpedo",
+    "service_type": "std_srvs/srv/Trigger",
+    "action": "command:mechanisms.torpedo_launcher.fire",
+    "request": {},
+    "response": {
+     "success": {
+      "from": "accepted"
+     },
+     "message": {
+      "from": "message"
+     }
+    }
+   },
+   {
+    "id": "fire_dropper",
+    "service": "command/actuator/dropper",
+    "service_type": "std_srvs/srv/Trigger",
+    "action": "command:mechanisms.dropper.fire",
+    "request": {},
+    "response": {
+     "success": {
+      "from": "accepted"
+     },
+     "message": {
+      "from": "message"
+     }
+    }
+   },
+   {
+    "id": "reload",
+    "service": "command/actuator/notify_reload",
+    "service_type": "std_srvs/srv/Trigger",
+    "action": "command:mechanisms.reload_all",
+    "request": {},
+    "response": {
+     "success": {
+      "from": "accepted"
+     },
+     "message": {
+      "from": "message"
+     }
+    }
+   },
+   {
+    "id": "claw",
+    "service": "command/actuator/claw",
+    "service_type": "std_srvs/srv/SetBool",
+    "action": "command:mechanisms.claw.command",
+    "request": {
+     "open": {
+      "from": "data"
+     }
+    },
+    "response": {
+     "success": {
+      "from": "accepted"
+     },
+     "message": {
+      "from": "message"
+     }
+    }
+   },
+   {
+    "id": "reset_tasks",
+    "service": "simulator/reset_tasks",
+    "service_type": "std_srvs/srv/Trigger",
+    "action": "command:tasks.reset",
+    "request": {},
+    "response": {
+     "success": {
+      "from": "accepted"
+     },
+     "message": {
+      "from": "message"
+     }
+    }
+   },
+   {
+    "id": "reset_scenario",
+    "service": "simulator/reset_scenario",
+    "service_type": "std_srvs/srv/Trigger",
+    "action": "command:scenario.reset",
+    "request": {},
+    "response": {
+     "success": {
+      "from": "accepted"
+     },
+     "message": {
+      "from": "message"
+     }
+    }
+   }
+  ],
+  "converters": []
+ },
+ "equipment": {
+  "kind": "equipment",
+  "id": "uwrt",
+  "description": "UWRT gear set up at the pool, the AprilTag calibration board.",
+  "assets": [
+   {
+    "id": "calibration_board",
+    "path": "assets/calibration_board.obj"
+   }
+  ],
+  "items": [
+   {
+    "id": "calibration_board",
+    "description": "2 ft x 3 ft, 3 mm dibond sign with tag36h11 id 0; the datum line is 18 in above the tag centre.",
+    "asset": "calibration_board",
+    "frames": [
+     {
+      "id": "tag",
+      "position_m": [
+       0.003,
+       0.0,
+       -0.1178
+      ],
+      "orientation_wxyz": [
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ]
+     }
+    ]
+   }
+  ],
+  "placed": [
+   {
+    "id": "calibration_board",
+    "item": "calibration_board",
+    "asset": "calibration_board",
+    "position_m": [
+     0.0,
+     0.0,
+     -0.3394
+    ],
+    "orientation_wxyz": [
+     1.0,
+     0.0,
+     0.0,
+     0.0
+    ]
+   }
+  ]
+ },
+ "run_options": {
+  "role": "repair",
+  "heading_coin": true,
+  "role_coin": true,
+  "pinger_task": "none",
+  "pinger_random": false
+ },
+ "sources": [
+  {
+   "path": "scenario.yaml",
+   "sha256": "1b5766f6e2437ec119bea2dc38a8f1783ea74d0577926d3dfbf095fb553f859c"
+  },
+  {
+   "path": "../../robots/talos/robot.yaml",
+   "sha256": "c07f75d861f91c8470c6f28562d646af653be3a595d6347dafbc617cc348ea4a"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/Talos3_body.glb",
+   "sha256": "5827668235d30dcde556d2cd1cf2c3352bf71adaeeaa1bc9840925d9eaa2460d"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/rotors/VUS.glb",
+   "sha256": "bcefa0cd37a3c3166cee03e33dcf3fa55342f239aba5b5a28e0c82fb64631f4d"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/rotors/VUP.glb",
+   "sha256": "7b34f2f1be6b251fc94b00b46de65bb5071014b4eb355cc0ff6b32d3b0c76be3"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/rotors/HUS.glb",
+   "sha256": "d11d3770a54ea4feb67b85cfd008f48c58c76703132305010d1e68ddf276651e"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/rotors/HUP.glb",
+   "sha256": "75f47aa49472d9399f466a44a03f6a9fdc7b91a4e170ea171d591b7d622c4f7b"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/rotors/HLS.glb",
+   "sha256": "4382429ecd19663cf270bd50eabe8db373ed52e022700da559b6bd004358804b"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/rotors/HLP.glb",
+   "sha256": "6c07417e1a4c56b1939c733af482689cd7f04faf82a52503436600d51d13d9f9"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/rotors/VLS.glb",
+   "sha256": "a1ea85ced8ca686c06d5a272cfb1ac9fd9ec5d40a1f746ef56364c7bf7869ba8"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/rotors/VLP.glb",
+   "sha256": "e9abcc47da85069b25cbdc780f1a9f75ab56317b523297626970246be7bf98ca"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/claw/assembly_static.glb",
+   "sha256": "3a8761e95d245ea160bac7da3bcac257331a16048958fdd046670246fda1eaed"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/claw/assembly_left.glb",
+   "sha256": "60ff5d30068cd11e8b0fd61a986335385f4816a65534902cbfd0c878b6313e70"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/claw/assembly_right.glb",
+   "sha256": "e9e644e9a62afac91e719d05d0775c9d2cc7a3ff82c77631921915d9bcd3aeba"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/claw/gripper.glb",
+   "sha256": "fd7ce8d8334a92da3060b74c0f4b85d45ed35a2bb937eb7e4b8f09302fd3405c"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/claw/gripper_right.glb",
+   "sha256": "f3267ef51e31de7942ab96561efa01931c838bd099ed8b13833aa06a1411e936"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/payloads/launcher.glb",
+   "sha256": "249910560aebb27b753466e6b27fd0f3d6331ad361712d966cf439bd66f98d07"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/payloads/projectile.glb",
+   "sha256": "67b854b4cdd1e4ec96e499f78bcd49509b16679796cb0b253cf7b9c3f67f6923"
+  },
+  {
+   "path": "../../robots/talos/assets/collision/claw_pad.obj",
+   "sha256": "506d0735f076ac74aa67b8fd9192576d0bd8bc5a07f0ca9e951311ad7fd46512"
+  },
+  {
+   "path": "../../robots/talos/assets/collision/claw_pad_right.obj",
+   "sha256": "f34963988eca6f6ac1ea47524d979724292b4831eb02b231d7e49cf6f7c3cfca"
+  },
+  {
+   "path": "../../robots/talos/assets/visual/magnet/robot_magnet.glb",
+   "sha256": "a95c37ae9be406f172ca5c3a972cf8018a9d46043e44979047c46f19c185b3c4"
+  },
+  {
+   "path": "../../pools/robosub_2026/pool.yaml",
+   "sha256": "5c96e169a3c6f8c54374694e6d6cc98b1c44d6c9b95c848ffd264cd4d7a41df9"
+  },
+  {
+   "path": "../../tasks/robosub_2026/tasks.yaml",
+   "sha256": "b1134fee7b428cdb85e914176d14475a25063d616740b5182be2a3b0a6d76145"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/gate/model.dae",
+   "sha256": "32c407fcb9fcd9c6aff01273de63219b41d79a2565715c85eeaa49071b60ede5"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/gate_repair/model.dae",
+   "sha256": "14133dacc620198f7ae3ac7f98301237177f2c3498d5da76cc2bab2ee59e9953"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/gate_repair/Task1_SurveyRepair_Fixed.png",
+   "sha256": "5066157d498876da3b0366d0a1872684b1f7bc38884f80a929917716ef7a1928"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/gate_rescue/model.dae",
+   "sha256": "1c3b5f5d13539ab5c3540136c0c42e861d52a78a805365ba5db00516c65315a8"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/gate_rescue/Task1_SearchRescue_Fixed.png",
+   "sha256": "b672a1d01c0468532a2cb87d5a466f6406db494f48daf09b738d4528cbb218a0"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/torpedo/model.dae",
+   "sha256": "0d45476fb0c24d9acf508b5cad95060a51b85373ed5c131813541ca685ed754e"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/torpedo/Task4_ver1_Fixed.png",
+   "sha256": "b6a5a8bc9ef0cde09a055296f9746b61be9b8d6961fe5504b46350649dbf4336"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/table/table.obj",
+   "sha256": "5a1d74b0c4c8691c673776ba284f9b2ba5e069d77f19bfafe464d9fed8dedd2e"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/table/table_basket_helmet.obj",
+   "sha256": "ede76ab0c280dd38277301411fbebf5195575da788f49956d38ecd6abda95f3f"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/table/table_basket_warning.obj",
+   "sha256": "ede76ab0c280dd38277301411fbebf5195575da788f49956d38ecd6abda95f3f"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/table/table_pill.obj",
+   "sha256": "534baeeccd98b78fd41ae145f0334a5e24f2515a467a84594d4ce95f6591a656"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/table/table_bandage.obj",
+   "sha256": "0fb179d57b4c7ba6d6941355e3274deb294bfdeb1a8c08f3a2e2598dc7eebc15"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/table/table_nut_and_bolt.obj",
+   "sha256": "534baeeccd98b78fd41ae145f0334a5e24f2515a467a84594d4ce95f6591a656"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/table/table_plug.obj",
+   "sha256": "0fb179d57b4c7ba6d6941355e3274deb294bfdeb1a8c08f3a2e2598dc7eebc15"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/slalom/model.dae",
+   "sha256": "ab2a771f16f9f0546362a986608eeb3af18a16e9d7e2b772c9b05c7178cf25bf"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/bin/model.dae",
+   "sha256": "3c99920f0cd42830336356365a4f0df2ac7504a22e7fdf136efde33265f509a9"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/bin_magnet/model.dae",
+   "sha256": "3ee920af938c676da72ae13e6abda913c2039030abcf88dc334fe9b8a309de16"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/bin_vinyl/model.dae",
+   "sha256": "fbb82e0c293401193fb2b1dab5052e1d1cdbf713544d9a520ca1168324ff5021"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/bin_vinyl/Task3_Blood_Fixed.png",
+   "sha256": "0647f0001d15dfe8c8d28415028c8e93f5ece93d28c4521a4819c5991b99d59e"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/bin_vinyl/Task3_Fire_Fixed.png",
+   "sha256": "36e2602834f76a1005c38561105ef89810cd37c446fa647657695be7af3a6e93"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/octagon_buoy/model.dae",
+   "sha256": "7493cea169edd2ff215f79edb2eedc3b3f053767ef077faac0d40af6b55e619a"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/octagon_buoy/Task5_Search_Fixed.png",
+   "sha256": "4c1a4f7ac07b05a51e0408a69bd99f987c1c4e5b9da7b19a51dcf71a9da9ea84"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/octagon_compass/model.dae",
+   "sha256": "f7fbf799513fd2e1aa9727272bf4987e07017cc4ec56bb59692f90b16216eeee"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/octagon_compass/Task5_Survey_Fixed.png",
+   "sha256": "fddafbc59bcf393c51a9d7531de69dca938e5231258c54fbba39362619cdb7c0"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/octagon_hammer_and_wrench/model.dae",
+   "sha256": "64b1c6185fa9f93e190a30b0a3bdde1c8fc3c283fa57ae805fff5fef9ad02b38"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/octagon_hammer_and_wrench/Task5_Repair_Fixed.png",
+   "sha256": "bda8e8c2982b1d51b01c165c7f21fbf67cda5725f4c9e4c22c7c2431a13680c7"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/octagon_sos/model.dae",
+   "sha256": "889932acae53c335bb0b526453d1d36398b3eefaa6c9b0f4ca8b232a76482a1b"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/octagon_sos/Task5_Rescue_Fixed.png",
+   "sha256": "58dd02090cc7fec1daeebf1ea63f4fdf64c59dcf072fb864c791d8fff9d2d579"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/visual/table/model.dae",
+   "sha256": "0671bea1d57426c23a000ea1a27e7d30c3d64d244dada3de85f4116b9fe8d78c"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/visual/table_basket_helmet/Task5_RedCross_Fixed.png",
+   "sha256": "1b6b33cd19bd0f63ca640262d3f76dabb847e5531032e8fc4e15673e43af0607"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/visual/table_basket_helmet/model.dae",
+   "sha256": "a7c114784418914efc3bb4b5f94728827f20454d54cdfc7720e7dd7072dc30f8"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/visual/table_basket_warning/Task5_Warning_Fixed.png",
+   "sha256": "12080a50fdcc92cbbf7b0216ce29498fbd3290500f272aa8377b8687a8de5141"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/visual/table_basket_warning/model.dae",
+   "sha256": "0d1bba8cf3a8b2469f7a9b9798924d5b12eba404a068a38bf286d2ab20c37b81"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/visual/table_pill/Task5_Pill_Fixed.png",
+   "sha256": "c4b51b42759f55d38c5c68602302a24a0235ce6c8a26930e33abc9fe3dedc80a"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/visual/table_pill/model.dae",
+   "sha256": "89a1568f6318a0752f8517dcb7d9767775c1ec701b5a46f632a4094d8de25be7"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/visual/table_bandage/Task5_BandAid_Fixed.png",
+   "sha256": "6e94ab1a131c683c5732674432b9e124996f38095061193b7d6e9a14fdee035c"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/visual/table_bandage/model.dae",
+   "sha256": "95057a57e7efdb47bb3be29b3edf629b13b89afb4a7d626e4a0b85a4868ae8fa"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/visual/table_nut_and_bolt/Task5_NutBolt_Fixed.png",
+   "sha256": "9294e4812c4a7519b589c7c873e8cab9802f20157caf9361a70de8f797b6badf"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/visual/table_nut_and_bolt/model.dae",
+   "sha256": "d484ef3540c63b57a2ec3ff6c98c76fa6c0d400273517354ed2a070f2ce04ab9"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/visual/table_plug/Task5_Electric_Fixed.png",
+   "sha256": "17ae6152f92af33f5429a1078aad8de1c167185ec440f6b16d7ae7937d3d9d6b"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/visual/table_plug/model.dae",
+   "sha256": "c221f5ec0fae0b134ec196da54f23ef8fb7a512d0a9e174babb5165e9899d47f"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/course/crate_lattice.glb",
+   "sha256": "df83a3e1152ed401cd863a5197012c7ee26419a184af77a3ba7542fc34dc6b2d"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/course/crate_liner.glb",
+   "sha256": "7860f269cf505ae5be28b704dfc024c986006a5a7ace0d3bffb4d0502e835d1b"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/course/octagon_ring.glb",
+   "sha256": "990a8cb14714a71f2441a3c87ddb3845ad3afdb964cad01b64c275e53e4f30e5"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/course/magnet_lights/housing.glb",
+   "sha256": "a44eb36aa35aeb0afaa9d111e3b9c516acca3d30344981c803a081a1a60ccc91"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/course/magnet_lights/cover.glb",
+   "sha256": "983f6a4a38b8cf5fd0bad2ded5ac5259c6eae37c603c4dbcc2b696e5bc77af32"
+  },
+  {
+   "path": "../../tasks/robosub_2026/assets/course/magnet_lights/leds.glb",
+   "sha256": "5059dc4c68f70e02fb5ee860a58c11907d33a2f10f458330143a167668dc5c33"
+  },
+  {
+   "path": "../../tasks/robosub_2026/gate.yaml",
+   "sha256": "a759094645495a726180f1ec712fedfd8bf972b5773364c0114238f0d91f5f85"
+  },
+  {
+   "path": "../../tasks/robosub_2026/torpedo.yaml",
+   "sha256": "3e274ab9324b31abbc2ca2f3151a1a2190374e08e72f227147dea2d5434035fb"
+  },
+  {
+   "path": "../../tasks/robosub_2026/table.yaml",
+   "sha256": "a61484d6b3e3e5ac3a15e330cb84a0bd3634359ce81f3bb36c19053ef910c229"
+  },
+  {
+   "path": "../../tasks/robosub_2026/slalom.yaml",
+   "sha256": "59bded465ada42bebe3cd51b8cf4458dfb786d369d8ceac4236ac73074c23f24"
+  },
+  {
+   "path": "../../tasks/robosub_2026/bins.yaml",
+   "sha256": "3039fcf18cf70f92d1298e66bc5477e18c34781cf6206c605d0c497cb64d733d"
+  },
+  {
+   "path": "../../tasks/robosub_2026/surface.yaml",
+   "sha256": "17645ff5370f6b4b95c79189ea2aee2a7427d2808f17ed34e52b8491983e16ac"
+  },
+  {
+   "path": "../../bridges/uwrt_talos/bridge.yaml",
+   "sha256": "68fcf8c50ded2e1f7d49fc71c81d5cfcc4c65387ec03517fa51a81d8cd7d3669"
+  },
+  {
+   "path": "../../equipment/uwrt/equipment.yaml",
+   "sha256": "ef21491247d625a1621a0455df2cd23a4de5377318ad482041745a5e1c505010"
+  },
+  {
+   "path": "../../equipment/uwrt/assets/calibration_board.obj",
+   "sha256": "cf23b27381622341f2ba7a0ffc4dac7bc14ffc862e00cf83430a5e93849e7732"
+  }
+ ],
+ "content_sha256": "ec3299afd71fb35cfb6039c0f2e9f9f3c8450138b3f4b035664e03a0e40b17f8",
+ "asset_paths": {
+  "robot": {
+   "body_mesh": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/Talos3_body.glb",
+   "rotor_VUS": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/rotors/VUS.glb",
+   "rotor_VUP": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/rotors/VUP.glb",
+   "rotor_HUS": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/rotors/HUS.glb",
+   "rotor_HUP": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/rotors/HUP.glb",
+   "rotor_HLS": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/rotors/HLS.glb",
+   "rotor_HLP": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/rotors/HLP.glb",
+   "rotor_VLS": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/rotors/VLS.glb",
+   "rotor_VLP": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/rotors/VLP.glb",
+   "claw_static_mesh": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/claw/assembly_static.glb",
+   "claw_left_mesh": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/claw/assembly_left.glb",
+   "claw_right_mesh": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/claw/assembly_right.glb",
+   "claw_left_pad_mesh": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/claw/gripper.glb",
+   "claw_right_pad_mesh": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/claw/gripper_right.glb",
+   "launcher_mesh": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/payloads/launcher.glb",
+   "projectile_mesh": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/payloads/projectile.glb",
+   "claw_pad_left": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/collision/claw_pad.obj",
+   "claw_pad_right": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/collision/claw_pad_right.obj",
+   "robot_magnet_mesh": "@NEREUS_SOURCE_DIR@/content/packs/robots/talos/assets/visual/magnet/robot_magnet.glb"
+  },
+  "pool": {},
+  "tasks": {
+   "gate_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/gate/model.dae",
+   "gate_repair_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/gate_repair/model.dae",
+   "gate_repair_texture": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/gate_repair/Task1_SurveyRepair_Fixed.png",
+   "gate_rescue_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/gate_rescue/model.dae",
+   "gate_rescue_texture": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/gate_rescue/Task1_SearchRescue_Fixed.png",
+   "torpedo_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/torpedo/model.dae",
+   "torpedo_texture": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/torpedo/Task4_ver1_Fixed.png",
+   "table_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/table/table.obj",
+   "basket_helmet_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/table/table_basket_helmet.obj",
+   "basket_warning_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/table/table_basket_warning.obj",
+   "pill_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/table/table_pill.obj",
+   "bandage_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/table/table_bandage.obj",
+   "nut_and_bolt_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/table/table_nut_and_bolt.obj",
+   "plug_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/table/table_plug.obj",
+   "slalom_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/slalom/model.dae",
+   "bin_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/bin/model.dae",
+   "bin_magnet_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/bin_magnet/model.dae",
+   "bin_vinyl_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/bin_vinyl/model.dae",
+   "bin_vinyl_blood_texture": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/bin_vinyl/Task3_Blood_Fixed.png",
+   "bin_vinyl_fire_texture": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/bin_vinyl/Task3_Fire_Fixed.png",
+   "octagon_buoy_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/octagon_buoy/model.dae",
+   "octagon_buoy_texture": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/octagon_buoy/Task5_Search_Fixed.png",
+   "octagon_compass_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/octagon_compass/model.dae",
+   "octagon_compass_texture": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/octagon_compass/Task5_Survey_Fixed.png",
+   "octagon_hammer_and_wrench_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/octagon_hammer_and_wrench/model.dae",
+   "octagon_hammer_and_wrench_texture": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/octagon_hammer_and_wrench/Task5_Repair_Fixed.png",
+   "octagon_sos_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/octagon_sos/model.dae",
+   "octagon_sos_texture": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/octagon_sos/Task5_Rescue_Fixed.png",
+   "table_visual": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/visual/table/model.dae",
+   "basket_helmet_visual_task5_redcross_fixed": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/visual/table_basket_helmet/Task5_RedCross_Fixed.png",
+   "basket_helmet_visual": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/visual/table_basket_helmet/model.dae",
+   "basket_warning_visual_task5_warning_fixed": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/visual/table_basket_warning/Task5_Warning_Fixed.png",
+   "basket_warning_visual": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/visual/table_basket_warning/model.dae",
+   "pill_visual_task5_pill_fixed": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/visual/table_pill/Task5_Pill_Fixed.png",
+   "pill_visual": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/visual/table_pill/model.dae",
+   "bandage_visual_task5_bandaid_fixed": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/visual/table_bandage/Task5_BandAid_Fixed.png",
+   "bandage_visual": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/visual/table_bandage/model.dae",
+   "nut_and_bolt_visual_task5_nutbolt_fixed": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/visual/table_nut_and_bolt/Task5_NutBolt_Fixed.png",
+   "nut_and_bolt_visual": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/visual/table_nut_and_bolt/model.dae",
+   "plug_visual_task5_electric_fixed": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/visual/table_plug/Task5_Electric_Fixed.png",
+   "plug_visual": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/visual/table_plug/model.dae",
+   "crate_lattice_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/course/crate_lattice.glb",
+   "crate_liner_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/course/crate_liner.glb",
+   "octagon_ring_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/course/octagon_ring.glb",
+   "magnet_housing_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/course/magnet_lights/housing.glb",
+   "magnet_cover_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/course/magnet_lights/cover.glb",
+   "magnet_leds_mesh": "@NEREUS_SOURCE_DIR@/content/packs/tasks/robosub_2026/assets/course/magnet_lights/leds.glb"
+  },
+  "equipment": {
+   "calibration_board": "@NEREUS_SOURCE_DIR@/content/packs/equipment/uwrt/assets/calibration_board.obj"
+  }
+ }
+}

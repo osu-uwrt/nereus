@@ -25,11 +25,12 @@ def main() -> None:
         "LC_ALL": "C.UTF-8",
         "PIP_DISABLE_PIP_VERSION_CHECK": "1",
     }
-    paths = ["python", "tests/python", "tools/check_python.py"]
+    tools = ["tools/check_python.py", "tools/freeze_session_scenarios.py"]
+    paths = ["python", "tests/python", *tools]
     run([interpreter, "-m", "ruff", "check", *paths], cwd=ROOT, env=env)
     run([interpreter, "-m", "ruff", "format", "--check", *paths], cwd=ROOT, env=env)
     run(
-        [interpreter, "-m", "mypy", "python/src", "tests/python", "tools/check_python.py"],
+        [interpreter, "-m", "mypy", "python/src", "tests/python", *tools],
         cwd=ROOT,
         env=env,
     )

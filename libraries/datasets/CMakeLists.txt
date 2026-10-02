@@ -31,5 +31,5 @@ if(BUILD_TESTING)
     NEREUS_RESOLVED_TALOS="${CMAKE_BINARY_DIR}/session_fixtures/talos_uwrt_resolved.json"
     NEREUS_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
   nereus_project_options(datasets_tests)
-  gtest_discover_tests(datasets_tests DISCOVERY_MODE PRE_TEST PROPERTIES FIXTURES_REQUIRED session_resolved)
+  gtest_discover_tests(datasets_tests DISCOVERY_MODE PRE_TEST)
 endif()

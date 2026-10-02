@@ -24,6 +24,11 @@ Tests check behaviour, not structure. The reference fixtures in `libraries/sessi
 `extensions/rules/robosub_2026/tests/` and `tests/fixtures/` are recordings of known-good runs. When you change
 behaviour on purpose, update the affected expected values and say why in the commit.
 
+The C++ tests run on frozen resolved scenarios (`libraries/session/tests/fixtures/*_resolved.json.in`), not on
+the live packs, so retuning the robot (mass, inertia, buoyancy, frames) or moving the course never breaks them;
+`nereus.packs validate` and the Python pack tests check the live packs. Re-freeze them with
+`tools/freeze_session_scenarios.py` only when you re-record the references that depend on them.
+
 ## Commits
 
 One coherent change per commit, with its tests and docs. The message says what changed and why, and how it was

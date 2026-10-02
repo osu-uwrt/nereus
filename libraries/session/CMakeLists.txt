@@ -30,22 +30,16 @@ nereus_project_options(nereus_rules)
 if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
-  # Resolved Talos/UWRT scenario for tests, written by the pack tool (asset paths are absolute).
-  find_package(Python 3.10 REQUIRED COMPONENTS Interpreter)
+  # Frozen resolved Talos/UWRT scenarios (tests/fixtures/*_resolved.json.in), not the live packs: the recorded
+  # references pin the plant to the last bit, and the team retunes the Talos pack. configure_file fills in the
+  # absolute asset paths. Re-freeze with tools/freeze_session_scenarios.py only when re-recording the references.
+  set(NEREUS_SOURCE_DIR ${PROJECT_SOURCE_DIR})
   set(nereus_resolved_talos ${CMAKE_BINARY_DIR}/session_fixtures/talos_uwrt_resolved.json)
-  add_test(NAME session_resolve_talos
-    COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH=${PROJECT_SOURCE_DIR}/python/src
-      ${Python_EXECUTABLE} -m nereus.packs resolve
-      ${PROJECT_SOURCE_DIR}/content/packs/scenarios/talos_uwrt -o ${nereus_resolved_talos})
-  set_tests_properties(session_resolve_talos PROPERTIES FIXTURES_SETUP session_resolved)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/talos_uwrt_resolved.json.in ${nereus_resolved_talos} @ONLY)
   # The same robot in the RPAC dive well: a sloped (profiled) floor.
   set(nereus_resolved_rpac ${CMAKE_BINARY_DIR}/session_fixtures/talos_uwrt_rpac_resolved.json)
-  add_test(NAME session_resolve_rpac
-    COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH=${PROJECT_SOURCE_DIR}/python/src
-      ${Python_EXECUTABLE} -m nereus.packs resolve
-      ${PROJECT_SOURCE_DIR}/content/packs/scenarios/talos_uwrt_rpac -o ${nereus_resolved_rpac})
-  set_tests_properties(session_resolve_rpac PROPERTIES FIXTURES_SETUP session_resolved)
-  file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/session_fixtures)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/talos_uwrt_rpac_resolved.json.in ${nereus_resolved_rpac}
+    @ONLY)
   file(GLOB nereus_session_tests CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/*_test.cpp)
   foreach(test_source ${nereus_session_tests})
     get_filename_component(test_name ${test_source} NAME_WE)
@@ -55,7 +49,6 @@ if(BUILD_TESTING)
       NEREUS_RESOLVED_TALOS="${nereus_resolved_talos}" NEREUS_RESOLVED_RPAC="${nereus_resolved_rpac}")
     target_link_libraries(session_${test_name} PRIVATE nereus_rules GTest::gtest_main)
     nereus_project_options(session_${test_name})
-    gtest_discover_tests(session_${test_name} DISCOVERY_MODE PRE_TEST
-      PROPERTIES FIXTURES_REQUIRED session_resolved)
+    gtest_discover_tests(session_${test_name} DISCOVERY_MODE PRE_TEST)
   endforeach()
 endif()
