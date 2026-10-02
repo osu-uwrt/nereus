@@ -27,8 +27,8 @@ assets:
 body:
   type: marine_6dof
   parameters:
-    mass_kg: 31.998
-    inertia_matrix: [[1.6315, -0.0599, -0.033], [-0.0599, 0.7341, 0.0427], [-0.033, 0.0427, 1.6332]]   # about COM, body axes
+    mass_kg: 32.444   # measured (CAD: 34.708)
+    inertia_matrix: [[1.8429, 0.0496, 0.0945], [0.0496, 1.0051, -0.0083], [0.0945, -0.0083, 1.8607]]   # about COM, body axes (CAD)
     added_mass_matrix:
     - [33.76441573413407, 0.0, 0.0, 0.0, 0.0, 0.0]
     - [0.0, 7.138775954138664, 0.0, 0.0, 0.0, 0.0]
@@ -45,8 +45,8 @@ body:
     - [0.0, 0.0, 0.0, 0.0, 0.0, 3.8668316289236078]
     quadratic_damping: [128.93885061269464, 96.24090039531974, 50.33885380673263, 2.7724251278046257, 1.4991943770654037, 5.138467615330231]
     damping_center_m: [0.0, 0.0, 0.0]
-    displaced_volume_m3: 0.0323621667640687
-    buoyancy_center_m: [0.00775, 0.0, 0.01]
+    displaced_volume_m3: 0.03281   # measured mass + ~3 N net buoyancy (CAD estimate 0.03516 is ~7% high)
+    buoyancy_center_m: [0.0075, -0.0003, 0.0152]   # relative to com; x/y from the pool feed-forward, z placeholder
     buoyancy_radii_m: [0.175, 0.415, 0.275]
     command_timeout_s: 0.5   # thrusters coast to zero if no command within this window
 
@@ -62,7 +62,7 @@ frames:
   body: com
   transforms:
   - {parent: origin, child: base_link, position_m: [-0.14, 0.03, -0.09], orientation_wxyz: [1, 0, 0, 0]}
-  - {parent: origin, child: com, position_m: [-0.157, 0.04, -0.048], orientation_wxyz: [1, 0, 0, 0]}   # with IVC
+  - {parent: origin, child: com, position_m: [-0.150, 0.037, -0.013], orientation_wxyz: [1, 0, 0, 0]}   # measured, everything on
   - {parent: origin, child: thruster_VUS, position_m: [-0.134, -0.369, 0.242], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
   - {parent: origin, child: thruster_VUP, position_m: [-0.134, 0.438, 0.242], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
   - {parent: origin, child: thruster_HUS, position_m: [-0.14, -0.26, 0.141], orientation_wxyz: [0.6532688037723191, 0.2704955304628238, -0.27044044338085915, 0.6534018706749187]}
@@ -82,7 +82,7 @@ frames:
   - {parent: origin, child: magnet_mount, position_m: [-0.2946, 0.0475, -0.391], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
   - {parent: origin, child: hitch_mount, position_m: [0.0, 0.0, 0.0], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
   - {parent: origin, child: ffc_mount, position_m: [-0.0195, -0.0889, 0.02], orientation_wxyz: [0.9996750202077826, -0.004998416754581291, 0.024997083447914372, 0.00012498645879513106]}
-  - {parent: origin, child: dfc_mount, position_m: [-0.24347, -0.065568, -0.15943], orientation_wxyz: [0.5199427952056352, 0.5095974583371051, 0.48959879164377196, -0.4798572114609425]}
+  - {parent: origin, child: dfc_mount, position_m: [-0.1436, -0.0916, -0.0916], orientation_wxyz: [0.5199427952056352, 0.5095974583371051, 0.48959879164377196, -0.4798572114609425]}
   # Claw pinch point (claw meshes and grasping are placed here).
   - {parent: origin, child: claw_pinch, position_m: [0.1845620038521386, 0.034362, -0.4164364383477267], orientation_wxyz: [1, 0, 0, 0]}
   # Hydrophones.
