@@ -9,6 +9,7 @@ void registerRunPanel(Registry &);
 void registerSimulationPanel(Registry &);
 void registerTelemetryPanel(Registry &);
 void registerRecordingPanel(Registry &);
+void registerElectricalPanel(Registry &);
 namespace {
 // Toolbar item "panels_menu": the popup that shows or hides sidebar panels (drawn by the composition).
 struct PanelsMenu final : Panel {
@@ -35,5 +36,6 @@ void registerPanels(Registry &registry) {
     registerPoseGizmo(registry);
     registerTelemetryPanel(registry);
     registerRecordingPanel(registry);
+    registerElectricalPanel(registry);
 }
 } // namespace nereus::ros_viewer::panels

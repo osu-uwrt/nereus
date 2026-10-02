@@ -11,15 +11,23 @@
 #include <iostream>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
+#include <riptide_msgs2/action/mag_cal.hpp>
+#include <riptide_msgs2/action/tare_gyro.hpp>
 #include <riptide_msgs2/msg/actuator_status.hpp>
 #include <riptide_msgs2/msg/battery_status.hpp>
+#include <riptide_msgs2/msg/electrical_command.hpp>
 #include <riptide_msgs2/msg/gyro_status.hpp>
 #include <riptide_msgs2/msg/mapping_target_info.hpp>
+#include <riptide_msgs2/msg/u_int8_stamped.hpp>
 #include <riptide_msgs2/srv/mapping_target.hpp>
+#include <riptide_msgs2/srv/query_imu_serial.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/empty.hpp>
+#include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
+#include <std_msgs/msg/int32.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/u_int8.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <thread>
 #include <unistd.h>
@@ -117,7 +125,8 @@ int main(int argc, char **argv) {
       {id: actuators, type: actuators, provider: actuators},
       {id: telemetry, type: telemetry, provider: telemetry},
       {id: recording, type: recording, provider: recording,
-       options: {path: "~/svos/test", home: /home/test, timestamp: false}}])");
+       options: {path: "~/svos/test", home: /home/test, timestamp: false}},
+      {id: electrical, type: electrical, provider: electrical}])");
     // Telemetry from the test namespace only (the configured CPU source is the global /diagnostics_agg).
     auto readings = config["providers"]["telemetry"]["options"]["readings"];
     readings[0]["timeout"] = .3;
@@ -153,6 +162,47 @@ ui:
     auto simulation = std::dynamic_pointer_cast<Simulation>(composition->providers().at("simulation"));
     auto telemetry = std::dynamic_pointer_cast<Telemetry>(composition->providers().at("telemetry"));
     auto recording = std::dynamic_pointer_cast<Recording>(composition->providers().at("recording"));
+    auto electrical = std::dynamic_pointer_cast<Electrical>(composition->providers().at("electrical"));
+    // Electrical: the RViz electrical panel's endpoints.
+    using MagCal = riptide_msgs2::action::MagCal;
+    using TareGyro = riptide_msgs2::action::TareGyro;
+    using ImuSerial = riptide_msgs2::srv::QueryImuSerial;
+    std::vector<uint8_t> electricalCommands, ivcSent;
+    std::vector<int> pingerFrequencies;
+    int pingerEnables = 0;
+    bool lastPingerEnable = false;
+    auto electricalSub = node->create_subscription<riptide_msgs2::msg::ElectricalCommand>(
+        "command/electrical", 10,
+        [&](const riptide_msgs2::msg::ElectricalCommand &m) { electricalCommands.push_back(m.command); });
+    auto pingerEnableSub =
+        node->create_subscription<std_msgs::msg::Bool>("ivc/pinger/enable", 10, [&](const std_msgs::msg::Bool &m) {
+            ++pingerEnables;
+            lastPingerEnable = m.data;
+        });
+    auto pingerFrequencySub = node->create_subscription<std_msgs::msg::Int32>(
+        "ivc/pinger/set_freq_broker_khz", 10,
+        [&](const std_msgs::msg::Int32 &m) { pingerFrequencies.push_back(m.data); });
+    auto pingerSelectedPub = node->create_publisher<std_msgs::msg::Int32>("ivc/pinger/selected_freq_khz", 10);
+    auto pingerAmplitudePub = node->create_publisher<std_msgs::msg::Float32>("ivc/pinger/selected_freq_amp_stream", 10);
+    auto ivcTxSub = node->create_subscription<std_msgs::msg::UInt8>(
+        "ivc/tx", 10, [&](const std_msgs::msg::UInt8 &m) { ivcSent.push_back(m.data); });
+    auto ivcRxPub = node->create_publisher<std_msgs::msg::UInt8>("ivc/rx", 10);
+    auto ivcConfirmPub = node->create_publisher<riptide_msgs2::msg::UInt8Stamped>("ivc/tx_success", 10);
+    std::vector<std::string> imuRequests;
+    std::string imuReply = "$VNRRG,05,115200*58";
+    auto imuService = node->create_service<ImuSerial>(
+        "vectornav/config", [&](ImuSerial::Request::SharedPtr request, ImuSerial::Response::SharedPtr reply) {
+            imuRequests.push_back(request->request);
+            reply->response = imuReply;
+        });
+    std::shared_ptr<rclcpp_action::ServerGoalHandle<MagCal>> magGoal;
+    auto magServer = rclcpp_action::create_server<MagCal>(
+        node, "vectornav/mag_cal", [](const auto &, auto) { return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE; },
+        [](auto) { return rclcpp_action::CancelResponse::ACCEPT; }, [&](auto accepted) { magGoal = accepted; });
+    std::shared_ptr<rclcpp_action::ServerGoalHandle<TareGyro>> tareGoal;
+    auto tareServer = rclcpp_action::create_server<TareGyro>(
+        node, "gyro/tare", [](const auto &, auto) { return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE; },
+        [](auto) { return rclcpp_action::CancelResponse::ACCEPT; }, [&](auto accepted) { tareGoal = accepted; });
     const auto reading = [&](const std::string &id) {
         for (const auto &r : telemetry->state().readings)
             if (r.id == id)
@@ -382,6 +432,100 @@ ui:
     recording->start("ffc", "/home/test/svos/test_ffc.svo2");
     assert(!recording->state().svoSupported && !recording->state().cameras[0].pending);
 #endif
+    // Electrical: power commands publish their configured value; power cuts are marked for confirmation.
+    auto elec = electrical->state();
+    assert(elec.commands.size() == 11 && elec.hasImu && elec.hasTare && elec.hasPinger && elec.hasIvc);
+    assert(elec.magCalReady && elec.registerReady && elec.tareReady);
+    for (const auto &item : elec.commands)
+        assert(item.confirm ==
+               (item.id == "cycle_computer" || item.id == "cycle_robot" || item.id == "kill_robot_power"));
+    electrical->command("kill_robot_power");
+    electrical->command("enable_leds");
+    electrical->command("nope");
+    spin(.15);
+    assert((electricalCommands == std::vector<uint8_t>{4, 9}));
+    // The pinger enable state is re-sent every second, and at once when it changes.
+    assert(pingerEnables >= 1 && lastPingerEnable);
+    electrical->setPingerEnabled(false);
+    spin(.15);
+    const int enables = pingerEnables;
+    assert(!lastPingerEnable);
+    spin(1.1);
+    assert(pingerEnables > enables && !lastPingerEnable);
+    electrical->setPingerEnabled(true);
+    electrical->setPingerFrequency(30);
+    std_msgs::msg::Int32 selected;
+    selected.data = 30;
+    pingerSelectedPub->publish(selected);
+    std_msgs::msg::Float32 amplitude;
+    amplitude.data = .25f;
+    pingerAmplitudePub->publish(amplitude);
+    spin(.15);
+    elec = electrical->state();
+    assert(pingerFrequencies == std::vector<int>{30} && elec.pingerSelected == 30 && elec.pingerAmplitude == .25f);
+    // IVC: header in the top 3 bits, status / command in the low 5; out-of-range sends are dropped.
+    electrical->sendIvc(1, 2);
+    electrical->sendIvc(2, 17);
+    electrical->sendIvc(1, 5); // only 5 statuses
+    electrical->sendIvc(3, 0); // only 3 headers
+    std_msgs::msg::UInt8 rx;
+    rx.data = 0x01; // tank_cmd_tank_status: talos_state_deploy_tank
+    ivcRxPub->publish(rx);
+    riptide_msgs2::msg::UInt8Stamped confirm;
+    confirm.data = 34;
+    ivcConfirmPub->publish(confirm);
+    spin(.15);
+    assert((ivcSent == std::vector<uint8_t>{34, 81}));
+    elec = electrical->state();
+    const auto logged = [&](const std::string &text) {
+        return std::any_of(elec.ivcLog.begin(), elec.ivcLog.end(),
+                           [&](const std::string &line) { return line.find(text) != std::string::npos; });
+    };
+    assert(elec.ivcLog.size() == 4 && logged("SEND  talos_cmd_talos_status: talos_state_tank_go  (1-2)") &&
+           logged("SEND  talos_cmd_fish_heading: 17") &&
+           logged("RECV  tank_cmd_tank_status: talos_state_deploy_tank") && logged("ACK "));
+    // IMU registers: the reply's register fields fill the value; VectorNav error replies are reported.
+    electrical->readRegister("05");
+    electrical->readRegister("06"); // one request at a time
+    spin(.2);
+    elec = electrical->state();
+    assert((imuRequests == std::vector<std::string>{"$VNRRG,05"}) && elec.registerValue == "115200" &&
+           elec.registerMessage == "Read register 05");
+    electrical->writeRegister("05", "9600");
+    electrical->writeRegister("x5", "9600"); // not a register number
+    spin(.2);
+    imuReply = "$VNERR,03*72";
+    electrical->saveImuSettings();
+    spin(.2);
+    elec = electrical->state();
+    assert(imuRequests.size() == 3 && imuRequests[1] == "$VNWRG,05,9600" && imuRequests[2] == "$VNWNV" &&
+           elec.registerMessage.find("IMU error") != std::string::npos && elec.registerValue == "115200");
+    // Mag cal: progress from the shrinking deviation; FOG tare: the goal's samples / timeout and abort reason.
+    electrical->startMagCal();
+    spin(.2);
+    assert(magGoal && electrical->state().magCalRunning);
+    auto magFeedback = std::make_shared<MagCal::Feedback>();
+    magFeedback->curr_avg_dev[0] = 4;
+    magGoal->publish_feedback(magFeedback);
+    spin(.1);
+    magFeedback->curr_avg_dev[0] = 1;
+    magGoal->publish_feedback(magFeedback);
+    spin(.1);
+    assert(std::abs(electrical->state().magCalProgress - .75f) < 1e-4);
+    magGoal->succeed(std::make_shared<MagCal::Result>());
+    magGoal.reset();
+    spin(.15);
+    elec = electrical->state();
+    assert(!elec.magCalRunning && elec.magCalProgress == 1 && elec.magCalMessage == "Mag cal complete");
+    electrical->startTare(5000, 7.5);
+    spin(.2);
+    assert(tareGoal && tareGoal->get_goal()->num_samples == 5000 && tareGoal->get_goal()->timeout_seconds == 7.5);
+    auto tareResult = std::make_shared<TareGyro::Result>();
+    tareResult->result = "drift too high";
+    tareGoal->abort(tareResult);
+    tareGoal.reset();
+    spin(.15);
+    assert(!electrical->state().tareRunning && electrical->state().tareMessage == "Tare aborted: drift too high");
     assert(calCount == 0 && armCount == 0 && fireCount == 0 && resetCount == 0 && runCommands.empty());
     assert(simulation->state().connected && simulation->state().rate == 1 && speedRequests == 0);
     simulation->setRate(0);
@@ -630,6 +774,7 @@ ui:
     actuators.reset();
     telemetry.reset();
     recording.reset();
+    electrical.reset();
     run.reset();
     simulation.reset();
     rclcpp::shutdown();

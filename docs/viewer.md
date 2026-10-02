@@ -6,7 +6,7 @@ starts it for you; for the real robot use `ros2 launch integrations/uwrt/launch/
 ![Viewer with the robot in the pool](images/robot.jpg)
 
 - **Top bar**: view, focus and display toggles.
-- **Left sidebar**: robot control panels (Motion, Mapping, Vision, Cameras, Actuators, Autonomy). Click a header
+- **Left sidebar**: robot control panels (Motion, Mapping, Vision, Cameras, Electrical, Actuators, Autonomy). Click a header
   to fold it.
 - **Centre**: the 3D scene. The pill at the top right says where the robot pose comes from (`PHYSICS CONNECTED`
   in sim, `ROBOT (ESTIMATE)` on the real robot).
@@ -71,6 +71,23 @@ does kill: use one operator at a time.
   Starting needs `zed_msgs` when the viewer is built; without it the panel says so and only Stop works.
 - **Capture image**: the picture taker (`capture_image`) saves the newest front camera frame on the robot; the
   reply lists the saved files.
+
+## Electrical
+
+The RViz electrical panel's tools, on the real robot:
+
+- **Power**: one button per `command/electrical` command. The red ones (cycle computer, cycle robot, kill robot
+  power) ask for confirmation first.
+- **IMU (VectorNav)**: **Mag cal** runs the driver's calibration (turn the robot slowly through every orientation;
+  the bar fills as the deviation shrinks), **Cancel** stops it. Register edit: type a register number, **Read**
+  fills the value, **Write** sends the value, **Save to flash** keeps the settings across power cycles.
+- **FOG**: **Tare gyro** with the sample count and timeout; hold the robot still. An aborted tare shows why.
+- **Pinger**: the enable state is re-sent every second, as RViz did, so a rebooted board picks it up. The
+  frequency buttons choose the broker's frequency; the highlighted one is what the board reports.
+- **IVC**: send a status (first two headers) or a raw 0-31 command (other headers); the log shows sends, receives
+  and acknowledgements with their decoded names.
+
+Topics, the command list and the IVC names are in the `electrical` provider of `talos_uwrt_panels.yaml`.
 
 ## Vision
 

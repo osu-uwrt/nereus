@@ -9,7 +9,7 @@
 
 namespace nereus::ros_viewer::panels {
 using Pose = glm::mat4;
-enum class Kind { Motion, Autonomy, Mapping, Actuators, Run, Simulation, Telemetry, Recording };
+enum class Kind { Motion, Autonomy, Mapping, Actuators, Run, Simulation, Telemetry, Recording, Electrical };
 enum class Mode { Disabled, Position, Feedforward };
 struct Provider {
     virtual ~Provider() = default;
@@ -156,6 +156,48 @@ struct Recording : Provider {
     virtual void start(const std::string &camera, const std::string &file) = 0;
     virtual void stop(const std::string &camera) = 0;
     virtual void capture() = 0;
+};
+// Electrical board and sensor maintenance: power commands, IMU (VectorNav) mag cal and registers, FOG tare,
+// the pinger and the inter-vehicle link (IVC). Every section is optional; `has*` says which are configured.
+struct ElectricalCommandItem {
+    std::string id, label;
+    bool confirm = false; // cuts power somewhere: the panel asks first
+};
+struct ElectricalState {
+    std::vector<ElectricalCommandItem> commands;
+    std::string commandMessage;
+    bool hasImu = false, magCalReady = false, magCalRunning = false;
+    float magCalProgress = 0; // 0..1, from the shrinking deviation (as RViz)
+    std::string magCalMessage;
+    bool registerReady = false, registerPending = false;
+    std::string registerValue, registerMessage; // value: the register fields of the last reply
+    bool hasTare = false, tareReady = false, tareRunning = false;
+    std::string tareMessage;
+    bool hasPinger = false, pingerEnabled = true;
+    std::vector<int> pingerFrequencies; // kHz
+    std::optional<int> pingerSelected;  // kHz, as the board reports it
+    std::optional<float> pingerAmplitude;
+    bool hasIvc = false;
+    std::vector<std::string> ivcHeaders, ivcStatuses;
+    int ivcStatusHeaders = 0;        // headers below this index carry a status, the rest a raw 5-bit command
+    std::vector<std::string> ivcLog; // newest last
+};
+struct Electrical : Provider {
+    Kind kind() const final {
+        return Kind::Electrical;
+    }
+    virtual ElectricalState state() = 0;
+    virtual void command(const std::string &id) = 0;
+    virtual void startMagCal() = 0;
+    virtual void cancelMagCal() = 0;
+    virtual void readRegister(const std::string &reg) = 0;
+    virtual void writeRegister(const std::string &reg, const std::string &value) = 0;
+    virtual void saveImuSettings() = 0;
+    virtual void startTare(int samples, double timeoutSeconds) = 0;
+    virtual void cancelTare() = 0;
+    virtual void setPingerEnabled(bool) = 0;
+    virtual void setPingerFrequency(int khz) = 0;
+    virtual void sendIvc(int header, int command) = 0;
 };
 // SVO file for `camera`: `base` with a leading ~ replaced by `home`, then _<stamp> (when not empty) and
 // _<camera> before the extension (.svo2 unless `base` ends in .svo or .svo2), so cameras never share a file.

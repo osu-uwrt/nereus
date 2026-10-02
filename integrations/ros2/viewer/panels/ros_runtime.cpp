@@ -56,6 +56,7 @@ void RosProviders::registerFactories(Registry &registry) {
     registerUwrtMapping(registry, factory);
     registerUwrtTelemetry(registry, factory);
     registerUwrtRecording(registry, factory);
+    registerUwrtElectrical(registry, factory);
 #endif
 }
 Pose poseMatrix(const geometry_msgs::msg::Transform &t) {

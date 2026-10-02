@@ -57,6 +57,41 @@ providers:
         - {id: ffc, label: FFC, start_service: ffc/zed_node/start_svo_rec, stop_service: ffc/zed_node/stop_svo_rec}
         - {id: dfc, label: DFC, start_service: dfc/zed_node/start_svo_rec, stop_service: dfc/zed_node/stop_svo_rec}
       capture_service: capture_image
+  electrical:
+    type: uwrt.electrical
+    options:
+      # riptide_msgs2/ElectricalCommand values; confirm: power cuts ask before sending.
+      command_topic: command/electrical
+      commands:
+        - {id: cycle_computer, label: Cycle computer, value: 0, confirm: true}
+        - {id: cycle_robot, label: Cycle robot, value: 3, confirm: true}
+        - {id: kill_robot_power, label: Kill robot power, value: 4, confirm: true}
+        - {id: cycle_imu, label: Cycle IMU, value: 10}
+        - {id: cycle_acoustics, label: Cycle acoustics, value: 1}
+        - {id: kill_acoustics, label: Kill acoustics, value: 2}
+        - {id: enable_fans, label: Enable fans, value: 5}
+        - {id: disable_fans, label: Disable fans, value: 6}
+        - {id: enable_leds, label: Enable LEDs, value: 9}
+        - {id: disable_leds, label: Disable LEDs, value: 8}
+        - {id: clear_depth, label: Clear depth, value: 7}
+      imu: {mag_cal_action: vectornav/mag_cal, config_service: vectornav/config}
+      tare_action: gyro/tare
+      pinger:
+        enable_topic: ivc/pinger/enable
+        frequency_topic: ivc/pinger/set_freq_broker_khz
+        selected_topic: ivc/pinger/selected_freq_khz
+        amplitude_topic: ivc/pinger/selected_freq_amp_stream
+        frequencies_khz: [25, 30, 35, 37, 40]
+        enabled: true
+        heartbeat_s: 1   # re-send the enable state (as RViz) so a rebooted board recovers it; 0 = only on change
+      ivc:
+        tx_topic: ivc/tx
+        rx_topic: ivc/rx
+        confirm_topic: ivc/tx_success
+        # One byte: header (3 bits) and data (5 bits). The first status_headers headers carry a status.
+        headers: [tank_cmd_tank_status, talos_cmd_talos_status, talos_cmd_fish_heading]
+        statuses: [talos_state_ready, talos_state_deploy_tank, talos_state_tank_go, tank_state_ready, tank_state_deploying]
+        status_headers: 2
   run:
     type: sim.run
     options:
@@ -96,6 +131,11 @@ panels:
     provider: recording
     open: false
     options: {path: "~/svos/run", home: /home/ros, timestamp: true}
+  - id: electrical
+    type: electrical
+    title: Electrical
+    provider: electrical
+    open: false
   - id: actuators
     type: actuators
     title: Actuators

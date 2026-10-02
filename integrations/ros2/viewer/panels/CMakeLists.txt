@@ -3,10 +3,11 @@
 set(_panel_sources
   panel_registry.cpp composition.cpp motion_panel.cpp mapping_panel.cpp actuator_panel.cpp
   run_panel.cpp simulation_panel.cpp autonomy_panel.cpp pose_gizmo.cpp telemetry_panel.cpp recording_panel.cpp
+  electrical_panel.cpp
   ros_runtime.cpp standard_motion.cpp sim_run.cpp simulation_rate.cpp)
 if(NEREUS_ROS_VIEWER_UWRT)
   list(APPEND _panel_sources uwrt_motion.cpp uwrt_autonomy.cpp uwrt_mapping.cpp uwrt_actuators.cpp
-    uwrt_telemetry.cpp uwrt_recording.cpp)
+    uwrt_telemetry.cpp uwrt_recording.cpp uwrt_electrical.cpp)
 endif()
 
 add_library(nereus_viewer_panels STATIC ${_panel_sources})
