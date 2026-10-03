@@ -123,8 +123,8 @@ payloads:
 magnet_lights:
   led_radiance: 60
 
-# The scenario's equipment pack (the calibration board) in the observer view at startup. Toggle: Scene settings >
-# Lighting > Team equipment. Camera cards always show it, like the simulator's cameras.
+# The scenario's equipment pack (the calibration board) in the observer view at startup. Toggle: Pool Viewer >
+# AprilTag board. Camera cards always show it, like the simulator's cameras.
 equipment_visible: true
 
 # Fallback task `ui` block (task pack `ui`, when present, overrides key by key). `focus` and

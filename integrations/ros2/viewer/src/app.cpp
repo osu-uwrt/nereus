@@ -1359,9 +1359,6 @@ void App::drawSceneSettingsPopup() {
         if (ImGui::BeginTabItem("Lighting")) {
             sectionHeading("UNDERWATER OPTICS");
             auto &a = look_.appearance;
-            ImGui::Checkbox("Team equipment", &look_.equipment);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("The equipment pack (calibration board) in this view; camera cards always show it.");
             ImGui::SetNextItemWidth(width * .17f);
             ImGui::SliderFloat("Caustics", &a.caustics, 0, 1, "%.2f");
             ImGui::SameLine();
@@ -1437,6 +1434,11 @@ void App::toolbarPoolViewer() {
         ImGui::Checkbox("Water", &observer_.water);
         ImGui::Checkbox("Pool walls & deck", &observer_.walls);
         ImGui::Checkbox("Pool floor", &observer_.floor);
+        if (!model_->pack().equipmentInstances().empty()) {
+            ImGui::Checkbox("AprilTag board", &look_.equipment);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("The equipment pack (calibration board) in this view; camera cards always show it.");
+        }
         if (!mappingMarkers_.empty() && !demoMode_) {
             ImGui::SeparatorText("Course");
             ImGui::SetNextItemWidth(170);

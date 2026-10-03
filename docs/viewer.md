@@ -106,6 +106,8 @@ stack actually receives.
 ## Pool Viewer menu
 
 - **Water, Pool walls & deck, Pool floor, Surface reflections**: visibility (camera cards always see the pool).
+- **AprilTag board**: the scenario's equipment pack (the calibration board) in this view only; camera cards always
+  show it. `equipment_visible` in the host config sets it at startup.
 - **Course**: *Auto* shows the simulator's course in sim and the mapping estimate on the real robot; *Mapping
   (RViz)* draws `riptide_meshes` models at the mapping TF frames, exactly as RViz does. *Mapping ghost* (sim)
   overlays the mapping estimate translucent on the true course. *Meshes* lists every mapping mesh by its TF frame:
@@ -114,8 +116,7 @@ stack actually receives.
 - **Localization estimate** (sim only): *Robot ghost* draws the EKF estimate as a translucent robot. *Control
   gizmo* and *Follow* each centre on the estimate or the true robot. Commands always go to the controller in its
   estimate frame.
-- **Lighting**: the observer's lighting, independent of what the cameras see. *Team equipment* hides the
-  scenario's equipment pack (the calibration board) in this view only; camera cards always show it.
+- **Lighting**: the observer's lighting, independent of what the cameras see.
 
 **Scene settings** has the simulator's mechanism buttons, lighting and water appearance; **Simulation settings**
 sets the speed (pause, 1x, faster), **Sync sim** to the estimate and **Reset sim**.
