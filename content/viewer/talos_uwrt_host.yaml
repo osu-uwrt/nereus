@@ -75,6 +75,7 @@ topics:
   projectiles: simulator/projectiles
   detections: yolo_orientation/visualization_marker_array
   mpc_path: controller/mpc/predicted_path
+  planned_path: controller/mpc/planned_path   # whole follow_path plan, drawn with the MPC path toggle
   thruster_forces: thruster_forces   # commanded forces (controller); the Thrust toggle draws them
 
 # Thrust toggle (toolbar): one arrow per thruster along its axis, like RViz's thruster wrench displays.

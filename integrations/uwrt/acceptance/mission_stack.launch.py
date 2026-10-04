@@ -20,6 +20,9 @@ PASSTHROUGH = {
     "mpc_model": "MPC model: '' = config/models/<robot>.yaml (vehicle estimate), 'sim' = the sim plant copy, a name or a path",
     "mpc_odom_topic": "MPC state feedback topic, e.g. simulator/ground_truth to bypass the EKF",
     "mpc_state_source": "MPC feedback: sensors (default) or odometry",
+    "mpc_config": "riptide_mpc params file (default: riptide_mpc config/mpc.yaml)",
+    "mpc_vehicle_config": "vehicle YAML for the MPC model (overrides mpc_model)",
+    "mpc_hydrodynamics_config": "hydrodynamics YAML for the MPC model (overrides mpc_model)",
 }
 
 

@@ -177,6 +177,8 @@ class RosSide {
     DetectionShow detectionShow() const {
         return resolveDetectionMode(detectionMode_, truthPlacementAvailable(), usingTruth_);
     }
+    // MPC prediction (mpcPath, over its horizon) and the whole follow_path plan (plannedPath, latched,
+    // placed through TF in the map frame like the course estimate), subscribed only while wanted.
     void captureMpc(bool wanted);
     // Commanded thruster forces (topics.thruster_forces, what RViz drew as thruster wrenches), subscribed only
     // while wanted. `thrust` holds the newest array in bridge order, empty when none arrived for 0.5 s.
@@ -190,13 +192,13 @@ class RosSide {
     std::array<float, 2> claw{0.f, 0.f};
     std::map<MarkerKey, MarkerRecord> props, projectiles, magnetLights;
     std::vector<PlacedDetection> placedDetections;
-    std::vector<glm::mat4> mpcPath;
+    std::vector<glm::mat4> mpcPath, plannedPath;
     std::vector<float> thrust;
     std::deque<CameraFeed> feeds;
     std::size_t detectionCount() const {
         return detectionMarkers_.size();
     }
-    std::string mpcTopic, detectionTopic, thrustTopic;
+    std::string mpcTopic, plannedTopic, detectionTopic, thrustTopic;
 
   private:
     struct DetectionEntry {
@@ -253,6 +255,8 @@ class RosSide {
     nav_msgs::msg::Path mpcMessage_;
     bool mpcPending_ = false, mpcFailing_ = false;
     Clock::time_point mpcReceived_{}, mpcFailingSince_{};
+    rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr plannedSub_;
+    nav_msgs::msg::Path plannedMessage_;
     rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr thrustSub_;
     Clock::time_point thrustReceived_{};
     std::map<MarkerKey, DetectionEntry> detectionMarkers_;

@@ -12,13 +12,17 @@ always_cameras:=true renders every camera output regardless of subscribers. came
 camera anti-aliasing factor (empty: the simulator's default, off; 2..4 supersample).
 
 The controller arguments pass through to riptide_bringup2 (mission_stack.launch.py); empty keeps bringup's
-default controller. MPC on the simulator plant: active_control_model:=mpc mpc_model:=sim.
+default controller. With active_control_model:=mpc the MPC models THIS run's plant by default
+(mpc_model empty or sim): mpc_sim_model.py writes its vehicle, hydrodynamics and mpc.yaml (sim DVL latency)
+from the resolved scenario into <output>.mpc/. mpc_model:=talos (or another name/path) uses that model instead,
+e.g. the pool-identified estimate of the real vehicle.
 
 Run records (resolved.json, execution.json, summary.json, tasks.json) go to `output`
 (default /tmp/nereus_sim/<timestamp>). Ctrl-C stops everything and writes the records.
 """
 
 import ctypes.util
+import json
 import os
 import subprocess
 import sys
@@ -46,7 +50,7 @@ PYTHON = str(ROOT / ".venv/bin/python") if (ROOT / ".venv/bin/python").exists() 
 CONTROLLER_ARGS = {
     "active_control_model": "controller: 'mpc' runs riptide_mpc, anything else complete_controller",
     "active_control_enabled": "launch the active controller (True/False)",
-    "mpc_model": "MPC model: '' = vehicle estimate, 'sim' = the sim plant copy, a name or a path",
+    "mpc_model": "MPC model: '' or 'sim' = this run's plant (generated), 'talos' = vehicle estimate, a name or a path",
     "mpc_odom_topic": "MPC state feedback topic, e.g. simulator/ground_truth to bypass the EKF",
     "mpc_state_source": "MPC feedback: sensors (default) or odometry",
 }
@@ -79,6 +83,22 @@ def _gpu_env(context):
     return {"__NV_PRIME_RENDER_OFFLOAD": "1", "__GLX_VENDOR_LIBRARY_NAME": "nvidia"}
 
 
+def _mpc_sim_model(context, resolved, output):
+    """MPC model files for this run's plant (see mpc_sim_model.py), as mission_stack arguments."""
+    if LC("active_control_model").perform(context) != "mpc" or LC("mpc_model").perform(context) not in ("", "sim"):
+        return []
+    from ament_index_python.packages import get_package_share_directory as share
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import mpc_sim_model
+
+    robot = json.loads(Path(resolved).read_text())["robot"]["id"]
+    vehicle, hydro, params = mpc_sim_model.write(
+        resolved, f"{output}.mpc", Path(share("riptide_descriptions2"), "config", f"{robot}.yaml"),
+        Path(share("riptide_mpc"), "config", "mpc.yaml"))
+    print(f"MPC model: this run's plant ({output}.mpc)")
+    return [("mpc_vehicle_config", vehicle), ("mpc_hydrodynamics_config", hydro), ("mpc_config", params)]
+
+
 def _processes(context):
     rmw = LC("rmw").perform(context)
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
@@ -93,6 +113,7 @@ def _processes(context):
         check=True, cwd=str(ROOT),
         env={**os.environ, "PYTHONPATH": os.pathsep.join(
             [str(ROOT / "python/src"), os.environ.get("PYTHONPATH", "")])})
+    stack_args = [(k, LC(k)) for k in CONTROLLER_ARGS] + _mpc_sim_model(context, resolved, output)
     command = [binary, resolved, "--output", output]
     if LC("cameras").perform(context).lower() in ("false", "0", "no"):
         command.append("--no-cameras")
@@ -104,7 +125,7 @@ def _processes(context):
                                   sigterm_timeout="15", name="simulator"))
     actions.append(IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(STACK)),
-        launch_arguments=[(k, LC(k)) for k in CONTROLLER_ARGS],
+        launch_arguments=stack_args,
         condition=IfCondition(LC("stack"))))
     actions.append(ExecuteProcess(
         cmd=[str(ROOT / "build/ros-viewer/nereus-viewer")], cwd=str(ROOT),

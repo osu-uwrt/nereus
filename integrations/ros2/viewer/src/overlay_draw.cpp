@@ -128,6 +128,33 @@ void drawMpcPath(const std::vector<glm::mat4> &path, const glm::mat4 &vp, const 
     draw->PopClipRect();
 }
 
+void drawPlannedPath(const std::vector<glm::mat4> &path, const glm::mat4 &vp, const ScreenRect &rect) {
+    auto *draw = ImGui::GetWindowDrawList();
+    draw->PushClipRect(rect.position, {rect.position.x + rect.width, rect.position.y + rect.height}, true);
+    const ImU32 line = IM_COL32(90, 200, 255, 200), heading = IM_COL32(190, 235, 255, 220);
+    ImVec2 previous;
+    bool previousVisible = false;
+    for (std::size_t i = 0; i < path.size(); ++i) {
+        ImVec2 pixel;
+        const bool visible = projectToScreen(vp, rect, path[i][3], pixel);
+        if (visible && previousVisible)
+            draw->AddLine(previous, pixel, line, 1.5f);
+        // Body +X every 0.5 m of plan (poses are 10 cm apart) and at the end: the planned heading.
+        ImVec2 nose;
+        if (visible && (i % 5 == 0 || i + 1 == path.size()) &&
+            projectToScreen(vp, rect, path[i] * glm::vec4(.2f, 0, 0, 1), nose))
+            draw->AddLine(pixel, nose, heading, 1.5f);
+        previous = pixel;
+        previousVisible = visible;
+    }
+    if (!path.empty()) {
+        ImVec2 end;
+        if (projectToScreen(vp, rect, path.back()[3], end))
+            draw->AddCircle(end, 5.f, line, 0, 1.5f);
+    }
+    draw->PopClipRect();
+}
+
 void drawThrust(const std::vector<ThrusterMount> &mounts, const std::vector<float> &forces, const glm::mat4 &body,
                 float metresPerNewton, const glm::mat4 &vp, const ScreenRect &rect) {
     auto *draw = ImGui::GetWindowDrawList();

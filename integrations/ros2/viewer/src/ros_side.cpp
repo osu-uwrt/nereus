@@ -171,6 +171,8 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
     }
     mpcTopic =
         scenario.absolute(lookup(config, {"topics", "mpc_path"}).as<std::string>("controller/mpc/predicted_path"));
+    plannedTopic =
+        scenario.absolute(lookup(config, {"topics", "planned_path"}).as<std::string>("controller/mpc/planned_path"));
     pointClouds.clear();
     for (const auto &entry : config["point_clouds"]) {
         PointCloudLayer layer;
@@ -680,8 +682,31 @@ void RosSide::captureMpc(bool wanted) {
         mpcPending_ = false;
         mpcPath.clear();
     }
+    if (wanted && !plannedSub_) {
+        plannedSub_ = node_->create_subscription<nav_msgs::msg::Path>(
+            plannedTopic, rclcpp::QoS(1).transient_local(),
+            [this](const nav_msgs::msg::Path &msg) { plannedMessage_ = msg; });
+    } else if (!wanted && plannedSub_) {
+        plannedSub_.reset();
+        plannedMessage_ = nav_msgs::msg::Path();
+        plannedPath.clear();
+    }
     if (!wanted)
         return;
+    // The plan is fixed in the odometry frame: re-place it with the latest TF (empty message: no path).
+    if (plannedMessage_.poses.empty()) {
+        plannedPath.clear();
+    } else {
+        try {
+            const auto toMap = matrixOf(buffer_->lookupTransform(scenario_->mapFrame, plannedMessage_.header.frame_id,
+                                                                 rclcpp::Time(0, 0, RCL_ROS_TIME))
+                                            .transform);
+            plannedPath.clear();
+            for (const auto &pose : plannedMessage_.poses)
+                plannedPath.push_back(toMap * poseOf(pose.pose));
+        } catch (const tf2::TransformException &) {
+        } // keep the last placement until TF has the frame
+    }
     const double age = std::chrono::duration<double>(Clock::now() - mpcReceived_).count();
     if (mpcPending_) {
         // Solves are stamped at compute time; TF can trail that by a few ms. Retry at the stamp briefly

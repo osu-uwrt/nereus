@@ -1706,9 +1706,10 @@ void App::toolbarMpcPath() {
     sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("MPC path").x);
     ImGui::Checkbox("MPC path", &showMpc_);
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Predicted MPC trajectory over its horizon (%s).\n"
-                          "Drawn relative to the simulator vehicle, so localization drift does not offset it.",
-                          ros_->mpcTopic.c_str());
+        ImGui::SetTooltip("Predicted MPC trajectory over its horizon (%s, orange).\n"
+                          "Drawn relative to the simulator vehicle, so localization drift does not offset it.\n"
+                          "Blue: the whole follow_path plan with its headings (%s), placed through TF.",
+                          ros_->mpcTopic.c_str(), ros_->plannedTopic.c_str());
 }
 
 void App::toolbarThrust() {
@@ -1954,8 +1955,10 @@ void App::drawInterface(double time, float dt) {
     }
     if (detections_ && !demoMode_)
         drawDetections(ros_->placedDetections, vp, rect, ros_->detectionShow().truth && ros_->detectionShow().estimate);
-    if (showMpc_ && !demoMode_)
+    if (showMpc_ && !demoMode_) {
+        drawPlannedPath(ros_->plannedPath, vp, rect);
         drawMpcPath(ros_->mpcPath, vp, rect);
+    }
     if (showThrust_ && !demoMode_)
         drawThrust(scenario_->thrusterMounts, ros_->thrust, body_, thrustScale_, vp, rect);
     if (composition_ && mode_ == 0) {
@@ -2263,6 +2266,7 @@ int App::loop() {
             if (scenario_)
                 std::cout << "capture: status=" << status_ << " detections stored/placed=" << ros_->detectionCount()
                           << "/" << ros_->placedDetections.size() << " mpc_points=" << ros_->mpcPath.size()
+                          << " planned_points=" << ros_->plannedPath.size()
                           << " props=" << ros_->props.size() << " projectiles=" << ros_->projectiles.size()
                           << " magnet_lights=" << ros_->magnetLights.size() << " tf_frames=" << tf_.frames.size()
                           << " camera_frames=" << (ros_->feeds.empty() ? 0 : ros_->feeds[0].frames) << " body=("
