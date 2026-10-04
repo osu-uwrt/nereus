@@ -23,6 +23,7 @@ assets:
 - {id: claw_pad_left, path: assets/collision/claw_pad.obj}
 - {id: claw_pad_right, path: assets/collision/claw_pad_right.obj}
 - {id: robot_magnet_mesh, path: assets/visual/magnet/robot_magnet.glb}
+- {id: zedxm_mesh, path: assets/visual/zed/zedxm.glb}   # Stereolabs ZED X Mini (zed-ros2-description, Apache-2.0)
 
 body:
   type: marine_6dof
@@ -81,18 +82,21 @@ frames:
   - {parent: origin, child: claw_mount, position_m: [0.19, 0.034, -0.3712], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
   - {parent: origin, child: magnet_mount, position_m: [-0.2946, 0.0475, -0.391], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
   - {parent: origin, child: hitch_mount, position_m: [0.0, 0.0, 0.0], orientation_wxyz: [1.0, 0.0, 0.0, 0.0]}
-  - {parent: origin, child: ffc_mount, position_m: [-0.0195, -0.0889, 0.02], orientation_wxyz: [0.9996750202077826, -0.004998416754581291, 0.024997083447914372, 0.00012498645879513106]}
-  - {parent: origin, child: dfc_mount, position_m: [-0.1436, -0.0916, -0.0916], orientation_wxyz: [0.5199427952056352, 0.5095974583371051, 0.48959879164377196, -0.4798572114609425]}
+  # Camera mounts are zed_wrapper's <cam>_camera_link: the bottom mounting screw, 16 mm below the
+  # camera center along camera -z (riptide_descriptions talos.yaml poses are the centers).
+  - {parent: origin, child: ffc_mount, position_m: [-0.0308, -0.08896, -0.009079], orientation_wxyz: [0.9996750202077826, -0.004998416754581291, 0.024997083447914372, 0.00012498645879513106]}
+  - {parent: origin, child: dfc_mount, position_m: [-0.144022, -0.075503, -0.0818], orientation_wxyz: [0.5049978284885284, 0.4949498526308692, 0.504999683452536, -0.49495167068653284]}
   # Claw pinch point (claw meshes and grasping are placed here).
   - {parent: origin, child: claw_pinch, position_m: [0.1845620038521386, 0.034362, -0.4164364383477267], orientation_wxyz: [1, 0, 0, 0]}
   # Hydrophones.
   - {parent: origin, child: hydrophone_port, position_m: [-0.305, 0.325, -0.075], orientation_wxyz: [1, 0, 0, 0]}
   - {parent: origin, child: hydrophone_starboard, position_m: [-0.315, -0.325, -0.075], orientation_wxyz: [1, 0, 0, 0]}
-  # Camera optical frames (z forward, x right, y down) under each camera mount. The right optical
-  # frame sits one rectified baseline along optical +X.
-  - {parent: ffc_mount, child: ffc_left_optical, position_m: [0, 0, 0], orientation_wxyz: [0.5, -0.5, 0.5, -0.5]}
+  # Camera optical frames (z forward, x right, y down) under each camera mount, placed as zed_wrapper
+  # places the ZED X Mini's left eye: 16 mm up to the center, then 10 mm back and half the 50 mm
+  # nominal baseline to the left. The right optical frame sits one rectified baseline along optical +X.
+  - {parent: ffc_mount, child: ffc_left_optical, position_m: [-0.01, 0.025, 0.016], orientation_wxyz: [0.5, -0.5, 0.5, -0.5]}
   - {parent: ffc_left_optical, child: ffc_right_optical, position_m: [0.04975591649077412, 0, 0], orientation_wxyz: [1, 0, 0, 0]}   # rectified baseline (ffc)
-  - {parent: dfc_mount, child: dfc_left_optical, position_m: [0, 0, 0], orientation_wxyz: [0.5, -0.5, 0.5, -0.5]}
+  - {parent: dfc_mount, child: dfc_left_optical, position_m: [-0.01, 0.025, 0.016], orientation_wxyz: [0.5, -0.5, 0.5, -0.5]}
   - {parent: dfc_left_optical, child: dfc_right_optical, position_m: [0.05030758651145167, 0, 0], orientation_wxyz: [1, 0, 0, 0]}   # rectified baseline (dfc)
 
 # Meshes drawn on the robot. Body and rotors are authored in the `origin` frame; claw meshes sit at the
@@ -114,6 +118,9 @@ visuals:
 - {asset: claw_right_pad_mesh, frame: claw_pinch, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
 # Magnet stick; its mesh origin is the magnet tip.
 - {asset: robot_magnet_mesh, frame: magnet_mount, position_m: [0, 0, 0.05], orientation_wxyz: [1, 0, 0, 0]}
+# ZED X Minis; the mesh origin is the bottom mounting screw, i.e. the camera mount frame.
+- {asset: zedxm_mesh, frame: ffc_mount, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
+- {asset: zedxm_mesh, frame: dfc_mount, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
 
 # Contact boxes, measured from `origin` like the frames.
 collision_boxes:

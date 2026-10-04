@@ -4,3 +4,4 @@ Copyright 2026 OSU Underwater Robotics Team (UWRT)
 This product bundles third-party software under its own license:
   Dear ImGui (third_party/imgui)   MIT License, see third_party/imgui/LICENSE.txt
   OpenGL Mathematics (third_party/glm)   MIT License / Happy Bunny License, see third_party/glm/glm/copying.txt
+  Stereolabs ZED X Mini mesh (content/packs/robots/talos/assets/visual/zed/zedxm.glb)   Apache License 2.0, see content/packs/robots/talos/assets/visual/zed/LICENSE
