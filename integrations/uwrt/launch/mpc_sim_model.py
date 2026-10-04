@@ -2,13 +2,13 @@
 
 The MPC's default model (riptide_mpc config/models/talos.yaml) is the pool-identified estimate of the real
 vehicle, and mpc.yaml carries the real Nortek DVL latency. Under nereus both are wrong: the sim plant has its own
-mass/volume/COB/drag and a 0.1 s lagged-force thruster model, and its DVL has no latency. This writes, from the
-resolved scenario:
+mass/volume/COB/drag and a 0.1 s lagged-force thruster model. This writes, from the resolved scenario:
 
     vehicle.yaml          riptide_descriptions <robot>.yaml with mass, COM, base_link and thruster poses
                           replaced by the plant's
     hydrodynamics.yaml    riptide_mpc hydrodynamics schema 1 from the plant body, pool and thrusters
-    mpc.yaml              riptide_mpc mpc.yaml with estimator.dvl_latency = the sim DVL's latency
+    mpc.yaml              riptide_mpc mpc.yaml with estimator.dvl_latency = 0: the simulator stamps every reading
+                          when it is taken (latency_s only delays delivery), like the fixed Nortek driver
 
 Both sides use the same MarineDynamics (inertia about the COM in body axes, COB/damping centre relative to
 the COM), so the body parameters copy over unchanged.
@@ -131,12 +131,14 @@ def hydrodynamics(resolved):
 
 
 def mpc_params(resolved, base):
+    """estimator.dvl_latency is how long before its stamp a DVL velocity was measured: 0 here, since the
+    simulator stamps readings at acquisition and only delays their delivery by latency_s."""
     dvl = [s for s in resolved["robot"]["sensors"] if s["type"] == "reference_velocity"]
     if len(dvl) != 1:
         raise ValueError(f"expected one DVL (reference_velocity) sensor, found {len(dvl)}")
     out = json.loads(json.dumps(base))
     for node in out.values():
-        node["ros__parameters"].setdefault("estimator", {})["dvl_latency"] = dvl[0].get("latency_ns", 0) * 1e-9
+        node["ros__parameters"].setdefault("estimator", {})["dvl_latency"] = 0.0
     return out
 
 

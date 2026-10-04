@@ -1,5 +1,6 @@
 """Offscreen-camera pack fields: robot visuals, stereo right eye, pool water tint and lighting."""
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,7 +9,19 @@ from typing import Any
 from nereus.packs import PackError, load_pack, resolve_scenario
 from test_packs_fixtures import write_generic_packs
 
-CONTENT = Path(__file__).resolve().parents[2] / "content" / "packs"
+ROOT = Path(__file__).resolve().parents[2]
+CONTENT = ROOT / "content" / "packs"
+# The frozen resolved Talos scenario the C++ tests also run on: Talos-specific values are checked against
+# it, not the live packs, which the team retunes as the robot changes.
+FROZEN_TALOS = ROOT / "libraries" / "session" / "tests" / "fixtures" / "talos_uwrt_resolved.json.in"
+
+
+def frozen_scenario(path: Path = FROZEN_TALOS) -> dict[str, Any]:
+    text = path.read_text("utf-8").replace("@NEREUS_SOURCE_DIR@/", f"{ROOT}/")
+    document: dict[str, Any] = json.loads(text)
+    return document
+
+
 IDENTITY = [1, 0, 0, 0]
 ORIGIN = [0, 0, 0]
 MESH = b"o hull\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
@@ -65,15 +78,16 @@ def mutate(text: str, old: str, new: str) -> str:
 
 
 class TalosCameraFieldTests(unittest.TestCase):
-    """The Talos camera and 2026 pool appearance data."""
+    """The Talos camera and 2026 pool appearance data, as frozen for the tests (see FROZEN_TALOS)."""
 
     robot: dict[str, Any]
     pool: dict[str, Any]
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.robot = load_pack(CONTENT / "robots" / "talos").plain()
-        cls.pool = load_pack(CONTENT / "pools" / "robosub_2026").plain()
+        frozen = frozen_scenario()
+        cls.robot = frozen["robot"]
+        cls.pool = frozen["pool"]
 
     def test_visuals_use_present_assets_at_their_initial_configuration(self) -> None:
         present = {item["id"] for item in self.robot["assets"]}

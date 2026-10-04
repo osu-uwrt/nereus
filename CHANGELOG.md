@@ -42,3 +42,7 @@ First version for the team.
   makes the pool the root. Resolving writes everything in world coordinates. The RPAC scenario hangs the board on
   the deep-end wall over lap line 3 and places the map from the tag as the UWRT stack does, so the course moves
   with the board; the robot starts 2 m out from it.
+- Scenario `thruster_overrides`: retune the robot's thrusters per scenario without editing the robot pack
+  (applied when resolving, so the resolved robot carries the result).
+- Talos sensors from the 2026-10-03 pool bags: IMU at 400 Hz with VN-100-like (nearly noise-free) attitude,
+  gyro/FOG/DVL/depth noise from the bags.

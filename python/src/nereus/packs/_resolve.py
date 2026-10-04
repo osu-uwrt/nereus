@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -219,6 +220,40 @@ def _add_runtime_times(scenario: dict[str, Any], robot: dict[str, Any]) -> None:
         sensor["latency_ns"] = _nanoseconds(sensor.get("latency_s", 0))
 
 
+def _override_thrusters(data: dict[str, Any], robot: dict[str, Any]) -> list[str]:
+    """Apply the scenario's ``thruster_overrides`` to the plain robot in place; problems of the result.
+
+    Each override selects thrusters (default all). A different ``type`` replaces their parameters; the same
+    type merges over them. The overridden robot must still pass the robot schema and semantics.
+    """
+    overrides = data.get("thruster_overrides", [])
+    if not overrides:
+        return []
+    problems: list[str] = []
+    ids = [item["id"] for item in robot["thrusters"]]
+    for index, override in enumerate(overrides):
+        selected = override.get("thrusters", ids)
+        problems += [
+            f"/thruster_overrides/{index}/thrusters: unknown robot thruster '{name}'"
+            for name in selected
+            if name not in ids
+        ]
+        for item in robot["thrusters"]:
+            if item["id"] not in selected:
+                continue
+            parameters = copy.deepcopy(override["parameters"])
+            kind = override.get("type", item["type"])
+            if kind != item["type"]:
+                item["type"] = kind
+                item["parameters"] = parameters
+            else:
+                item["parameters"] = {**item["parameters"], **parameters}
+    if problems:
+        return problems
+    result = schema_problems("robot", robot) or semantics.robot(robot)
+    return [f"/thruster_overrides: overridden robot {problem}" for problem in result]
+
+
 def resolve_scenario(path: Path) -> ResolvedScenario:
     """Load a scenario and every selected pack and validate their cross-references."""
     hashes: dict[Path, str] = {}
@@ -247,6 +282,9 @@ def resolve_scenario(path: Path) -> ResolvedScenario:
     tasks_data = tasks_document.plain()
     definitions = [include.plain() for include in tasks_document.includes]
     robot = documents["robot"].plain()
+    problems += _prefixed(scenario.path, _override_thrusters(data, robot))
+    if problems:
+        raise PackError(problems)
     express_in_body(robot)
     _add_runtime_times(data, robot)
     bridge = documents["bridge"].plain() if "bridge" in documents else None

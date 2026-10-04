@@ -192,6 +192,40 @@ class ScenarioRejectionTests(PackRejectionCase):
         self.assert_resolve_rejects("unknown robot frame 'ghost'")
 
 
+class ThrusterOverrideTests(PackRejectionCase):
+    """Scenario thruster_overrides: applied to the resolved robot, validated like the robot pack."""
+
+    def override(self, text: str) -> None:
+        target = self.root / "scenario" / "scenario.yaml"
+        target.write_text(target.read_text(encoding="utf-8") + "thruster_overrides:\n" + text)
+
+    def test_same_type_merges(self) -> None:
+        self.override("- {parameters: {delay_s: 0.2}}\n")
+        thrusters = resolve_scenario(self.scenario).robot["thrusters"]
+        self.assertEqual({item["parameters"]["delay_s"] for item in thrusters}, {0.2})
+        self.assertEqual(thrusters[0]["parameters"]["rise_time_s"], 0.05)
+        self.assertEqual(
+            load_pack(self.root / "robot").plain()["thrusters"][0]["parameters"]["delay_s"], 0.05
+        )
+
+    def test_only_selected_thrusters_change(self) -> None:
+        self.override("- {thrusters: [t1], parameters: {efficiency: 0.85}}\n")
+        thrusters = resolve_scenario(self.scenario).robot["thrusters"]
+        self.assertEqual([item["parameters"]["efficiency"] for item in thrusters], [1, 0.85, 1, 1])
+
+    def test_unknown_thruster(self) -> None:
+        self.override("- {thrusters: [t9], parameters: {delay_s: 0.2}}\n")
+        self.assert_resolve_rejects("/thruster_overrides/0/thrusters: unknown robot thruster 't9'")
+
+    def test_invalid_parameter_value(self) -> None:
+        self.override("- {parameters: {delay_s: -1}}\n")
+        self.assert_resolve_rejects("overridden robot /thrusters/0/parameters/delay_s")
+
+    def test_unknown_type(self) -> None:
+        self.override("- {type: no_such_thruster, parameters: {delay_s: 0.2}}\n")
+        self.assert_resolve_rejects("/thruster_overrides: overridden robot")
+
+
 class BridgeRejectionTests(PackRejectionCase):
     def test_native_sensor_unknown(self) -> None:
         self.edit("bridge/bridge.yaml", "'sensor:altitude'", "'sensor:nope'")

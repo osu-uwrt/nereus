@@ -30,24 +30,26 @@ body:
   parameters:
     mass_kg: 32.444   # measured (CAD: 34.708)
     inertia_matrix: [[1.8429, 0.0496, 0.0945], [0.0496, 1.0051, -0.0083], [0.0945, -0.0083, 1.8607]]   # about COM, body axes (CAD)
+    # Body from riptide_mpc config/models/talos.yaml (pool-identified 2026-10-03, dry mass/COM), so the
+    # simulated vehicle is the model the MPC flies; keep the two the same.
     added_mass_matrix:
     - [33.76441573413407, 0.0, 0.0, 0.0, 0.0, 0.0]
-    - [0.0, 7.138775954138664, 0.0, 0.0, 0.0, 0.0]
-    - [0.0, 0.0, 14.375071388298007, 0.0, 0.0, 0.0]
+    - [0.0, 81.746069427430427, 0.0, 0.0, 0.0, 0.0]
+    - [0.0, 0.0, 75.9778267671104, 0.0, 0.0, 0.0]
     - [0.0, 0.0, 0.0, 0.062395054069073454, 0.0, 0.0]
     - [0.0, 0.0, 0.0, 0.0, 0.060232298657156735, 0.0]
-    - [0.0, 0.0, 0.0, 0.0, 0.0, 0.30409901675615597]
+    - [0.0, 0.0, 0.0, 0.0, 0.0, 1.1008187711165971]
     linear_damping_matrix:
-    - [34.945580177147725, 0.0, 0.0, 0.0, 0.0, 0.0]
-    - [0.0, 27.992277245879045, 0.0, 0.0, 0.0, 0.0]
-    - [0.0, 0.0, 40.36692194478054, 0.0, 0.0, 0.0]
+    - [30.653250327004201, 0.0, 0.0, 0.0, 0.0, 0.0]
+    - [0.0, 11.494245536364375, 0.0, 0.0, 0.0, 0.0]
+    - [0.0, 0.0, 12.060685816169192, 0.0, 0.0, 0.0]
     - [0.0, 0.0, 0.0, 9.910927173896203, 0.0, 0.0]
     - [0.0, 0.0, 0.0, 0.0, 3.0045521578787238, 0.0]
-    - [0.0, 0.0, 0.0, 0.0, 0.0, 3.8668316289236078]
-    quadratic_damping: [128.93885061269464, 96.24090039531974, 50.33885380673263, 2.7724251278046257, 1.4991943770654037, 5.138467615330231]
+    - [0.0, 0.0, 0.0, 0.0, 0.0, 0.86990171253617221]
+    quadratic_damping: [123.85703897902883, 166.87346125534444, 266.42358738660482, 2.7724251278046257, 1.4991943770654036, 3.6378974294453426]
     damping_center_m: [0.0, 0.0, 0.0]
-    displaced_volume_m3: 0.03281   # measured mass + ~3 N net buoyancy (CAD estimate 0.03516 is ~7% high)
-    buoyancy_center_m: [0.0075, -0.0003, 0.0152]   # relative to com; x/y from the pool feed-forward, z placeholder
+    displaced_volume_m3: 0.032625353506613629
+    buoyancy_center_m: [0.0048556629726181737, -0.0017882310176341376, 0.015014513842039799]   # relative to com
     buoyancy_radii_m: [0.175, 0.415, 0.275]
     command_timeout_s: 0.5   # thrusters coast to zero if no command within this window
 
@@ -130,16 +132,16 @@ collision_boxes:
 # Thruster order is the actuator index; the bridge maps ROS array order separately.
 # Each acts at its `thruster_*` frame, along that frame's +X.
 thrusters:
-# All eight share: delay 0.1 s, rise 0.08 s, fall 0.06 s, slew 300 N/s, +/-28 N, deadband 0,
-# scales 1, efficiency 1, propeller radius 0.05 m.
-- {id: VUS, type: lagged_force, frame: thruster_VUS, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: VUP, type: lagged_force, frame: thruster_VUP, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: HUS, type: lagged_force, frame: thruster_HUS, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: HUP, type: lagged_force, frame: thruster_HUP, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: HLS, type: lagged_force, frame: thruster_HLS, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: HLP, type: lagged_force, frame: thruster_HLP, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: VLS, type: lagged_force, frame: thruster_VLS, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
-- {id: VLP, type: lagged_force, frame: thruster_VLP, parameters: {delay_s: 0.1, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 28.0, reverse_limit_n: 28.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+# All eight share riptide_mpc models/talos.yaml's thruster model: delay 0.03 s, rise 0.08 s, fall 0.06 s,
+# slew 300 N/s, +/-24 N, deadband 0, scales 1, efficiency 1, propeller radius 0.05 m.
+- {id: VUS, type: lagged_force, frame: thruster_VUS, parameters: {delay_s: 0.03, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 24.0, reverse_limit_n: 24.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: VUP, type: lagged_force, frame: thruster_VUP, parameters: {delay_s: 0.03, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 24.0, reverse_limit_n: 24.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: HUS, type: lagged_force, frame: thruster_HUS, parameters: {delay_s: 0.03, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 24.0, reverse_limit_n: 24.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: HUP, type: lagged_force, frame: thruster_HUP, parameters: {delay_s: 0.03, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 24.0, reverse_limit_n: 24.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: HLS, type: lagged_force, frame: thruster_HLS, parameters: {delay_s: 0.03, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 24.0, reverse_limit_n: 24.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: HLP, type: lagged_force, frame: thruster_HLP, parameters: {delay_s: 0.03, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 24.0, reverse_limit_n: 24.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: VLS, type: lagged_force, frame: thruster_VLS, parameters: {delay_s: 0.03, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 24.0, reverse_limit_n: 24.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
+- {id: VLP, type: lagged_force, frame: thruster_VLP, parameters: {delay_s: 0.03, rise_time_s: 0.08, fall_time_s: 0.06, slew_rate_n_s: 300.0, forward_limit_n: 24.0, reverse_limit_n: 24.0, deadband_n: 0.0, forward_scale: 1.0, reverse_scale: 1.0, efficiency: 1.0, propeller_radius_m: 0.05}}
 
 # Start killed. Kill clears queued thruster commands and disarms the mechanisms.
 safety:
@@ -158,17 +160,17 @@ sensors:
   type: ahrs
   frame: imu_mount
   mount_frame: imu_mount
-  rate_hz: 50
+  rate_hz: 400   # VN-100 as configured on Talos (2026-10-03 pool bags)
   parameters:
     inertial:
-      acceleration_noise: {white_stddev: [0.016, 0.016, 0.016]}                      # m/s^2
-      gyro_noise: {white_stddev: [0.00017453292519943296, 0.00017453292519943296, 0.00017453292519943296]}   # 0.01 deg/s
+      acceleration_noise: {white_stddev: [0.035, 0.035, 0.035]}   # m/s^2, 2026-10-03 bag 01 hold
+      gyro_noise: {white_stddev: [0.0009, 0.0009, 0.0009]}   # rad/s, 2026-10-03 bag 01 hold
       reporting:
         gravity_magnitude_m_s2: 9.755455    # matches EKF gravitational_acceleration; plant uses 9.80665
         force_variance: [0.01, 0.01, 0.01]
         angular_variance: [0.01, 0.01, 0.01]
     attitude:
-      angle_stddev_rad: 0.008726646259971648   # 0.5 deg random-axis scalar angle
+      angle_stddev_rad: 0.0002   # VN-100 attitude is filtered, nearly noise-free (2026-10-03 bags)
       heading_drift_rad_s: 0.0
       reported_variance: [5.0e-05, 1.0e-05, 0.01]
 - id: fog
@@ -178,7 +180,7 @@ sensors:
   rate_hz: 500
   parameters:
     axes: [[0, 0, 1]]
-    gyro_noise: {white_stddev: [0, 0, 0.00017453292519943296]}
+    gyro_noise: {white_stddev: [0, 0, 0.0011]}   # rad/s, 2026-10-03 bags
     reported_variance: [0, 0, 3.0461741978670866e-08]
 - id: dvl
   type: reference_velocity
@@ -187,7 +189,7 @@ sensors:
   rate_hz: 8   # the 2 ms step rounds the period to 126/250/376 ms
   parameters:
     reference_velocity_world_m_s: [0, 0, 0]
-    velocity_noise: {white_stddev: [0.001, 0.001, 0.001]}
+    velocity_noise: {white_stddev: [0.006, 0.006, 0.003]}   # m/s, 2026-10-03 bags
     reported_variance: [1.0e-06, 1.0e-06, 1.0e-06]
     # Never loses bottom lock; no range output.
 - id: depth
@@ -197,7 +199,7 @@ sensors:
   rate_hz: 20
   parameters:
     target_frame: base_link
-    noise: {white_stddev: 0.01}
+    noise: {white_stddev: 0.0007}   # m, 2026-10-03 bags
     reported_variance: 0.0001
 - id: ffc
   type: stereo_camera

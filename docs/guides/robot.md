@@ -89,6 +89,16 @@ thrusters:
                efficiency: 1, propeller_radius_m: 0.05}
 ```
 
+A scenario can retune the thrusters without editing the robot pack. `thruster_overrides` is applied to the
+robot's thrusters when the scenario is resolved (so the resolved robot, and anything generated from it, sees
+the result): the same type merges the given parameters, a different `type` replaces them all.
+
+```yaml
+thruster_overrides:
+- thrusters: [HUS, HLS]      # optional; default every thruster
+  parameters: {efficiency: 0.85}
+```
+
 ## Safety
 
 ```yaml

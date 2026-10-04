@@ -13,7 +13,7 @@ camera anti-aliasing factor (empty: the simulator's default, off; 2..4 supersamp
 
 The controller arguments pass through to riptide_bringup2 (mission_stack.launch.py); empty keeps bringup's
 default controller. With active_control_model:=mpc the MPC models THIS run's plant by default
-(mpc_model empty or sim): mpc_sim_model.py writes its vehicle, hydrodynamics and mpc.yaml (sim DVL latency)
+(mpc_model empty or sim): mpc_sim_model.py writes its vehicle, hydrodynamics and mpc.yaml (DVL stamped at measurement)
 from the resolved scenario into <output>.mpc/. mpc_model:=talos (or another name/path) uses that model instead,
 e.g. the pool-identified estimate of the real vehicle.
 

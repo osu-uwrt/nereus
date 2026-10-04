@@ -25,8 +25,10 @@ Tests check behaviour, not structure. The reference fixtures in `libraries/sessi
 behaviour on purpose, update the affected expected values and say why in the commit.
 
 The C++ tests run on frozen resolved scenarios (`libraries/session/tests/fixtures/*_resolved.json.in`), not on
-the live packs, so retuning the robot (mass, inertia, buoyancy, frames) or moving the course never breaks them;
-`nereus.packs validate` and the Python pack tests check the live packs. Re-freeze them with
+the live packs, so retuning the robot (mass, inertia, buoyancy, frames) or moving the course never breaks them.
+Python tests that check Talos-specific values (e.g. `test_camera_pack_fields.py`) read the same frozen documents.
+The live packs are only checked for being valid and saving byte-exact (`nereus.packs validate` and the Python
+pack tests), never for their values. Re-freeze them with
 `tools/freeze_session_scenarios.py` only when you re-record the references that depend on them.
 
 ## Commits

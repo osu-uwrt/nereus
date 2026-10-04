@@ -208,6 +208,36 @@
       ],
       "additionalProperties": false
     },
+    "thruster_overrides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "thrusters": {
+            "type": "array",
+            "items": {
+              "$ref": "common.schema.json#/$defs/name"
+            },
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "Robot thruster ids; default every thruster."
+          },
+          "type": {
+            "$ref": "common.schema.json#/$defs/name",
+            "description": "Thruster type. A different type replaces the parameters, so give all of them."
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Merged over the thruster's parameters (replacing them when the type changes)."
+          }
+        },
+        "required": [
+          "parameters"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Applied in order to the selected robot pack's thrusters when resolving, so one robot pack serves model variants (e.g. retuned lag or efficiencies). The result is validated like the robot pack; the resolved robot carries it."
+    },
     "metadata": {
       "type": "object",
       "description": "Free non-executable annotations preserved verbatim by load/save; never interpreted."

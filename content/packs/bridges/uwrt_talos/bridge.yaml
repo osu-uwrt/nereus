@@ -186,7 +186,7 @@ streams:
   message_type: sensor_msgs/msg/Imu
   native: 'sensor:imu'
   frame_id: talos/imu_link
-  rate_hz: 50
+  rate_hz: 400
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
   fields:
     header.stamp: {from: sample.time}
