@@ -1,6 +1,6 @@
 """One-command UWRT simulation: nereus-sim + the UWRT robot stack + the pool viewer.
 
-    ros2 launch integrations/uwrt/launch/sim.launch.py [stack:=false] [viewer:=false]
+    ros2 launch integrations/uwrt/launch/sim.launch.py [stack:=false] [viewer:=false] [close_with_viewer:=false]
         [pool:=robosub|rpac] [scenario:=<pack folder>] [output:=<run dir>] [rmw:=<rmw implementation>]
         [cameras:=true|false] [always_cameras:=true|false] [camera_supersample:=1..4]
         [active_control_model:=mpc] [mpc_model:=sim|<name>|<path>] [mpc_odom_topic:=simulator/ground_truth]
@@ -18,7 +18,8 @@ from the resolved scenario into <output>.mpc/. mpc_model:=talos (or another name
 e.g. the pool-identified estimate of the real vehicle.
 
 Run records (resolved.json, execution.json, summary.json, tasks.json) go to `output`
-(default /tmp/nereus_sim/<timestamp>). Ctrl-C stops everything and writes the records.
+(default /tmp/nereus_sim/<timestamp>). Ctrl-C, or closing the viewer, stops everything and writes the records;
+close_with_viewer:=false keeps the simulator and stack running when the viewer is closed.
 
 The simulator runs under sim_supervisor.py, which restarts it in another pool when the viewer asks (View > Pool;
 or `ros2 topic pub --once /talos/simulator/load_scenario std_msgs/msg/String "{data: rpac}"`). Each restart writes
@@ -39,6 +40,7 @@ from launch.actions import (
     IncludeLaunchDescription,
     OpaqueFunction,
     SetEnvironmentVariable,
+    Shutdown,
 )
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -128,9 +130,13 @@ def _processes(context):
         PythonLaunchDescriptionSource(str(STACK)),
         launch_arguments=stack_args,
         condition=IfCondition(LC("stack"))))
+    # Closing the viewer ends the whole launch (as Ctrl-C: the simulator writes its records), unless
+    # close_with_viewer:=false keeps the simulator and stack running for a viewer reopened by hand.
+    close = LC("close_with_viewer").perform(context).lower() not in ("false", "0", "no")
     actions.append(ExecuteProcess(
         cmd=[str(ROOT / "build/ros-viewer/nereus-viewer")], cwd=str(ROOT),
         output="screen", name="pool_viewer", additional_env=_gpu_env(context),
+        on_exit=[Shutdown(reason="the pool viewer was closed")] if close else None,
         condition=IfCondition(LC("viewer"))))
     return actions
 
@@ -143,6 +149,8 @@ def generate_launch_description():
         DeclareLaunchArgument("output", default_value=""),
         DeclareLaunchArgument("stack", default_value="true", description="launch the UWRT stack"),
         DeclareLaunchArgument("viewer", default_value="true", description="launch the pool viewer"),
+        DeclareLaunchArgument("close_with_viewer", default_value="true",
+                              description="closing the viewer stops the simulator and the stack (false: keep them)"),
         DeclareLaunchArgument("bridge_binary", default_value=str(
             ROOT / "build/ros-viewer/integrations/ros2/bridge/nereus-sim"),
             description="nereus-sim executable"),
