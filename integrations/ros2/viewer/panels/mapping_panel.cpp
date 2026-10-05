@@ -19,7 +19,7 @@ class MappingPanel final : public Panel {
     }
     void draw() override {
         auto s = mapping ? mapping->state() : MappingState{};
-        ImGui::SeparatorText("Tag calibration");
+        sectionTitle("Tag calibration");
         ImGui::BeginDisabled(s.calibrating);
         ImGui::TextUnformatted("Parent frame");
         ImGui::SetNextItemWidth(-1);
@@ -33,7 +33,7 @@ class MappingPanel final : public Panel {
         ImGui::EndDisabled();
         ImGui::BeginDisabled(!mapping || (!s.calibrating && (!s.calibrationReady || samples < 1 || samples > 65535 ||
                                                              !parent[0] || !child[0] || std::string(parent) == child)));
-        if (pins::Button(s.calibrating ? "Cancel tag cal###tag_cal" : "Tag cal###tag_cal", {-1, ui(36)})) {
+        if (pins::Button(s.calibrating ? "Cancel calibration###tag_cal" : "Calibrate tag###tag_cal", {-1, ui(36)})) {
             if (s.calibrating)
                 mapping->cancelCalibration();
             else
@@ -42,8 +42,9 @@ class MappingPanel final : public Panel {
         ImGui::EndDisabled();
         if (s.calibrating)
             ImGui::Text("Samples: %u / %d", s.samples, samples);
-        ImGui::TextWrapped("%s", mapping ? s.calibrationMessage.c_str() : "Preview / mapping disconnected");
-        ImGui::SeparatorText("Mapping target");
+        if (mapping && !s.calibrationMessage.empty())
+            ImGui::TextWrapped("%s", s.calibrationMessage.c_str());
+        sectionTitle("Mapping target");
         if (s.fresh) {
             ImGui::TextWrapped("Current: %s", s.target.empty() ? "Automatic" : s.target.c_str());
             ImGui::TextUnformatted(s.locked ? "Map locked" : "Map unlocked");

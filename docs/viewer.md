@@ -36,7 +36,8 @@ starts it for you; for the real robot use `ros2 launch integrations/uwrt/launch/
 | View → *Free camera* | click for mouse look, `WASD` move, `Space`/`Shift` up/down, `Ctrl` fast, `Esc` release |
 | View → *ffc* / *dfc*, or **Main view** on a camera window | look through a robot camera |
 
-The camera and focus dropdowns lead the pool view's toolbar. **Focus** jumps to the vehicle, a mechanism (Claw,
+The camera and focus dropdowns lead the pool view's toolbar, which is grouped (camera, overlays, windows, task
+preview) by thin dividers. **Focus** jumps to the vehicle, a mechanism (Claw,
 Payloads) or a course element; **Follow** keeps the camera on the robot. **Labels** names course elements; **TF**
 draws frame axes (its arrow opens the TF frames window: names, axis length, the frame tree); **MPC path** draws the
 MPC's predicted path; **Thrust** draws the commanded thruster forces (`thruster_forces`) as red arrows from each
@@ -104,7 +105,10 @@ View → *Theme* ▸ **Abyss** (dark teal, the default), **Midnight** (neutral d
 (light, for a bright room or a sunny pool deck), **High contrast** (black, white and yellow), **Ocean** (navy and
 blue), **Arctic** (slate and frost blue), **Ember** (charcoal and orange), **Sonar** (green on black), **Paper**
 (warm light) and **Classic** (Qt's Windows-style grey with bevels and the Ubuntu font, like RViz on this desktop).
-The choice is remembered (`~/.config/nereus/viewer.yaml`); `--theme NAME` or the host config's `theme:` set it too. The pool view itself looks the same in every theme.
+The choice is remembered (`~/.config/nereus/viewer.yaml`); `--theme NAME` or the host config's `theme:` set it too. The
+3D scene looks the same in every theme; its overlays (labels, the pool chip, the controls strip) and the course map
+follow the theme. Every theme keeps secondary, status and accent text and the labels of lit buttons at 5:1 contrast
+or better against what they sit on, for a sunny pool deck.
 
 ## Interface scale
 
@@ -224,7 +228,7 @@ Reckoning tool does. While editing, the command bar turns the accent colour and 
 config.yaml* (with *unsaved* when there are changes), with **Save** and **Done** at its right end; Enable / KILL stay
 where they are. Editing has its own window layout: **Map objects** on the left (the file, Open / Reload / Save, Undo
 / Redo, *+ Add* and the object table: the tree with lock / hide and, toggled by **x y z**, each prop's x / y / z / yaw
-relative to its parent as the file stores it), the **Inspector** on the right (the selected prop, or the map origin when
+relative to its parent as the file stores it; click a value, type, Enter to change it), the **Inspector** on the right (the selected prop, or the map origin when
 nothing is selected) and the pool view between. **Done** goes back to operating with the layout as it was.
 
 The map is edited against a still scene: a running simulator is paused (the bar says *simulator paused*; Done
@@ -238,8 +242,11 @@ walls & deck, floor, *Pool tiles* (off: plain walls and floor, the lane lines st
 and the lighting (preset, shadows, exposure, ambient). It starts
 with the water off and Sterile lighting (even light, no shadows or caustics) so the floor and its lines read plainly.
 
-- **2D** (the default) looks straight down at the pool (the same render, without perspective), for quick moves
-  across a flat floor: drag a prop to move it in x / y (its height stays), the yellow ring turns it. Drag the floor
+- **2D** (the default) looks straight down at the pool (the same render, without perspective), drawn as a chart in
+  the theme's colours: a flat floor with quiet lane lines, each prop outlined in its own colour (the colour of its
+  dot in the table) with a notch toward +X, props without a mesh as badges with a heading triangle, a scale bar and
+  the labelled map origin (*Plan colours* in Display turns the chart colours off). For quick moves across a flat
+  floor: drag a prop to move it in x / y (its height stays), the yellow ring turns it. Drag the floor
   (or right / middle drag) to pan, scroll to zoom about the pointer, `F` or *Fit* for the whole pool, double-click a
   prop (or its row in the tree) to centre on it.
 - **3D** orbits; the selected prop has red / green / blue arrows for the map's X / Y and height, and the ring.
@@ -251,8 +258,10 @@ A click picks what is under the pointer: a prop's mesh (its bounds), its label o
   to 15 degrees). `Esc` during a drag puts it back. Keys:
   arrows nudge 1 cm along the pool (`Shift` 10 cm), `PgUp` / `PgDn` height, `Q` / `E` turn 1 degree (`Shift` 15),
   `L` lock, `H` hide, `Delete`, `Esc` deselect. Children ride along with their parent.
-- **Type** a pose relative to the parent (as the file stores it) or in the map; the pool position and depth are
-  shown below. The inspector also sets the parent (re-parenting keeps the prop where it is), the
+- **Type** a pose in the table or the inspector. The inspector's **Stored** pose is what the file holds: relative
+  to the prop's parent (for a top-level prop the parent is the map, so it is simply *Pose in the map*). A child also
+  shows its **Resulting map position** (its parents' poses and its own combined), editable too: the stored pose
+  follows. The pool position and depth are shown below. The inspector also sets the parent (re-parenting keeps the prop where it is), the
   `lock_orientation_to_config` / `point_yaw_at_parent` flags, `class` and covariance; swaps poses or classes with
   a sibling (the two gate sides, fire / blood); adds a child, duplicates, renames (children follow) and deletes
   (children move to the map where they are).
@@ -293,7 +302,8 @@ All of it is YAML in `content/viewer/`:
 | `talos_uwrt_panels.yaml` | the pool view `toolbar:`, command bar `header:` and the `panels:` windows (order, titles, `dock:` area in the built-in layouts, which start open or as the shown tab), and the providers they talk to (telemetry readings and thresholds, recording services) |
 | `talos_uwrt_thruster_visuals.yaml`, `talos_uwrt_status_lights.yaml` | rotor animation and LED bars |
 
-Toolbar, header and panel items are listed by type; reorder or remove entries to change what is offered. A
+Toolbar, header and panel items are listed by type; reorder or remove entries to change what is offered, and put a
+`{id: <unique>, type: separator}` between toolbar groups for a divider. A
 panel's `dock:` is `left_top`, `left`, `right`, `right_bottom`, `bottom` or `floating`; panels sharing an area are
 tabs, and `open: false` puts one behind the others. `visible: false` starts it closed. For command-line
 options run `build/ros-viewer/nereus-viewer --help`.

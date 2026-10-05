@@ -21,7 +21,9 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <cfloat>
 #include <cstring>
+#include <functional>
 #include <deque>
 #include <fstream>
 #include <imgui_internal.h>
@@ -39,7 +41,7 @@ namespace fs = std::filesystem;
 namespace panels = nereus::ros_viewer::panels;
 
 // Drawn over the 3D view and the course map, so the same in every theme (the interface uses palette()).
-const ImVec4 cyan(.32f, .86f, .82f, 1), muted(.47f, .57f, .64f, 1), white(.87f, .92f, .95f, 1);
+const ImVec4 muted(.47f, .57f, .64f, 1); // on the camera cards' dark video area, in every theme
 
 // "Talos · Robosub 2026" from the robot and task-pack ids (underscores become spaces, words capitalized).
 std::string scenarioLabel(const Scenario &scenario) {
@@ -54,6 +56,11 @@ std::string scenarioLabel(const Scenario &scenario) {
         word = !letter && !std::isdigit(static_cast<unsigned char>(c));
     }
     return label;
+}
+// Overlay chips on the pool view and the course map: the theme's window colour, nearly opaque.
+ImU32 chipFill() {
+    const ImVec4 bg = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
+    return ImGui::GetColorU32(ImVec4(bg.x, bg.y, bg.z, .88f));
 }
 ImU32 color(ImVec4 c) {
     return ImGui::ColorConvertFloat4ToU32(c);
@@ -123,9 +130,38 @@ struct Look {
     rendering::Appearance appearance;
     bool equipment = true; // equipment pack visuals in the observer view
 };
+// The HDR value the renderer's post pass (exposure 1, ACES fit, 1/2.2 gamma) shows as display value `display`,
+// kept below the bloom threshold (1.2).
+float hdrFor(float display) {
+    const float v = std::pow(std::clamp(display, 0.f, .999f), 2.2f);
+    // ACES: x(2.51x + .03) / (x(2.43x + .59) + .14) = v, a quadratic in x with a < 0: the positive root
+    const float a = 2.43f * v - 2.51f, b = .59f * v - .03f, c = .14f * v;
+    const float x = (-b - std::sqrt(std::max(0.f, b * b - 4 * a * c))) / (2 * a);
+    return std::clamp(x, 0.f, 1.15f);
+}
+// Map editing's 2D chart colours, from the theme: the canvas around the pool, a floor one step from it toward
+// the accent, lane lines a quiet stroke on the floor, the pool rim.
+struct PlanPalette {
+    ImVec4 canvas, floor, line, rim;
+};
+PlanPalette planPalette() {
+    const ImVec4 bg = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
+    const auto &p = palette();
+    const auto mix = [](ImVec4 a, ImVec4 b, float t) {
+        return ImVec4(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t, 1);
+    };
+    const bool dark = .2126f * bg.x + .7152f * bg.y + .0722f * bg.z < .5f;
+    PlanPalette out;
+    out.canvas = ImVec4(bg.x, bg.y, bg.z, 1);
+    out.floor = mix(out.canvas, p.accent, dark ? .16f : .12f);
+    out.line = mix(out.floor, p.text, dark ? .22f : .20f);
+    out.rim = mix(out.canvas, p.text, dark ? .16f : .20f);
+    return out;
+}
 struct ObserverSettings {
     bool water = true, walls = true, floor = true, reflections = false, shadows = true;
-    bool tiles = true; // the pool's tile grout (off: plain walls and floor; the lane lines stay)
+    bool tiles = true;      // the pool's tile grout (off: plain walls and floor; the lane lines stay)
+    bool planColors = true; // map editing's 2D view drawn as a chart (theme colours, flat light)
     int lighting = 0; // 0 follows the scene, 1 indoor, 2 outdoor, 3 sterile
     float exposure = 1, brightness = 1, ambient = 1;
     int antialiasing = 1; // supersampling factor of the observer view and camera cards (1 = off)
@@ -284,6 +320,7 @@ class App {
         return workspace_ == Workspace::Map && planView_;
     }
     void fitPlan();
+    void drawPlanFrame(const glm::mat4 &vp, glm::vec2 origin, glm::vec2 size); // the chart's canvas, rim, scale
     void handlePlanInput(bool hovered);
     SensorView planCamera(float aspect) const;
     void setupPriorMap();
@@ -1136,6 +1173,7 @@ void App::loadMappingMarkers() {
 
 VisualState App::buildState() {
     VisualState state;
+    priorMap_->setPlan(planActive()); // 2D: stand-alone props without a mesh are badges, not boxes
     // The Map workspace draws the robot at a robot-frame origin (its start pose), else where it is (the simulator
     // is paused while the map is edited).
     const bool mapping = workspace_ == Workspace::Map;
@@ -1410,13 +1448,7 @@ void App::focusAtCursor(const SensorView &view, const rendering::RenderedFrame &
 // ------------------------------------------------------------------------------------------- widgets
 
 void App::pill(const std::string &text, ImVec4 tint) {
-    const ImVec4 fill = tintedFill(tint);
-    ImGui::PushStyleColor(ImGuiCol_Button, fill);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, fill);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, fill);
-    ImGui::PushStyleColor(ImGuiCol_Text, tint);
-    ImGui::Button(text.c_str());
-    ImGui::PopStyleColor(4);
+    statusChip(text.c_str(), tint);
 }
 void App::sectionHeading(const char *text) {
     ImGui::PushFont(window_->small);
@@ -1481,11 +1513,10 @@ void App::drawCameraCard(std::size_t index) {
                               depthShown ? tex.depthHeight : tex.rgbHeight,
                               !demoMode_ && !canLocal ? "\nROS image topic (no simulator truth pose)" : "");
     }
-    const float footer = ImGui::GetFontSize() + ImGui::GetStyle().ItemSpacing.y + 2;
     ImGui::PopFont();
     const auto available = ImGui::GetContentRegionAvail();
     const float aspect = float(camera.k.width) / float(camera.k.height);
-    const float w = std::max(16.f, std::min(available.x, (available.y - footer) * aspect));
+    const float w = std::max(16.f, std::min(available.x, available.y * aspect));
     const float h = w / aspect;
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (available.x - w) / 2);
     const ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -1506,16 +1537,27 @@ void App::drawCameraCard(std::size_t index) {
         if (texture)
             draw->AddRectFilled(pos, {pos.x + w, pos.y + h}, IM_COL32(4, 13, 19, 175));
         draw->AddText({pos.x + 18, pos.y + 18}, color(muted),
-                      !ready                 ? "Awaiting vehicle pose"
+                      !ready                 ? "Waiting for pose"
                       : local && !depthShown ? "Rendering local view"
                                              : "Awaiting camera image");
     }
+    // The source and rate on a dark band across the image's foot (fixed light text: it reads on any image and theme)
+    const ImVec2 below = ImGui::GetCursorScreenPos();
     ImGui::PushFont(window_->small);
+    const float band = ImGui::GetFontSize() + ui(10);
+    auto *draw = ImGui::GetWindowDrawList();
+    draw->AddRectFilled({pos.x, pos.y + h - band}, {pos.x + w, pos.y + h}, IM_COL32(4, 13, 19, 200));
+    draw->PushClipRect({pos.x, pos.y + h - band}, {pos.x + w, pos.y + h}, true);
+    ImGui::SetCursorScreenPos({pos.x + ui(8), pos.y + h - band + ui(5)});
+    const ImVec4 live(.45f, .93f, .84f, 1), quiet(.78f, .83f, .87f, 1);
+    ImGui::PushStyleColor(ImGuiCol_Text, quiet);
+    ImGui::PushStyleColor(ImGuiCol_TextDisabled, quiet);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {ui(8), 0});
     const bool connected = !demoMode_ && feed.connected();
     const bool depthFromRos = feed.wantDepth && !demoMode_;
-    ImGui::TextColored(local && !depthFromRos ? palette().accent
-                       : connected            ? palette().accent
-                                              : palette().muted,
+    ImGui::TextColored(local && !depthFromRos ? live
+                       : connected            ? live
+                                              : quiet,
                        "%s",
                        demoMode_                ? "PREVIEW ONLY"
                        : local && !depthFromRos ? "LOCAL VIEW"
@@ -1556,7 +1598,12 @@ void App::drawCameraCard(std::size_t index) {
                                 "Depth is rendered geometry with the pack's sensor noise model.\n"
                                 "Topic: %s",
                           feed.wantDepth ? camera.depthTopic.c_str() : camera.rgbTopic.c_str());
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(2);
+    draw->PopClipRect();
     ImGui::PopFont();
+    ImGui::SetCursorScreenPos(below);
+    ImGui::Dummy({0, 0});
     ImGui::PopID();
 }
 
@@ -1623,36 +1670,64 @@ void App::drawCourseMap(float width, float height, bool compact) {
             mapPan_.y += io.MouseDelta.y;
         }
     }
-    const float length = s.poolLength, poolWidth = s.poolWidth;
-    const float scale = std::min((width - 36) / length, (height - 36) / poolWidth) * mapZoom_;
+    const float length = s.poolLength, poolWidth = s.poolWidth, margin = ui(28);
+    // the pool lengthwise across the well, or turned a quarter (its x up) when that draws it larger (a tall well)
+    const float across = std::min((width - margin) / length, (height - margin) / poolWidth),
+                upright = std::min((height - margin) / length, (width - margin) / poolWidth);
+    const bool turned = upright > across * 1.15f;
+    const float scale = std::max(across, turned ? upright : 0.f) * mapZoom_;
     const ImVec2 center(a.x + width / 2 + mapPan_.x, a.y + height / 2 + mapPan_.y);
     auto poolXY = [&](glm::vec2 p) {
-        return ImVec2(center.x + (p.x - length / 2) * scale, center.y - (p.y - poolWidth / 2) * scale);
+        const glm::vec2 c = (p - glm::vec2(length, poolWidth) * .5f) * scale;
+        return turned ? ImVec2(center.x - c.y, center.y - c.x) : ImVec2(center.x + c.x, center.y - c.y);
     };
     auto xy = [&](glm::vec3 p) { return poolXY(glm::vec2(s.worldToPool * glm::vec4(p, 1))); };
     auto *d = ImGui::GetWindowDrawList();
-    d->AddRectFilled(a, {a.x + width, a.y + height}, IM_COL32(9, 24, 32, 255), 5);
+    const auto chart = planPalette(); // the same chart colours as map editing's 2D view, from the theme
+    const ImU32 lineColor = ImGui::GetColorU32(chart.line);
+    d->AddRectFilled(a, {a.x + width, a.y + height}, ImGui::GetColorU32(chart.canvas), 5);
     d->PushClipRect(a, {a.x + width, a.y + height}, true);
-    d->AddRectFilled(poolXY({0, poolWidth}), poolXY({length, 0}), IM_COL32(13, 40, 50, 255));
+    const ImVec2 cornerA = poolXY({0, 0}), cornerB = poolXY({length, poolWidth});
+    const ImVec2 poolMin(std::min(cornerA.x, cornerB.x), std::min(cornerA.y, cornerB.y)),
+        poolMax(std::max(cornerA.x, cornerB.x), std::max(cornerA.y, cornerB.y));
+    d->AddRectFilled(poolMin, poolMax, ImGui::GetColorU32(chart.floor));
     // The pool's floor markings when it declares any, else a 5 m grid for scale.
     bool marked = false;
     if (model_)
         for (const auto &stripe : model_->pack().poolStripes())
             if (stripe.side == rendering::PoolSide::Floor) {
                 d->AddLine(poolXY({stripe.from.x(), stripe.from.y()}), poolXY({stripe.to.x(), stripe.to.y()}),
-                           IM_COL32(48, 88, 100, 255), std::max(1.f, stripe.width * scale));
+                           lineColor, std::max(1.f, stripe.width * scale));
                 marked = true;
             }
     if (!marked) {
         for (int i = 0; i <= length; i += 5)
-            d->AddLine(poolXY({float(i), 0}), poolXY({float(i), poolWidth}), IM_COL32(35, 64, 74, 255));
+            d->AddLine(poolXY({float(i), 0}), poolXY({float(i), poolWidth}), lineColor);
         for (int i = 0; i <= poolWidth; i += 5)
-            d->AddLine(poolXY({0, float(i)}), poolXY({length, float(i)}), IM_COL32(35, 64, 74, 255));
+            d->AddLine(poolXY({0, float(i)}), poolXY({length, float(i)}), lineColor);
     }
-    d->AddRect(poolXY({0, poolWidth}), poolXY({length, 0}), IM_COL32(94, 154, 166, 255), 0, 0, 2);
+    d->AddRect(poolMin, poolMax, ImGui::GetColorU32(chart.rim), 0, 0, 2);
+    const ImVec4 accent = palette().accent;
     for (std::size_t i = 1; i < trail_.size(); ++i)
-        d->AddLine(xy(trail_[i - 1]), xy(trail_[i]), IM_COL32(53, 134, 143, 200), 1.5f);
-    int index = 0;
+        d->AddLine(xy(trail_[i - 1]), xy(trail_[i]), ImGui::GetColorU32(ImVec4(accent.x, accent.y, accent.z, .6f)), 1.5f);
+    // Labels take the first free spot beside their dot (right, then left, below then above), clear of the other
+    // labels, the dots and the vehicle; one with no free spot is left out (hover the dot for its name).
+    const auto vehicle = xy(glm::vec3(body_[3]));
+    std::vector<std::pair<ImVec2, ImVec2>> taken{{{vehicle.x - ui(8), vehicle.y - ui(8)}, {vehicle.x + ui(8), vehicle.y + ui(8)}}};
+    const ImVec2 robotText = window_->small->CalcTextSizeA(window_->small->FontSize, 1e9f, 0, s.robotId.c_str());
+    taken.push_back({{vehicle.x + ui(8), vehicle.y - ui(15)}, {vehicle.x + ui(8) + robotText.x, vehicle.y - ui(15) + robotText.y}});
+    for (const auto &entry : s.ui["map_landmarks"]) {
+        const auto found = s.landmarks.find(entry.IsScalar() ? entry.as<std::string>() : entry["name"].as<std::string>());
+        if (found != s.landmarks.end()) {
+            const auto p = xy(glm::vec3(found->second.world[3]));
+            taken.push_back({{p.x - ui(6), p.y - ui(6)}, {p.x + ui(6), p.y + ui(6)}});
+        }
+    }
+    const auto free = [&](ImVec2 min, ImVec2 max) {
+        return std::none_of(taken.begin(), taken.end(), [&](const auto &r) {
+            return min.x < r.second.x && max.x > r.first.x && min.y < r.second.y && max.y > r.first.y;
+        });
+    };
     for (const auto &entry : s.ui["map_landmarks"]) {
         const std::string key = entry.IsScalar() ? entry.as<std::string>() : entry["name"].as<std::string>();
         const std::string label = entry.IsScalar() ? key : entry["label"].as<std::string>(key);
@@ -1662,26 +1737,35 @@ void App::drawCourseMap(float width, float height, bool compact) {
         if (found == s.landmarks.end())
             continue;
         const auto p = xy(glm::vec3(found->second.world[3]));
-        const float font = compact ? ui(12) : ui(16);
-        const ImVec2 textAt(p.x + 7, p.y + (index++ % 2 ? -19 : 4));
-        d->AddCircleFilled(p, compact ? ui(4) : ui(5), color(cyan));
-        if (!compact || !hiddenInMinimap)
-            d->AddText(compact ? window_->small : window_->normal, font, textAt, color(white),
-                       (compact && relabelMinimap ? entry["minimap_label"].as<std::string>() : key).c_str());
-        (void)label;
+        d->AddCircleFilled(p, compact ? ui(4) : ui(5), color(palette().accent));
+        if (!compact || !hiddenInMinimap) {
+            ImFont *font = compact ? window_->small : window_->normal;
+            const std::string text = compact && relabelMinimap ? entry["minimap_label"].as<std::string>() : key;
+            const ImVec2 size = font->CalcTextSizeA(font->FontSize, 1e9f, 0, text.c_str());
+            const float gap = ui(7);
+            for (const ImVec2 at : {ImVec2(p.x + gap, p.y + ui(2)), ImVec2(p.x + gap, p.y - ui(2) - size.y),
+                                    ImVec2(p.x - gap - size.x, p.y + ui(2)), ImVec2(p.x - gap - size.x, p.y - ui(2) - size.y)})
+                if (free(at, {at.x + size.x, at.y + size.y})) {
+                    taken.push_back({at, {at.x + size.x, at.y + size.y}});
+                    d->AddText(font, font->FontSize, at, color(palette().text), text.c_str());
+                    break;
+                }
+        }
+        if (hovered && std::hypot(io.MousePos.x - p.x, io.MousePos.y - p.y) < ui(12))
+            ImGui::SetTooltip("%s: click to focus the view", label.c_str());
         if (hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
             ImGui::GetMouseDragDelta().x * ImGui::GetMouseDragDelta().x +
                     ImGui::GetMouseDragDelta().y * ImGui::GetMouseDragDelta().y <
                 9 &&
-            std::hypot(io.MousePos.x - p.x, io.MousePos.y - p.y) < 12)
+            std::hypot(io.MousePos.x - p.x, io.MousePos.y - p.y) < ui(12))
             focus(key);
     }
     const auto p = xy(glm::vec3(body_[3]));
     const auto tip = xy(glm::vec3(body_[3]) + glm::vec3(body_[0]) * 1.3f);
-    d->AddCircleFilled(p, 6, IM_COL32(255, 208, 96, 255));
-    d->AddLine(p, tip, IM_COL32(255, 208, 96, 255), 3);
-    d->AddText(window_->small, window_->small->FontSize, {p.x + ui(8), p.y - ui(15)}, IM_COL32(255, 208, 96, 255),
-               s.robotId.c_str());
+    const ImU32 robot = ImGui::GetColorU32(palette().warn); // the vehicle: the theme's warm status colour
+    d->AddCircleFilled(p, 6, robot);
+    d->AddLine(p, tip, robot, 3);
+    d->AddText(window_->small, window_->small->FontSize, {p.x + ui(8), p.y - ui(15)}, robot, s.robotId.c_str());
     d->PopClipRect();
 }
 
@@ -1712,7 +1796,7 @@ void App::drawMapWindow() {
         ImGui::SameLine(
             std::max(ImGui::GetCursorPosX(), ImGui::GetWindowContentRegionMax().x - buttonWidth("Fit pool")));
         ImGui::BeginDisabled(fitted);
-        if (ImGui::SmallButton("Fit pool")) {
+        if (ImGui::Button("Fit pool")) {
             mapZoom_ = 1;
             mapPan_ = {0, 0};
         }
@@ -1838,7 +1922,7 @@ void App::drawDisplaySettings() {
             ImGui::SetTooltip("The equipment pack (calibration board) in this view; camera cards always show it.");
     }
     if (!mappingMarkers_.empty() && !demoMode_) {
-        ImGui::SeparatorText("Course");
+        sectionTitle("Course");
         ImGui::SetNextItemWidth(ui(170));
         pins::Combo("Source", &courseMode_, "Auto\0Pack layout\0Mapping (RViz)\0");
         if (ImGui::IsItemHovered())
@@ -1854,7 +1938,7 @@ void App::drawDisplaySettings() {
         drawMappingMeshList();
     }
     if (ros_->truthActive() && !demoMode_) { // simulator only: a real robot has the estimate alone
-        ImGui::SeparatorText("Localization estimate");
+        sectionTitle("Localization estimate");
         pins::Checkbox("Robot ghost", &robotGhost_);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Draw the robot translucent at the localization estimate (TF base_link).");
@@ -1873,7 +1957,7 @@ void App::drawDisplaySettings() {
     }
     pins::Checkbox("Surface reflections", &observer_.reflections);
     pins::Checkbox("Frame stats (F3)", &showProfile_);
-    ImGui::SeparatorText("Viewer lighting");
+    sectionTitle("Viewer lighting");
     int antialiasing = std::clamp(observer_.antialiasing, 1, 4) - 1;
     ImGui::SetNextItemWidth(ui(160));
     if (pins::Combo("Anti-aliasing", &antialiasing,
@@ -1917,38 +2001,41 @@ void App::setViewMode(int mode) {
     mode_ = mode;
 }
 
+// A toolbar dropdown that names what it chooses: "Camera \u00b7 Orbit". Returns the chosen index (or -1).
+static int labelledCombo(const char *id, const char *what, const std::vector<std::string> &options, int current) {
+    const std::string preview =
+        std::string(what) + "  \u00b7  " + (current >= 0 && current < int(options.size()) ? options[std::size_t(current)] : "");
+    const float width = ImGui::CalcTextSize(preview.c_str()).x + 2 * ImGui::GetStyle().FramePadding.x +
+                        ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x;
+    sameLineIfFits(width);
+    ImGui::SetNextItemWidth(width);
+    int chosen = -1;
+    if (ImGui::BeginCombo(id, preview.c_str())) {
+        for (int i = 0; i < int(options.size()); ++i)
+            if (ImGui::Selectable(options[std::size_t(i)].c_str(), i == current))
+                chosen = i;
+        ImGui::EndCombo();
+    }
+    return chosen;
+}
+
 void App::toolbarView() {
     const auto &s = *scenario_;
-    sameLineIfFits(ui(130));
-    ImGui::SetNextItemWidth(ui(130));
     toolbarOldMode_ = mode_;
-    std::string views = "Orbit";
-    views += '\0';
-    views += "Free camera";
-    views += '\0';
-    for (const auto &camera : s.cameras) {
-        views += camera.id;
-        views += '\0';
-    }
-    views += '\0';
-    int mode = mode_;
-    if (ImGui::Combo("##view", &mode, views.c_str()))
+    std::vector<std::string> views{"Orbit", "Free camera"};
+    for (const auto &camera : s.cameras)
+        views.push_back(camera.id);
+    if (const int mode = labelledCombo("##view", "Camera", views, mode_); mode >= 0)
         setViewMode(mode);
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Camera: orbit, free camera (WASD), or look through a robot camera");
 }
 
 void App::toolbarFocus() {
-    sameLineIfFits(toolbarLeft_ > 640 ? 150 : 120);
-    ImGui::SetNextItemWidth(toolbarLeft_ > 640 ? 150 : 120);
-    std::string focuses;
-    for (const auto &name : focusNames_) {
-        focuses += name;
-        focuses += '\0';
-    }
-    focuses += '\0';
-    if (ImGui::Combo("##focus", &selectedFocus_, focuses.c_str()))
+    if (const int chosen = labelledCombo("##focus", "Focus", focusNames_, selectedFocus_); chosen >= 0) {
+        selectedFocus_ = chosen;
         focus(focusNames_.at(std::size_t(selectedFocus_)));
+    }
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Focus: jump the camera to the vehicle, a mechanism or a course element");
 }
@@ -2148,7 +2235,7 @@ void App::drawMappingMeshList() {
 void App::drawPointCloudSettings() {
     if (ros_->pointClouds.empty() || demoMode_)
         return;
-    ImGui::SeparatorText("Point clouds");
+    sectionTitle("Point clouds");
     for (auto &layer : ros_->pointClouds) {
         ImGui::PushID(layer.id.c_str());
         pins::Checkbox(layer.title.c_str(), &layer.enabled);
@@ -2272,10 +2359,21 @@ void App::registerHostItems() {
             ImGui::EndDisabled();
             if (demoMode_)
                 ImGui::TextDisabled("Preview: no detector feed.");
-            ImGui::SeparatorText("Legend");
-            ImGui::TextUnformatted("Solid: simulator truth placement");
-            ImGui::TextColored(ImVec4(.25f, .9f, 1.f, .95f), "Cyan outline: estimate (TF), when both are shown");
-            ImGui::TextDisabled("Dim dashed: approximate estimate (TF lagged)");
+            sectionTitle("Legend");
+            // a swatch drawn in each style, the words in the theme's text colour
+            const auto legend = [](ImU32 swatch, bool dashed, const char *text) {
+                const ImVec2 at = ImGui::GetCursorScreenPos();
+                const float h = ImGui::GetTextLineHeight(), w = ui(22), y = at.y + h * .5f;
+                auto *d = ImGui::GetWindowDrawList();
+                for (float x = 0; x < w; x += dashed ? ui(6) : w)
+                    d->AddLine({at.x + x, y}, {at.x + std::min(w, x + (dashed ? ui(3.5f) : w)), y}, swatch, ui(3));
+                ImGui::Dummy({w + ui(6), h});
+                ImGui::SameLine(0, 0);
+                ImGui::TextWrapped("%s", text);
+            };
+            legend(ImGui::GetColorU32(palette().text), false, "Solid: simulator truth placement");
+            legend(IM_COL32(64, 230, 255, 242), false, "Cyan outline: estimate (TF), when both are shown");
+            legend(ImGui::GetColorU32(palette().muted), true, "Dim dashed: approximate estimate (TF lagged)");
         });
 }
 
@@ -2328,8 +2426,26 @@ void App::drawInterface(double time, float dt) {
 
 void App::drawMenuBar() {
     // 35 px at the desktop's scale whatever the interface scale, like other applications' title bars (VS Code's):
-    // the padding sets the bar's height and centres the menus; font, spacing and the dropdowns at that scale too.
+    // the padding sets the bar's height and centres the menus. The dropdowns are content: the interface scale's
+    // font and spacing (as the panels), and never taller than the window (they scroll).
     const float t = window_->contentScale();
+    const ImGuiStyle content = ImGui::GetStyle();
+    const auto menu = [&](const char *label, const std::function<void()> &body) {
+        ImGui::SetNextWindowSizeConstraints({0, 0}, {FLT_MAX, ImGui::GetMainViewport()->WorkSize.y - ui(12)});
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, content.WindowPadding); // read as the dropdown begins
+        const bool shown = ImGui::BeginMenu(label);
+        ImGui::PopStyleVar();
+        if (!shown)
+            return;
+        ImGui::PushFont(window_->normal);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, content.FramePadding);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, content.ItemSpacing);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, content.ItemInnerSpacing);
+        body();
+        ImGui::PopStyleVar(3);
+        ImGui::PopFont();
+        ImGui::EndMenu();
+    };
     ImGui::PushFont(window_->menu);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10 * t, 9 * t));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14 * t, 12 * t));
@@ -2343,22 +2459,10 @@ void App::drawMenuBar() {
         ImGui::PopFont();
         return;
     }
-    if (ImGui::BeginMenu("View")) {
-        drawViewMenu();
-        ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Windows")) {
-        drawWindowsMenu();
-        ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Layout")) {
-        drawLayoutMenu();
-        ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Help")) {
-        ImGui::MenuItem("Controls & shortcuts", "F1", &helpOpen_);
-        ImGui::EndMenu();
-    }
+    menu("View", [&] { drawViewMenu(); });
+    menu("Windows", [&] { drawWindowsMenu(); });
+    menu("Layout", [&] { drawLayoutMenu(); });
+    menu("Help", [&] { ImGui::MenuItem("Controls & shortcuts", "F1", &helpOpen_); });
     const char *state = maximized_ ? "Pool view maximized (Ctrl+Space restores)" : layoutLocked_ ? "Layout locked" : "";
     if (*state) {
         ImGui::SameLine(0, 24);
@@ -2534,7 +2638,7 @@ void App::drawViewMenu() {
         drawScaleMenu();
         return;
     }
-    ImGui::SeparatorText("Scene");
+    sectionTitle("Scene");
     if (ImGui::BeginMenu("Pool")) {
         drawPoolMenu();
         ImGui::EndMenu();
@@ -2546,7 +2650,7 @@ void App::drawViewMenu() {
                 fitPlan();
         }
     } else {
-    ImGui::SeparatorText("Camera");
+    sectionTitle("Camera");
     if (ImGui::MenuItem("Orbit", nullptr, mode_ == 0))
         setViewMode(0);
     if (ImGui::MenuItem("Free camera", nullptr, mode_ == 1))
@@ -2561,7 +2665,7 @@ void App::drawViewMenu() {
         ImGui::EndMenu();
     }
     ImGui::MenuItem("Follow", nullptr, &follow_, presetFor(focusName_).follow);
-    ImGui::SeparatorText("Overlays");
+    sectionTitle("Overlays");
     ImGui::MenuItem("Labels", nullptr, &labels_);
     ImGui::MenuItem("TF frames", nullptr, &showTf_);
     ImGui::MenuItem("Detections", nullptr, &detections_, !demoMode_);
@@ -2609,7 +2713,7 @@ void App::drawWindowsMenu() {
             if (entry.section != section)
                 continue;
             if (!heading)
-                ImGui::SeparatorText(title);
+                sectionTitle(title);
             heading = true;
             ImGui::PushID(entry.key.c_str());
             if (ImGui::MenuItem(entry.label.c_str(), nullptr, *entry.open)) {
@@ -2637,14 +2741,14 @@ void App::drawLayoutMenu() {
         ImGui::MenuItem("Lock layout", nullptr, &layoutLocked_);
         return;
     }
-    ImGui::SeparatorText("Built-in");
+    sectionTitle("Built-in");
     for (const auto &preset : layoutPresets()) {
         if (ImGui::MenuItem(preset.label.c_str(), preset.shortcut.c_str()))
             pendingPreset_ = preset.id;
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s\nAlso reopens the default windows.", preset.description.c_str());
     }
-    ImGui::SeparatorText("Saved");
+    sectionTitle("Saved");
     const auto names = savedLayouts(layoutDir_);
     if (ImGui::BeginMenu("Load", !names.empty())) {
         for (const auto &name : names)
@@ -2696,11 +2800,17 @@ void App::drawLayoutMenu() {
 // and the pose-source pill.
 void App::drawCommandBar() {
     const float height = ui(52), padding = ui(9);
-    // Editing the map: the bar takes on the accent colour (half way, so Enable keeps its contrast).
+    // Editing the map: the bar takes on the accent colour, as far as its text stays legible (muted 5:1, text 7:1;
+    // at most half way, so Enable keeps its contrast).
     const bool editingMap = scenario_ && workspace_ == Workspace::Map;
     const auto &bar = palette().bar, &accent = palette().active;
-    const ImVec4 editBar(bar.x + (accent.x - bar.x) * .45f, bar.y + (accent.y - bar.y) * .45f,
-                         bar.z + (accent.z - bar.z) * .45f, 1);
+    const auto tinted = [&](float t) {
+        return ImVec4(bar.x + (accent.x - bar.x) * t, bar.y + (accent.y - bar.y) * t, bar.z + (accent.z - bar.z) * t, 1);
+    };
+    float tint = .45f;
+    while (tint > .1f && (contrastRatio(palette().muted, tinted(tint)) < 5 || contrastRatio(palette().text, tinted(tint)) < 7))
+        tint -= .025f;
+    const ImVec4 editBar = tinted(tint);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, padding));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, editingMap ? editBar : bar);
     const bool open = ImGui::BeginViewportSideBar("##command_bar", ImGui::GetMainViewport(), ImGuiDir_Up, height,
@@ -2741,7 +2851,7 @@ void App::drawCommandBar() {
             ImGui::SetCursorPosY(padding);
             composition_->drawPinned();
         }
-        const float statusWidth = ImGui::CalcTextSize(status_.c_str()).x + 2 * ImGui::GetStyle().FramePadding.x;
+        const float statusWidth = statusChipWidth(status_.c_str());
         const float spacing = ImGui::GetStyle().ItemSpacing.x, edit = editMapButtonWidth();
         if (composition_) { // header items (robot telemetry, recording) sit just left of Edit map and the status
             ImGui::SetCursorPosY(padding + (inner - ImGui::GetFrameHeight()) * .5f); // a fresh line (no SameLine)
@@ -2890,9 +3000,50 @@ void App::drawPoolView(double time, float dt) {
         scene.points = ros_->pointSets(); // main view only (cards render without points)
     if (!viewSettings().tiles && scene.water) // main view only: the cameras see the pool as it is
         scene.water->tile_size = 0;
+    const bool planLook = planActive() && mapObserver_.planColors;
+    if (planLook) { // a chart: flat theme-coloured floor and lines, no walls (the overlay draws the rim)
+        const auto pal = planPalette();
+        const auto hdr = [](ImVec4 c) { return Eigen::Vector3f(hdrFor(c.x), hdrFor(c.y), hdrFor(c.z)); };
+        Eigen::Vector3f stripe(.093f, .14f, .16f); // the floor stripes' own colour (tint multiplies it)
+        for (const auto &s : model_->pack().poolStripes())
+            if (s.side == rendering::PoolSide::Floor) {
+                stripe = s.color;
+                break;
+            }
+        // Lamp surfaces show 1.65 x their colour; markings are lit by the upward ambient term only (flat light).
+        const Eigen::Vector3f floorTint = hdr(pal.floor) / 1.65f,
+                              lineTint = hdr(pal.line).cwiseQuotient(
+                                  Eigen::Vector3f(.48f, .55f, .56f).cwiseProduct(stripe.cwiseMax(Eigen::Vector3f::Constant(.01f))));
+        for (const auto i : model_->pack().poolFloorInstances()) {
+            if (i >= scene.instances.size())
+                continue;
+            auto &instance = scene.instances[i];
+            if (instance.material == rendering::SurfaceMaterial::Tiles) {
+                instance.material = rendering::SurfaceMaterial::Lamp;
+                instance.tint.head<3>() = floorTint;
+                instance.casts_shadow = false;
+            } else if (instance.material == rendering::SurfaceMaterial::Marking)
+                instance.tint.head<3>() = lineTint;
+        }
+        for (const auto i : model_->pack().poolWallInstances())
+            if (i < scene.instances.size())
+                scene.instances[i].visible = false;
+        if (scene.water)
+            scene.water->tile_size = 0;
+    }
     const rendering::View renderView{toEigen(view.view), toEigen(view.projection),
                                      Eigen::Vector3f(view.eye.x, view.eye.y, view.eye.z)};
     auto appearance = viewSettings().apply(look_.appearance);
+    if (planLook) { // flat light so the chart colours come out exactly (see hdrFor)
+        appearance.direct_light = 0;
+        appearance.ambient_light = 1;
+        appearance.exposure = 1;
+        appearance.shadows = appearance.reflections = appearance.surface = false;
+        appearance.caustics = appearance.glare = 0;
+        appearance.water.absorption.setZero();
+        appearance.water.scattering = 0;
+        appearance.water.distance_scale = 0;
+    }
     // A window too large for the supersampled targets falls back to fewer samples.
     GLint maximumTexture = 0;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximumTexture);
@@ -2950,18 +3101,28 @@ void App::drawPoolView(double time, float dt) {
         panelView.eye = view.eye;
         composition_->drawOverlays(panelView);
     }
+    if (planLook)
+        drawPlanFrame(vp, {imagePos.x, imagePos.y}, {iw, ih});
     if (editing) {
         editorView.viewProjection = vp;
         priorMap_->drawOverlay(editorView, window_->small);
     }
     auto *d = ImGui::GetWindowDrawList();
-    d->AddRect(position, {position.x + width, position.y + viewHeight}, IM_COL32(38, 62, 72, 255), 5, 0, 1);
-    d->AddRectFilled({position.x + ui(14), position.y + ui(14)}, {position.x + ui(237), position.y + ui(43)},
-                     IM_COL32(8, 22, 29, 225), 4);
-    d->AddText(
-        window_->small, window_->small->FontSize, {position.x + ui(25), position.y + ui(22)}, color(white),
-        (scenario_->poolId + " / " + fixed(scenario_->poolLength, 1) + " x " + fixed(scenario_->poolWidth, 2) + " m")
-            .c_str());
+    d->AddRect(position, {position.x + width, position.y + viewHeight}, ImGui::GetColorU32(ImGuiCol_Border), 5, 0, 1);
+    // the pool's name (its pack's label, else its id) and size
+    if (poolSwitch_.packs.empty())
+        poolSwitch_.packs = scenarioPacks();
+    std::string poolName = scenario_->poolId;
+    for (const auto &pack : poolSwitch_.packs)
+        if (pack.poolId == scenario_->poolId)
+            poolName = pack.poolLabel;
+    const std::string poolChip =
+        poolName + "  \u00b7  " + fixed(scenario_->poolLength, 1) + " x " + fixed(scenario_->poolWidth, 2) + " m";
+    const ImVec2 poolText = window_->small->CalcTextSizeA(window_->small->FontSize, 1e9f, 0, poolChip.c_str());
+    d->AddRectFilled({position.x + ui(14), position.y + ui(14)},
+                     {position.x + ui(36) + poolText.x, position.y + ui(22) + poolText.y + ui(8)}, chipFill(), 4);
+    d->AddText(window_->small, window_->small->FontSize, {position.x + ui(25), position.y + ui(22)},
+               color(palette().text), poolChip.c_str());
     drawPoolSwitchStatus(position);
     if (showProfile_ && !profiler_.recent().empty()) {
         if (time - profileCachedAt_ > .5) {
@@ -2983,8 +3144,8 @@ void App::drawPoolView(double time, float dt) {
         const ImVec2 size = ImGui::CalcTextSize(profileText_.c_str());
         ImGui::PopFont();
         d->AddRectFilled({position.x + ui(14), position.y + ui(50)},
-                         {position.x + ui(30) + size.x, position.y + ui(62) + size.y}, IM_COL32(8, 22, 29, 225), 4);
-        d->AddText(window_->small, window_->small->FontSize, {position.x + ui(22), position.y + ui(56)}, color(white),
+                         {position.x + ui(30) + size.x, position.y + ui(62) + size.y}, chipFill(), 4);
+        d->AddText(window_->small, window_->small->FontSize, {position.x + ui(22), position.y + ui(56)}, color(palette().text),
                    profileText_.c_str());
     }
     if (runScore_ && runScore_["total"]) {
@@ -2992,9 +3153,9 @@ void App::drawPoolView(double time, float dt) {
         if (runScore_["running"].as<bool>(false))
             readout += "  RUNNING";
         d->AddRectFilled({position.x + width - ui(310), position.y + ui(12)},
-                         {position.x + width - ui(12), position.y + ui(43)}, IM_COL32(8, 22, 29, 225), 4);
+                         {position.x + width - ui(12), position.y + ui(43)}, chipFill(), 4);
         d->AddText(window_->small, window_->small->FontSize * 14 / 12,
-                   {position.x + width - ui(298), position.y + ui(21)}, color(cyan), readout.c_str());
+                   {position.x + width - ui(298), position.y + ui(21)}, color(palette().accent), readout.c_str());
     }
     if (labels_ && mode_ < 2 && presetFor(focusName_).labels && !priorMap_->hidesCourse()) {
         for (const auto &key : focusNames_) {
@@ -3008,12 +3169,16 @@ void App::drawPoolView(double time, float dt) {
             if (std::abs(p.x) > .94 || std::abs(p.y) > .85 || p.z > 1)
                 continue;
             const ImVec2 at(position.x + (p.x * .5f + .5f) * width, position.y + (.5f - p.y * .5f) * viewHeight);
-            d->AddCircleFilled(at, 3, color(cyan));
-            d->AddLine(at, {at.x + ui(10), at.y - ui(14)}, color(cyan));
-            d->AddRectFilled({at.x + ui(9), at.y - ui(31)}, {at.x + ui(105), at.y - ui(11)}, IM_COL32(8, 22, 29, 215),
-                             3);
-            d->AddText(window_->small, window_->small->FontSize, {at.x + ui(16), at.y - ui(28)}, color(white),
-                       key.c_str());
+            d->AddCircleFilled(at, 3, color(palette().accent));
+            d->AddLine(at, {at.x + ui(10), at.y - ui(14)}, color(palette().accent));
+            // a plate fitted to the name, edged in the accent like its leader line
+            ImFont *font = typeRamp().smallStrong ? typeRamp().smallStrong : window_->small;
+            const float text = font->CalcTextSizeA(font->FontSize, 1e9f, 0, key.c_str()).x;
+            const ImVec2 min(at.x + ui(9), at.y - ui(31)), max(at.x + ui(23) + text, at.y - ui(11));
+            d->AddRectFilled(min, max, chipFill(), ui(3));
+            d->AddRect(min, max, ImGui::GetColorU32(ImVec4(palette().accent.x, palette().accent.y, palette().accent.z, .55f)),
+                       ui(3), 0, ui(1));
+            d->AddText(font, font->FontSize, {at.x + ui(16), at.y - ui(28)}, color(palette().text), key.c_str());
         }
     }
     const char *controls =
@@ -3021,9 +3186,9 @@ void App::drawPoolView(double time, float dt) {
         : mode_ == 1 ? "CLICK  mouse look    WASD  move    SPACE / SHIFT  up / down    CTRL  fast    ESC  release"
                      : "LEFT DRAG  orbit   RIGHT / MIDDLE DRAG  pan   SCROLL  zoom   F  focus cursor";
     d->AddRectFilled({position.x, position.y + viewHeight - ui(30)}, {position.x + width, position.y + viewHeight},
-                     IM_COL32(6, 18, 26, 205));
+                     chipFill());
     d->AddText(window_->small, window_->small->FontSize, {position.x + ui(14), position.y + viewHeight - ui(21)},
-               color(white), controls);
+               color(palette().text), controls);
     for (const Side side : {Side::Left, Side::Right})
         drawSideHandle(side, position, {width, viewHeight}, true);
     ImGui::End();
@@ -3222,7 +3387,7 @@ void App::drawHelpWindow() {
             }
             ImGui::EndTable();
         };
-        ImGui::SeparatorText("Pool view");
+        sectionTitle("Pool view");
         table("view_keys",
               {{"Left drag", "orbit"},
                {"Right / middle drag", "pan (detaches Follow)"},
@@ -3231,24 +3396,22 @@ void App::drawHelpWindow() {
                {"Free camera", "click for mouse look, WASD move, Space / Shift up / down, Ctrl fast, "
                                "Esc release"},
                {"Gizmo", "drag an arrow to move, a ring to rotate; Esc during a drag restores the start"}});
-        ImGui::SeparatorText("Shortcuts");
+        sectionTitle("Shortcuts");
         table("shortcuts", {{"Ctrl+M", "edit the prior map / done"},
                             {"Ctrl+Space", "maximize the pool view / restore the layout"},
                             {"Ctrl+Shift+1 / 2 / 3", "Standard / Wide view / Camera wall layout"},
                             {"Ctrl+[ / Ctrl+]", "snap the left / right panels shut, or bring them back"},
                             {"F1", "this window"},
                             {"F3", "frame-time stats"}});
-        ImGui::SeparatorText("Windows");
-        ImGui::PushStyleColor(ImGuiCol_Text, palette().muted);
-        ImGui::TextWrapped(
-            "Every panel, camera, the course map and the tool windows can be moved: drag a window's tab onto "
-            "another window to dock it there (the arrows show where), next to it to split the space, or away "
-            "to float it. Drag the borders between windows to resize. Close a window with its x and reopen it "
-            "from the Windows menu. The layout is saved when the viewer closes; Layout > Save current as keeps "
-            "named layouts, and Layout > Standard puts everything back. Right-click a window's tab to pin it to the "
-            "toolbar, or any button, checkbox or dropdown in a panel to pin that control; right-click the toolbar (or "
-            "its +) to choose its buttons. View > Theme changes the colours, View > Interface scale the size.");
-        ImGui::PopStyleColor();
+        sectionTitle("Windows");
+        table("windows", {{"Move", "drag a tab onto a window to dock it (the arrows show where), beside it to split, "
+                                   "away to float it"},
+                          {"Resize", "drag the borders between windows"},
+                          {"Close / reopen", "a tab's x / the Windows menu"},
+                          {"Layouts", "saved when the viewer closes; Layout > Save current as, Layout > Standard"},
+                          {"Pin", "right-click a tab, or any control in a panel, to put it on the toolbar"},
+                          {"Toolbar", "right-click it (or its +) to choose its buttons"},
+                          {"Look", "View > Theme, View > Interface scale"}});
     }
     ImGui::End();
 }
@@ -3414,16 +3577,18 @@ std::string toolbarLabel(const std::string &type) {
 
 void App::drawToolbarCustomization() {
     if (composition_ && !composition_->toolbarItems().empty()) {
-        ImGui::SeparatorText("Toolbar buttons");
+        sectionTitle("Toolbar buttons");
         for (const auto &item : composition_->toolbarItems()) {
+            if (item.type == "separator") // dividers come and go with the groups around them
+                continue;
             ImGui::PushID(item.id.c_str());
             ImGui::Checkbox(item.title.empty() ? toolbarLabel(item.type).c_str() : item.title.c_str(), item.visible);
             ImGui::PopID();
         }
     }
-    ImGui::SeparatorText("Pinned controls");
+    sectionTitle("Pinned controls");
     pins::drawCustomization();
-    ImGui::SeparatorText("Pinned windows");
+    sectionTitle("Pinned windows");
     ImGui::TextDisabled("Also: right-click a window's tab > Pin to toolbar");
     for (const auto &entry : windowEntries()) {
         ImGui::PushID(entry.key.c_str());
@@ -3844,7 +4009,7 @@ void App::drawPoolMenu() {
             same > 1 ? pack.poolLabel + " (" + pack.folder.filename().string() + ")" : pack.poolLabel;
         const bool current = scenario_ && pack.poolId == scenario_->poolId;
         ImGui::PushID(pack.folder.c_str());
-        if (ImGui::MenuItem(label.c_str(), nullptr, current, supervised && !busy && !current))
+        if (ImGui::MenuItem(label.c_str(), nullptr, current, supervised && !busy) && !current)
             switchPool(pack);
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
             ImGui::SetTooltip("%s\n%s\n%s", pack.poolDescription.c_str(), pack.folder.c_str(),
@@ -4079,6 +4244,9 @@ void App::drawMapToolbar(float width) {
         ImGui::Checkbox("Water", &mapObserver_.water);
         ImGui::Checkbox("Pool walls & deck", &mapObserver_.walls);
         ImGui::Checkbox("Pool floor", &mapObserver_.floor);
+        ImGui::Checkbox("Plan colours (2D)", &mapObserver_.planColors);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("The 2D view as a chart: flat theme colours, the floor, its lines and the props' outlines");
         ImGui::Checkbox("Pool tiles", &mapObserver_.tiles);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("The tile grout on the walls and floor; the lane lines stay.");
@@ -4110,7 +4278,7 @@ void App::drawMapToolbar(float width) {
 // Map editing's lighting (its own; Operate's look is unchanged). Sterile by default: even light, no shadows.
 void App::drawMapLighting() {
     auto &s = mapObserver_;
-    ImGui::SeparatorText("Lighting");
+    sectionTitle("Lighting");
     ImGui::SetNextItemWidth(ui(160));
     ImGui::Combo("Lighting", &s.lighting, "Scene lighting\0Indoor\0Outdoor\0Sterile\0");
     if (ImGui::IsItemHovered())
@@ -4225,5 +4393,74 @@ SensorView App::planCamera(float aspect) const {
     const float h = planHeight_ * .5f, w = h * aspect;
     return {eye, glm::lookAt(eye, eye - glm::vec3(0, 0, 1), glm::vec3(y, 0)),
             glm::ortho(-w, w, -h, h, .05f, 6 + scenario_->deckHeight + scenario_->poolDepth + 20)};
+}
+} // namespace nereus::ros_viewer::host
+
+namespace nereus::ros_viewer::host {
+// The 2D chart's frame: the theme canvas around the pool (hiding the deck and the sky), the pool's rim, a scale bar,
+// and the robot's name at its marker.
+void App::drawPlanFrame(const glm::mat4 &vp, glm::vec2 origin, glm::vec2 size) {
+    const auto &s = *scenario_;
+    const auto pal = planPalette();
+    auto *d = ImGui::GetWindowDrawList();
+    const auto project = [&](glm::vec3 w, ImVec2 &out) {
+        const auto clip = vp * glm::vec4(w, 1);
+        if (clip.w <= 1e-6f)
+            return false;
+        out = {origin.x + (clip.x / clip.w * .5f + .5f) * size.x, origin.y + (.5f - clip.y / clip.w * .5f) * size.y};
+        return true;
+    };
+    ImVec2 lo(1e9f, 1e9f), hi(-1e9f, -1e9f);
+    for (const glm::vec2 corner : {glm::vec2(0, 0), glm::vec2(s.poolLength, 0), glm::vec2(0, s.poolWidth),
+                                   glm::vec2(s.poolLength, s.poolWidth)}) {
+        ImVec2 at;
+        if (!project(glm::vec3(s.poolToWorld * glm::vec4(corner, -s.poolDepth, 1)), at))
+            return;
+        lo = {std::min(lo.x, at.x), std::min(lo.y, at.y)};
+        hi = {std::max(hi.x, at.x), std::max(hi.y, at.y)};
+    }
+    const ImVec2 a(origin.x, origin.y), b(origin.x + size.x, origin.y + size.y);
+    d->PushClipRect(a, b, true);
+    const ImU32 canvas = ImGui::GetColorU32(pal.canvas);
+    d->AddRectFilled(a, {b.x, lo.y}, canvas);
+    d->AddRectFilled({a.x, hi.y}, b, canvas);
+    d->AddRectFilled({a.x, lo.y}, {lo.x, hi.y}, canvas);
+    d->AddRectFilled({hi.x, lo.y}, {b.x, hi.y}, canvas);
+    const float rim = ui(5);
+    d->AddRect({lo.x - rim * .5f, lo.y - rim * .5f}, {hi.x + rim * .5f, hi.y + rim * .5f}, ImGui::GetColorU32(pal.rim),
+               ui(2), 0, rim);
+    // the robot, named (map editing draws it frozen and level)
+    if (!s.robotId.empty()) {
+        ImVec2 at;
+        const glm::mat4 body = priorMap_->robotStart().value_or(body_);
+        if (project(glm::vec3(body[3]), at)) {
+            const ImVec2 text = window_->small->CalcTextSizeA(window_->small->FontSize, 1e9f, 0, s.robotId.c_str());
+            const ImVec2 box(at.x - (text.x + ui(10)) * .5f, at.y + ui(16));
+            d->AddRectFilled(box, {box.x + text.x + ui(10), box.y + text.y + ui(6)},
+                             ImGui::GetColorU32(ImVec4(pal.canvas.x, pal.canvas.y, pal.canvas.z, .85f)), ui(3));
+            d->AddText(window_->small, window_->small->FontSize, {box.x + ui(5), box.y + ui(3)},
+                       ImGui::GetColorU32(palette().muted), s.robotId.c_str());
+        }
+    }
+    // a scale bar in the top right corner (clear of the scene chip and the hints): the longest round length under 160 px
+    const float metresPerPixel = planHeight_ / std::max(1.f, size.y);
+    float metres = .5f;
+    for (const float step : {1.f, 2.f, 5.f, 10.f, 20.f, 50.f})
+        if (step / metresPerPixel <= ui(160))
+            metres = step;
+    const float length = metres / metresPerPixel;
+    char label[16];
+    std::snprintf(label, sizeof(label), metres < 1 ? "%.1f m" : "%.0f m", metres);
+    const ImVec2 text = window_->small->CalcTextSizeA(window_->small->FontSize, 1e9f, 0, label);
+    const ImVec2 base(b.x - ui(18) - length, a.y + ui(18) + text.y + ui(12));
+    const ImU32 ink = ImGui::GetColorU32(palette().text);
+    d->AddRectFilled({base.x - ui(8), base.y - text.y - ui(12)}, {base.x + length + ui(8), base.y + ui(8)},
+                     ImGui::GetColorU32(ImVec4(pal.canvas.x, pal.canvas.y, pal.canvas.z, .85f)), ui(3));
+    d->AddLine(base, {base.x + length, base.y}, ink, ui(2));
+    for (const float x : {0.f, length})
+        d->AddLine({base.x + x, base.y - ui(5)}, {base.x + x, base.y + ui(3)}, ink, ui(2));
+    d->AddText(window_->small, window_->small->FontSize, {base.x + (length - text.x) * .5f, base.y - text.y - ui(6)},
+               ink, label);
+    d->PopClipRect();
 }
 } // namespace nereus::ros_viewer::host

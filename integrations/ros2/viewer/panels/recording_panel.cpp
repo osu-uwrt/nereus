@@ -57,7 +57,7 @@ class RecordingPanel final : public Panel {
         for (const auto &camera : recording->state().cameras)
             if (camera.recording) {
                 if (!first)
-                    ImGui::SameLine(0, 4);
+                    ImGui::SameLine(0, ui(6));
                 first = false;
                 ImGui::PushID(camera.id.c_str());
                 const auto text = "REC " + camera.label + " " + clock(camera.elapsed);
@@ -69,8 +69,8 @@ class RecordingPanel final : public Panel {
     void draw() override {
         auto s = recording ? recording->state() : RecordingState{};
         if (!recording)
-            ImGui::TextDisabled("Preview / recording disconnected");
-        ImGui::SeparatorText("SVO recording");
+            emptyState("Connected, this records SVO video and still images on the robot.");
+        sectionTitle("SVO recording");
         ImGui::TextUnformatted("Path on the robot");
         ImGui::SetNextItemWidth(-1);
         ImGui::InputTextWithHint("##path", "~/svos/run", path, sizeof(path));
@@ -106,7 +106,7 @@ class RecordingPanel final : public Panel {
             if (!camera.message.empty())
                 ImGui::TextWrapped("%s", camera.message.c_str());
         }
-        ImGui::SeparatorText("Still images");
+        sectionTitle("Still images");
         ImGui::BeginDisabled(!recording || !s.captureReady || s.capturing);
         if (pins::Button(s.capturing ? "Capturing...###capture" : "Capture image###capture", {-1, ui(36)}))
             recording->capture();

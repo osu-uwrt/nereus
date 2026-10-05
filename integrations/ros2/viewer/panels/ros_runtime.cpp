@@ -214,7 +214,7 @@ void RosMotion::tick() {
         value.fresh = false;
     }
     if (!session)
-        value.message = value.fresh ? "Ready / enable to control" : "Waiting for fresh pose";
+        value.message = value.fresh ? "Ready / enable to control" : "Waiting for pose";
     const bool controlling = value.mode != Mode::Disabled || value.pending;
     if (value.pending && std::chrono::duration<double>(now - pendingSince).count() > requestTimeout)
         releaseLocked("Control request timed out");

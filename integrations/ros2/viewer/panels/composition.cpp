@@ -491,6 +491,8 @@ void Composition::drawOverlayControls(const std::string &provider) {
         ImGui::PushID(item.id.c_str());
         if (pins::Checkbox(item.title.c_str(), &item.visible) && !item.visible)
             item.overlay->cancelInteraction();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Show %s in the pool view", item.title.c_str());
         ImGui::PopID();
     }
 }

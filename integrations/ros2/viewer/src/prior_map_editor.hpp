@@ -163,6 +163,11 @@ class PriorMapEditor {
     std::map<std::string, MappingMarker> meshes_;
     std::map<std::string, Extent> extents_;
     mutable ImFont *labelFont_ = nullptr; // the overlay's (labels are click targets)
+    struct LabelBox {
+        std::string name;
+        ImVec2 min, max;
+    };
+    mutable std::vector<LabelBox> labelBoxes_; // last drawn label boxes, for picking
     std::vector<Snapshot> undo_, redo_;
     std::string selected_, message_, filter_;
     bool messageError_ = false, active_ = false, objectsOpen_ = true, inspectorOpen_ = true, hideCourse_ = true,

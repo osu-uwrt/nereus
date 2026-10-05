@@ -1,5 +1,6 @@
 #include "overlay_draw.hpp"
 #include "nereus/ros_viewer/theme.hpp"
+#include <algorithm>
 #include <imgui_internal.h>
 
 namespace nereus::ros_viewer::host {
@@ -90,7 +91,13 @@ void drawDetections(const std::vector<PlacedDetection> &detections, const glm::m
         float y = rect.position.y + ui(52); // below the status pills
         const float x = rect.position.x + ui(10);
         const int lines = (both ? 2 : 0) + (haveApprox ? 1 : 0);
-        draw->AddRectFilled({x - 4.f, y - 2.f}, {x + ui(300), y + ImGui::GetTextLineHeight() * lines + 2.f},
+        float wide = 0; // the plate fits its longest line
+        if (both)
+            wide = std::max(ImGui::CalcTextSize("Detections: solid = simulator truth").x,
+                            ImGui::CalcTextSize("Detections: cyan outline = estimate (TF)").x);
+        if (haveApprox)
+            wide = std::max(wide, ImGui::CalcTextSize("Detections: dim dashed = approximate (TF lagged)").x);
+        draw->AddRectFilled({x - ui(6), y - ui(3)}, {x + wide + ui(6), y + ImGui::GetTextLineHeight() * lines + ui(3)},
                             rgba(.03f, .07f, .1f, .72f), 3.f);
         if (both) {
             draw->AddText({x, y}, rgba(1.f, 1.f, 1.f, .9f), "Detections: solid = simulator truth");

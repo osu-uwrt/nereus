@@ -1,4 +1,5 @@
 #include "window.hpp"
+#include "nereus/ros_viewer/theme.hpp"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <algorithm>
@@ -107,13 +108,17 @@ void Window::loadFonts(float ui, float titleBar, const std::string &family, floa
     const float k = body / 15;
     if (std::filesystem::exists(font)) {
         normal = io.Fonts->AddFontFromFileTTF(font.c_str(), 15 * k * ui);
+        const auto *heavy = std::filesystem::exists(bold) ? bold.c_str() : font.c_str();
+        strong = io.Fonts->AddFontFromFileTTF(heavy, 15 * k * ui);
+        smallStrong = io.Fonts->AddFontFromFileTTF(heavy, 12 * k * ui);
         small = io.Fonts->AddFontFromFileTTF(font.c_str(), 12 * k * ui);
         title = io.Fonts->AddFontFromFileTTF(std::filesystem::exists(bold) ? bold.c_str() : font.c_str(), 21 * k * ui);
         number = io.Fonts->AddFontFromFileTTF(font.c_str(), 25 * k * ui);
         menu = io.Fonts->AddFontFromFileTTF(font.c_str(), 13 * k * titleBar);
     } else
-        normal = small = title = number = menu = io.Fonts->AddFontDefault();
+        normal = small = title = number = menu = strong = smallStrong = io.Fonts->AddFontDefault();
     io.FontDefault = normal;
+    setTypeRamp({strong, number, small, smallStrong});
     io.Fonts->Build();
     if (backendReady_) { // a running viewer: replace the GPU copy of the atlas
         ImGui_ImplOpenGL3_DestroyFontsTexture();

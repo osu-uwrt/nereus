@@ -7,6 +7,16 @@
 #include <imgui.h>
 namespace nereus::ros_viewer::panels {
 namespace {
+// A large figure (run time, score) in the number font.
+void figure(const char *format, double value, double second = 0) {
+    char text[64];
+    std::snprintf(text, sizeof(text), format, value, second);
+    if (auto *font = typeRamp().number)
+        ImGui::PushFont(font);
+    ImGui::TextUnformatted(text);
+    if (typeRamp().number)
+        ImGui::PopFont();
+}
 class RunPanel final : public Panel {
     std::shared_ptr<Run> run;
     YAML::Node schema, options;
@@ -63,8 +73,12 @@ class RunPanel final : public Panel {
         const auto score = s.score;
         const bool running = score["running"].as<bool>(false);
         const double seconds = score["elapsed"].as<double>(0);
-        ImGui::Text("%02d:%04.1f  |  %.1f points", int(seconds) / 60, std::fmod(seconds, 60.),
-                    score["total"].as<double>(0));
+        figure("%02.0f:%04.1f", std::floor(seconds / 60), std::fmod(seconds, 60.));
+        ImGui::SameLine(0, ui(18));
+        figure("%.1f", score["total"].as<double>(0));
+        ImGui::SameLine(0, ui(6));
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(palette().muted, "points");
         if (showDetails && pins::Button("Detailed scorecard", {-1, ui(36)}))
             details = focusDetails = true;
         ImGui::BeginDisabled(!run || !s.fresh || !enabled);
@@ -124,9 +138,7 @@ class RunPanel final : public Panel {
             if (pins::Button(action["label"].as<std::string>().c_str(), {-1, ui(36)}))
                 run->command(action["command"]);
         ImGui::EndDisabled();
-        if (!run)
-            ImGui::TextWrapped("Preview / run tracking disconnected");
-        else if (!s.message.empty())
+        if (run && !s.message.empty())
             ImGui::TextWrapped("%s", s.message.c_str());
         for (const auto &field : schema["status_fields"]) {
             auto value = score[field["key"].as<std::string>()];
@@ -143,7 +155,7 @@ class RunPanel final : public Panel {
     // Subjective points: each entry adds to (or, negative, subtracts from) the run's adjustment.
     void adjustment(const RunState &s) {
         const double current = s.score["adjustment"].as<double>(0);
-        ImGui::SeparatorText("Score adjustment");
+        sectionTitle("Score adjustment");
         ImGui::Text("Current: %+.1f", current);
         ImGui::BeginDisabled(!run || !s.fresh || !enabled);
         const float button = ImGui::CalcTextSize("Clear").x + 2 * ImGui::GetStyle().FramePadding.x;
@@ -175,18 +187,18 @@ class RunPanel final : public Panel {
     void taskStatus() {
         const auto s = run ? run->state() : RunState{};
         if (!s.taskSummary.empty()) {
-            ImGui::SeparatorText("Task status");
+            sectionTitle("Task status");
             ImGui::TextWrapped("%s", s.taskSummary.c_str());
         }
         if (!s.magnetTargets.empty())
-            ImGui::SeparatorText("Magnet targets");
+            sectionTitle("Magnet targets");
         for (const auto &target : s.magnetTargets)
             ImGui::TextColored(target.second ? ImVec4(.2f, 1.f, .3f, 1.f) : ImVec4(1.f, .3f, .25f, 1.f), "%s: %s",
                                target.first.c_str(), target.second ? "GREEN" : "RED");
         for (const auto &reading : s.simulationReadings)
             ImGui::TextWrapped("%s: %s", reading.first.c_str(), reading.second.c_str());
         if (!s.events.empty())
-            ImGui::SeparatorText("Recent events");
+            sectionTitle("Recent events");
         for (const auto &event : s.events)
             ImGui::TextWrapped("%s", event.c_str());
         if (schema["run_inspections"] && ImGui::TreeNode("Inspect scene")) {
@@ -201,11 +213,11 @@ class RunPanel final : public Panel {
     void scorecard() {
         auto s = run ? run->state() : RunState{};
         const auto score = s.score;
-        ImGui::SeparatorText("Awards");
+        sectionTitle("Awards");
         if (ImGui::BeginTable("awards", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH)) {
             ImGui::TableSetupColumn("Award", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Points", ImGuiTableColumnFlags_WidthFixed, 80);
-            ImGui::TableHeadersRow();
+            ImGui::TableSetupColumn("Points", ImGuiTableColumnFlags_WidthFixed, ui(80));
+            tableHeaders();
             for (const auto &row : score["rows"]) {
                 ImGui::TableNextRow(0, 30);
                 ImGui::TableNextColumn();
@@ -221,8 +233,11 @@ class RunPanel final : public Panel {
             }
             ImGui::EndTable();
         }
-        ImGui::Text("Score adjustment: %+.1f", score["adjustment"].as<double>(0));
-        ImGui::Text("TOTAL: %.1f", score["total"].as<double>(0));
+        ImGui::TextColored(palette().muted, "Score adjustment  %+.1f", score["adjustment"].as<double>(0));
+        figure("%.1f", score["total"].as<double>(0));
+        ImGui::SameLine(0, ui(6));
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(palette().muted, "points total");
         for (const auto &field : schema["score_fields"]) {
             auto value = score[field["key"].as<std::string>()];
             if (value && value.IsScalar())

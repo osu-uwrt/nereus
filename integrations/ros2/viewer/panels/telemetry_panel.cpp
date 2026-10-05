@@ -16,7 +16,7 @@ class TelemetryPanel final : public Panel {
         for (std::size_t i = 0; i < s.readings.size(); ++i) {
             const auto &reading = s.readings[i];
             if (i)
-                ImGui::SameLine(0, 4);
+                ImGui::SameLine(0, ui(6));
             ImGui::PushID(int(i));
             if (statusChip(chipText(reading).c_str(), levelColor(reading.level)))
                 ImGui::SetTooltip("%s: %s\n%s", reading.label.c_str(), levelName(reading.level),
@@ -37,13 +37,13 @@ class TelemetryPanel final : public Panel {
         const auto s = telemetry->state();
         float width = 0;
         for (const auto &reading : s.readings)
-            width += chipWidth(chipText(reading).c_str()) + 4;
+            width += chipWidth(chipText(reading).c_str()) + ui(6);
         sameLineIfFits(width);
         chips(s);
     }
     void draw() override {
         if (!telemetry) {
-            ImGui::TextDisabled("Preview / telemetry disconnected");
+            emptyState("Connected, this lists the robot's telemetry readings.");
             return;
         }
         for (const auto &reading : telemetry->state().readings) {

@@ -156,7 +156,7 @@ panels:
 overlays:
   - id: target
     type: pose_gizmo
-    title: Robot controls
+    title: Pose gizmo  # the arrows and rings in the pool view that command the robot's pose
     provider: motion
     options:
       size_metres: 0.3
@@ -165,18 +165,21 @@ overlays:
 # scene_settings ("Scene" window), pool_viewer ("Display" window), panels_menu (a Windows popup, as the menu bar's),
 # preview_task) and provider-backed tools (run, simulation; these name a provider and open their own windows).
 # Detection settings live in the "Vision" panel; add `- {type: detections}` here for a compact toggle.
-toolbar:
+toolbar:  # groups: camera | overlays | windows | preview task (separator: a divider, each with its own id)
   - {type: view}
   - {type: focus}
   - {type: follow}
+  - {id: separator_overlays, type: separator}
   - {type: labels}
   - {type: tf}
   - {type: mpc_path}
   - {type: thrust}
+  - {id: separator_windows, type: separator}
   - {type: pool_viewer}
   - {type: scene_settings}
   - {id: simulation, type: simulation, provider: simulation}
   - {id: run, type: run, provider: run, options: {profile: task}}
+  - {id: separator_task, type: separator}
   - {type: preview_task}
 # Command bar (always visible, whatever the window layout), right-aligned beside the pose-source pill; the motion
 # panel's Enable / KILL is pinned at its left. Toolbar item types (provider-backed

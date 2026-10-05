@@ -11,7 +11,10 @@ class ActuatorPanel final : public Panel {
     explicit ActuatorPanel(const Binding &b) : actuators(std::dynamic_pointer_cast<Actuators>(b.provider)) {}
     void draw() override {
         auto s = actuators ? actuators->state() : ActuatorState{};
-        ImGui::TextWrapped("%s", actuators ? s.message.c_str() : "Preview / actuators disconnected");
+        if (!actuators)
+            emptyState("Connected, this holds a button per mechanism action (claw, droppers, torpedoes, magnet).");
+        else if (!s.message.empty())
+            ImGui::TextWrapped("%s", s.message.c_str());
         for (const auto &action : s.actions) {
             ImGui::PushID(action.id.c_str());
             ImGui::BeginDisabled(!action.available);
@@ -21,7 +24,7 @@ class ActuatorPanel final : public Panel {
             ImGui::PopID();
         }
         if (!s.readings.empty())
-            ImGui::SeparatorText("Status");
+            sectionTitle("Status");
         for (const auto &reading : s.readings)
             ImGui::TextWrapped("%s: %s", reading.first.c_str(), reading.second.c_str());
     }

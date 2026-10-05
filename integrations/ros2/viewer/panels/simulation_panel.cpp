@@ -38,7 +38,10 @@ class SimulationPanel final : public Panel {
         const bool paused = s.rate == 0;
         if (!dirty)
             draft = paused ? s.resumeRate : s.rate;
-        ImGui::TextWrapped("%s", simulation ? s.message.c_str() : "Preview / simulator disconnected");
+        if (!simulation)
+            emptyState("Connected to the simulator, this sets its speed, pauses it, and syncs or resets it.");
+        else if (!s.message.empty())
+            ImGui::TextWrapped("%s", s.message.c_str());
         if (s.connected) {
             ImGui::BeginDisabled(paused);
             ImGui::Text("Selected speed: %.2fx", paused ? s.resumeRate : s.rate);

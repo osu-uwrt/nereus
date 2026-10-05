@@ -18,7 +18,11 @@ class AutonomyPanel final : public Panel {
         : mission(std::dynamic_pointer_cast<Autonomy>(b.provider)), mayStart(b.mayStart) {}
     void draw() override {
         const auto s = mission ? mission->state() : MissionState{};
-        ImGui::TextWrapped("%s", mission ? s.message.c_str() : "Preview / autonomy disconnected");
+        if (!mission)
+            emptyState("Connected, this lists the robot's behaviour trees to start and shows the running tree's "
+                       "execution stack.");
+        else if (!s.message.empty())
+            ImGui::TextWrapped("%s", s.message.c_str());
         ImGui::BeginDisabled(!mission || !s.connected || s.busy || s.pending);
         float labelWidth = ImGui::CalcTextSize("Select a tree").x;
         for (const auto &tree : s.trees)
@@ -63,11 +67,13 @@ class AutonomyPanel final : public Panel {
         ImGui::EndDisabled();
         if (!s.activeTree.empty())
             ImGui::TextWrapped("Tree: %s", std::filesystem::path(s.activeTree).filename().c_str());
-        ImGui::SeparatorText(s.stackStale ? "Execution stack / stale"
+        sectionTitle(s.stackStale ? "Execution stack (stale)"
                              : s.busy     ? "Execution stack"
                                           : "Last execution stack");
-        if (s.stack.empty())
-            ImGui::TextDisabled(s.busy ? "Waiting for stack..." : "No stack received");
+        if (s.stack.empty()) {
+            ImGui::TextDisabled(s.busy ? "Waiting for the stack..." : "None yet: start a tree to see its stack.");
+            return;
+        }
         ImGui::BeginChild("stack",
                           {0, std::max(ui(80), ImGui::GetContentRegionAvail().y - ImGui::GetStyle().ItemSpacing.y)},
                           ImGuiChildFlags_None);

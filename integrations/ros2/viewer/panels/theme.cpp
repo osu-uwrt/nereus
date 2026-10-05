@@ -104,7 +104,9 @@ void apply(const Spec &t) {
     c[ImGuiCol_PlotLinesHovered] = p.activeHovered;
     c[ImGuiCol_PlotHistogram] = p.accent;
     c[ImGuiCol_PlotHistogramHovered] = p.activeHovered;
-    c[ImGuiCol_TableHeaderBg] = t.header;
+    // a quiet step off the panel, not the selection colour (a header is not a selected row)
+    c[ImGuiCol_TableHeaderBg] = {t.window.x * .9f + p.text.x * .1f, t.window.y * .9f + p.text.y * .1f,
+                                 t.window.z * .9f + p.text.z * .1f, 1};
     c[ImGuiCol_TableBorderStrong] = t.border;
     c[ImGuiCol_TableBorderLight] = t.border;
     c[ImGuiCol_TableRowBg] = {0, 0, 0, 0};
@@ -503,15 +505,103 @@ const std::vector<Theme> &themes() {
     return list;
 }
 
+// Legibility floor for every theme (the pool deck is in daylight): WCAG contrast of 4.5:1 for secondary, status and
+// accent text on every surface it is drawn on, and for the labels of filled "on" controls. A colour that falls short
+// moves toward black or white (keeping its hue) until it passes; KILL's colours are the theme's own.
+namespace {
+float channel(float c) {
+    return c <= .04045f ? c / 12.92f : std::pow((c + .055f) / 1.055f, 2.4f);
+}
+float relativeLuminance(ImVec4 c) {
+    return .2126f * channel(c.x) + .7152f * channel(c.y) + .0722f * channel(c.z);
+}
+} // namespace
+float contrastRatio(ImVec4 a, ImVec4 b) {
+    float la = relativeLuminance(a), lb = relativeLuminance(b);
+    if (la < lb)
+        std::swap(la, lb);
+    return (la + .05f) / (lb + .05f);
+}
+namespace {
+float contrast(ImVec4 a, ImVec4 b) {
+    return contrastRatio(a, b);
+}
+template <typename Worst> ImVec4 pushUntil(ImVec4 c, ImVec4 toward, float target, Worst worst) {
+    if (worst(c) >= target)
+        return c;
+    for (int i = 1; i <= 50; ++i) {
+        const ImVec4 next = mix(c, toward, float(i) / 50);
+        if (worst(next) >= target)
+            return next;
+    }
+    return toward;
+}
+// Text `fg` readable on every surface in `surfaces` (pills included: their fill is the window tinted 18 % by fg).
+ImVec4 readable(ImVec4 fg, const std::vector<ImVec4> &surfaces, bool onPill, float target = 4.5f) {
+    float mean = 0;
+    for (const auto &s : surfaces)
+        mean += relativeLuminance(s);
+    mean /= float(surfaces.size());
+    const ImVec4 toward = mean < .18f ? ImVec4(1, 1, 1, fg.w) : ImVec4(0, 0, 0, fg.w);
+    return pushUntil(fg, toward, target, [&](ImVec4 c) {
+        float worst = 1e9f;
+        for (const auto &s : surfaces)
+            worst = std::min(worst, contrast(c, s));
+        if (onPill)
+            worst = std::min(worst, contrast(c, mix(surfaces.front(), c, .18f)));
+        return worst;
+    });
+}
+// A filled control's colour, darkened or lightened (away from its label) until the label reads.
+ImVec4 fillFor(ImVec4 fill, ImVec4 label, float target = 4.5f) {
+    const ImVec4 toward = relativeLuminance(label) > .5f ? ImVec4(0, 0, 0, fill.w) : ImVec4(1, 1, 1, fill.w);
+    return pushUntil(fill, toward, target, [&](ImVec4 c) { return contrast(c, label); });
+}
+Spec legible(Spec t) {
+    auto &p = t.palette;
+    // Input boxes, checkboxes and buttons stand out from the panel they sit on (an unchecked checkbox used to vanish
+    // at 1.1:1); hovered / pressed shades keep their step beyond the resting one.
+    const auto stepOut = [&](ImVec4 &fill, std::initializer_list<ImVec4 *> shades, float target) {
+        const auto against = [&](ImVec4 c) { return std::min(contrast(c, t.window), contrast(c, t.child)); };
+        const ImVec4 toward(p.text.x, p.text.y, p.text.z, fill.w);
+        const float before = against(fill);
+        fill = pushUntil(fill, toward, target, against);
+        const float gained = against(fill) / before;
+        for (auto *shade : shades)
+            *shade = pushUntil(*shade, ImVec4(p.text.x, p.text.y, p.text.z, shade->w),
+                               std::max(target, against(*shade) * gained), against);
+    };
+    stepOut(t.frame, {&t.frameHovered, &t.frameActive}, 1.35f);
+    stepOut(t.button, {&t.buttonHovered, &t.buttonPressed}, 1.25f);
+    const std::vector<ImVec4> surfaces{t.window, t.child, t.popup, t.frame, t.button, t.tabSelected, p.bar, p.toolbar};
+    // 5:1 rather than 4.5: small anti-aliased text measures below its colour pair
+    p.muted = readable(p.muted, surfaces, false, 5.5f);
+    p.accent = readable(p.accent, {t.window, t.child, p.bar}, false, 5);
+    for (auto *status : {&p.warn, &p.error, &p.robotEnabled, &p.robotKilled})
+        *status = readable(*status, {t.window, t.child, p.bar}, true, 5);
+    // tabs stand out from the tab bar behind them (an inactive tab used to vanish into it)
+    for (auto *tab : {&t.tab, &t.tabDimmed})
+        *tab = pushUntil(*tab, ImVec4(p.text.x, p.text.y, p.text.z, tab->w), 1.2f, [&](ImVec4 c) {
+            return std::min(contrast(c, t.title), contrast(c, t.titleActive));
+        });
+    p.active = fillFor(p.active, p.activeText, 5);
+    p.activeHovered = fillFor(p.activeHovered, p.activeText, 5);
+    p.activePressed = fillFor(p.activePressed, p.activeText, 5);
+    return t;
+}
+
+} // namespace
+
 bool applyTheme(const std::string &id) {
     for (const auto &entry : entries())
         if (entry.theme.id == id) {
+            const auto spec = [make = entry.spec] { return legible(make()); };
             if (ImGui::GetCurrentContext())
-                apply(entry.spec()); // style and palette
+                apply(spec()); // style and palette
             else
-                current = entry.spec().palette;
+                current = spec().palette;
             currentId = id;
-            currentSpec = entry.spec;
+            currentSpec = spec;
             return true;
         }
     return false;
@@ -520,7 +610,7 @@ bool applyTheme(const std::string &id) {
 // Before any applyTheme(): the default theme's colours, without touching the ImGui style.
 static void ensureDefault() {
     if (currentId.empty()) {
-        current = entries().front().spec().palette;
+        current = legible(entries().front().spec()).palette;
         currentId = entries().front().theme.id;
     }
 }
@@ -551,5 +641,29 @@ float interfaceScale() {
 const Palette &palette() {
     ensureDefault();
     return current;
+}
+
+namespace {
+TypeRamp ramp;
+}
+void setTypeRamp(const TypeRamp &fonts) {
+    ramp = fonts;
+}
+const TypeRamp &typeRamp() {
+    return ramp;
+}
+void sectionTitle(const char *text) {
+    if (ramp.strong)
+        ImGui::PushFont(ramp.strong);
+    ImGui::SeparatorText(text);
+    if (ramp.strong)
+        ImGui::PopFont();
+}
+void tableHeaders() {
+    if (ramp.strong)
+        ImGui::PushFont(ramp.strong);
+    ImGui::TableHeadersRow();
+    if (ramp.strong)
+        ImGui::PopFont();
 }
 } // namespace nereus::ros_viewer

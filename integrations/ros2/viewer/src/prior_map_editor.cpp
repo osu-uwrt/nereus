@@ -9,6 +9,7 @@
 #include <fstream>
 #include <functional>
 #include <glm/gtc/matrix_transform.hpp>
+#include <imgui_internal.h>
 #include <iostream>
 #include <sstream>
 #include <yaml-cpp/yaml.h>
@@ -78,8 +79,24 @@ std::string sanitized(const fs::path &path) {
     return out;
 }
 // Where a prop's label box starts: centred under it in 2D (as Dead Reckoning), up and to the right in 3D.
+// A label chip: the prop's colour swatch, then its name.
+float labelWidth(ImVec2 text) {
+    return text.x + ui(22);
+}
 ImVec2 labelCorner(ImVec2 at, ImVec2 text, bool plan) {
-    return plan ? ImVec2(at.x - (text.x + ui(10)) * .5f, at.y + ui(11)) : ImVec2(at.x + ui(8), at.y - ui(22));
+    return plan ? ImVec2(at.x - labelWidth(text) * .5f, at.y + ui(11)) : ImVec2(at.x + ui(8), at.y - ui(22));
+}
+// An arrow from `from` to `tip` with a filled head.
+void arrow(ImDrawList *d, ImVec2 from, ImVec2 tip, ImU32 color, float width) {
+    glm::vec2 along(tip.x - from.x, tip.y - from.y);
+    const float length = glm::length(along);
+    if (length < ui(12))
+        return;
+    along /= length;
+    const glm::vec2 side(-along.y, along.x), base = glm::vec2(tip.x, tip.y) - along * ui(11);
+    d->AddLine(from, {base.x, base.y}, color, width);
+    d->AddTriangleFilled(tip, {base.x + side.x * ui(6), base.y + side.y * ui(6)},
+                         {base.x - side.x * ui(6), base.y - side.y * ui(6)}, color);
 }
 ImU32 colorU32(const glm::vec4 &c, float alpha = 1) {
     return ImGui::GetColorU32(ImVec4(c.x, c.y, c.z, c.w * alpha));
@@ -97,7 +114,7 @@ bool iconToggle(const char *id, bool &on, Icon icon, ImVec4 onColor) {
     if (hovered)
         d->AddRectFilled(at, {at.x + s, at.y + s}, ImGui::GetColorU32(ImGuiCol_FrameBgHovered), ui(3));
     const ImVec4 off = palette().muted;
-    const ImU32 ink = ImGui::GetColorU32(on ? onColor : ImVec4(off.x, off.y, off.z, hovered ? .9f : .45f));
+    const ImU32 ink = ImGui::GetColorU32(on ? onColor : ImVec4(off.x, off.y, off.z, hovered ? 1.f : .75f));
     const ImVec2 c(at.x + s * .5f, at.y + s * .5f);
     const float k = s * .5f, w = std::max(1.f, ui(1.6f));
     if (icon == Icon::Lock) {
@@ -211,7 +228,7 @@ void PriorMapEditor::saveFile() {
         doc_ = std::move(reloaded);
         dirty_ = false;
         saveState();
-        message_ = "Saved " + configPath_.filename().string();
+        message_ = "Saved " + configPath_.filename().string() + " (read back and checked)";
         messageError_ = false;
     } catch (const std::exception &error) {
         message_ = std::string("Not saved: ") + error.what();
@@ -510,6 +527,11 @@ std::optional<PriorMapEditor::Extent> PriorMapEditor::extentOf(const pm::Object 
 std::string PriorMapEditor::pick(const View &view, const glm::vec2 &mouse) const {
     const auto poses = pm::mapPoses(doc_.objects);
     std::string best;
+    for (const auto &label : labelBoxes_) // the label boxes as last drawn
+        if (const auto *o = pm::find(doc_.objects, label.name);
+            o && !o->hidden && !o->locked && mouse.x >= label.min.x && mouse.x <= label.max.x &&
+            mouse.y >= label.min.y && mouse.y <= label.max.y)
+            return label.name;
     float bestPixels = ui(view.plan ? 9.f : 7.f); // the origin dot / badge
     for (const auto &o : doc_.objects) {
         if (o.hidden || o.locked)
@@ -521,13 +543,6 @@ std::string PriorMapEditor::pick(const View &view, const glm::vec2 &mouse) const
         if (d < bestPixels) {
             bestPixels = d;
             best = o.name;
-        }
-        if (labelFont_ && labelShown(o)) { // the label box, as drawOverlay lays it out
-            const ImVec2 size = labelFont_->CalcTextSizeA(labelFont_->FontSize, 1e9f, 0, o.name.c_str());
-            const ImVec2 box = labelCorner(at, size, view.plan);
-            if (mouse.x >= box.x && mouse.x <= box.x + size.x + ui(10) && mouse.y >= box.y &&
-                mouse.y <= box.y + size.y + ui(6))
-                return o.name;
         }
     }
     if (!best.empty() || !view.pointer)
@@ -810,7 +825,13 @@ bool PriorMapEditor::input(const View &view) {
 void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
     if (!active())
         return;
-    labelFont_ = small;
+    labelFont_ = typeRamp().smallStrong ? typeRamp().smallStrong : small;
+    std::vector<std::pair<ImVec2, ImVec2>> taken; // what labels keep clear of: badges, chips, the scale bar
+    // the view's own chips: the scene name (top left) and, in 2D, the scale bar (top right)
+    taken.push_back({{view.origin.x, view.origin.y}, {view.origin.x + ui(340), view.origin.y + ui(48)}});
+    if (view.plan)
+        taken.push_back({{view.origin.x + view.size.x - ui(200), view.origin.y},
+                         {view.origin.x + view.size.x, view.origin.y + ui(70)}});
     auto *d = ImGui::GetWindowDrawList();
     const auto &p = palette();
     const auto proj = [&](const glm::vec3 &point, ImVec2 &pixel) {
@@ -822,17 +843,23 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
     const glm::vec3 o(map[3]);
     ImVec2 po;
     if (proj(o, po)) {
-        const ImU32 colors[] = {IM_COL32(235, 75, 75, 255), IM_COL32(90, 215, 110, 255), IM_COL32(80, 145, 255, 255)};
-        for (int i = 0; i < 3; ++i) {
+        const ImU32 colors[] = {IM_COL32(240, 96, 100, 255), IM_COL32(84, 208, 144, 255), IM_COL32(80, 145, 255, 255)};
+        // 3D: axes 0.7 m long; 2D: X and Y as arrows a fixed 64 px long (the map frame reads at any zoom)
+        const float metres = view.plan ? ui(64) / pixelsPerMetre(view.viewProjection, view.origin, view.size, o) : .7f;
+        for (int i = 0; i < (view.plan ? 2 : 3); ++i) {
             ImVec2 tip;
-            if (proj(o + glm::normalize(glm::vec3(map[i])) * .7f, tip))
-                d->AddLine(po, tip, colors[i], ui(3));
+            if (proj(o + glm::normalize(glm::vec3(map[i])) * metres, tip))
+                arrow(d, po, tip, colors[i], view.plan ? ui(3.5f) : ui(3));
         }
         if (!origin_.robot)
             d->AddRect({po.x - ui(7), po.y - ui(7)}, {po.x + ui(7), po.y + ui(7)}, IM_COL32(255, 255, 255, 230), 0, 0,
                        ui(2));
-        d->AddText(small, small->FontSize, {po.x + ui(8), po.y + ui(4)}, IM_COL32(255, 255, 255, 230),
-                   origin_.robot ? "map (robot start)" : "map (AprilTag)");
+        const char *name = origin_.robot ? "map \u00b7 robot start" : "map \u00b7 AprilTag";
+        const ImVec2 text = small->CalcTextSizeA(small->FontSize, 1e9f, 0, name);
+        const ImVec2 chip(po.x - text.x * .5f - ui(6), po.y + ui(12));
+        d->AddRectFilled(chip, {chip.x + text.x + ui(12), chip.y + text.y + ui(6)}, IM_COL32(232, 237, 243, 240), ui(3));
+        taken.push_back({chip, {chip.x + text.x + ui(12), chip.y + text.y + ui(6)}});
+        d->AddText(small, small->FontSize, {chip.x + ui(6), chip.y + ui(3)}, IM_COL32(14, 18, 24, 255), name);
         // the selected robot-frame origin: its turning ring
         const bool turning = drag_ == Handle::OriginYaw, moving = drag_ == Handle::OriginBody;
         if (origin_.robot && (originSelected_ || turning || moving)) {
@@ -858,6 +885,57 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
                 d->AddCircleFilled(s, ui(4), ImGui::GetColorU32(p.accent));
         }
     const auto poses = pm::mapPoses(doc_.objects);
+    // 2D: each meshed prop's footprint (its mesh bounds from above) outlined in its colour, with a notch on the +X
+    // side for its heading.
+    if (view.plan)
+        for (const auto &obj : doc_.objects) {
+            // top-level props (an assembly's parts ride with it); the selected one whatever its depth
+            if (obj.hidden || lookOf(obj) != Look::Mesh || (obj.parent != pm::kMap && obj.name != selected_))
+                continue;
+            const auto extent = extents_.find(obj.name + "_frame");
+            if (extent == extents_.end())
+                continue;
+            const auto pose = worldOf(poses.at(obj.name));
+            const auto &lo = extent->second.low, &hi = extent->second.high;
+            const float z = (lo.z + hi.z) * .5f;
+            ImVec2 corners[4];
+            bool ok = true;
+            const glm::vec2 xy[] = {{lo.x, lo.y}, {hi.x, lo.y}, {hi.x, hi.y}, {lo.x, hi.y}};
+            for (int i = 0; i < 4 && ok; ++i)
+                ok = proj(glm::vec3(pose * glm::vec4(xy[i], z, 1)), corners[i]);
+            if (!ok)
+                continue;
+            const auto color = colorFor(obj.name);
+            const bool chosen = obj.name == selected_;
+            const float fade = obj.locked ? .45f : 1;
+            // corner brackets only, so the mesh stays visible (the selected prop's in the accent, heavier)
+            {
+                const ImU32 ink = chosen ? ImGui::GetColorU32(p.accent) : colorU32(color, .9f * fade);
+                const float width = chosen ? ui(3) : ui(2), reach = chosen ? ui(12) : ui(9);
+                for (int i = 0; i < 4; ++i) {
+                    const glm::vec2 c(corners[i].x, corners[i].y);
+                    for (const int j : {(i + 1) % 4, (i + 3) % 4}) {
+                        const glm::vec2 edge = glm::vec2(corners[j].x, corners[j].y) - c;
+                        const float length = glm::length(edge);
+                        if (length < 1)
+                            continue;
+                        const glm::vec2 end = c + edge * (std::min(reach, length * .3f) / length);
+                        d->AddLine(corners[i], {end.x, end.y}, ink, width);
+                    }
+                }
+            }
+            ImVec2 mid, ahead;
+            if (proj(glm::vec3(pose * glm::vec4(hi.x, (lo.y + hi.y) * .5f, z, 1)), mid) &&
+                proj(glm::vec3(pose * glm::vec4(hi.x + 1, (lo.y + hi.y) * .5f, z, 1)), ahead)) {
+                glm::vec2 dir(ahead.x - mid.x, ahead.y - mid.y);
+                if (glm::length(dir) > 1e-3f) {
+                    dir = glm::normalize(dir);
+                    const glm::vec2 side(-dir.y, dir.x), m(mid.x, mid.y), tip = m + dir * ui(7),
+                                                           b1 = m + side * ui(5), b2 = m - side * ui(5);
+                    d->AddTriangleFilled({tip.x, tip.y}, {b1.x, b1.y}, {b2.x, b2.y}, colorU32(color, fade));
+                }
+            }
+        }
     // Markers in each prop's colour: a frame on a meshed assembly is a small dot; in 2D a stand-alone prop without a
     // mesh is a badge with a triangle along its heading (3D draws it as a box). A meshed prop is its mesh.
     for (const auto &obj : doc_.objects) {
@@ -893,21 +971,62 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
             }
         }
     }
-    // Labels: map roots, everything, or nothing; the selected one always.
+    // Labels: map roots, everything, or nothing; the selected one always. Each takes the first free spot around its
+    // prop (the selection first), clear of other labels, the props' badges and the chips; a label with no free spot
+    // is left out (its prop still shows, and hovering the list names it).
+    auto *font = labelFont_;
+    std::vector<std::pair<const pm::Object *, ImVec2>> wanted;
     for (const auto &obj : doc_.objects) {
-        const bool chosen = obj.name == selected_;
-        if (!labelShown(obj))
-            continue;
         ImVec2 at;
-        if (!proj(glm::vec3(worldOf(poses.at(obj.name))[3]), at))
+        if (obj.hidden || !proj(glm::vec3(worldOf(poses.at(obj.name))[3]), at))
             continue;
-        const ImVec2 size = small->CalcTextSizeA(small->FontSize, 1e9f, 0, obj.name.c_str());
-        const ImVec2 box = labelCorner(at, size, view.plan);
-        d->AddRectFilled(box, {box.x + size.x + ui(10), box.y + size.y + ui(6)},
-                         chosen ? ImGui::GetColorU32(p.active) : IM_COL32(8, 22, 29, obj.locked ? 150 : 215), ui(3));
-        d->AddText(small, small->FontSize, {box.x + ui(5), box.y + ui(3)},
-                   chosen ? ImGui::GetColorU32(p.activeText) : IM_COL32(230, 240, 245, obj.locked ? 150 : 255),
-                   obj.name.c_str());
+        taken.push_back({{at.x - ui(7.5f), at.y - ui(7.5f)}, {at.x + ui(7.5f), at.y + ui(7.5f)}}); // its badge
+        if (labelShown(obj))
+            wanted.push_back({&obj, at});
+    }
+    std::stable_partition(wanted.begin(), wanted.end(), [&](const auto &w) { return w.first->name == selected_; });
+    const auto overlaps = [&](ImVec2 a, ImVec2 b) { // or would be cut off by the view's edge
+        if (a.x < view.origin.x || a.y < view.origin.y || b.x > view.origin.x + view.size.x ||
+            b.y > view.origin.y + view.size.y)
+            return true;
+        return std::any_of(taken.begin(), taken.end(), [&](const auto &r) {
+            return a.x < r.second.x && b.x > r.first.x && a.y < r.second.y && b.y > r.first.y;
+        });
+    };
+    labelBoxes_.clear();
+    for (const auto &[obj, at] : wanted) {
+        const bool chosen = obj->name == selected_;
+        const ImVec2 size = font->CalcTextSizeA(font->FontSize, 1e9f, 0, obj->name.c_str());
+        const ImVec2 box(labelWidth(size), size.y + ui(6));
+        // below, above, right, left of the prop in 2D; up-right, up-left, down-right, down-left in 3D
+        const ImVec2 spots[] = {
+            labelCorner(at, size, view.plan),
+            view.plan ? ImVec2(at.x - box.x * .5f, at.y - ui(11) - box.y) : ImVec2(at.x - ui(8) - box.x, at.y - ui(22)),
+            view.plan ? ImVec2(at.x + ui(12), at.y - box.y * .5f) : ImVec2(at.x + ui(8), at.y + ui(8)),
+            view.plan ? ImVec2(at.x - ui(12) - box.x, at.y - box.y * .5f) : ImVec2(at.x - ui(8) - box.x, at.y + ui(8))};
+        const ImVec2 *spot = nullptr;
+        for (const auto &candidate : spots)
+            if (!overlaps(candidate, {candidate.x + box.x, candidate.y + box.y})) {
+                spot = &candidate;
+                break;
+            }
+        if (!spot && !chosen)
+            continue;
+        const ImVec2 min = spot ? *spot : spots[0], max{min.x + box.x, min.y + box.y};
+        taken.push_back({min, max});
+        labelBoxes_.push_back({obj->name, min, max});
+        // the theme's window colour and text (a light chart gets light chips) edged in the prop's colour; locked
+        // props quieter
+        const ImVec4 chip = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
+        const auto color = colorFor(obj->name);
+        d->AddRectFilled(min, max,
+                         chosen ? ImGui::GetColorU32(p.active) : ImGui::GetColorU32(ImVec4(chip.x, chip.y, chip.z, .94f)),
+                         ui(3));
+        if (!chosen)
+            d->AddRect(min, max, colorU32(color, obj->locked ? .35f : .75f), ui(3), 0, ui(1));
+        d->AddCircleFilled({min.x + ui(9), min.y + box.y * .5f}, ui(4), colorU32(color, obj->locked ? .6f : 1.f));
+        d->AddText(font, font->FontSize, {min.x + ui(17), min.y + ui(3)},
+                   ImGui::GetColorU32(chosen ? p.activeText : obj->locked ? p.muted : p.text), obj->name.c_str());
     }
     // The selected prop's handles: X / Y / Z arrows and the yaw ring, sized to the screen.
     const auto *sel = pm::find(doc_.objects, selected_);
@@ -965,17 +1084,17 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
                        : originSelected_ ? "Drag the robot to move the map origin, its ring to turn it  /  Esc deselects"
                        : view.plan ? (sel ? "Drag props to move them, the ring to turn  /  arrows nudge, Q E turn  /  "
                                             "Esc deselects"
-                                          : origin_.robot ? "Drag a prop to move it, the robot to move the map origin"
-                                                          : "Drag a prop to move it  /  drag the floor to pan, scroll "
-                                                            "to zoom, F fits")
+                                          : nullptr)
                        : sel ? "Drag the prop or its handles  /  arrows nudge, Q E turn, PgUp PgDn height  /  Esc deselects"
-                             : "Click a prop to select it";
-    const ImVec2 size = small->CalcTextSizeA(small->FontSize, 1e9f, 0, hint);
-    ImVec2 box(view.origin.x + (view.size.x - size.x) / 2 - ui(8), view.origin.y + ui(12));
-    if (box.x < view.origin.x + ui(245)) // clear of the pool's name in the top left corner
-        box.y += ui(38);
-    d->AddRectFilled(box, {box.x + size.x + ui(16), box.y + size.y + ui(10)}, ImGui::GetColorU32(p.active), ui(4));
-    d->AddText(small, small->FontSize, {box.x + ui(8), box.y + ui(5)}, ImGui::GetColorU32(p.activeText), hint);
+                             : nullptr;
+    // Only when it says something the controls strip does not: a mode or a selection. Bottom centre, above the strip.
+    if (hint) {
+        const ImVec2 size = small->CalcTextSizeA(small->FontSize, 1e9f, 0, hint);
+        const ImVec2 box(view.origin.x + (view.size.x - size.x) / 2 - ui(8),
+                         view.origin.y + view.size.y - ui(30) - ui(12) - size.y - ui(10));
+        d->AddRectFilled(box, {box.x + size.x + ui(16), box.y + size.y + ui(10)}, ImGui::GetColorU32(p.active), ui(4));
+        d->AddText(small, small->FontSize, {box.x + ui(8), box.y + ui(5)}, ImGui::GetColorU32(p.activeText), hint);
+    }
     d->PopClipRect();
 }
 
@@ -1123,10 +1242,25 @@ void PriorMapEditor::drawFileBar() {
         openFile(expandHome(pathField_));
     ImGui::SameLine();
     ImGui::BeginDisabled(!loaded());
-    if (ImGui::Button("Reload"))
-        openFile(configPath_);
+    if (ImGui::Button("Reload")) {
+        if (dirty_)
+            ImGui::OpenPopup("reload_confirm");
+        else
+            openFile(configPath_);
+    }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Read the file again (unsaved edits are dropped)");
+        ImGui::SetTooltip("Read the file again");
+    if (ImGui::BeginPopup("reload_confirm")) {
+        ImGui::TextUnformatted("Discard the unsaved changes and read the file again?");
+        if (ImGui::Button("Discard and reload")) {
+            openFile(configPath_);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Keep editing"))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
     ImGui::SameLine();
     pushActiveColors(dirty_);
     if (ImGui::Button(dirty_ ? "Save*###save" : "Save###save"))
@@ -1189,7 +1323,7 @@ void PriorMapEditor::drawFileBar() {
 }
 
 void PriorMapEditor::drawObjects() {
-    const float toggle = buttonWidth("x y z");
+    const float toggle = buttonWidth("Pose");
     ImGui::SetNextItemWidth(-(toggle + ImGui::GetStyle().ItemSpacing.x));
     char filter[64];
     std::snprintf(filter, sizeof(filter), "%s", filter_.c_str());
@@ -1197,7 +1331,7 @@ void PriorMapEditor::drawObjects() {
         filter_ = filter;
     ImGui::SameLine();
     pushActiveColors(poseColumns_);
-    if (ImGui::Button("x y z")) {
+    if (ImGui::Button("Pose")) {
         poseColumns_ = !poseColumns_;
         saveState();
     }
@@ -1231,24 +1365,25 @@ void PriorMapEditor::drawObjects() {
         return;
     ImGui::TableSetupScrollFreeze(1, 1); // the header row and the names stay
     ImGui::TableSetupColumn(heading.c_str(), ImGuiTableColumnFlags_WidthFixed, names + ui(6));
-    ImGui::TableSetupColumn("Lock", ImGuiTableColumnFlags_WidthFixed, ui(32));
-    ImGui::TableSetupColumn("Hide", ImGuiTableColumnFlags_WidthFixed, ui(32));
+    ImGui::TableSetupColumn("Lock", ImGuiTableColumnFlags_WidthFixed, ui(40));
+    ImGui::TableSetupColumn("Hide", ImGuiTableColumnFlags_WidthFixed, ui(40));
     if (poseColumns_)
         for (const char *axis : {"x", "y", "z", "yaw"})
             ImGui::TableSetupColumn(axis, ImGuiTableColumnFlags_WidthFixed, ui(axis[1] ? 46.f : 40.f));
-    ImGui::TableHeadersRow();
-    // a number right-aligned in its cell, centred on the frame-tall row
-    const auto number = [](double value, const char *format) {
-        char text[32];
-        std::snprintf(text, sizeof(text), format, value);
-        if (std::string(text).find_first_not_of("-0.") == std::string::npos) // no "-0.0"
-            std::snprintf(text, sizeof(text), format, 0.0);
-        ImGui::AlignTextToFramePadding();
-        const float pad = ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(text).x;
-        if (pad > 0)
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + pad);
-        ImGui::TextUnformatted(text);
-    };
+    // the header row: the pose headings right-aligned over their right-aligned figures
+    if (typeRamp().strong)
+        ImGui::PushFont(typeRamp().strong);
+    ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+    for (int column = 0; column < ImGui::TableGetColumnCount(); ++column) {
+        ImGui::TableSetColumnIndex(column);
+        const char *name = ImGui::TableGetColumnName(column);
+        if (column >= 3)
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.f, ImGui::GetContentRegionAvail().x -
+                                                                            ImGui::CalcTextSize(name).x - ui(3)));
+        ImGui::TableHeader(name);
+    }
+    if (typeRamp().strong)
+        ImGui::PopFont();
     std::function<void(const pm::Object &)> row = [&](const pm::Object &o) {
         std::vector<const pm::Object *> children;
         for (const auto &c : doc_.objects)
@@ -1308,13 +1443,50 @@ void PriorMapEditor::drawObjects() {
                                                     : "Hide from the view");
         ImGui::PopID();
         if (poseColumns_) {
+            // each cell is the stored pose, editable in place: click, type, Enter (one undo step per edit);
+            // frameless until hovered so the table still reads as a table
             ImGui::PushStyleColor(ImGuiCol_Text, o.hidden || o.locked ? palette().muted : palette().text);
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {ui(3), ImGui::GetStyle().FramePadding.y});
+            ImGui::PushID(o.name.c_str()); // one ID per row's cells
             for (int i = 0; i < 4; ++i) {
                 ImGui::TableNextColumn();
-                const double value[] = {o.pose.x, o.pose.y, o.pose.z, o.pose.yaw};
-                number(value[i], i == 3 ? "%.1f" : "%.2f");
+                auto *editable = pm::find(doc_.objects, o.name);
+                double *field[] = {&editable->pose.x, &editable->pose.y, &editable->pose.z, &editable->pose.yaw};
+                double value = *field[i];
+                ImGui::PushID(i);
+                ImGui::SetNextItemWidth(-1);
+                // at rest the figure is drawn right-aligned (an input's own text is left-aligned); typing shows it
+                const char *format = i == 3 ? "%.1f" : "%.2f";
+                const bool editing = ImGui::GetActiveID() == ImGui::GetID("##cell");
+                if (!editing)
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 0));
+                const bool entered = ImGui::InputDouble("##cell", &value, 0, 0, format,
+                                                        ImGuiInputTextFlags_EnterReturnsTrue |
+                                                            ImGuiInputTextFlags_CharsScientific);
+                if (!editing) {
+                    ImGui::PopStyleColor();
+                    char figure[32];
+                    std::snprintf(figure, sizeof(figure), format, value);
+                    const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
+                    ImGui::GetWindowDrawList()->AddText(
+                        {max.x - ui(3) - ImGui::CalcTextSize(figure).x, min.y + ImGui::GetStyle().FramePadding.y},
+                        ImGui::GetColorU32(ImGuiCol_Text), figure);
+                }
+                if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+                    ImGui::SetTooltip("%s %s: click to type a new value (stored relative to %s)", o.name.c_str(),
+                                      i == 3 ? "yaw (deg)" : i == 0 ? "x (m)" : i == 1 ? "y (m)" : "z (m)",
+                                      o.parent == pm::kMap ? "the map" : (o.parent + "_frame").c_str());
+                if (entered && std::isfinite(value) && value != *field[i]) {
+                    record();
+                    *field[i] = i == 3 ? pm::wrapDegrees(value) : value;
+                    changed();
+                }
+                ImGui::PopID();
             }
-            ImGui::PopStyleColor();
+            ImGui::PopID();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(2);
         }
         if (opened && !children.empty()) {
             for (const auto *c : children)
@@ -1331,7 +1503,7 @@ void PriorMapEditor::drawObjects() {
 void PriorMapEditor::drawInspector() {
     auto *o = pm::find(doc_.objects, selected_);
     const auto poses = pm::mapPoses(doc_.objects);
-    const auto section = [](const char *title) { ImGui::SeparatorText(title); };
+    const auto section = [](const char *title) { sectionTitle(title); };
     // Name (Enter renames; children follow), lock and hide.
     const auto checkboxWidth = [](const char *label) {
         return ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(label).x +
@@ -1359,8 +1531,8 @@ void PriorMapEditor::drawInspector() {
     ImGui::SameLine();
     if (ImGui::Checkbox("Hidden", &o->hidden))
         saveState();
-    // Relative pose, as the config stores it.
-    section(("Pose relative to " + (o->parent == pm::kMap ? std::string("map") : o->parent + "_frame")).c_str());
+    // The parent, then the pose: the file stores it relative to the parent; a child also shows where that puts it.
+    section("Parent");
     ImGui::SetNextItemWidth(std::min(ui(220), ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Parent").x -
                                                   ImGui::GetStyle().ItemInnerSpacing.x));
     if (ImGui::BeginCombo("Parent", o->parent.c_str())) {
@@ -1409,16 +1581,26 @@ void PriorMapEditor::drawInspector() {
             ImGui::PopID();
         }
     };
+    const bool child = o->parent != pm::kMap;
+    section(child ? ("Stored: relative to " + o->parent + "_frame").c_str() : "Pose in the map (as stored)");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip(child ? "What config.yaml holds for this prop: its pose in its parent's frame"
+                                : "What config.yaml holds: the parent is the map, so this is the map pose");
     double rel[4] = {o->pose.x, o->pose.y, o->pose.z, o->pose.yaw};
     ImGui::PushID("relative");
     fieldRow(rel, "%.2f", [&] { o->pose = {rel[0], rel[1], rel[2], pm::wrapDegrees(rel[3])}; });
     ImGui::PopID();
-    section("In the map");
     const auto mp = poses.at(o->name);
-    double inMap[4] = {mp.x, mp.y, mp.z, mp.yaw};
-    ImGui::PushID("map");
-    fieldRow(inMap, "%.2f", [&] { pm::setMapPose(doc_.objects, selected_, {inMap[0], inMap[1], inMap[2], inMap[3]}); });
-    ImGui::PopID();
+    if (child) { // where the parent's pose and this one put it: editable too (the stored pose follows)
+        section("Resulting map position");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Where the prop ends up in the map: its parents' poses and its own combined");
+        double inMap[4] = {mp.x, mp.y, mp.z, mp.yaw};
+        ImGui::PushID("map");
+        fieldRow(inMap, "%.2f",
+                 [&] { pm::setMapPose(doc_.objects, selected_, {inMap[0], inMap[1], inMap[2], inMap[3]}); });
+        ImGui::PopID();
+    }
     const auto inPool = pm::mapToPool(mp, origin_);
     ImGui::TextDisabled("In the pool: x %.2f  y %.2f  yaw %.1f  (%.2f m deep)", inPool.x, inPool.y, inPool.yaw,
                         pool_.waterLevel - worldOf(mp)[3].z);
@@ -1462,7 +1644,7 @@ void PriorMapEditor::drawInspector() {
                     other = i;
             ImGui::EndCombo();
         }
-        ImGui::SameLine();
+        sameLineIfFits(buttonWidth("Swap poses"));
         if (ImGui::Button("Swap poses")) {
             record();
             std::string error;
@@ -1474,7 +1656,7 @@ void PriorMapEditor::drawInspector() {
                 messageError_ = true;
             }
         }
-        ImGui::SameLine();
+        sameLineIfFits(buttonWidth("Swap classes"));
         const auto *b = pm::find(doc_.objects, names[std::size_t(other)]);
         ImGui::BeginDisabled(o->cls.empty() || !b || b->cls.empty());
         if (ImGui::Button("Swap classes")) {
@@ -1530,7 +1712,7 @@ void PriorMapEditor::drawInspector() {
 }
 
 void PriorMapEditor::drawOriginInspector() {
-    ImGui::SeparatorText("Map origin");
+    sectionTitle("Map origin");
     ImGui::TextWrapped("%s", origin_.robot ? "Robot frame: the map origin is the sub's start pose, anywhere in the pool. "
                                                              "The robot is drawn there: drag it in the view to move "
                                                              "the origin, its ring to turn it."
@@ -1565,9 +1747,9 @@ void PriorMapEditor::drawOriginInspector() {
         }
         popActiveColors();
     }
-    ImGui::SameLine();
+    // the action on its own line: the pair above is a mode, this places it
     pushActiveColors(placing_);
-    if (ImGui::Button(placing_ ? "Placing... (Esc)###place" : "Place origin###place"))
+    if (ImGui::Button(placing_ ? "Placing... (Esc)###place" : "Place origin in the view###place"))
         placing_ = !placing_;
     popActiveColors();
     if (ImGui::IsItemHovered())
@@ -1617,9 +1799,7 @@ void PriorMapEditor::drawOriginInspector() {
     }
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Where the scenario has the map (its calibration board placement)");
-    ImGui::SeparatorText("File");
-    ImGui::TextDisabled("%s", configPath_.c_str());
-    ImGui::TextDisabled("%zu objects in %s%s", doc_.objects.size(), doc_.ns.c_str(), dirty_ ? ", unsaved changes" : "");
+    ImGui::Spacing();
     ImGui::TextDisabled("Select a prop in the list or the view to edit it.");
 }
 } // namespace nereus::ros_viewer::host

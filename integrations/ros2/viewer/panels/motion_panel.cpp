@@ -87,7 +87,7 @@ class MotionPanel final : public Panel {
     const char *stateText(const MotionState &s, ImVec4 &tint) const {
         const auto &p = palette();
         tint = !motion ? p.muted : s.observedKilled.value_or(true) ? p.robotKilled : p.robotEnabled;
-        return !motion            ? "Preview / controls disconnected"
+        return !motion            ? "Preview: not connected to a robot"
                : s.observedKilled ? (*s.observedKilled ? "Robot: killed" : "Robot: enabled")
                                   : "Robot: state unknown";
     }
@@ -128,7 +128,10 @@ class MotionPanel final : public Panel {
         }
         if (!s.pending)
             selected = s.mode == Mode::Feedforward ? Mode::Feedforward : Mode::Position;
-        ImGui::TextDisabled("Frame: %s / m, deg", s.frame.c_str());
+        if (s.frame.empty())
+            ImGui::TextDisabled("Metres and degrees");
+        else
+            ImGui::TextDisabled("Frame: %s  /  metres, degrees", s.frame.c_str());
         ImGui::TextWrapped("%s", s.message.c_str());
         const bool unavailable = !motion || !s.enabled || !s.fresh || s.pending || s.blocked || s.competing;
         ImGui::BeginDisabled(unavailable);
@@ -151,18 +154,39 @@ class MotionPanel final : public Panel {
             ImGui::TextWrapped("Feedforward controller mode; pose feedback is disabled.");
         ImGui::EndDisabled();
         ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ui(ImVec2(2, 2)));
-        if (ImGui::BeginTable("pose", 5, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
+        // The table scrolls on its own when the panel is short, so the actions below it stay in view.
+        const float rowHeight = ImGui::GetFrameHeight() + ui(4);
+        const float buttonRow = std::max(ui(40), ImGui::GetFrameHeight()) + ImGui::GetStyle().ItemSpacing.y;
+        const bool oneRow = !hasDive || ImGui::CalcTextSize("CurrentCommandDive in place").x + 6 * 4 +
+                                                2 * ImGui::GetStyle().ItemSpacing.x <=
+                                            ImGui::GetContentRegionAvail().x;
+        const float actions = buttonRow * (oneRow ? 1 : 2) + ImGui::GetTextLineHeightWithSpacing() +
+                              2 * ImGui::GetStyle().ItemSpacing.y;
+        const float tableHeight = std::min(7 * rowHeight + ui(4),
+                                           std::max(3 * rowHeight, ImGui::GetContentRegionAvail().y - actions));
+        if (ImGui::BeginTable("pose", 5, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+                              {0, tableHeight})) {
             ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, ui(36));
             ImGui::TableSetupColumn("Actual");
             ImGui::TableSetupColumn("Commanded");
             ImGui::TableSetupColumn("Error");
             ImGui::TableSetupColumn("Target", ImGuiTableColumnFlags_WidthFixed, ui(66));
             ImGui::TableNextRow();
-            for (const char *heading : {"", "Actual", "Commanded", "Error", "Target"}) {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            // a heading too wide for its column (a narrow panel, a large interface scale) shortens; the tooltip names it
+            const std::pair<const char *, const char *> headings[] = {
+                {"", ""}, {"Actual", "Act"}, {"Commanded", "Cmd"}, {"Error", "Err"}, {"Target", "Target"}};
+            for (const auto &[full, brief] : headings) {
                 ImGui::TableNextColumn();
-                ImGui::TextDisabled("%s", heading);
-                if (std::string(heading) == "Error" && ImGui::IsItemHovered())
+                const bool fits = ImGui::CalcTextSize(full).x + ui(8) <= ImGui::GetContentRegionAvail().x;
+                const char *shown = fits ? full : brief; // right-aligned over the right-aligned figures
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
+                                     std::max(0.f, ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(shown).x));
+                ImGui::TextDisabled("%s", shown);
+                if (ImGui::IsItemHovered() && std::string(full) == "Error")
                     ImGui::SetTooltip("Commanded minus actual / angles wrapped to [-180, 180] degrees");
+                else if (ImGui::IsItemHovered() && !fits)
+                    ImGui::SetTooltip("%s", full);
             }
             const auto actualAngles = glm::degrees(glm::eulerAngles(glm::quat_cast(s.actual)));
             const auto sentAngles = glm::degrees(glm::eulerAngles(glm::quat_cast(s.commanded)));
@@ -218,8 +242,8 @@ class MotionPanel final : public Panel {
             dirty = false;
         }
         ImGui::EndDisabled();
-        if (hasDive)
-            ImGui::SameLine();
+        if (hasDive) // its own line when the three do not fit
+            nereus::ros_viewer::sameLineIfFits(actionSize("Dive in place").x);
         if (hasDive && pins::Button("Dive in place", actionSize("Dive in place"))) {
             copy(s.actual);
             position.z = diveZ;

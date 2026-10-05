@@ -30,18 +30,8 @@ inline const char *levelName(Level level) {
         return "No data";
     }
 }
+// statusChip() is theme.hpp's outlined status capsule (the same as the viewer's status pill).
 inline float chipWidth(const char *text) {
-    return ImGui::CalcTextSize(text).x + 2 * ImGui::GetStyle().FramePadding.x;
-}
-// A dim, tinted button that reads as a label (same look as the viewer's status pill); returns hover.
-inline bool statusChip(const char *text, ImVec4 tint) {
-    const ImVec4 fill = tintedFill(tint);
-    ImGui::PushStyleColor(ImGuiCol_Button, fill);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, fill);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, fill);
-    ImGui::PushStyleColor(ImGuiCol_Text, tint);
-    ImGui::Button(text);
-    ImGui::PopStyleColor(4);
-    return ImGui::IsItemHovered();
+    return statusChipWidth(text);
 }
 } // namespace nereus::ros_viewer::panels

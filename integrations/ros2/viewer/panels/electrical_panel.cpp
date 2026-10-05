@@ -25,7 +25,7 @@ class ElectricalPanel final : public Panel {
     std::size_t logLines = 0;
 
     void power(const ElectricalState &s) {
-        ImGui::SeparatorText("Power");
+        sectionTitle("Power");
         const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
         for (std::size_t i = 0; i < s.commands.size(); ++i) {
             const auto &command = s.commands[i];
@@ -59,7 +59,7 @@ class ElectricalPanel final : public Panel {
         muted(s.commandMessage);
     }
     void imu(const ElectricalState &s) {
-        ImGui::SeparatorText("IMU (VectorNav)");
+        sectionTitle("IMU (VectorNav)");
         ImGui::BeginDisabled(!s.magCalRunning && !s.magCalReady);
         if (pins::Button(s.magCalRunning ? "Cancel mag cal###mag_cal" : "Mag cal###mag_cal", {-1, ui(30)})) {
             if (s.magCalRunning)
@@ -100,7 +100,7 @@ class ElectricalPanel final : public Panel {
         muted(s.registerReady || s.registerPending ? s.registerMessage : "IMU config service unavailable");
     }
     void fog(const ElectricalState &s) {
-        ImGui::SeparatorText("FOG");
+        sectionTitle("FOG");
         ImGui::BeginDisabled(s.tareRunning);
         ImGui::SetNextItemWidth(ui(130));
         if (ImGui::InputInt("Samples", &samples, 1000, 10000))
@@ -120,7 +120,7 @@ class ElectricalPanel final : public Panel {
         muted(s.tareReady || s.tareRunning ? s.tareMessage : "Gyro tare action unavailable");
     }
     void pinger(const ElectricalState &s) {
-        ImGui::SeparatorText("Pinger");
+        sectionTitle("Pinger");
         if (!pingerInitialized) {
             pingerEnabled = s.pingerEnabled;
             pingerInitialized = true;
@@ -153,7 +153,7 @@ class ElectricalPanel final : public Panel {
               "   Amplitude: " + amplitude);
     }
     void ivc(const ElectricalState &s) {
-        ImGui::SeparatorText("IVC");
+        sectionTitle("IVC");
         header = std::clamp(header, 0, std::max(0, int(s.ivcHeaders.size()) - 1));
         ImGui::SetNextItemWidth(-1);
         if (ImGui::BeginCombo("##header", s.ivcHeaders.empty() ? "" : s.ivcHeaders[std::size_t(header)].c_str())) {
@@ -197,7 +197,8 @@ class ElectricalPanel final : public Panel {
     explicit ElectricalPanel(const Binding &b) : electrical(std::dynamic_pointer_cast<Electrical>(b.provider)) {}
     void draw() override {
         if (!electrical) {
-            ImGui::TextDisabled("Preview / electrical disconnected");
+            emptyState("Connected, this shows the power rails and their switches, the IMU, FOG and pinger, and the "
+                       "IVC link.");
             return;
         }
         const auto s = electrical->state();

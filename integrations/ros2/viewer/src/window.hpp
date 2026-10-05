@@ -40,6 +40,8 @@ class Window {
     // The window's icon (dock, task switcher) from PNG files of several sizes; missing files are skipped.
     void setIcon(const std::vector<std::filesystem::path> &pngs);
     ImFont *normal = nullptr, *small = nullptr, *title = nullptr, *number = nullptr;
+    ImFont *strong = nullptr;      // the body size in bold: section titles, table headers
+    ImFont *smallStrong = nullptr; // the small size in bold: chart labels
     ImFont *menu = nullptr; // the title bar's menus, at the desktop's scale like other apps' title bars
     // Loads the fonts at the interface scale (`ui`) and the title bar's at `titleBar`; between frames only. A
     // family (fontconfig name, e.g. a Qt theme's) at its point size replaces the viewer's DejaVu Sans.
