@@ -11,7 +11,7 @@ void registerTelemetryPanel(Registry &);
 void registerRecordingPanel(Registry &);
 void registerElectricalPanel(Registry &);
 namespace {
-// Toolbar item "panels_menu": the popup that shows or hides sidebar panels (drawn by the composition).
+// Toolbar item "panels_menu": a Windows popup that shows or hides windows (drawn by the composition).
 struct PanelsMenu final : Panel {
     std::function<void()> menu;
     explicit PanelsMenu(const Binding &b) : menu(b.drawPanelMenu) {}

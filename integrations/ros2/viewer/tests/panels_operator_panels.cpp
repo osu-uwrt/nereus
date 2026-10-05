@@ -85,7 +85,20 @@ int main(int argc, char **argv) {
     const auto toolsConfig = YAML::LoadFile(argv[2]);
     for (const auto &entry : toolsConfig["providers"])
         config["providers"][entry.first.as<std::string>()] = YAML::Clone(entry.second);
-    config["toolbar"] = YAML::Clone(toolsConfig["toolbar"]);
+    // The shipped toolbar, with the simulation tool moved just before the recording stub ("pool_viewer").
+    YAML::Node toolbar(YAML::NodeType::Sequence), simulationTool;
+    for (const auto &item : toolsConfig["toolbar"])
+        if (item["type"].as<std::string>() == "simulation")
+            simulationTool = YAML::Clone(item);
+    assert(simulationTool);
+    for (const auto &item : toolsConfig["toolbar"]) {
+        const auto type = item["type"].as<std::string>();
+        if (type == "pool_viewer")
+            toolbar.push_back(simulationTool);
+        if (type != "simulation")
+            toolbar.push_back(YAML::Clone(item));
+    }
+    config["toolbar"] = toolbar;
     config["providers"]["simulation"]["options"]["node"] = "mock";
     config["providers"]["simulation"]["options"]["request_timeout"] = .75;
     node->declare_parameter<double>("real_time_factor", 1.0);
@@ -692,7 +705,7 @@ ui:
     scoreMsg.data = "{running: true}";
     spin(.1);
     assert(!run->state().fresh && run->state().message.find("Invalid run score") != std::string::npos);
-    // Draw all panels (including empty/preview snapshots) at minimum sidebar width.
+    // Draw all panels (including empty/preview snapshots) as windows, with the toolbar in a narrow window.
     ImGui::CreateContext();
     auto &io = ImGui::GetIO();
     io.IniFilename = nullptr;
@@ -703,16 +716,16 @@ ui:
     io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
     auto draw = [&](Composition &c) {
         ImGui::NewFrame();
+        c.drawPanels(); // created before the toolbar window, so they open behind it
         ImGui::SetNextWindowSize({320, 850});
         ImGui::Begin("test");
-        c.setWidth(300);
         c.drawToolbar();
         ImGui::TextUnformatted("header");
         c.drawHeader(300);
         ImGui::NewLine();
-        c.drawSidebar(800);
-        c.drawWindows();
+        c.drawPinned();
         ImGui::End();
+        c.drawWindows();
         ImGui::Render();
     };
     for (int frame = 0; frame < 4; ++frame)
@@ -724,23 +737,40 @@ ui:
     io.AddMouseButtonEvent(0, true);
     draw(*composition);
     io.AddMouseButtonEvent(0, false);
-    bool sawPopup = false;
+    // The Simulation button opens its window under the button, inside the application window; it stays open
+    // (unlike the old popup) until the button or its close box is clicked again.
+    const auto simulationWindow = [&]() -> ImGuiWindow * {
+        for (auto *window : ImGui::GetCurrentContext()->Windows)
+            if (window->Active && !window->Hidden &&
+                std::string(window->Name).find("###simulation_") != std::string::npos)
+                return window;
+        return nullptr;
+    };
+    bool sawWindow = false;
     for (int frame = 0; frame < 4; ++frame) {
         draw(*composition);
-        for (const auto *window : ImGui::GetCurrentContext()->Windows)
-            if (window->Active && !window->Hidden && (window->Flags & ImGuiWindowFlags_Popup)) {
-                sawPopup = true;
-                // Check the very first visible popup frame as well as settled frames.
-                assert(std::abs(window->Pos.x - anchor.x) < 1);
-                assert(std::abs(window->Pos.y - bottom) < 1);
-                assert(std::abs(window->Size.x - 340) < 1);
-                assert(window->Pos.y + window->Size.y <= io.DisplaySize.y - 7);
-            }
+        if (const auto *window = simulationWindow()) {
+            sawWindow = true;
+            assert(std::abs(window->Pos.x - anchor.x) < 1);
+            assert(std::abs(window->Pos.y - bottom) < 1);
+            assert(std::abs(window->Size.x - 340) < 1);
+            assert(window->Pos.y + window->Size.y <= io.DisplaySize.y - 7);
+        }
     }
-    assert(sawPopup);
+    assert(sawWindow);
     io.AddKeyEvent(ImGuiKey_Escape, true);
     draw(*composition);
     io.AddKeyEvent(ImGuiKey_Escape, false);
+    draw(*composition);
+    assert(simulationWindow()); // a window, not a popup: Escape does not close it
+    io.AddMousePosEvent(anchor.x + 10, anchor.y + 10);
+    draw(*composition);
+    io.AddMouseButtonEvent(0, true);
+    draw(*composition);
+    io.AddMouseButtonEvent(0, false);
+    draw(*composition);
+    draw(*composition);
+    assert(!simulationWindow());
     auto checkScorecard = [&] {
         bool found = false;
         for (const auto *window : ImGui::GetCurrentContext()->Windows)

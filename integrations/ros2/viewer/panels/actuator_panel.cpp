@@ -1,4 +1,6 @@
+#include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/pins.hpp"
 #include <imgui.h>
 namespace nereus::ros_viewer::panels {
 namespace {
@@ -13,7 +15,7 @@ class ActuatorPanel final : public Panel {
         for (const auto &action : s.actions) {
             ImGui::PushID(action.id.c_str());
             ImGui::BeginDisabled(!action.available);
-            if (ImGui::Button(action.label.c_str(), {-1, 36}))
+            if (pins::Button((action.label + "###" + action.id).c_str(), {-1, ui(36)}))
                 actuators->command(action.id);
             ImGui::EndDisabled();
             ImGui::PopID();

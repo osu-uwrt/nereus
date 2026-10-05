@@ -1,5 +1,6 @@
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/pins.hpp"
 #include <algorithm>
 #include <cmath>
 #include <imgui.h>
@@ -8,32 +9,29 @@ namespace {
 class SimulationPanel final : public Panel {
     std::shared_ptr<Simulation> simulation;
     float draft = 1;
-    bool dirty = false;
+    bool dirty = false, open = false;
+    ImVec2 anchor{80, 120};
 
   public:
     explicit SimulationPanel(const Binding &b) : simulation(std::dynamic_pointer_cast<Simulation>(b.provider)) {}
+    // Toolbar: a button for the Simulation window (speed, pause, sync, reset), which stays open while in use and
+    // can be docked like any panel.
     void toolbar() override {
-        nereus::ros_viewer::sameLineIfFits(ImGui::CalcTextSize("Simulation settings").x +
-                                           2 * ImGui::GetStyle().FramePadding.x);
-        if (ImGui::Button("Simulation settings"))
-            ImGui::OpenPopup("simulation_settings");
-        // A known width and anchor prevent wrapped text from causing a first-frame
-        // auto-fit/reposition jump. Keep the popup inside the application viewport.
-        const auto *viewport = ImGui::GetMainViewport();
-        const auto button = ImGui::GetItemRectMin();
-        const auto bottom = ImGui::GetItemRectMax().y;
-        const float width = std::min(340.f, viewport->WorkSize.x - 16.f);
-        const float x =
-            std::clamp(button.x, viewport->WorkPos.x + 8.f, viewport->WorkPos.x + viewport->WorkSize.x - width - 8.f);
-        const float y = bottom + ImGui::GetStyle().ItemSpacing.y;
-        ImGui::SetNextWindowPos({x, y});
-        ImGui::SetNextWindowSize({width, 0});
-        ImGui::SetNextWindowSizeConstraints(
-            {width, 0}, {width, std::max(1.f, viewport->WorkPos.y + viewport->WorkSize.y - y - 8.f)});
-        if (ImGui::BeginPopup("simulation_settings")) {
+        nereus::ros_viewer::windowToggle("Simulation", &open);
+        anchor = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y};
+    }
+    void windowMenu() override {
+        if (ImGui::MenuItem("Simulation", nullptr, open))
+            open = !open;
+    }
+    void drawWindows() override {
+        if (!open)
+            return;
+        // The instance's ID keeps several simulation tools' windows apart.
+        const auto name = "Simulation###simulation_" + std::to_string(ImGui::GetID("simulation"));
+        if (nereus::ros_viewer::beginToolWindow(name.c_str(), &open, ui(ImVec2(340, 0)), anchor))
             draw();
-            ImGui::EndPopup();
-        }
+        ImGui::End();
     }
     void draw() override {
         const auto s = simulation ? simulation->state() : SimulationState{};
@@ -48,24 +46,24 @@ class SimulationPanel final : public Panel {
         }
         ImGui::BeginDisabled(!simulation || !s.connected || s.pending);
         ImGui::BeginDisabled(paused);
-        ImGui::SetNextItemWidth(180);
+        ImGui::SetNextItemWidth(ui(180));
         if (ImGui::InputFloat("Speed", &draft, .25f, 1.f, "%.2fx"))
             dirty = true;
         ImGui::BeginDisabled(!std::isfinite(draft) || draft <= 0 || draft > s.maxRate);
-        if (ImGui::Button(s.pending ? "Applying..." : "Apply", {90, 36})) {
+        if (pins::Button(s.pending ? "Applying...###apply" : "Apply###apply", ui(ImVec2(90, 36)))) {
             simulation->setRate(draft);
             dirty = false;
         }
         ImGui::EndDisabled();
         ImGui::EndDisabled();
         ImGui::SameLine();
-        if (ImGui::Button(paused ? "Resume" : "Pause", {80, 36})) {
+        if (pins::Button(paused ? "Resume###pause" : "Pause###pause", ui(ImVec2(80, 36)))) {
             simulation->setPaused(!paused);
             dirty = false;
         }
         ImGui::SameLine();
         ImGui::BeginDisabled(paused || s.maxRate < 1);
-        if (ImGui::Button("1x", {60, 36})) {
+        if (pins::Button("1x", ui(ImVec2(60, 36)))) {
             simulation->setRate(1);
             dirty = false;
         }
@@ -75,7 +73,7 @@ class SimulationPanel final : public Panel {
         ImGui::TextDisabled("Pause preserves the selected speed.");
         ImGui::Separator();
         ImGui::BeginDisabled(!simulation || !s.syncReady || s.operationPending);
-        if (ImGui::Button("Sync sim", {130, 36}))
+        if (pins::Button("Sync sim", ui(ImVec2(130, 36))))
             simulation->sync();
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip(
@@ -83,7 +81,7 @@ class SimulationPanel final : public Panel {
         ImGui::EndDisabled();
         ImGui::SameLine();
         ImGui::BeginDisabled(!simulation || !s.resetReady || s.operationPending);
-        if (ImGui::Button("Reset sim", {130, 36}))
+        if (pins::Button("Reset sim", ui(ImVec2(130, 36))))
             simulation->reset();
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip(

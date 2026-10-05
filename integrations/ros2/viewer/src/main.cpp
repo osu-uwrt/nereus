@@ -21,8 +21,17 @@ void usage() {
            "  --view NAME            initial view: orbit, free, or a camera id\n"
            "  --inject-f X Y         test aid: hover window position (X,Y) and press F halfway through a capture run\n"
            "  --orbit YAW PITCH DIST initial orbit angles (radians) and distance (metres) after the focus\n"
-           "  --open NAME            open scene-settings, map, tf, pool-viewer or depth (camera cards) at start "
-           "(repeatable)\n"
+           "  --open NAME            open scene-settings, map, tf, display (pool-viewer), help or depth (camera "
+           "cards) at start (repeatable)\n"
+           "  --layout NAME          start layout: standard, wide, cameras, a saved layout's name or an .ini file\n"
+           "                         (default: the last session's layout, else the host config's `layout`)\n"
+           "  --theme NAME           abyss (default), midnight, daylight, contrast, ocean, arctic, ember, sonar, "
+           "paper,\n"
+           "                         classic (default: the last one chosen)\n"
+           "  --ui-scale X|auto      interface scale, 1 = 100 % (default: the last one chosen); auto follows the "
+           "desktop\n"
+           "  --system-title-bar | --custom-title-bar   window decorations: the desktop's, or the viewer's own\n"
+           "                         title bar with the menus in it (default; host yaml window.title_bar)\n"
            "  --show-tf --mpc-path --thrust --show-scorecard   initial toggle states\n"
            "  --detections | --no-detections   detection overlay on/off at start (default on)\n"
            "  --keep-detections      ignore detector DELETEALL; observations live out their lifetime\n"
@@ -88,6 +97,16 @@ int main(int argc, char **argv) {
             options.injectF = {std::stof(value()), std::stof(value())};
         else if (arg == "--open")
             options.open.push_back(value());
+        else if (arg == "--layout")
+            options.layout = value();
+        else if (arg == "--theme")
+            options.theme = value();
+        else if (arg == "--ui-scale")
+            options.uiScale = value();
+        else if (arg == "--system-title-bar")
+            options.systemTitleBar = true;
+        else if (arg == "--custom-title-bar")
+            options.systemTitleBar = false;
         else if (arg == "--orbit") {
             options.orbit = {std::stof(value()), std::stof(value()), std::stof(value())};
         } else if (arg == "--demo-task")

@@ -1,4 +1,5 @@
 #pragma once
+#include "nereus/ros_viewer/theme.hpp"
 #include <algorithm>
 #include <imgui.h>
 namespace nereus::ros_viewer {
@@ -8,73 +9,90 @@ inline void sameLineIfFits(float width) {
         ImGui::SameLine();
 }
 
-inline bool disclosureHeader(const char *label, bool open) {
-    const auto origin = ImGui::GetCursorScreenPos();
-    const auto &style = ImGui::GetStyle();
-    ImGui::PushStyleColor(ImGuiCol_Button, style.Colors[ImGuiCol_Header]);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, style.Colors[ImGuiCol_HeaderHovered]);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, style.Colors[ImGuiCol_HeaderActive]);
-    if (ImGui::Button("##disclosure", {ImGui::GetContentRegionAvail().x, ImGui::GetFrameHeight()}))
-        open = !open;
-    ImGui::PopStyleColor(3);
-    auto *draw = ImGui::GetWindowDrawList();
-    const auto color = ImGui::GetColorU32(ImGuiCol_Text);
-    draw->AddText({origin.x + ImGui::GetFontSize() + style.FramePadding.x * 3, origin.y + style.FramePadding.y}, color,
-                  label);
-    if (ImGui::IsItemHovered() || (ImGui::IsItemFocused() && ImGui::GetIO().NavVisible)) {
-        const ImVec2 center(origin.x + style.FramePadding.x + 7, origin.y + ImGui::GetFrameHeight() * .5f);
-        if (open)
-            draw->AddTriangleFilled({center.x - 5, center.y - 3}, {center.x + 5, center.y - 3},
-                                    {center.x, center.y + 5}, color);
-        else
-            draw->AddTriangleFilled({center.x - 3, center.y - 5}, {center.x - 3, center.y + 5},
-                                    {center.x + 5, center.y}, color);
-    }
-    return open;
+inline float buttonWidth(const char *label) {
+    return ImGui::CalcTextSize(label, nullptr, true).x + 2 * ImGui::GetStyle().FramePadding.x;
 }
-// Retain drag ownership across a snap so the user can pull the panel back open
-// before releasing. Only the restored width is clamped; the gesture is not.
-class PanelEdge {
-    bool dragging = false, startedVisible = false;
-    float startX = 0, startWidth = 0;
 
-  public:
-    // Origin anchors the sidebar at its outer window edge; right-side drags mirror left-side drags.
-    bool draw(ImVec2 origin, float height, bool visible, float &width, float maximum, bool rightSide = false) {
-        constexpr float minimum = 300, snapRatio = .8f;
-        const float direction = rightSide ? -1.f : 1.f;
-        const auto edgeX = [&] { return origin.x + direction * (visible ? width : 0) - (rightSide ? 16 : 0); };
-        const ImVec2 edge(edgeX(), origin.y);
-        ImGui::SetCursorScreenPos(edge);
-        ImGui::InvisibleButton("divider", {16, std::max(1.f, height)});
-        if (ImGui::IsItemActivated()) {
-            dragging = true;
-            startedVisible = visible;
-            startX = ImGui::GetIO().MousePos.x;
-            startWidth = visible ? width : 0;
-        }
-        if (dragging && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-            const float requested = startWidth + direction * (ImGui::GetIO().MousePos.x - startX);
-            const float threshold = minimum * (startedVisible ? snapRatio : 1 - snapRatio);
-            visible = requested >= threshold;
-            width = std::clamp(requested, minimum, maximum);
-        } else
-            dragging = false;
-        const bool hovered = ImGui::IsItemHovered();
-        if (hovered || dragging)
-            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-        if (hovered || dragging) {
-            const float x = edgeX() + 8;
-            const auto tint = IM_COL32(70, 200, 190, 255);
-            ImGui::GetWindowDrawList()->AddLine({x, origin.y}, {x, origin.y + height}, tint, 2);
-            const float middle = origin.y + height * .5f;
-            ImGui::GetWindowDrawList()->AddRectFilled({x - 2, middle - 20}, {x + 2, middle + 20}, tint, 2);
-        }
-        if (hovered && !dragging)
-            ImGui::SetTooltip(visible     ? "Drag to resize / pull toward the window edge to hide"
-                              : rightSide ? "Drag left to show cameras"
-                                          : "Drag right to show panels");
-        return visible;
+// The theme's fill for an active state (selected mode, toggle on): one place so every "on" looks the same.
+// Pushes four colours; pop them with popActiveColors().
+inline void pushActiveColors(bool active) {
+    const auto &p = palette();
+    const auto &colors = ImGui::GetStyle().Colors;
+    ImGui::PushStyleColor(ImGuiCol_Button, active ? p.active : colors[ImGuiCol_Button]);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? p.activeHovered : colors[ImGuiCol_ButtonHovered]);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, active ? p.activePressed : colors[ImGuiCol_ButtonActive]);
+    ImGui::PushStyleColor(ImGuiCol_Text, active ? p.activeText : colors[ImGuiCol_Text]);
+}
+inline void popActiveColors() {
+    ImGui::PopStyleColor(4);
+}
+
+// A toolbar toggle drawn as a button that is filled while on (reads at a glance, unlike a checkbox row).
+// Wraps to the next line when it does not fit. Returns true when clicked.
+inline bool toggleChip(const char *label, bool *value) {
+    sameLineIfFits(buttonWidth(label));
+    pushActiveColors(*value);
+    const bool clicked = ImGui::Button(label);
+    popActiveColors();
+    if (clicked)
+        *value = !*value;
+    return clicked;
+}
+
+// A toggle chip with a small arrow beside it for its settings. Returns true when the arrow was clicked.
+inline bool toggleChipWithMenu(const char *label, bool *value, const char *menuId) {
+    const float arrow = ImGui::GetFrameHeight();
+    sameLineIfFits(buttonWidth(label) + arrow);
+    pushActiveColors(*value);
+    if (ImGui::Button(label))
+        *value = !*value;
+    ImGui::SameLine(0, 1);
+    ImGui::PushID(menuId);
+    const bool menu = ImGui::ArrowButton("##settings", ImGuiDir_Down);
+    ImGui::PopID();
+    popActiveColors();
+    return menu;
+}
+
+// A toolbar button that shows/hides a tool window; filled while the window is open.
+inline bool windowToggle(const char *label, bool *open) {
+    sameLineIfFits(buttonWidth(label));
+    pushActiveColors(*open);
+    const bool clicked = ImGui::Button(label);
+    popActiveColors();
+    if (clicked)
+        *open = !*open;
+    return clicked;
+}
+
+// A dockable tool window opened from a toolbar button or the Windows menu. The first time it opens it floats
+// under the button that opened it (anchor, in screen coordinates) at `size` (height 0: fit the contents once);
+// afterwards the operator places it (float, dock, tab) and the layout remembers. A floating window is kept
+// inside the application window. Call End() whatever this returns, as with ImGui::Begin.
+inline bool beginToolWindow(const char *name, bool *open, ImVec2 size, ImVec2 anchor, bool focus = false) {
+    const float margin = ui(12);
+    const auto *viewport = ImGui::GetMainViewport();
+    const ImVec2 low(viewport->WorkPos.x + margin, viewport->WorkPos.y + margin);
+    const ImVec2 available(std::max(1.f, viewport->WorkSize.x - 2 * margin),
+                           std::max(1.f, viewport->WorkSize.y - 2 * margin));
+    const float width = std::min(size.x, available.x);
+    ImGui::SetNextWindowSize({width, std::min(size.y, available.y)}, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos({std::clamp(anchor.x, low.x, low.x + std::max(0.f, available.x - width)),
+                             std::clamp(anchor.y, low.y, low.y + std::max(0.f, available.y - ui(120)))},
+                            ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSizeConstraints({std::min(ui(240), available.x), std::min(ui(100), available.y)}, available);
+    if (focus) {
+        ImGui::SetNextWindowFocus();
+        ImGui::SetNextWindowCollapsed(false);
     }
-};
+    const bool visible = ImGui::Begin(name, open);
+    if (!ImGui::IsWindowDocked() && !ImGui::IsWindowAppearing()) {
+        const auto pos = ImGui::GetWindowPos(), extent = ImGui::GetWindowSize();
+        const ImVec2 clamped(std::clamp(pos.x, low.x, low.x + std::max(0.f, available.x - extent.x)),
+                             std::clamp(pos.y, low.y, low.y + std::max(0.f, available.y - extent.y)));
+        if (clamped.x != pos.x || clamped.y != pos.y)
+            ImGui::SetWindowPos(clamped);
+    }
+    return visible;
+}
 } // namespace nereus::ros_viewer

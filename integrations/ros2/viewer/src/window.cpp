@@ -4,18 +4,20 @@
 #include <algorithm>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
+#include <cmath>
 #include <cstdio>
+#include <fontconfig/fontconfig.h>
 #include <imgui_internal.h>
 #include <iostream>
 #include <png.h>
 #include <stdexcept>
+#include <strings.h>
+#define GLFW_EXPOSE_NATIVE_X11
+#include <GLFW/glfw3native.h> // after everything else: X11 headers define macros such as None and Status
 
 namespace nereus::ros_viewer::host {
-namespace {
-const ImVec4 cyan(.32f, .86f, .82f, 1), muted(.47f, .57f, .64f, 1), white(.87f, .92f, .95f, 1);
-} // namespace
-
-Window::Window(int width, int height, const std::string &titleText, bool hidden, bool vsync) {
+Window::Window(int width, int height, const std::string &titleText, bool hidden, bool vsync, bool customTitleBar)
+    : custom_(customTitleBar) {
     glfwSetErrorCallback([](int, const char *text) { std::cerr << "GLFW: " << text << '\n'; });
     if (!glfwInit())
         throw std::runtime_error("GLFW initialization failed. OpenGL 3.3 and an X/Wayland display are required.");
@@ -24,10 +26,15 @@ Window::Window(int width, int height, const std::string &titleText, bool hidden,
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_VISIBLE, hidden ? GLFW_FALSE : GLFW_TRUE);
+    glfwWindowHint(GLFW_DECORATED, custom_ ? GLFW_FALSE : GLFW_TRUE);
     window_ = glfwCreateWindow(width, height, titleText.c_str(), nullptr, nullptr);
     if (!window_) {
         glfwTerminate();
         throw std::runtime_error("Cannot create an OpenGL 3.3 window");
+    }
+    if (custom_ && !glfwGetX11Display()) { // no window-manager protocol to move / resize with
+        custom_ = false;
+        glfwSetWindowAttrib(window_, GLFW_DECORATED, GLFW_TRUE);
     }
     glfwMakeContextCurrent(window_);
     glfwSwapInterval(vsync && !hidden ? 1 : 0);
@@ -40,45 +47,78 @@ Window::Window(int width, int height, const std::string &titleText, bool hidden,
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     auto &io = ImGui::GetIO();
-    io.IniFilename = nullptr;
-    const std::filesystem::path font = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                                bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
-    if (std::filesystem::exists(font)) {
-        normal = io.Fonts->AddFontFromFileTTF(font.c_str(), 15);
-        small = io.Fonts->AddFontFromFileTTF(font.c_str(), 12);
-        title = io.Fonts->AddFontFromFileTTF(std::filesystem::exists(bold) ? bold.c_str() : font.c_str(), 21);
-        number = io.Fonts->AddFontFromFileTTF(font.c_str(), 25);
-    } else
-        normal = small = title = number = io.Fonts->AddFontDefault();
-    ImGui::StyleColorsDark();
-    auto &s = ImGui::GetStyle();
-    s.Colors[ImGuiCol_ScrollbarBg].w = 0;
-    s.Colors[ImGuiCol_ScrollbarGrab].w = 0;
-    s.WindowPadding = {18, 16};
-    s.FramePadding = {10, 7};
-    s.ItemSpacing = {10, 9};
-    s.WindowRounding = 9;
-    s.ChildRounding = 8;
-    s.FrameRounding = 5;
-    s.WindowBorderSize = 0;
-    s.ChildBorderSize = 1;
-    s.PopupRounding = 6;
-    s.GrabRounding = 5;
-    s.Colors[ImGuiCol_WindowBg] = {.035f, .052f, .066f, 1};
-    s.Colors[ImGuiCol_ChildBg] = {.052f, .074f, .091f, 1};
-    s.Colors[ImGuiCol_Border] = {.12f, .18f, .21f, 1};
-    s.Colors[ImGuiCol_Text] = white;
-    s.Colors[ImGuiCol_TextDisabled] = muted;
-    s.Colors[ImGuiCol_FrameBg] = {.083f, .12f, .145f, 1};
-    s.Colors[ImGuiCol_Button] = {.085f, .14f, .17f, 1};
-    s.Colors[ImGuiCol_ButtonHovered] = {.13f, .27f, .29f, 1};
-    s.Colors[ImGuiCol_ButtonActive] = {.11f, .36f, .35f, 1};
-    s.Colors[ImGuiCol_CheckMark] = cyan;
-    s.Colors[ImGuiCol_SliderGrab] = cyan;
-    s.Colors[ImGuiCol_SliderGrabActive] = {.5f, .96f, .89f, 1};
-    s.Colors[ImGuiCol_Header] = {.09f, .25f, .27f, 1};
+    io.IniFilename = nullptr; // the host saves layouts itself (session file, named layouts)
+    // Every operator window docks: drag a tab to rearrange, split or float. Windows move only by their title
+    // bar or tab, so drags inside them (orbit, map pan, gizmo) never move the window.
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigWindowsMoveFromTitleBarOnly = true;
+    loadFonts(1, contentScale());
+    ImGui::StyleColorsDark(); // the application applies its theme
     ImGui_ImplGlfw_InitForOpenGL(window_, true);
     ImGui_ImplOpenGL3_Init("#version 330 core");
+    backendReady_ = true;
+}
+
+float Window::contentScale() const {
+    float x = 1, y = 1;
+    glfwGetWindowContentScale(window_, &x, &y);
+    return std::isfinite(x) && x > 0 ? x : 1;
+}
+
+namespace {
+// The file fontconfig picks for a family and style (empty if none).
+std::string fontFile(const std::string &family, const char *style) {
+    std::string file;
+    if (family.empty() || !FcInit())
+        return file;
+    FcPattern *pattern = FcPatternCreate();
+    FcPatternAddString(pattern, FC_FAMILY, reinterpret_cast<const FcChar8 *>(family.c_str()));
+    FcPatternAddString(pattern, FC_STYLE, reinterpret_cast<const FcChar8 *>(style));
+    FcConfigSubstitute(nullptr, pattern, FcMatchPattern);
+    FcDefaultSubstitute(pattern);
+    FcResult result = FcResultNoMatch;
+    if (FcPattern *match = FcFontMatch(nullptr, pattern, &result)) {
+        FcChar8 *path = nullptr, *matched = nullptr;
+        // Only the family asked for: fontconfig always returns something, often an unrelated fallback.
+        if (FcPatternGetString(match, FC_FILE, 0, &path) == FcResultMatch &&
+            FcPatternGetString(match, FC_FAMILY, 0, &matched) == FcResultMatch &&
+            strcasecmp(reinterpret_cast<const char *>(matched), family.c_str()) == 0)
+            file = reinterpret_cast<const char *>(path);
+        FcPatternDestroy(match);
+    }
+    FcPatternDestroy(pattern);
+    return file;
+}
+} // namespace
+
+void Window::loadFonts(float ui, float titleBar, const std::string &family, float points) {
+    auto &io = ImGui::GetIO();
+    io.Fonts->Clear();
+    std::filesystem::path font = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                          bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+    float body = 15; // pixels at 100 %; the other sizes keep their ratios to it
+    if (const auto regular = fontFile(family, "Regular"); !regular.empty()) {
+        font = regular;
+        const auto heavy = fontFile(family, "Bold");
+        bold = heavy.empty() ? regular : heavy;
+        if (points > 0)
+            body = points * 96.f / 72.f;
+    }
+    const float k = body / 15;
+    if (std::filesystem::exists(font)) {
+        normal = io.Fonts->AddFontFromFileTTF(font.c_str(), 15 * k * ui);
+        small = io.Fonts->AddFontFromFileTTF(font.c_str(), 12 * k * ui);
+        title = io.Fonts->AddFontFromFileTTF(std::filesystem::exists(bold) ? bold.c_str() : font.c_str(), 21 * k * ui);
+        number = io.Fonts->AddFontFromFileTTF(font.c_str(), 25 * k * ui);
+        menu = io.Fonts->AddFontFromFileTTF(font.c_str(), 13 * k * titleBar);
+    } else
+        normal = small = title = number = menu = io.Fonts->AddFontDefault();
+    io.FontDefault = normal;
+    io.Fonts->Build();
+    if (backendReady_) { // a running viewer: replace the GPU copy of the atlas
+        ImGui_ImplOpenGL3_DestroyFontsTexture();
+        ImGui_ImplOpenGL3_CreateFontsTexture();
+    }
 }
 
 Window::~Window() {
@@ -127,6 +167,55 @@ void Window::present(bool screenshotFrame, const std::filesystem::path &screensh
 }
 void Window::swap() {
     glfwSwapBuffers(window_);
+}
+void Window::minimize() {
+    glfwIconifyWindow(window_);
+}
+bool Window::maximized() const {
+    return glfwGetWindowAttrib(window_, GLFW_MAXIMIZED) != 0;
+}
+void Window::toggleMaximized() {
+    if (maximized())
+        glfwRestoreWindow(window_);
+    else
+        glfwMaximizeWindow(window_);
+}
+void Window::requestClose() {
+    glfwSetWindowShouldClose(window_, GLFW_TRUE);
+}
+void Window::beginMove() {
+    moveResize(8); // _NET_WM_MOVERESIZE_MOVE
+}
+void Window::beginResize(int edge) {
+    if (edge >= 0 && edge <= 7)
+        moveResize(edge); // _NET_WM_MOVERESIZE_SIZE_TOPLEFT ... _SIZE_LEFT
+}
+// EWMH _NET_WM_MOVERESIZE: the window manager takes the pointer and moves or resizes the window like its own
+// decorations would (snapping, tiling, maximize on drag). It also takes the button release, so ImGui is told the
+// button went up.
+void Window::moveResize(long direction) {
+    Display *display = glfwGetX11Display();
+    const ::Window window = glfwGetX11Window(window_);
+    if (!display || !window)
+        return;
+    ::Window root = 0, child = 0;
+    int rootX = 0, rootY = 0, x = 0, y = 0;
+    unsigned int mask = 0;
+    XQueryPointer(display, window, &root, &child, &rootX, &rootY, &x, &y, &mask);
+    XUngrabPointer(display, CurrentTime); // release the implicit grab of the button press
+    XEvent event{};
+    event.xclient.type = ClientMessage;
+    event.xclient.window = window;
+    event.xclient.message_type = XInternAtom(display, "_NET_WM_MOVERESIZE", False);
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = rootX;
+    event.xclient.data.l[1] = rootY;
+    event.xclient.data.l[2] = direction;
+    event.xclient.data.l[3] = Button1;
+    event.xclient.data.l[4] = 1; // source: a normal application
+    XSendEvent(display, DefaultRootWindow(display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
+    XFlush(display);
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
 }
 
 void writePng(const std::filesystem::path &path, int width, int height, const std::vector<unsigned char> &rgb) {

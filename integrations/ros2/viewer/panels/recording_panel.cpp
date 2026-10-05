@@ -1,4 +1,6 @@
+#include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/pins.hpp"
 #include "status_chip.hpp"
 #include <cstdio>
 #include <ctime>
@@ -72,14 +74,14 @@ class RecordingPanel final : public Panel {
         ImGui::TextUnformatted("Path on the robot");
         ImGui::SetNextItemWidth(-1);
         ImGui::InputTextWithHint("##path", "~/svos/run", path, sizeof(path));
-        ImGui::Checkbox("Add date and time", &timestamp);
+        pins::Checkbox("Add date and time", &timestamp);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Inserts the start time so a new recording never overwrites an older one.");
         if (recording && !s.svoSupported)
             ImGui::TextWrapped("Built without zed_msgs: recordings can be stopped but not started.");
         const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
         for (const auto &camera : s.cameras) {
-            ImGui::PushID(camera.id.c_str());
+            pins::Scope cameraScope(camera.id); // each camera's Start / Stop pins on its own
             ImGui::Spacing();
             ImGui::TextUnformatted(camera.label.c_str());
             ImGui::SameLine();
@@ -90,12 +92,12 @@ class RecordingPanel final : public Panel {
             const auto file = recordingFile(path, camera.id, timestamp ? localStamp() : "", home);
             ImGui::BeginDisabled(!s.svoSupported || !camera.startReady || camera.pending || camera.recording ||
                                  !path[0]);
-            if (ImGui::Button("Start", {half, 30}))
+            if (pins::Button(("Start " + camera.label + "###start").c_str(), {half, ui(30)}))
                 recording->start(camera.id, file);
             ImGui::EndDisabled();
             ImGui::SameLine();
             ImGui::BeginDisabled(!camera.stopReady || camera.pending);
-            if (ImGui::Button("Stop", {half, 30}))
+            if (pins::Button(("Stop " + camera.label + "###stop").c_str(), {half, ui(30)}))
                 recording->stop(camera.id);
             ImGui::EndDisabled();
             ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
@@ -103,11 +105,10 @@ class RecordingPanel final : public Panel {
             ImGui::PopStyleColor();
             if (!camera.message.empty())
                 ImGui::TextWrapped("%s", camera.message.c_str());
-            ImGui::PopID();
         }
         ImGui::SeparatorText("Still images");
         ImGui::BeginDisabled(!recording || !s.captureReady || s.capturing);
-        if (ImGui::Button(s.capturing ? "Capturing..." : "Capture image", {-1, 36}))
+        if (pins::Button(s.capturing ? "Capturing...###capture" : "Capture image###capture", {-1, ui(36)}))
             recording->capture();
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))

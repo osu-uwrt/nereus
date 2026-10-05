@@ -1,4 +1,5 @@
 #include "overlay_draw.hpp"
+#include "nereus/ros_viewer/theme.hpp"
 #include <imgui_internal.h>
 
 namespace nereus::ros_viewer::host {
@@ -86,10 +87,10 @@ void drawDetections(const std::vector<PlacedDetection> &detections, const glm::m
         }
     }
     if (both || haveApprox) {
-        float y = rect.position.y + 52.f; // below the status pills
-        const float x = rect.position.x + 10.f;
+        float y = rect.position.y + ui(52); // below the status pills
+        const float x = rect.position.x + ui(10);
         const int lines = (both ? 2 : 0) + (haveApprox ? 1 : 0);
-        draw->AddRectFilled({x - 4.f, y - 2.f}, {x + 300.f, y + ImGui::GetTextLineHeight() * lines + 2.f},
+        draw->AddRectFilled({x - 4.f, y - 2.f}, {x + ui(300), y + ImGui::GetTextLineHeight() * lines + 2.f},
                             rgba(.03f, .07f, .1f, .72f), 3.f);
         if (both) {
             draw->AddText({x, y}, rgba(1.f, 1.f, 1.f, .9f), "Detections: solid = simulator truth");
@@ -208,13 +209,14 @@ void drawTfAxes(const TfOverlay &tf, const glm::mat4 &vp, const ScreenRect &rect
             draw->AddCircleFilled(origin, 3, IM_COL32(255, 255, 255, 255));
             if (tf.names) {
                 const ImVec2 at(origin.x + 5, origin.y + 5);
-                draw->AddText(tf.font, 12, {at.x + 1, at.y + 1}, IM_COL32(0, 0, 0, 255), name.c_str());
-                draw->AddText(tf.font, 12, at, white, name.c_str());
+                draw->AddText(tf.font, tf.font->FontSize, {at.x + 1, at.y + 1}, IM_COL32(0, 0, 0, 255), name.c_str());
+                draw->AddText(tf.font, tf.font->FontSize, at, white, name.c_str());
             }
         }
-    draw->AddText(tf.font, 12, {rect.position.x + 14, rect.position.y + 50}, white, tf.caption.c_str());
+    draw->AddText(tf.font, tf.font->FontSize, {rect.position.x + ui(14), rect.position.y + ui(50)}, white,
+                  tf.caption.c_str());
     if (tf.snapshot && !tf.snapshot->difference.empty())
-        draw->AddText(tf.font, 12, {rect.position.x + 14, rect.position.y + 67}, white,
+        draw->AddText(tf.font, tf.font->FontSize, {rect.position.x + ui(14), rect.position.y + ui(67)}, white,
                       tf.snapshot->difference.c_str());
     draw->PopClipRect();
 }

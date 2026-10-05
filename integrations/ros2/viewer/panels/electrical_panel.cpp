@@ -1,5 +1,6 @@
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/pins.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <imgui.h>
@@ -32,8 +33,8 @@ class ElectricalPanel final : public Panel {
                 ImGui::SameLine();
             ImGui::PushID(command.id.c_str());
             if (command.confirm)
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(.45f, .14f, .13f, 1));
-            if (ImGui::Button(command.label.c_str(), {half, 30})) {
+                ImGui::PushStyleColor(ImGuiCol_Button, palette().dangerPressed);
+            if (pins::Button(command.label.c_str(), {half, ui(30)})) {
                 if (command.confirm)
                     ImGui::OpenPopup("confirm_power");
                 else
@@ -44,12 +45,12 @@ class ElectricalPanel final : public Panel {
             if (ImGui::BeginPopup("confirm_power")) {
                 ImGui::Text("%s?", command.label.c_str());
                 ImGui::TextDisabled("This cuts power on the robot.");
-                if (ImGui::Button("Send", {90, 0})) {
+                if (ImGui::Button("Send", ui(ImVec2(90, 0)))) {
                     electrical->command(command.id);
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::SameLine();
-                if (ImGui::Button("Cancel", {90, 0}))
+                if (ImGui::Button("Cancel", ui(ImVec2(90, 0))))
                     ImGui::CloseCurrentPopup();
                 ImGui::EndPopup();
             }
@@ -60,7 +61,7 @@ class ElectricalPanel final : public Panel {
     void imu(const ElectricalState &s) {
         ImGui::SeparatorText("IMU (VectorNav)");
         ImGui::BeginDisabled(!s.magCalRunning && !s.magCalReady);
-        if (ImGui::Button(s.magCalRunning ? "Cancel mag cal" : "Mag cal", {-1, 30})) {
+        if (pins::Button(s.magCalRunning ? "Cancel mag cal###mag_cal" : "Mag cal###mag_cal", {-1, ui(30)})) {
             if (s.magCalRunning)
                 electrical->cancelMagCal();
             else
@@ -74,7 +75,7 @@ class ElectricalPanel final : public Panel {
             shownValue = s.registerValue;
             std::snprintf(data, sizeof(data), "%s", shownValue.c_str());
         }
-        ImGui::SetNextItemWidth(70);
+        ImGui::SetNextItemWidth(ui(70));
         ImGui::InputTextWithHint("##reg", "Register", reg, sizeof(reg), ImGuiInputTextFlags_CharsDecimal);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-1);
@@ -82,16 +83,16 @@ class ElectricalPanel final : public Panel {
         const float third = (ImGui::GetContentRegionAvail().x - 2 * ImGui::GetStyle().ItemSpacing.x) / 3;
         ImGui::BeginDisabled(!s.registerReady || s.registerPending);
         ImGui::BeginDisabled(!reg[0]);
-        if (ImGui::Button("Read", {third, 0}))
+        if (pins::Button("Read###register_read", {third, 0}))
             electrical->readRegister(reg);
         ImGui::SameLine();
         ImGui::BeginDisabled(!data[0]);
-        if (ImGui::Button("Write", {third, 0}))
+        if (pins::Button("Write###register_write", {third, 0}))
             electrical->writeRegister(reg, data);
         ImGui::EndDisabled();
         ImGui::EndDisabled();
         ImGui::SameLine();
-        if (ImGui::Button("Save to flash", {third, 0}))
+        if (pins::Button("Save to flash", {third, 0}))
             electrical->saveImuSettings();
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Writes the current IMU settings to its flash ($VNWNV) so they survive a power cycle.");
@@ -101,15 +102,15 @@ class ElectricalPanel final : public Panel {
     void fog(const ElectricalState &s) {
         ImGui::SeparatorText("FOG");
         ImGui::BeginDisabled(s.tareRunning);
-        ImGui::SetNextItemWidth(130);
+        ImGui::SetNextItemWidth(ui(130));
         if (ImGui::InputInt("Samples", &samples, 1000, 10000))
             samples = std::clamp(samples, 1000, 1000000);
-        ImGui::SetNextItemWidth(130);
+        ImGui::SetNextItemWidth(ui(130));
         if (ImGui::InputDouble("Timeout (s)", &tareTimeout, 1, 5, "%.1f"))
             tareTimeout = std::clamp(tareTimeout, .1, 60.);
         ImGui::EndDisabled();
         ImGui::BeginDisabled(!s.tareRunning && !s.tareReady);
-        if (ImGui::Button(s.tareRunning ? "Cancel tare" : "Tare gyro", {-1, 30})) {
+        if (pins::Button(s.tareRunning ? "Cancel tare###tare" : "Tare gyro###tare", {-1, ui(30)})) {
             if (s.tareRunning)
                 electrical->cancelTare();
             else
@@ -124,7 +125,7 @@ class ElectricalPanel final : public Panel {
             pingerEnabled = s.pingerEnabled;
             pingerInitialized = true;
         }
-        if (ImGui::Checkbox("Enable pinger", &pingerEnabled))
+        if (pins::Checkbox("Enable pinger", &pingerEnabled))
             electrical->setPingerEnabled(pingerEnabled);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Re-sent every second, so a rebooted board picks it up (as RViz).");
@@ -139,7 +140,7 @@ class ElectricalPanel final : public Panel {
             if (selected)
                 ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonActive]);
             ImGui::PushID(khz);
-            if (ImGui::Button(label.c_str()))
+            if (pins::Button(label.c_str()))
                 electrical->setPingerFrequency(khz);
             ImGui::PopID();
             if (selected)
@@ -177,7 +178,7 @@ class ElectricalPanel final : public Panel {
             rawCommand = std::clamp(rawCommand, 0, 31);
         ImGui::SameLine();
         ImGui::BeginDisabled(s.ivcHeaders.empty() || (statusMessage && s.ivcStatuses.empty()));
-        if (ImGui::Button("Send", {send, 0}))
+        if (pins::Button("Send###ivc_send", {send, 0}))
             electrical->sendIvc(header, statusMessage ? status : rawCommand);
         ImGui::EndDisabled();
         ImGui::BeginChild("ivc_log", {-1, 130}, ImGuiChildFlags_Borders);

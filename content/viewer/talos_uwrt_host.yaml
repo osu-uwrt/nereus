@@ -6,7 +6,20 @@
 # Latched std_msgs/String scenario document published by the bridge (transient_local, reliable, depth 1).
 scenario_topic: /talos/simulator/scenario
 
-window: {width: 1480, height: 940}
+# title_bar: custom (the viewer's own, with the menus in it; drag it to move, double-click to maximize) or
+# system (the desktop's title bar, menus under it). --system-title-bar overrides.
+window: {width: 1480, height: 940, title_bar: custom}
+
+# Interface theme until the operator picks one (View > Theme, remembered per user): abyss, midnight, daylight,
+# contrast, ocean, arctic, ember, sonar, paper, classic (the desktop's Qt look). --theme overrides.
+theme: abyss
+# Interface scale until the operator picks one (View > Interface scale): 1 = 100 %, or auto (the desktop's scale).
+# The title bar always follows the desktop. --ui-scale overrides.
+interface_scale: 1
+
+# Window layout when the operator has no saved one (or picks Layout > the built-in): standard, wide or cameras.
+# Their own arrangement is saved to ~/.config/nereus/viewer_layout.ini; --layout NAME overrides both.
+layout: standard
 
 # Sibling documents (relative to this file).
 panels_config: talos_uwrt_panels.yaml
@@ -26,8 +39,8 @@ pose:
   source: auto
   truth_delay_s: 0.02
   other_delay_s: 0.06
-  # Simulator only (ignored on a real robot, where the estimate is the only pose): defaults of the Pool Viewer
-  # menu's "Localization estimate" section. robot_ghost: translucent robot at the estimate (TF base_link);
+  # Simulator only (ignored on a real robot, where the estimate is the only pose): defaults of the Display
+  # window's "Localization estimate" section. robot_ghost: translucent robot at the estimate (TF base_link);
   # gizmo_anchor / follow_anchor: truth | estimate, the robot the control gizmo / Follow camera centre on.
   robot_ghost: false
   gizmo_anchor: estimate
@@ -52,7 +65,7 @@ detections:
 # meshes: optional local folder of <mesh>/model.dae (default: the file's mesh_pkg). course: auto (pack layout with
 # simulator truth, mapping otherwise) | pack | mapping. ghost: draw the mapping estimate over the simulator course.
 # hidden: markers hidden at start, by TF frame (gate_frame), label (gate) or mesh (slalom: every post); toggle
-# each one in Pool Viewer > Course > Meshes.
+# each one in Display > Course > Meshes.
 mapping_markers:
   config: riptide_rviz/config/markers.yaml
   course: auto
@@ -124,7 +137,7 @@ payloads:
 magnet_lights:
   led_radiance: 60
 
-# The scenario's equipment pack (the calibration board) in the observer view at startup. Toggle: Pool Viewer >
+# The scenario's equipment pack (the calibration board) in the observer view at startup. Toggle: Display >
 # AprilTag board. Camera cards always show it, like the simulator's cameras.
 equipment_visible: true
 

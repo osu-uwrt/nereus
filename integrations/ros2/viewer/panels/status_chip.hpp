@@ -1,19 +1,21 @@
 // Compact status chips for header and toolbar forms (telemetry readings, recording indicators).
 #pragma once
 #include "nereus/ros_viewer/panels/capabilities.hpp"
+#include "nereus/ros_viewer/theme.hpp"
 #include <imgui.h>
 
 namespace nereus::ros_viewer::panels {
 inline ImVec4 levelColor(Level level) {
+    const auto &p = palette();
     switch (level) {
     case Level::Ok:
-        return {.32f, .86f, .82f, 1};
+        return p.accent;
     case Level::Warn:
-        return {.94f, .73f, .35f, 1};
+        return p.warn;
     case Level::Error:
-        return {.96f, .36f, .33f, 1};
+        return p.error;
     default:
-        return {.47f, .57f, .64f, 1};
+        return p.muted;
     }
 }
 inline const char *levelName(Level level) {
@@ -33,7 +35,7 @@ inline float chipWidth(const char *text) {
 }
 // A dim, tinted button that reads as a label (same look as the viewer's status pill); returns hover.
 inline bool statusChip(const char *text, ImVec4 tint) {
-    const ImVec4 fill(tint.x * .15f, tint.y * .15f, tint.z * .15f, 1);
+    const ImVec4 fill = tintedFill(tint);
     ImGui::PushStyleColor(ImGuiCol_Button, fill);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, fill);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, fill);

@@ -46,3 +46,21 @@ First version for the team.
   (applied when resolving, so the resolved robot carries the result).
 - Talos sensors from the 2026-10-03 pool bags: IMU at 400 Hz with VN-100-like (nearly noise-free) attitude,
   gyro/FOG/DVL/depth noise from the bags.
+- Viewer window layout: every panel, robot camera, the course map and the tool windows (Scene settings, Display,
+  TF frames, Simulation, run scorecard) is a dockable window: drag tabs to rearrange, split, tab or float them.
+  Built-in layouts (Standard, Wide view, Camera wall), named saved layouts, Lock layout, `Ctrl+Space` to
+  maximize the pool view, and the last arrangement restored at start (`~/.config/nereus/`, `--layout NAME`).
+  Enable / KILL moved to an always-visible command bar; menu bar with View, Windows, Layout and Help. Panels
+  take `dock:` in the composition. Dear ImGui is now its docking release (v1.91.9b-docking).
+- Viewer title bar, toolbar and themes: the menus live in the viewer's own title bar (drag to move, double-click to
+  maximize, edges resize; `--system-title-bar` for the desktop's). Any window can be pinned to the pool view
+  toolbar (right-click its tab, or the toolbar's +) and any toolbar button hidden; saved with the layout. Themes:
+  Abyss (default), Midnight, Daylight, High contrast (View > Theme, remembered; `--theme`). Enable / KILL is also
+  at the top of the Motion panel; tab close boxes show on hover.
+- Viewer side panels snap shut again: drag the border nearly to the window edge (or View > Left / Right panels,
+  `Ctrl+[` / `Ctrl+]`); drag the pool view's edge back out to show them. Theme is a View submenu.
+- Viewer: right-click any button, checkbox or dropdown in a panel to pin a working copy to the toolbar (saved with
+  the layout). The title bar follows the desktop's display scale like other applications'; View > Interface scale
+  (100-200 %, Match desktop; `--ui-scale`) sizes the rest. Five more themes: Ocean, Arctic, Ember, Sonar, Paper.
+- Viewer theme Classic: Qt's Windows-style grey with bevelled controls and the Ubuntu font, like the desktop's Qt
+  tools (RViz).

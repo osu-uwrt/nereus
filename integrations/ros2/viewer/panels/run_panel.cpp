@@ -1,5 +1,6 @@
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/pins.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -13,6 +14,7 @@ class RunPanel final : public Panel {
     bool details = false, focusDetails = false, enabled = true;
     float manualPoints = 0;
     std::string title;
+    ImVec2 anchor{120, 120};
 
   public:
     explicit RunPanel(const Binding &b)
@@ -29,12 +31,13 @@ class RunPanel final : public Panel {
             options[option["key"].as<std::string>()] = YAML::Clone(option["default"]);
     }
     void toolbar() override {
-        const float width = ImGui::CalcTextSize("Run tracking").x + 2 * ImGui::GetStyle().FramePadding.x;
-        nereus::ros_viewer::sameLineIfFits(width);
-        if (ImGui::Button("Run tracking")) {
-            details = !details;
+        if (nereus::ros_viewer::windowToggle("Run tracking", &details))
             focusDetails = details;
-        }
+        anchor = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y};
+    }
+    void windowMenu() override {
+        if (ImGui::MenuItem(title.c_str(), nullptr, details))
+            details = focusDetails = !details;
     }
     void draw() override {
         controls(true);
@@ -42,32 +45,15 @@ class RunPanel final : public Panel {
     void drawWindows() override {
         if (!details)
             return;
-        const auto *viewport = ImGui::GetMainViewport();
-        const ImVec2 available(std::max(1.f, viewport->WorkSize.x - 24.f), std::max(1.f, viewport->WorkSize.y - 24.f));
-        // Measure the complete scorecard on opening, then allow normal resizing.
-        ImGui::SetNextWindowSize({std::min(720.f, available.x), 0}, ImGuiCond_Appearing);
-        ImGui::SetNextWindowSizeConstraints({std::min(360.f, available.x), std::min(120.f, available.y)}, available);
-        ImGui::SetNextWindowPos(
-            {viewport->WorkPos.x + viewport->WorkSize.x * .5f, viewport->WorkPos.y + viewport->WorkSize.y * .5f},
-            ImGuiCond_Appearing, {.5f, .5f});
-        if (focusDetails) {
-            ImGui::SetNextWindowFocus();
-            ImGui::SetNextWindowCollapsed(false);
-            focusDetails = false;
-        }
         // Include the instance's ID so multiple run panels can have separate windows.
         const auto name = title + "###scorecard_" + std::to_string(ImGui::GetID("scorecard"));
-        if (ImGui::Begin(name.c_str(), &details)) {
-            const auto pos = ImGui::GetWindowPos(), size = ImGui::GetWindowSize();
-            if (!ImGui::IsWindowAppearing())
-                ImGui::SetWindowPos({std::clamp(pos.x, viewport->WorkPos.x + 12.f,
-                                                viewport->WorkPos.x + 12.f + std::max(0.f, available.x - size.x)),
-                                     std::clamp(pos.y, viewport->WorkPos.y + 12.f,
-                                                viewport->WorkPos.y + 12.f + std::max(0.f, available.y - size.y))});
+        // Measure the complete scorecard on opening, then allow normal resizing and docking.
+        if (nereus::ros_viewer::beginToolWindow(name.c_str(), &details, ui(ImVec2(720, 0)), anchor, focusDetails)) {
             controls(false);
             taskStatus();
             scorecard();
         }
+        focusDetails = false;
         ImGui::End();
     }
 
@@ -79,7 +65,7 @@ class RunPanel final : public Panel {
         const double seconds = score["elapsed"].as<double>(0);
         ImGui::Text("%02d:%04.1f  |  %.1f points", int(seconds) / 60, std::fmod(seconds, 60.),
                     score["total"].as<double>(0));
-        if (showDetails && ImGui::Button("Detailed scorecard", {-1, 36}))
+        if (showDetails && pins::Button("Detailed scorecard", {-1, ui(36)}))
             details = focusDetails = true;
         ImGui::BeginDisabled(!run || !s.fresh || !enabled);
         ImGui::BeginDisabled(running);
@@ -89,7 +75,7 @@ class RunPanel final : public Panel {
             ImGui::PushID(key.c_str());
             if (type == "bool") {
                 bool value = options[key].as<bool>();
-                if (ImGui::Checkbox(label.c_str(), &value))
+                if (pins::Checkbox(label.c_str(), &value))
                     options[key] = value;
             } else {
                 ImGui::TextUnformatted(label.c_str());
@@ -115,7 +101,7 @@ class RunPanel final : public Panel {
             ImGui::PopID();
         }
         const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * .5f;
-        if (ImGui::Button("Start run", {half, 36})) {
+        if (pins::Button("Start run", {half, ui(36)})) {
             auto cmd = YAML::Clone(options);
             cmd["action"] = "start";
             run->command(cmd);
@@ -126,16 +112,16 @@ class RunPanel final : public Panel {
         ImGui::EndDisabled();
         ImGui::SameLine();
         ImGui::BeginDisabled(!running);
-        if (ImGui::Button("Stop run", {half, 36})) {
+        if (pins::Button("Stop run", {half, ui(36)})) {
             YAML::Node cmd;
             cmd["action"] = "stop";
             run->command(cmd);
         }
         ImGui::EndDisabled();
-        if (ImGui::Button("Reset run & tasks", {-1, 36}))
+        if (pins::Button("Reset run & tasks", {-1, ui(36)}))
             run->reset();
         for (const auto &action : schema["actions"])
-            if (ImGui::Button(action["label"].as<std::string>().c_str(), {-1, 36}))
+            if (pins::Button(action["label"].as<std::string>().c_str(), {-1, ui(36)}))
                 run->command(action["command"]);
         ImGui::EndDisabled();
         if (!run)
@@ -172,14 +158,14 @@ class RunPanel final : public Panel {
             run->command(cmd);
         };
         ImGui::BeginDisabled(!std::isfinite(manualPoints) || manualPoints == 0);
-        if (ImGui::Button("Add")) {
+        if (pins::Button("Add###add_points")) {
             send(current + manualPoints);
             manualPoints = 0;
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
         ImGui::BeginDisabled(current == 0);
-        if (ImGui::Button("Clear"))
+        if (pins::Button("Clear###clear_points"))
             send(0);
         ImGui::EndDisabled();
         ImGui::EndDisabled();
@@ -206,7 +192,7 @@ class RunPanel final : public Panel {
         if (schema["run_inspections"] && ImGui::TreeNode("Inspect scene")) {
             ImGui::BeginDisabled(!focus);
             for (const auto &item : schema["run_inspections"])
-                if (ImGui::Button(item["label"].as<std::string>().c_str(), {-1, 36}))
+                if (pins::Button(item["label"].as<std::string>().c_str(), {-1, ui(36)}))
                     focus(item["target"].as<std::string>());
             ImGui::EndDisabled();
             ImGui::TreePop();

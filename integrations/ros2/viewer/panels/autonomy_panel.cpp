@@ -1,4 +1,7 @@
+#include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/pins.hpp"
+#include "nereus/ros_viewer/theme.hpp"
 #include <cfloat>
 #include <filesystem>
 #include <imgui.h>
@@ -45,17 +48,17 @@ class AutonomyPanel final : public Panel {
                 }
             ImGui::EndCombo();
         }
-        if (ImGui::Button(s.refreshing ? "Refreshing..." : "Refresh"))
+        if (pins::Button(s.refreshing ? "Refreshing...###refresh" : "Refresh###refresh"))
             mission->refresh();
         ImGui::SameLine();
         ImGui::BeginDisabled(selected.empty() || !mayStart());
-        if (ImGui::Button("Start"))
+        if (pins::Button("Start"))
             mission->start(selected);
         ImGui::EndDisabled();
         ImGui::EndDisabled();
         ImGui::SameLine();
         ImGui::BeginDisabled(!mission || !s.busy);
-        if (ImGui::Button("Stop"))
+        if (pins::Button("Stop"))
             mission->stop();
         ImGui::EndDisabled();
         if (!s.activeTree.empty())
@@ -66,11 +69,10 @@ class AutonomyPanel final : public Panel {
         if (s.stack.empty())
             ImGui::TextDisabled(s.busy ? "Waiting for stack..." : "No stack received");
         ImGui::BeginChild("stack",
-                          {0, std::max(80.f, ImGui::GetContentRegionAvail().y - ImGui::GetStyle().ItemSpacing.y)},
+                          {0, std::max(ui(80), ImGui::GetContentRegionAvail().y - ImGui::GetStyle().ItemSpacing.y)},
                           ImGuiChildFlags_None);
         for (size_t i = 0; i < s.stack.size(); ++i) {
-            ImGui::TextColored(i + 1 == s.stack.size() ? ImVec4(.3, .9, .8, 1) : ImVec4(.65, .72, .77, 1), "%02zu",
-                               i + 1);
+            ImGui::TextColored(i + 1 == s.stack.size() ? palette().accent : palette().muted, "%02zu", i + 1);
             ImGui::SameLine();
             ImGui::TextWrapped("%s", s.stack[i].c_str());
         }

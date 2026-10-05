@@ -3,6 +3,7 @@
 set(_panel_sources
   panel_registry.cpp composition.cpp motion_panel.cpp mapping_panel.cpp actuator_panel.cpp
   run_panel.cpp simulation_panel.cpp autonomy_panel.cpp pose_gizmo.cpp telemetry_panel.cpp recording_panel.cpp
+  dock_layout.cpp theme.cpp pins.cpp
   electrical_panel.cpp
   ros_runtime.cpp standard_motion.cpp sim_run.cpp simulation_rate.cpp)
 if(NEREUS_ROS_VIEWER_UWRT)
@@ -38,9 +39,13 @@ endif()
 
 if(BUILD_TESTING)
   set(_viewer_config ${PROJECT_SOURCE_DIR}/content/viewer/talos_uwrt_panels.yaml)
-  set(_panel_tests panels_gizmo_input_test panels_composition_test)
+  set(_panel_tests panels_gizmo_input_test panels_composition_test panels_dock_layout_test
+    panels_pins_test panels_theme_classic_test)
   add_executable(panels_gizmo_input_test ../tests/panels_gizmo_input.cpp)
   add_executable(panels_composition_test ../tests/panels_panel_composition.cpp)
+  add_executable(panels_dock_layout_test ../tests/panels_dock_layout.cpp)
+  add_executable(panels_pins_test ../tests/panels_pins.cpp)
+  add_executable(panels_theme_classic_test ../tests/panels_theme_classic.cpp)
   if(NEREUS_ROS_VIEWER_UWRT) # these two use riptide_msgs2
     add_executable(panels_panel_ros_test ../tests/panels_panel_ros.cpp)
     add_executable(panels_operator_test ../tests/panels_operator_panels.cpp)
@@ -52,6 +57,9 @@ if(BUILD_TESTING)
   endforeach()
   add_test(NAME panels_gizmo_input COMMAND panels_gizmo_input_test)
   add_test(NAME panels_composition COMMAND panels_composition_test)
+  add_test(NAME panels_dock_layout COMMAND panels_dock_layout_test)
+  add_test(NAME panels_pins COMMAND panels_pins_test)
+  add_test(NAME panels_theme_classic COMMAND panels_theme_classic_test)
   if(NEREUS_ROS_VIEWER_UWRT)
     add_test(NAME panels_ros COMMAND panels_panel_ros_test ${_viewer_config}
       ${CMAKE_CURRENT_SOURCE_DIR}/../tests/panels_standard_example.yaml)

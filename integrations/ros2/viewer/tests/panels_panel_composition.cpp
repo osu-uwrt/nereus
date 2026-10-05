@@ -1,7 +1,9 @@
 #include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/theme.hpp"
 #include <cassert>
 #include <functional>
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <iostream>
 using namespace nereus::ros_viewer::panels;
 struct FakeMotion : Motion {
@@ -98,14 +100,34 @@ ownership:
     Context ctx{"some_robot", "some_frame", false, false};
     Composition good(YAML::Load(text), ctx, r);
     assert(created == 2);
-    assert(good.sidebarVisible());
+    // Left dock column of the built-in layout: a fraction of the window (default .29) or sidebar_width pixels.
     assert(std::abs(good.width(1000) - 290) < .01f);
     assert(std::abs(good.width(1500) - 435) < .01f);
-    good.setWidth(400, true);
-    assert(good.width(1500) == 400);
-    good.toggleSidebar();
-    assert(!good.sidebarVisible());
-    good.toggleSidebar();
+    // Panels are dockable windows: the title shown, the instance ID as the window's identity in saved layouts.
+    {
+        const Context ctx{"some_robot", "some_frame", true, false}; // preview: these create no providers
+        auto fixedWidth = YAML::Load(text);
+        fixedWidth["sidebar_width"] = 400;
+        assert(Composition(fixedWidth, ctx, r).width(1500) == 400);
+        const auto windows = good.panelWindows();
+        assert(windows.size() == 2 && windows[0].id == "control" && windows[0].name == "control###panel.control");
+        assert(windows[0].dock == Dock::Left && windows[0].selected);
+        auto docked = YAML::Load(text);
+        docked["panels"][0]["dock"] = "left_top";
+        docked["panels"][1]["open"] = false;
+        docked["panels"][1]["title"] = "Mission";
+        Composition c(docked, ctx, r);
+        const auto placed = c.panelWindows();
+        assert(placed[0].dock == Dock::LeftTop && placed[1].name == "Mission###panel.autonomy" && !placed[1].selected);
+        auto flags = c.visibility();
+        assert(flags.size() == 2 && flags[0].first == "panel.control" && *flags[0].second);
+        auto hidden = YAML::Load(text);
+        hidden["sidebar_visible"] = false; // panel windows start closed
+        Composition closed(hidden, ctx, r);
+        for (const auto &flag : closed.visibility())
+            assert(!*flag.second);
+        assert(parseDock("right_bottom") == Dock::RightBottom && parseDock("floating") == Dock::Floating);
+    }
     auto motion = std::dynamic_pointer_cast<Motion>(good.providers().at("motion"));
     auto mission = std::dynamic_pointer_cast<Autonomy>(good.providers().at("mission"));
     mission->start("test");
@@ -155,6 +177,9 @@ ownership:
     cfg["providers"]["motion"]["type"] = "missing";
     fails(cfg);
     cfg = YAML::Load(text);
+    cfg["panels"][0]["dock"] = "middle"; // unknown dock area
+    fails(cfg);
+    cfg = YAML::Load(text);
     cfg["overlays"][0]["options"]["size_metres"] = -5;
     fails(cfg);
     cfg = YAML::Load(text);
@@ -190,6 +215,63 @@ ownership:
         ImGui::Render();
         const std::vector<std::string> drawn{"toolbar:view", "toolbar:scene_settings"};
         assert(drawLog == drawn); // panels_menu / motion draw their own widgets, not through the log
+        // The operator's toolbar customization: every item with its type, configured title and shown flag.
+        {
+            auto titled = YAML::Load(toolbarText);
+            titled["toolbar"][2]["title"] = "Drive";
+            Composition c(titled, ctx, r);
+            auto items = c.toolbarItems();
+            assert(items.size() == 4 && items[0].id == "view" && items[0].type == "view" && items[0].title.empty());
+            assert(items[2].id == "mine" && items[2].type == "motion" && items[2].title == "Drive");
+            *items[0].visible = false; // hidden from the toolbar like `visible: false`
+            ImGui::NewFrame();
+            ImGui::Begin("t");
+            drawLog.clear();
+            c.drawToolbar();
+            ImGui::End();
+            ImGui::Render();
+            assert(drawLog == std::vector<std::string>{"toolbar:scene_settings"});
+        }
+        // Themes restyle everything; unknown names change nothing.
+        for (const auto &theme : nereus::ros_viewer::themes()) {
+            assert(nereus::ros_viewer::applyTheme(theme.id) && nereus::ros_viewer::currentTheme() == theme.id);
+            assert(ImGui::GetStyle().WindowMenuButtonPosition == ImGuiDir_None);
+            assert(ImGui::GetStyle().TabCloseButtonMinWidthSelected == 0); // tab close box only on hover
+            assert(ImGui::GetStyle().Colors[ImGuiCol_Text].x == nereus::ros_viewer::palette().text.x);
+        }
+        assert(nereus::ros_viewer::applyTheme("daylight"));
+        const float daylightText = nereus::ros_viewer::palette().text.x;
+        assert(!nereus::ros_viewer::applyTheme("nope") && nereus::ros_viewer::currentTheme() == "daylight");
+        assert(nereus::ros_viewer::applyTheme("abyss") && nereus::ros_viewer::palette().text.x > daylightText);
+        // Panel windows: each visible panel is its own window; closing it (Windows menu, its x) hides it.
+        Composition windows(YAML::Load(toolbarText), ctx, r);
+        const auto frame = [&] {
+            ImGui::NewFrame();
+            ImGui::Begin("t");
+            windows.drawPinned();
+            ImGui::End();
+            windows.drawPanels();
+            ImGui::Render();
+        };
+        frame();
+        const auto active = [](const char *name) {
+            const auto *window = ImGui::FindWindowByName(name);
+            return window && window->Active;
+        };
+        assert(active("control###panel.control") && active("autonomy###panel.autonomy"));
+        *windows.visibility()[1].second = false;
+        frame();
+        frame();
+        assert(active("control###panel.control") && !active("autonomy###panel.autonomy"));
+        // The host's right-click menu runs right after each visible panel window's Begin, with the panel's ID.
+        std::vector<std::string> menus;
+        windows.setWindowContextMenu([&](const std::string &id) { menus.push_back(id); });
+        frame();
+        assert(menus == std::vector<std::string>{"control"});
+        windows.focusPanel("autonomy"); // reopens it on top
+        frame();
+        frame();
+        assert(active("autonomy###panel.autonomy") && *windows.visibility()[1].second);
         // visible: false hides an item without dropping it
         auto hidden = YAML::Load(toolbarText);
         hidden["toolbar"][0]["visible"] = false;
@@ -213,7 +295,7 @@ ownership:
         assert(none.toolbarIds().empty());
     }
     {
-        // A host item can also be a sidebar panel (draw()), but not a toolbar-only one.
+        // A host item can also be a panel window (draw()), but not a toolbar-only one.
         auto c2 = YAML::Load(text);
         c2["panels"].push_back(YAML::Load("{id: det, type: detections, title: Detections}"));
         c2["toolbar"] = YAML::Load("[{type: detections}, {id: det2, type: detections}]");
@@ -293,6 +375,7 @@ ownership:
     cfg = YAML::Load(text);
     cfg["panels"][0]["slot"] = "settings";
     fails(cfg);
+    fails(withToolbar("[{type: view, dock: left}]")); // dock places panel windows only
     assert(expand("/{namespace}/{fixed_frame}", ctx) == "/some_robot/some_frame");
     bool threw = false;
     try {

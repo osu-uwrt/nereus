@@ -1,4 +1,6 @@
+#include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/pins.hpp"
 #include <cstdio>
 #include <imgui.h>
 namespace nereus::ros_viewer::panels {
@@ -31,7 +33,7 @@ class MappingPanel final : public Panel {
         ImGui::EndDisabled();
         ImGui::BeginDisabled(!mapping || (!s.calibrating && (!s.calibrationReady || samples < 1 || samples > 65535 ||
                                                              !parent[0] || !child[0] || std::string(parent) == child)));
-        if (ImGui::Button(s.calibrating ? "Cancel tag cal" : "Tag cal", {-1, 36})) {
+        if (pins::Button(s.calibrating ? "Cancel tag cal###tag_cal" : "Tag cal###tag_cal", {-1, ui(36)})) {
             if (s.calibrating)
                 mapping->cancelCalibration();
             else
@@ -54,15 +56,16 @@ class MappingPanel final : public Panel {
             ImGui::TextDisabled("Mapping status unavailable / stale");
         ImGui::SetNextItemWidth(-1);
         ImGui::InputTextWithHint("##target", "Target object (empty = automatic)", target, sizeof(target));
-        ImGui::Checkbox("Lock map", &locked);
+        pins::Checkbox("Lock map", &locked);
         ImGui::BeginDisabled(!mapping || !s.targetReady || s.settingTarget);
-        if (ImGui::Button(s.settingTarget ? "Setting target..." : "Set mapping target", {-1, 36}))
+        if (pins::Button(s.settingTarget ? "Setting target...###set_target" : "Set mapping target###set_target",
+                         {-1, ui(36)}))
             mapping->setTarget(target, locked);
         ImGui::EndDisabled();
         if (!s.targetMessage.empty())
             ImGui::TextWrapped("%s", s.targetMessage.c_str());
         ImGui::BeginDisabled(!mapping || !s.resetReady || s.resetting);
-        if (ImGui::Button(s.resetting ? "Resetting..." : "Reset mapping", {-1, 36}))
+        if (pins::Button(s.resetting ? "Resetting...###reset_mapping" : "Reset mapping###reset_mapping", {-1, ui(36)}))
             mapping->reset();
         ImGui::EndDisabled();
         if (!s.resetMessage.empty())

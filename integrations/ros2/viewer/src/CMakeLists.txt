@@ -6,6 +6,8 @@ find_package(GLEW REQUIRED)
 find_package(PNG REQUIRED)
 find_package(JPEG REQUIRED)
 find_package(Threads REQUIRED)
+find_package(X11 REQUIRED) # custom title bar: window-manager move / resize
+find_package(Fontconfig REQUIRED) # a theme's font family (the desktop's Qt font)
 
 # Logic that needs no GL context (tested by tests/host_*).
 add_library(nereus_viewer_host_core STATIC scenario.cpp jpeg_decode.cpp)
@@ -21,7 +23,7 @@ target_compile_definitions(nereus_viewer_host_core PRIVATE NEREUS_PACK_CONTENT="
 add_library(nereus_viewer_host STATIC ros_side.cpp scene_model.cpp overlay_draw.cpp window.cpp app.cpp)
 target_include_directories(nereus_viewer_host PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(nereus_viewer_host PUBLIC nereus_viewer_host_core nereus_scene_rendering nereus_viewer_panels nereus_imgui
-  ament_index_cpp::ament_index_cpp PRIVATE glfw GLEW::GLEW OpenGL::GL PNG::PNG)
+  ament_index_cpp::ament_index_cpp PRIVATE glfw GLEW::GLEW OpenGL::GL PNG::PNG X11::X11 Fontconfig::Fontconfig)
 target_compile_definitions(nereus_viewer_host PRIVATE
   NEREUS_VIEWER_CONTENT="${PROJECT_SOURCE_DIR}/content/viewer"
   NEREUS_RENDERING_SHADERS="${PROJECT_SOURCE_DIR}/libraries/rendering/shaders")

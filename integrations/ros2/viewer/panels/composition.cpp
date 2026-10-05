@@ -1,6 +1,8 @@
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panel_layout.hpp"
+#include "nereus/ros_viewer/pins.hpp"
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <imgui.h>
@@ -53,12 +55,25 @@ void validateSubstitutions(const YAML::Node &node, const Context &ctx) {
             validateSubstitutions(item.second, ctx);
 }
 } // namespace
+Dock parseDock(const std::string &name) {
+    static const std::map<std::string, Dock> areas{{"left_top", Dock::LeftTop}, {"left", Dock::Left},
+                                                   {"right", Dock::Right},      {"right_bottom", Dock::RightBottom},
+                                                   {"bottom", Dock::Bottom},    {"floating", Dock::Floating}};
+    const auto found = areas.find(name);
+    if (found == areas.end())
+        throw std::invalid_argument("unknown dock area '" + name +
+                                    "' (left_top, left, right, right_bottom, bottom, floating)");
+    return found->second;
+}
+std::string panelWindowName(const std::string &id, const std::string &title) {
+    return title + "###panel." + id;
+}
 Composition::Composition(const YAML::Node &config, const Context &ctx, const Registry &registry) {
     keys(config,
          {"sidebar_width", "sidebar_width_fraction", "sidebar_visible", "providers", "panels", "toolbar", "header",
           "overlays", "ownership"},
          "composition");
-    sidebarShown = config["sidebar_visible"].as<bool>(true);
+    const bool panelsShown = config["sidebar_visible"].as<bool>(true);
     if (config["sidebar_width"] && config["sidebar_width_fraction"])
         throw std::invalid_argument("choose sidebar_width or sidebar_width_fraction, not both");
     sidebarFraction = config["sidebar_width"] ? 0.f : config["sidebar_width_fraction"].as<float>(.29f);
@@ -105,10 +120,15 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
             if (id.empty() && isToolbar && item.IsMap())
                 id = item["type"].template as<std::string>("");
             try {
-                keys(item, {"id", "type", "provider", "title", "visible", "open", "options"}, name);
+                keys(item, {"id", "type", "provider", "title", "visible", "open", "dock", "options"}, name);
                 required(item, {"type"});
                 if (!isToolbar)
                     required(item, {"id"});
+                if (item["dock"] && std::string(name) != "panels")
+                    throw std::invalid_argument("'dock' places panel windows; " + std::string(name) +
+                                                " items have no window");
+                if (item["dock"])
+                    parseDock(item["dock"].template as<std::string>());
                 const auto type = item["type"].template as<std::string>();
                 const auto found = factories.find(type);
                 if (found == factories.end()) {
@@ -133,7 +153,7 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
                         throw std::invalid_argument("provider capability mismatch");
                 }
                 if (!isToolbar && factory.toolbarOnly)
-                    throw std::invalid_argument("'" + type + "' is toolbar-only and cannot be a sidebar panel");
+                    throw std::invalid_argument("'" + type + "' is toolbar-only and cannot be a panel window");
                 (void)item["visible"].template as<bool>(true);
                 (void)item["open"].template as<bool>(true);
                 (void)item["title"].template as<std::string>(id);
@@ -201,15 +221,17 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
     };
     for (const auto &item : config["panels"]) {
         const auto id = item["id"].as<std::string>();
-        panelInstances.push_back({id, item["title"].as<std::string>(id), item["visible"].as<bool>(true),
+        panelInstances.push_back({id, item["title"].as<std::string>(id), panelsShown && item["visible"].as<bool>(true),
                                   item["open"].as<bool>(true),
-                                  registry.panels.at(item["type"].as<std::string>()).create(binding(item))});
+                                  registry.panels.at(item["type"].as<std::string>()).create(binding(item)),
+                                  parseDock(item["dock"].as<std::string>("left"))});
     }
     for (const auto &item : toolbarConfig) {
         const auto type = item["type"].as<std::string>();
         const auto id = item["id"].as<std::string>(type);
         toolbarInstances.push_back({id, item["title"].as<std::string>(id), item["visible"].as<bool>(true), true,
-                                    registry.panels.at(type).create(binding(item))});
+                                    registry.panels.at(type).create(binding(item)), Dock::Left, false, type,
+                                    item["title"].as<std::string>("")});
     }
     for (const auto &item : config["header"]) {
         const auto type = item["type"].as<std::string>();
@@ -233,21 +255,54 @@ void Composition::touch() {
     syncOwnership();
 }
 void Composition::drawPanelMenu() {
-    nereus::ros_viewer::sameLineIfFits(88);
-    if (ImGui::Button("Panels", {88, 30}))
+    nereus::ros_viewer::sameLineIfFits(nereus::ros_viewer::buttonWidth("Windows"));
+    if (ImGui::Button("Windows"))
         ImGui::OpenPopup("panel_menu");
     if (ImGui::BeginPopup("panel_menu")) {
-        for (auto &item : panelInstances)
-            ImGui::Checkbox(item.title.c_str(), &item.visible);
+        if (windowMenu)
+            windowMenu();
+        else
+            drawPanelMenuItems();
         ImGui::EndPopup();
     }
-    if (sidebarShown)
-        return;
-    for (auto &item : panelInstances) {
-        ImGui::PushID(item.id.c_str());
-        item.panel->toolbar();
-        ImGui::PopID();
-    }
+}
+void Composition::drawPanelMenuItems() {
+    for (auto &item : panelInstances)
+        if (ImGui::MenuItem(item.title.c_str(), nullptr, item.visible)) {
+            item.visible = !item.visible;
+            item.focus = item.visible; // shown on top (its tab selected) when reopened
+        }
+}
+void Composition::drawToolMenuItems() {
+    for (auto *group : {&toolbarInstances, &panelInstances})
+        for (auto &item : *group) {
+            ImGui::PushID(item.id.c_str());
+            item.panel->windowMenu();
+            ImGui::PopID();
+        }
+}
+std::vector<Composition::ToolbarItem> Composition::toolbarItems() {
+    std::vector<ToolbarItem> items;
+    for (auto &item : toolbarInstances)
+        items.push_back({item.id, item.type, item.configuredTitle, &item.visible});
+    return items;
+}
+std::vector<Composition::PanelWindow> Composition::panelWindows() const {
+    std::vector<PanelWindow> windows;
+    for (const auto &item : panelInstances)
+        windows.push_back({item.id, panelWindowName(item.id, item.title), item.dock, item.open});
+    return windows;
+}
+std::vector<std::pair<std::string, bool *>> Composition::visibility() {
+    std::vector<std::pair<std::string, bool *>> flags;
+    for (auto &item : panelInstances)
+        flags.emplace_back("panel." + item.id, &item.visible);
+    return flags;
+}
+void Composition::focusPanel(const std::string &id) {
+    for (auto &item : panelInstances)
+        if (item.id == id)
+            item.focus = item.visible = true;
 }
 void Composition::drawToolbar() {
     for (auto &item : toolbarInstances)
@@ -333,52 +388,89 @@ YAML::Node defaultToolbar() {
                       "{type: focus}, {type: follow}, {type: labels}, {type: tf}, "
                       "{type: mpc_path}, {type: thrust}, {type: preview_task}]");
 }
-void Composition::drawSidebar(float height) {
-    ImGui::BeginChild("operator_sidebar", {sidebarWidth, height}, ImGuiChildFlags_Borders,
-                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+void Composition::drawPinned() {
+    bool drawn = false;
     for (auto &item : panelInstances) {
+        if (drawn)
+            ImGui::SameLine();
+        const auto before = ImGui::GetCursorPos();
         ImGui::PushID(item.id.c_str());
+        pins::beginScope("panel." + item.id, item.title);
         item.panel->pinned();
+        pins::endScope();
         ImGui::PopID();
+        const auto after = ImGui::GetCursorPos();
+        drawn = drawn || after.x != before.x || after.y != before.y;
     }
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, ImGui::GetStyle().FramePadding.y));
-    ImGui::BeginChild("panel_contents", {0, 0});
-    bool first = true;
+}
+void Composition::drawPanels() {
     for (auto &item : panelInstances) {
-        ImGui::PushID(item.id.c_str());
-        if (item.visible) {
-            if (!first)
-                ImGui::Spacing();
-            first = false;
-            item.open = nereus::ros_viewer::disclosureHeader(item.title.c_str(), item.open);
-            if (item.open)
-                item.panel->draw();
+        if (!item.visible)
+            continue;
+        if (item.focus) {
+            ImGui::SetNextWindowFocus();
+            item.focus = false;
         }
-        ImGui::PopID();
+        ImGui::SetNextWindowSize(ui(ImVec2(380, 520)), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin(panelWindowName(item.id, item.title).c_str(), &item.visible)) {
+            if (windowContextMenu)
+                windowContextMenu(item.id);
+            ImGui::PushID(item.id.c_str());
+            pins::beginScope("panel." + item.id, item.title);
+            item.panel->draw();
+            pins::endScope();
+            ImGui::PopID();
+        }
+        ImGui::End();
     }
-    ImGui::EndChild();
-    ImGui::PopStyleVar();
-    ImGui::EndChild();
+    // Panels with controls pinned to the toolbar keep running while closed or behind another tab.
+    for (auto &item : panelInstances)
+        if (pins::needsDrawing("panel." + item.id))
+            pins::drawOffscreen("panel." + item.id, item.title, [&] {
+                ImGui::PushID(item.id.c_str());
+                item.panel->draw();
+                ImGui::PopID();
+            });
     syncOwnership();
 }
 void Composition::drawWindows() {
     for (auto &item : toolbarInstances) {
         ImGui::PushID(item.id.c_str());
+        pins::beginScope("tool." + item.id, toolTitle(item));
         item.panel->drawWindows();
+        pins::endScope();
         ImGui::PopID();
     }
     for (auto &item : panelInstances) {
         ImGui::PushID(item.id.c_str());
+        pins::beginScope("panel." + item.id, item.title);
         item.panel->drawWindows();
+        pins::endScope();
         ImGui::PopID();
     }
+    // A tool window (Simulation, the run scorecard) with pinned controls keeps running while closed.
+    for (auto &item : toolbarInstances)
+        if (pins::needsDrawing("tool." + item.id))
+            pins::drawOffscreen("tool." + item.id, toolTitle(item), [&] {
+                ImGui::PushID(item.id.c_str());
+                item.panel->draw();
+                ImGui::PopID();
+            });
+}
+std::string Composition::toolTitle(const PanelInstance &item) {
+    if (!item.configuredTitle.empty())
+        return item.configuredTitle;
+    std::string title = item.type;
+    if (!title.empty())
+        title[0] = char(std::toupper(static_cast<unsigned char>(title[0])));
+    return title == "Run" ? "Run tracking" : title;
 }
 void Composition::drawOverlayControls(const std::string &provider) {
     for (auto &item : overlays) {
         if (item.provider != provider)
             continue;
         ImGui::PushID(item.id.c_str());
-        if (ImGui::Checkbox(item.title.c_str(), &item.visible) && !item.visible)
+        if (pins::Checkbox(item.title.c_str(), &item.visible) && !item.visible)
             item.overlay->cancelInteraction();
         ImGui::PopID();
     }

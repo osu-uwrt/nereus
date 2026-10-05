@@ -25,11 +25,15 @@ struct Options {
     bool keepDetections = false;    // ignore marker DELETEALL (host yaml detections.honor_delete_all: false)
     std::string detectionPlacement; // pose_source | truth | estimate | both (empty: host yaml)
     bool showTf = false, mpcPath = false, thrust = false, showScorecard = false;
-    std::vector<std::string> open; // initial windows/popups: scene-settings, map, tf, pool-viewer
-    std::vector<float> injectF;    // test aid: hover this window position and press F mid-run
-    std::vector<float> orbit;      // optional initial orbit: yaw pitch distance (radians, metres)
-    int frames = 0;                // render N frames, save the screenshot, exit
-    double renderRate = 0;         // frame cap in Hz; 0 = 60 (vsync: uncapped, vsync paces; hidden runs use 30)
+    std::vector<std::string> open;      // windows shown at start: scene-settings, map, tf, display (pool-viewer)
+    std::string layout;                 // start layout: built-in preset, saved layout name or .ini path (empty: last)
+    std::string theme;                  // abyss | midnight | daylight | contrast (empty: last chosen, else host yaml)
+    std::optional<bool> systemTitleBar; // system window decorations instead of the viewer's title bar
+    std::string uiScale;                // interface scale: a factor (1 = 100 %) or auto (empty: last chosen)
+    std::vector<float> injectF;         // test aid: hover this window position and press F mid-run
+    std::vector<float> orbit;           // optional initial orbit: yaw pitch distance (radians, metres)
+    int frames = 0;                     // render N frames, save the screenshot, exit
+    double renderRate = 0;              // frame cap in Hz; 0 = 60 (vsync: uncapped, vsync paces; hidden runs use 30)
     // Swap interval 1 (ignored for --hidden). Off by default: under Wayland/XWayland the compositor throttles
     // swaps of a covered or unfocused window (~1 Hz), which stalls the whole UI loop.
     bool vsync = false;

@@ -1,9 +1,12 @@
 #include "app.hpp"
 #include "frame_profiler.hpp"
 #include "mapping_markers.hpp"
+#include "nereus/ros_viewer/dock_layout.hpp"
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panels/ros_providers.hpp"
+#include "nereus/ros_viewer/pins.hpp"
+#include "nereus/ros_viewer/theme.hpp"
 #include "overlay_draw.hpp"
 #include "ros_side.hpp"
 #include "scene_model.hpp"
@@ -13,8 +16,10 @@
 #include <GLFW/glfw3.h>
 #include <algorithm>
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <array>
 #include <cctype>
 #include <cmath>
+#include <cstring>
 #include <deque>
 #include <fstream>
 #include <imgui_internal.h>
@@ -30,6 +35,7 @@ namespace {
 namespace fs = std::filesystem;
 namespace panels = nereus::ros_viewer::panels;
 
+// Drawn over the 3D view and the course map, so the same in every theme (the interface uses palette()).
 const ImVec4 cyan(.32f, .86f, .82f, 1), muted(.47f, .57f, .64f, 1), white(.87f, .92f, .95f, 1);
 
 // "Talos · Robosub 2026" from the robot and task-pack ids (underscores become spaces, words capitalized).
@@ -189,7 +195,16 @@ struct CardTexture {
     GLuint rgb = 0, depth = 0;
     int rgbWidth = 0, rgbHeight = 0, depthWidth = 0, depthHeight = 0;
     bool flipped = false; // rendered (bottom-up) rather than decoded (top-down)
+    bool open = true;     // its camera window is shown
 };
+
+// Dockable host windows. The part after ### is the window's identity in saved layouts; the title can change.
+constexpr const char *kPoolView = "Pool view###pool_view", *kCourseMap = "Course map###course_map",
+                     *kSceneSettings = "Scene settings###scene_settings", *kDisplay = "Display###display",
+                     *kTfFrames = "TF frames###tf", *kHelp = "Controls & shortcuts###help";
+std::string cameraWindowName(const SensorCamera &camera) {
+    return camera.title + "###camera." + camera.id;
+}
 void upload(GLuint &texture, int &tw, int &th, const std::vector<std::uint8_t> &rgb, int w, int h) {
     if (!texture)
         glGenTextures(1, &texture);
@@ -230,11 +245,27 @@ class App {
     void demoTf();
     // --- UI
     void drawInterface(double time, float dt);
+    void drawMenuBar();
+    void drawViewMenu();
+    void drawThemeMenu();
+    void drawWindowsMenu();
+    void drawLayoutMenu();
+    void drawCommandBar();
+    void drawPoolView(double time, float dt);
+    void drawCameraWindows();
+    void drawMapWindow();
+    void drawSceneSettingsWindow();
+    void drawDisplayWindow();
+    void drawTfWindow();
+    void drawHelpWindow();
+    void handleShortcuts();
+    void setViewMode(int mode);
     void drawToolbar(float left, int &oldMode);
     void registerHostItems();
     void toolbarSceneSettings();
-    void drawSceneSettingsPopup();
+    void drawSceneSettings();
     void toolbarPoolViewer();
+    void drawDisplaySettings();
     void toolbarView();
     void toolbarFocus();
     void loadMappingMarkers();
@@ -248,9 +279,8 @@ class App {
     void toolbarMpcPath();
     void toolbarThrust();
     void toolbarPreviewTask();
-    void drawCameraCard(std::size_t index, float width, float maxHeight);
-    void drawCourseMap(float width, float height, bool interactive);
-    void drawMinimap(float width);
+    void drawCameraCard(std::size_t index);
+    void drawCourseMap(float width, float height, bool compact);
     void drawWaterControls();
     void pill(const std::string &text, ImVec4 tint);
     void sectionHeading(const char *text);
@@ -258,6 +288,57 @@ class App {
     void saveCameraImages(const fs::path &screenshot);
     double cardPeriod(std::size_t camera) const;
     void renderLocalCards(double t, const rendering::Scene &mainScene);
+    // --- window layout
+    struct WindowEntry {
+        std::string key, name, label; // stable key ("panel.<id>", "camera.<id>", "map", ...), ImGui name, title
+        bool *open;
+    };
+    std::vector<WindowEntry> windowEntries();
+    WindowStates::Flags windowFlags();
+    WindowStates::Flags toolbarFlags();
+    void windowContextMenu(const std::string &key);
+    void pinnedWindowButton(const WindowEntry &);
+    void showWindow(const WindowEntry &);
+    void drawToolbarCustomization();
+    void resetToolbar();
+    void drawWindowControls();
+    void handleWindowEdges();
+    void setTheme(const std::string &id);
+    // Interface scale: 0 follows the desktop (the window's content scale); the title bar always does.
+    float uiScaleSetting_ = 1, pendingUiScale_ = -1;
+    float resolvedUiScale() const;
+    void setUiScale(float setting); // remembered in viewer.yaml
+    void applyPendingUiScale();     // between frames: fonts and style at the new scale
+    void drawScaleMenu();
+    void savePreference(const char *key, const YAML::Node &value);
+    // Side columns snapped shut (dragged nearly closed, the View menu, Ctrl+[ / Ctrl+]): their windows close and
+    // dragging the pool view's edge out brings them back, as the old sidebars' edges did.
+    struct SideState {
+        bool collapsed = false;
+        std::vector<std::string> keys; // windows closed with the side
+        float width = 0;               // last comfortable width
+        float pending = 0;             // width to give it once its windows show again (dragged out)
+        bool dragging = false;         // the viewer follows the held mouse: snap shut / pull back out live
+    };
+    std::array<SideState, 2> sides_;
+    void updateSides();
+    void collapseSide(Side);
+    void expandSide(Side);
+    void toggleSide(Side);
+    bool sideShown(Side) const;
+    void resetSides();
+    bool drawSideHandle(Side, ImVec2 viewPos, ImVec2 viewSize, bool draw);
+    std::string layoutSnapshot();
+    void rememberDefaults();
+    void applyCommandLineWindows();
+    void requestLayout(const std::string &name);
+    void applyPendingIni();
+    void applyPreset(const std::string &id);
+    void saveLayout(const std::string &name);
+    void toggleMaximized();
+    void persistLayout(bool force);
+    void focusIfRequested(const std::string &window);
+    std::string defaultPreset() const;
 
     Options opt_;
     YAML::Node config_;
@@ -298,9 +379,9 @@ class App {
     // settings
     Look look_;
     ObserverSettings observer_;
-    bool openTfPopup_ = false, openObserverPopup_ = false, openDepth_ = false;
-    bool openSceneSettings_ = false, showTf_ = false, tfNames_ = true, tfTreeOpen_ = false, detections_ = false,
-         showMpc_ = false, showThrust_ = false, largeMap_ = false, focusMap_ = false, demoMode_ = false;
+    bool openDepth_ = false;
+    bool showTf_ = false, tfNames_ = true, tfTreeOpen_ = false, detections_ = false, showMpc_ = false,
+         showThrust_ = false, demoMode_ = false;
     float thrustScale_ = .05f; // arrow metres per newton (host yaml thrust_arrows.metres_per_newton)
     float tfAxisLength_ = .12f, mapZoom_ = 1, toolbarLeft_ = 0;
     int toolbarOldMode_ = 0;
@@ -335,10 +416,28 @@ class App {
     std::vector<double> cardDue_;   // next render time per card
     std::vector<char> cardVisible_; // drawn on screen last frame (scrolled-out / hidden cards are skipped)
     std::size_t nextCardTurn_ = 0;  // round-robin start so cards share the frame budget evenly
-    // layout
-    float cameraSidebarWidth_ = 0, toolbarHeight_ = 80;
-    bool cameraSidebarVisible_ = true, cameraSidebarResized_ = false;
-    PanelEdge panelEdge_, cameraEdge_;
+    // windows: open state of the host windows (camera windows: CardTexture::open; panels: the composition)
+    bool mapOpen_ = true, sceneOpen_ = false, displayOpen_ = false, tfOpen_ = false, helpOpen_ = false;
+    bool focusMap_ = false, camerasShown_ = true;
+    ImVec2 sceneAnchor_{120, 140}, displayAnchor_{220, 140}, tfAnchor_{320, 140};
+    float toolbarHeight_ = 46;
+    // layout: dock space, built-in presets, the session layout saved in the config directory, named layouts
+    ImGuiID dockspace_ = 0;
+    WindowStates windowStates_{[this] {
+        auto flags = windowFlags();
+        for (const auto &flag : toolbarFlags())
+            flags.push_back(flag);
+        return flags;
+    }};
+    std::map<std::string, bool> pins_;        // windows pinned to the toolbar, by window key
+    bool titleDrag_ = false;                  // a press on the empty title bar that becomes a window move once dragged
+    std::map<std::string, bool> defaultOpen_; // window states a built-in layout resets to
+    std::set<std::string> focusOnce_;         // windows brought to front (tab selected) on their next frame
+    std::string pendingPreset_, pendingIni_, beforeMaximize_, layoutMessage_;
+    fs::path sessionIni_, layoutDir_, preferencesFile_;
+    bool persist_ = false, layoutReady_ = false, layoutLocked_ = false, maximized_ = false, commandLineDone_ = false,
+         presetApplied_ = false;
+    char layoutName_[64]{};
     Clock::time_point start_;
     double frameSeconds_ = 0;
     // profiling
@@ -361,13 +460,8 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     config_ = YAML::LoadFile(configPath.string());
     configDir_ = configPath.parent_path();
     demoMode_ = opt_.demo;
-    for (const auto &name : opt_.open) {
-        openSceneSettings_ |= name == "scene-settings";
-        largeMap_ = focusMap_ = largeMap_ || name == "map";
-        openTfPopup_ |= name == "tf";
-        openObserverPopup_ |= name == "pool-viewer";
+    for (const auto &name : opt_.open)
         openDepth_ |= name == "depth";
-    }
     showTf_ = opt_.showTf;
     detections_ = opt_.detections.value_or(lookup(config_, {"detections", "enabled"}).as<bool>(true));
     showMpc_ = opt_.mpcPath;
@@ -401,9 +495,65 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     ros_->setHonorDeleteAll(!opt_.keepDetections && lookup(config_, {"detections", "honor_delete_all"}).as<bool>(true));
     const int width = lookup(config_, {"window", "width"}).as<int>(1480),
               height = lookup(config_, {"window", "height"}).as<int>(940);
+    const bool customTitleBar =
+        !opt_.systemTitleBar.value_or(lookup(config_, {"window", "title_bar"}).as<std::string>("custom") == "system");
     window_ =
         std::make_unique<Window>(width, height, lookup(config_, {"branding", "window_title"}).as<std::string>("Nereus"),
-                                 opt_.hidden, opt_.vsync);
+                                 opt_.hidden, opt_.vsync, customTitleBar);
+    // Window layout: the operator's last session (config directory), unless --layout names one. Capture runs
+    // (--frames) neither read nor write it, so they always see the configured built-in layout.
+    dockspace_ = ImHashStr("nereus_dockspace");
+    defaultOpen_ = {{"map", true}, {"scene_settings", false}, {"display", false}, {"tf", false}, {"help", false}};
+    windowStates_.install();
+    pins::install();
+    const auto configHome = configDirectory();
+    persist_ = opt_.frames == 0 && !configHome.empty();
+    if (!configHome.empty()) {
+        sessionIni_ = configHome / "viewer_layout.ini";
+        layoutDir_ = configHome / "layouts";
+    }
+    if (!opt_.layout.empty())
+        requestLayout(opt_.layout);
+    else if (persist_ && fs::exists(sessionIni_)) {
+        ImGui::LoadIniSettingsFromDisk(sessionIni_.c_str());
+        layoutReady_ = ImGui::DockBuilderGetNode(dockspace_) != nullptr;
+    }
+    applyPendingIni();
+    if (!layoutReady_ && pendingPreset_.empty())
+        pendingPreset_ = defaultPreset();
+    // Theme: --theme, else the operator's last choice (viewer.yaml in the config directory), else the host config.
+    if (!configHome.empty())
+        preferencesFile_ = configHome / "viewer.yaml";
+    std::string theme = opt_.theme;
+    if (theme.empty() && persist_ && fs::exists(preferencesFile_))
+        try {
+            theme = YAML::LoadFile(preferencesFile_.string())["theme"].as<std::string>("");
+        } catch (const std::exception &error) {
+            std::cerr << "nereus-viewer: ignoring " << preferencesFile_ << ": " << error.what() << '\n';
+        }
+    if (theme.empty())
+        theme = lookup(config_, {"theme"}).as<std::string>(themes().front().id);
+    if (!applyTheme(theme)) {
+        std::cerr << "nereus-viewer: unknown theme '" << theme << "'; using " << themes().front().id << '\n';
+        applyTheme(themes().front().id);
+    }
+    // Interface scale: --ui-scale, else the operator's last choice, else the host config; "auto" follows the desktop.
+    YAML::Node scaleSetting = lookup(config_, {"interface_scale"});
+    if (persist_ && opt_.uiScale.empty() && fs::exists(preferencesFile_))
+        try {
+            if (auto saved = YAML::LoadFile(preferencesFile_.string())["interface_scale"])
+                scaleSetting = saved;
+        } catch (const std::exception &) {
+        }
+    const std::string scaleText = !opt_.uiScale.empty() ? opt_.uiScale : scaleSetting.as<std::string>("1");
+    try {
+        uiScaleSetting_ = scaleText == "auto" ? 0.f : std::clamp(std::stof(scaleText), .5f, 4.f);
+    } catch (const std::exception &) {
+        std::cerr << "nereus-viewer: interface scale '" << scaleText << "' is not a number or auto; using 1\n";
+        uiScaleSetting_ = 1;
+    }
+    pendingUiScale_ = resolvedUiScale();
+    applyPendingUiScale();
     fs::path shaders = opt_.shaders;
 #ifdef NEREUS_RENDERING_SHADERS
     if (shaders.empty())
@@ -437,6 +587,11 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
 }
 
 App::~App() {
+    try {
+        persistLayout(true); // before the panels (their window states) go
+    } catch (const std::exception &error) {
+        std::cerr << "nereus-viewer: layout not saved: " << error.what() << '\n';
+    }
     panelRos_.stop();
     composition_.reset();
     model_.reset();
@@ -654,6 +809,11 @@ void App::loadScenario(const std::string &json) {
     }
     if (!composition_)
         buildPanels();
+    // New windows (this scenario's cameras, the panels) start as configured, then as the saved layout has them.
+    rememberDefaults();
+    windowStates_.apply();
+    if (!commandLineDone_)
+        applyCommandLineWindows();
     std::string initial =
         !opt_.initialFocus.empty() ? opt_.initialFocus : lookup(config_, {"initial_focus"}).as<std::string>("Vehicle");
     if (!focusable(initial))
@@ -687,6 +847,17 @@ void App::buildPanels() {
     if (ros_->poseSource() == PoseSource::Estimate)
         dropSimulatorPanels(document); // real robot: no simulator run / rate controls
     composition_ = std::make_unique<panels::Composition>(document, context, registry_);
+    composition_->setWindowMenu([this] { drawWindowsMenu(); });
+    composition_->setWindowContextMenu([this](const std::string &id) { windowContextMenu("panel." + id); });
+    // A saved layout from before these panels existed (or of another composition) does not place them: start
+    // from the built-in layout instead of leaving every panel floating.
+    if (layoutReady_ && pendingPreset_.empty()) {
+        bool placed = composition_->empty();
+        for (const auto &window : composition_->panelWindows())
+            placed = placed || ImGui::FindWindowSettingsByID(ImHashStr(window.name.c_str())) != nullptr;
+        if (!placed)
+            pendingPreset_ = defaultPreset();
+    }
     for (const auto &entry : composition_->providers())
         if (auto run = std::dynamic_pointer_cast<panels::Run>(entry.second)) {
             runTracking_ = run;
@@ -1082,14 +1253,17 @@ void App::focusAtCursor(const SensorView &view, const rendering::RenderedFrame &
 // ------------------------------------------------------------------------------------------- widgets
 
 void App::pill(const std::string &text, ImVec4 tint) {
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(tint.x * .15f, tint.y * .15f, tint.z * .15f, 1));
+    const ImVec4 fill = tintedFill(tint);
+    ImGui::PushStyleColor(ImGuiCol_Button, fill);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, fill);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, fill);
     ImGui::PushStyleColor(ImGuiCol_Text, tint);
     ImGui::Button(text.c_str());
-    ImGui::PopStyleColor(2);
+    ImGui::PopStyleColor(4);
 }
 void App::sectionHeading(const char *text) {
     ImGui::PushFont(window_->small);
-    ImGui::TextColored(muted, "%s", text);
+    ImGui::TextColored(palette().muted, "%s", text);
     ImGui::PopFont();
 }
 std::string App::runTime() const {
@@ -1099,7 +1273,8 @@ std::string App::runTime() const {
     return value;
 }
 
-void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
+// One camera window's contents: source controls, the image fitted to the window, and the feed status.
+void App::drawCameraCard(std::size_t index) {
     auto &feed = ros_->feeds[index];
     auto &tex = cards_[index];
     const auto &camera = *feed.camera;
@@ -1113,32 +1288,49 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
         feed.depthDirty = false;
     }
     ImGui::PushID(camera.id.c_str());
-    ImGui::BeginChild("camera", {width, 0}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(cyan, "%s", camera.title.c_str());
-    ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 62);
-    if (ImGui::Button(feed.wantDepth ? "DEPTH" : "RGB", {62, 0})) {
-        feed.wantDepth = !feed.wantDepth;
-        ros_->refreshCameras();
-    }
     // Local rendering needs the simulator's truth pose; without it the card is the ROS image topic.
     const bool canLocal = demoMode_ || ros_->truthActive();
-    if (!demoMode_ && !canLocal) {
-        ImGui::PushFont(window_->small);
-        ImGui::TextDisabled("ROS image topic (no simulator truth pose)");
-        ImGui::PopFont();
-    }
-    ImGui::PushFont(window_->small);
-    ImGui::TextColored(muted, "%s  /  %d x %d", camera.model.c_str(), camera.k.width, camera.k.height);
     const bool depthShown = feed.wantDepth && tex.depth;
     const bool local = demoMode_ || (canLocal && !feed.rosMode);
-    ImGui::TextDisabled("Preview: %d x %d", depthShown ? tex.depthWidth : tex.rgbWidth,
-                        depthShown ? tex.depthHeight : tex.rgbHeight);
+    // RGB / Depth as a two-way switch, then "Main view" to show this camera in the pool view.
+    for (const bool depth : {false, true}) {
+        if (depth)
+            ImGui::SameLine(0, 1);
+        pushActiveColors(feed.wantDepth == depth);
+        if (pins::Button(depth ? "Depth" : "RGB") && feed.wantDepth != depth) {
+            feed.wantDepth = depth;
+            ros_->refreshCameras();
+        }
+        popActiveColors();
+    }
+    ImGui::SameLine();
+    const int cameraMode = int(index) + 2;
+    pushActiveColors(mode_ == cameraMode);
+    if (pins::Button("Main view"))
+        setViewMode(mode_ == cameraMode ? 0 : cameraMode);
+    popActiveColors();
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip(mode_ == cameraMode ? "Back to the orbit camera"
+                                              : "Look through this camera in the pool view");
+    ImGui::PushFont(window_->small);
+    const std::string model =
+        camera.model + "  /  " + std::to_string(camera.k.width) + " x " + std::to_string(camera.k.height);
+    const float modelWidth = ImGui::CalcTextSize(model.c_str()).x;
+    if (ImGui::GetContentRegionAvail().x > modelWidth + ui(120)) {
+        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - modelWidth); // takes the buttons' text baseline
+        ImGui::TextColored(palette().muted, "%s", model.c_str());
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Preview: %d x %d%s", depthShown ? tex.depthWidth : tex.rgbWidth,
+                              depthShown ? tex.depthHeight : tex.rgbHeight,
+                              !demoMode_ && !canLocal ? "\nROS image topic (no simulator truth pose)" : "");
+    }
+    const float footer = ImGui::GetFontSize() + ImGui::GetStyle().ItemSpacing.y + 2;
     ImGui::PopFont();
-    const float available = ImGui::GetContentRegionAvail().x;
-    const float w = std::min(available, maxHeight * float(camera.k.width) / float(camera.k.height));
-    const float h = w * float(camera.k.height) / float(camera.k.width);
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (available - w) / 2);
+    const auto available = ImGui::GetContentRegionAvail();
+    const float aspect = float(camera.k.width) / float(camera.k.height);
+    const float w = std::max(16.f, std::min(available.x, (available.y - footer) * aspect));
+    const float h = w / aspect;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (available.x - w) / 2);
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     const GLuint texture = depthShown ? tex.depth : tex.rgb;
     if (texture) {
@@ -1164,29 +1356,31 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
     ImGui::PushFont(window_->small);
     const bool connected = !demoMode_ && feed.connected();
     const bool depthFromRos = feed.wantDepth && !demoMode_;
-    ImGui::TextColored(local && !depthFromRos ? cyan
-                       : connected            ? cyan
-                                              : muted,
+    ImGui::TextColored(local && !depthFromRos ? palette().accent
+                       : connected            ? palette().accent
+                                              : palette().muted,
                        "%s",
                        demoMode_                ? "PREVIEW ONLY"
                        : local && !depthFromRos ? "LOCAL VIEW"
                        : connected              ? "CONNECTED"
                                                 : "NO SENSOR OUTPUT");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", demoMode_ ? "Scene preview. Start the simulator bridge to stream live cameras."
+                                          : "Images are rendered by the bridge at the physics pose. Observer "
+                                            "controls do not move the vehicle.");
     ImGui::SameLine();
     const bool sourceToggle = canLocal && !demoMode_;
     if (sourceToggle) {
         // Simulator: the source label toggles the card between this viewer's truth-pose render and
         // the images the bridge publishes to the robot stack.
         const bool stack = feed.rosMode;
-        ImGui::PushStyleColor(ImGuiCol_Button, stack ? ImVec4(.12f, .48f, .46f, 1) : ImVec4(.1f, .16f, .2f, 1));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, stack ? ImVec4(.16f, .6f, .56f, 1) : ImVec4(.16f, .25f, .31f, 1));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, stack ? ImVec4(.1f, .4f, .38f, 1) : ImVec4(.08f, .13f, .17f, 1));
+        pushActiveColors(stack);
         if (ImGui::SmallButton(stack ? "ROS (stack)###source" : "truth pose###source")) {
             feed.rosMode = !stack;
             ros_->refreshCameras();
             cardDue_[index] = 0; // render the local view immediately when switching back
         }
-        ImGui::PopStyleColor(3);
+        popActiveColors();
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip(
                 "Click to switch the card's source.\n"
@@ -1206,15 +1400,14 @@ void App::drawCameraCard(std::size_t index, float width, float maxHeight) {
                                 "Topic: %s",
                           feed.wantDepth ? camera.depthTopic.c_str() : camera.rgbTopic.c_str());
     ImGui::PopFont();
-    ImGui::EndChild();
     ImGui::PopID();
 }
 
 void App::drawWaterControls() {
     auto edited = look_.appearance.water;
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 3));
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 3));
-    ImGui::SetNextItemWidth(240);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ui(ImVec2(10, 3)));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ui(ImVec2(8, 3)));
+    ImGui::SetNextItemWidth(ui(240));
     ImGui::ColorEdit3("Water tint", edited.tint.data());
     ImGui::SameLine();
     if (ImGui::SmallButton("Clear blue")) {
@@ -1249,7 +1442,7 @@ void App::drawWaterControls() {
     slider("Blue absorption", edited.absorption[2], 0, 1, "%.3f /m");
     ImGui::TextDisabled("More red absorption\nmakes distant objects\nlook bluer.");
     ImGui::Columns(1);
-    ImGui::PushStyleColor(ImGuiCol_Text, muted);
+    ImGui::PushStyleColor(ImGuiCol_Text, palette().muted);
     ImGui::TextWrapped("Tint and haze accumulate along the underwater sightline. These settings change only this "
                        "viewer's rendering; the robot cameras are rendered by the bridge from the pool pack. "
                        "Exponent 1 / clear distance 0: exponential attenuation.");
@@ -1258,13 +1451,15 @@ void App::drawWaterControls() {
     ImGui::PopStyleVar(2);
 }
 
-void App::drawCourseMap(float width, float height, bool interactive) {
+// Scroll zooms, drag pans, clicking a task focuses the pool view on it. Compact (a small window): smaller labels,
+// the ui document's minimap labels, and landmarks marked hidden_in_minimap unlabelled.
+void App::drawCourseMap(float width, float height, bool compact) {
     const auto &s = *scenario_;
     const ImVec2 a = ImGui::GetCursorScreenPos();
     ImGui::InvisibleButton("course canvas", {width, height});
     const bool hovered = ImGui::IsItemHovered();
     auto &io = ImGui::GetIO();
-    if (interactive && hovered) {
+    if (hovered) {
         mapZoom_ = glm::clamp(mapZoom_ * std::exp(io.MouseWheel * .15f), 1.f, 8.f);
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
             mapPan_.x += io.MouseDelta.x;
@@ -1272,9 +1467,8 @@ void App::drawCourseMap(float width, float height, bool interactive) {
         }
     }
     const float length = s.poolLength, poolWidth = s.poolWidth;
-    const float scale = std::min((width - 36) / length, (height - 36) / poolWidth) * (interactive ? mapZoom_ : 1.f);
-    const ImVec2 center(a.x + width / 2 + (interactive ? mapPan_.x : 0),
-                        a.y + height / 2 + (interactive ? mapPan_.y : 0));
+    const float scale = std::min((width - 36) / length, (height - 36) / poolWidth) * mapZoom_;
+    const ImVec2 center(a.x + width / 2 + mapPan_.x, a.y + height / 2 + mapPan_.y);
     auto poolXY = [&](glm::vec2 p) {
         return ImVec2(center.x + (p.x - length / 2) * scale, center.y - (p.y - poolWidth / 2) * scale);
     };
@@ -1311,14 +1505,14 @@ void App::drawCourseMap(float width, float height, bool interactive) {
         if (found == s.landmarks.end())
             continue;
         const auto p = xy(glm::vec3(found->second.world[3]));
-        const float font = interactive ? 16 : 12;
+        const float font = compact ? ui(12) : ui(16);
         const ImVec2 textAt(p.x + 7, p.y + (index++ % 2 ? -19 : 4));
-        d->AddCircleFilled(p, interactive ? 5 : 4, color(cyan));
-        if (interactive || !hiddenInMinimap)
-            d->AddText(interactive ? window_->normal : window_->small, font, textAt, color(white),
-                       (!interactive && relabelMinimap ? entry["minimap_label"].as<std::string>() : key).c_str());
+        d->AddCircleFilled(p, compact ? ui(4) : ui(5), color(cyan));
+        if (!compact || !hiddenInMinimap)
+            d->AddText(compact ? window_->small : window_->normal, font, textAt, color(white),
+                       (compact && relabelMinimap ? entry["minimap_label"].as<std::string>() : key).c_str());
         (void)label;
-        if (interactive && hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
+        if (hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
             ImGui::GetMouseDragDelta().x * ImGui::GetMouseDragDelta().x +
                     ImGui::GetMouseDragDelta().y * ImGui::GetMouseDragDelta().y <
                 9 &&
@@ -1329,29 +1523,55 @@ void App::drawCourseMap(float width, float height, bool interactive) {
     const auto tip = xy(glm::vec3(body_[3]) + glm::vec3(body_[0]) * 1.3f);
     d->AddCircleFilled(p, 6, IM_COL32(255, 208, 96, 255));
     d->AddLine(p, tip, IM_COL32(255, 208, 96, 255), 3);
-    d->AddText(window_->small, 12, {p.x + 8, p.y - 15}, IM_COL32(255, 208, 96, 255), s.robotId.c_str());
+    d->AddText(window_->small, window_->small->FontSize, {p.x + ui(8), p.y - ui(15)}, IM_COL32(255, 208, 96, 255),
+               s.robotId.c_str());
     d->PopClipRect();
 }
 
-void App::drawMinimap(float width) {
-    ImGui::BeginChild("map", {width, 0}, ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
-    ImGui::AlignTextToFramePadding();
-    sectionHeading("COURSE MAP");
-    ImGui::SameLine();
-    if (ImGui::Button("Expand"))
-        largeMap_ = focusMap_ = true;
-    const auto available = ImGui::GetContentRegionAvail();
-    // Scale both canvas dimensions with the sidebar so height cannot cap the map's growth.
-    const float aspect = scenario_->poolWidth / scenario_->poolLength;
-    drawCourseMap(available.x, std::max(120.f, 36.f + (available.x - 36.f) * aspect), false);
-    ImGui::EndChild();
+void App::drawMapWindow() {
+    if (!mapOpen_)
+        return;
+    if (focusMap_) {
+        ImGui::SetNextWindowFocus();
+        focusMap_ = false;
+    }
+    focusIfRequested(kCourseMap);
+    ImGui::SetNextWindowSize(ui(ImVec2(520, 340)), ImGuiCond_FirstUseEver);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui(ImVec2(10, 8)));
+    const bool visible = ImGui::Begin(kCourseMap, &mapOpen_);
+    ImGui::PopStyleVar();
+    if (visible) {
+        windowContextMenu("map");
+        ImGui::PushFont(window_->small);
+        ImGui::AlignTextToFramePadding();
+        // The hint as far as it fits beside Fit pool.
+        const float room = ImGui::GetContentRegionAvail().x - buttonWidth("Fit pool") - ImGui::GetStyle().ItemSpacing.x;
+        for (const char *hint : {"Scroll zoom  /  drag pan  /  click a task to focus", "Scroll zoom  /  drag pan", ""})
+            if (ImGui::CalcTextSize(hint).x <= room) {
+                ImGui::TextDisabled("%s", hint);
+                break;
+            }
+        const bool fitted = mapZoom_ == 1 && mapPan_.x == 0 && mapPan_.y == 0;
+        ImGui::SameLine(
+            std::max(ImGui::GetCursorPosX(), ImGui::GetWindowContentRegionMax().x - buttonWidth("Fit pool")));
+        ImGui::BeginDisabled(fitted);
+        if (ImGui::SmallButton("Fit pool")) {
+            mapZoom_ = 1;
+            mapPan_ = {0, 0};
+        }
+        ImGui::EndDisabled();
+        ImGui::PopFont();
+        const auto space = ImGui::GetContentRegionAvail();
+        drawCourseMap(space.x, std::max(80.f, space.y), space.x < ui(520) || space.y < ui(320));
+    }
+    ImGui::End();
 }
 
-void App::drawSceneSettingsPopup() {
+void App::drawSceneSettings() {
     const float width = ImGui::GetContentRegionAvail().x;
     for (const auto &control : scenario_->ui["mechanism_controls"]) {
         ImGui::BeginDisabled(demoMode_ || !ros_->truthActive()); // simulator-only commands
-        if (ImGui::Button(control["label"].as<std::string>().c_str()))
+        if (pins::Button(control["label"].as<std::string>().c_str()))
             ros_->publishMechanism(control["topic"].as<std::string>(), control["value"].as<bool>(true));
         ImGui::EndDisabled();
     }
@@ -1362,35 +1582,35 @@ void App::drawSceneSettingsPopup() {
             ImGui::SetNextItemWidth(width * .17f);
             ImGui::SliderFloat("Caustics", &a.caustics, 0, 1, "%.2f");
             ImGui::SameLine();
-            ImGui::Checkbox("Surface", &a.surface);
+            pins::Checkbox("Surface", &a.surface);
             ImGui::SameLine();
-            ImGui::Checkbox("Shadows", &a.shadows);
+            pins::Checkbox("Shadows", &a.shadows);
             ImGui::Separator();
             int profile = a.outdoor ? 1 : 0;
-            ImGui::SetNextItemWidth(120);
-            if (ImGui::Combo("Lighting", &profile, "Indoor\0Outdoor\0")) {
+            ImGui::SetNextItemWidth(ui(120));
+            if (pins::Combo("Lighting", &profile, "Indoor\0Outdoor\0")) {
                 a.outdoor = profile == 1;
                 a.direct_light = a.outdoor ? 1.4f : 1.f;
                 a.ambient_light = a.outdoor ? .6f : .9f;
             }
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(130);
+            ImGui::SetNextItemWidth(ui(130));
             ImGui::SliderFloat("Brightness", &a.direct_light, 0, 4, "%.2f");
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(125);
+            ImGui::SetNextItemWidth(ui(125));
             ImGui::SliderFloat("Ambient", &a.ambient_light, 0, 2, "%.2f");
             if (a.outdoor) {
-                ImGui::SetNextItemWidth(160);
+                ImGui::SetNextItemWidth(ui(160));
                 ImGui::SliderFloat("Sun azimuth", &a.sun_azimuth, 0, 360, "%.0f deg");
                 ImGui::SameLine();
-                ImGui::SetNextItemWidth(140);
+                ImGui::SetNextItemWidth(ui(140));
                 ImGui::SliderFloat("Elevation", &a.sun_elevation, 5, 89, "%.0f deg");
                 ImGui::SameLine();
-                ImGui::SetNextItemWidth(120);
+                ImGui::SetNextItemWidth(ui(120));
                 ImGui::SliderFloat("Glare", &a.glare, 0, 2, "%.2f");
             } else
                 ImGui::TextDisabled("Diffuse indoor lighting. Switch to Outdoor to adjust sun and glare.");
-            ImGui::PushStyleColor(ImGuiCol_Text, muted);
+            ImGui::PushStyleColor(ImGuiCol_Text, palette().muted);
             ImGui::TextWrapped("Observer settings only: the bridge renders the robot cameras from the pool pack.");
             ImGui::PopStyleColor();
             ImGui::EndTabItem();
@@ -1404,124 +1624,126 @@ void App::drawSceneSettingsPopup() {
 }
 
 void App::toolbarSceneSettings() {
-    if (ImGui::Button("Scene settings") || openSceneSettings_) {
-        openSceneSettings_ = false;
-        ImGui::OpenPopup("scene_settings");
+    windowToggle("Scene", &sceneOpen_);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Scene settings: mechanism buttons, lighting and water appearance");
+    sceneAnchor_ = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y};
+}
+
+void App::drawSceneSettingsWindow() {
+    if (sceneOpen_) {
+        focusIfRequested(kSceneSettings);
+        if (beginToolWindow(kSceneSettings, &sceneOpen_, ui(ImVec2(780, 400)), sceneAnchor_)) {
+            windowContextMenu("scene_settings");
+            pins::beginScope("scene_settings", "Scene settings");
+            drawSceneSettings();
+            pins::endScope();
+        }
+        ImGui::End();
     }
-    // Anchored under the button and kept inside the window. A plain popup (no child window) so colour-picker
-    // sub-popups stack on it instead of dismissing it, and a fixed size so the tabs do not resize as they change.
-    const auto *viewport = ImGui::GetMainViewport();
-    const auto button = ImGui::GetItemRectMin();
-    const float y = ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y;
-    const float width = std::min(780.f, viewport->WorkSize.x - 16.f);
-    const float height = std::clamp(viewport->WorkPos.y + viewport->WorkSize.y - y - 8.f, 120.f, 400.f);
-    ImGui::SetNextWindowPos(
-        {std::clamp(button.x, viewport->WorkPos.x + 8.f, viewport->WorkPos.x + viewport->WorkSize.x - width - 8.f), y});
-    ImGui::SetNextWindowSize({width, height});
-    if (ImGui::BeginPopup("scene_settings")) {
-        drawSceneSettingsPopup();
-        ImGui::EndPopup();
-    }
+    if (pins::needsDrawing("scene_settings"))
+        pins::drawOffscreen("scene_settings", "Scene settings", [this] { drawSceneSettings(); });
 }
 
 void App::toolbarPoolViewer() {
-    sameLineIfFits(ImGui::CalcTextSize("Pool Viewer").x + 2 * ImGui::GetStyle().FramePadding.x);
-    if (ImGui::Button("Pool Viewer") || openObserverPopup_) {
-        openObserverPopup_ = false;
-        ImGui::OpenPopup("observer_visibility");
-    }
-    if (ImGui::BeginPopup("observer_visibility")) {
-        ImGui::Checkbox("Water", &observer_.water);
-        ImGui::Checkbox("Pool walls & deck", &observer_.walls);
-        ImGui::Checkbox("Pool floor", &observer_.floor);
-        if (!model_->pack().equipmentInstances().empty()) {
-            ImGui::Checkbox("AprilTag board", &look_.equipment);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("The equipment pack (calibration board) in this view; camera cards always show it.");
-        }
-        if (!mappingMarkers_.empty() && !demoMode_) {
-            ImGui::SeparatorText("Course");
-            ImGui::SetNextItemWidth(170);
-            ImGui::Combo("Source", &courseMode_, "Auto\0Pack layout\0Mapping (RViz)\0");
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Auto: the pack layout with simulator truth, the mapping estimate otherwise.\n"
-                                  "Mapping: riptide_meshes at the mapping TF frames, as RViz shows them.");
-            if (ros_->truthActive()) {
-                ImGui::BeginDisabled(courseFromMapping());
-                ImGui::Checkbox("Mapping ghost", &mappingGhost_);
-                ImGui::EndDisabled();
-                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                    ImGui::SetTooltip("Draw the mapping estimate translucent over the simulator course.");
-            }
-            drawMappingMeshList();
-        }
-        if (ros_->truthActive() && !demoMode_) { // simulator only: a real robot has the estimate alone
-            ImGui::SeparatorText("Localization estimate");
-            ImGui::Checkbox("Robot ghost", &robotGhost_);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Draw the robot translucent at the localization estimate (TF base_link).");
-            int gizmo = gizmoOnEstimate_ ? 1 : 0, follow = followEstimate_ ? 1 : 0;
-            ImGui::SetNextItemWidth(170);
-            if (ImGui::Combo("Control gizmo", &gizmo, "Truth (sim)\0Estimate (TF)\0"))
-                gizmoOnEstimate_ = gizmo == 1;
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip(
-                    "Where the drag axes and rings are drawn. Commands always go to the controller in its\n"
-                    "(estimate) frame; on Truth they are shown re-rooted at the sim robot.");
-            ImGui::SetNextItemWidth(170);
-            if (ImGui::Combo("Follow", &follow, "Truth (sim)\0Estimate (TF)\0"))
-                followEstimate_ = follow == 1;
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Robot the Follow camera tracks (the estimate with its jitter smoothed).");
-        }
-        ImGui::Checkbox("Surface reflections", &observer_.reflections);
-        ImGui::Checkbox("Frame stats (F3)", &showProfile_);
-        ImGui::SeparatorText("Viewer lighting");
-        int antialiasing = std::clamp(observer_.antialiasing, 1, 4) - 1;
-        ImGui::SetNextItemWidth(160);
-        if (ImGui::Combo("Anti-aliasing", &antialiasing,
-                         "Off\0"
-                         "2x\0"
-                         "3x\0"
-                         "4x\0"))
-            observer_.antialiasing = antialiasing + 1;
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Supersampling of this view and the camera cards: each pixel averages n x n samples.\n"
-                              "Costs about n^2 in GPU time and memory; never changes the simulated camera images.");
-        ImGui::BeginDisabled(observer_.lighting == 3);
-        ImGui::Checkbox("Shadows", &observer_.shadows);
-        ImGui::EndDisabled();
-        ImGui::SetNextItemWidth(160);
-        ImGui::Combo("Lighting", &observer_.lighting, "Scene lighting\0Indoor\0Outdoor\0Sterile\0");
-        ImGui::SetNextItemWidth(160);
-        ImGui::SliderFloat("Exposure", &observer_.exposure, .4f, 2.f, "%.2fx");
-        ImGui::BeginDisabled(observer_.lighting == 3);
-        ImGui::SetNextItemWidth(160);
-        ImGui::SliderFloat("Brightness", &observer_.brightness, 0.f, 4.f, "%.2fx");
-        ImGui::EndDisabled();
-        ImGui::SetNextItemWidth(160);
-        ImGui::SliderFloat("Ambient", &observer_.ambient, 0.f, 3.f, "%.2fx");
-        if (ImGui::Button("Reset lighting", {-1, 30}))
-            observer_.resetLighting();
-        ImGui::EndPopup();
-    }
+    windowToggle("Display", &displayOpen_);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("What this view shows: pool, course source, estimate ghost, viewer lighting");
+    displayAnchor_ = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y};
 }
 
-void App::toolbarView() {
-    const auto &s = *scenario_;
-    ImGui::SetNextItemWidth(110);
-    toolbarOldMode_ = mode_;
-    std::string views = "Orbit";
-    views += '\0';
-    views += "Free camera";
-    views += '\0';
-    for (const auto &camera : s.cameras) {
-        views += camera.id;
-        views += '\0';
+void App::drawDisplayWindow() {
+    if (displayOpen_) {
+        focusIfRequested(kDisplay);
+        if (beginToolWindow(kDisplay, &displayOpen_, ui(ImVec2(340, 0)), displayAnchor_)) {
+            windowContextMenu("display");
+            pins::beginScope("display", "Display");
+            drawDisplaySettings();
+            pins::endScope();
+        }
+        ImGui::End();
     }
-    views += '\0';
-    ImGui::Combo("##view", &mode_, views.c_str());
-    if (mode_ == 1 && toolbarOldMode_ != 1) {
+    if (pins::needsDrawing("display"))
+        pins::drawOffscreen("display", "Display", [this] { drawDisplaySettings(); });
+}
+
+// Observer visibility and lighting: what this view draws, never what the robot cameras see.
+void App::drawDisplaySettings() {
+    pins::Checkbox("Water", &observer_.water);
+    pins::Checkbox("Pool walls & deck", &observer_.walls);
+    pins::Checkbox("Pool floor", &observer_.floor);
+    if (!model_->pack().equipmentInstances().empty()) {
+        pins::Checkbox("AprilTag board", &look_.equipment);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("The equipment pack (calibration board) in this view; camera cards always show it.");
+    }
+    if (!mappingMarkers_.empty() && !demoMode_) {
+        ImGui::SeparatorText("Course");
+        ImGui::SetNextItemWidth(ui(170));
+        pins::Combo("Source", &courseMode_, "Auto\0Pack layout\0Mapping (RViz)\0");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Auto: the pack layout with simulator truth, the mapping estimate otherwise.\n"
+                              "Mapping: riptide_meshes at the mapping TF frames, as RViz shows them.");
+        if (ros_->truthActive()) {
+            ImGui::BeginDisabled(courseFromMapping());
+            pins::Checkbox("Mapping ghost", &mappingGhost_);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Draw the mapping estimate translucent over the simulator course.");
+        }
+        drawMappingMeshList();
+    }
+    if (ros_->truthActive() && !demoMode_) { // simulator only: a real robot has the estimate alone
+        ImGui::SeparatorText("Localization estimate");
+        pins::Checkbox("Robot ghost", &robotGhost_);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Draw the robot translucent at the localization estimate (TF base_link).");
+        int gizmo = gizmoOnEstimate_ ? 1 : 0, follow = followEstimate_ ? 1 : 0;
+        ImGui::SetNextItemWidth(ui(170));
+        if (pins::Combo("Control gizmo", &gizmo, "Truth (sim)\0Estimate (TF)\0"))
+            gizmoOnEstimate_ = gizmo == 1;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Where the drag axes and rings are drawn. Commands always go to the controller in its\n"
+                              "(estimate) frame; on Truth they are shown re-rooted at the sim robot.");
+        ImGui::SetNextItemWidth(ui(170));
+        if (pins::Combo("Follow", &follow, "Truth (sim)\0Estimate (TF)\0"))
+            followEstimate_ = follow == 1;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Robot the Follow camera tracks (the estimate with its jitter smoothed).");
+    }
+    pins::Checkbox("Surface reflections", &observer_.reflections);
+    pins::Checkbox("Frame stats (F3)", &showProfile_);
+    ImGui::SeparatorText("Viewer lighting");
+    int antialiasing = std::clamp(observer_.antialiasing, 1, 4) - 1;
+    ImGui::SetNextItemWidth(ui(160));
+    if (pins::Combo("Anti-aliasing", &antialiasing,
+                    "Off\0"
+                    "2x\0"
+                    "3x\0"
+                    "4x\0"))
+        observer_.antialiasing = antialiasing + 1;
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Supersampling of this view and the camera cards: each pixel averages n x n samples.\n"
+                          "Costs about n^2 in GPU time and memory; never changes the simulated camera images.");
+    ImGui::BeginDisabled(observer_.lighting == 3);
+    pins::Checkbox("Shadows", &observer_.shadows);
+    ImGui::EndDisabled();
+    ImGui::SetNextItemWidth(ui(160));
+    pins::Combo("Lighting", &observer_.lighting, "Scene lighting\0Indoor\0Outdoor\0Sterile\0");
+    ImGui::SetNextItemWidth(ui(160));
+    ImGui::SliderFloat("Exposure", &observer_.exposure, .4f, 2.f, "%.2fx");
+    ImGui::BeginDisabled(observer_.lighting == 3);
+    ImGui::SetNextItemWidth(ui(160));
+    ImGui::SliderFloat("Brightness", &observer_.brightness, 0.f, 4.f, "%.2fx");
+    ImGui::EndDisabled();
+    ImGui::SetNextItemWidth(ui(160));
+    ImGui::SliderFloat("Ambient", &observer_.ambient, 0.f, 3.f, "%.2fx");
+    if (pins::Button("Reset lighting", {-1, ui(30)}))
+        observer_.resetLighting();
+}
+
+void App::setViewMode(int mode) {
+    if (mode == 1 && mode_ != 1) {
         // Continue from the last displayed view, including sensor-camera roll.
         const glm::mat4 cameraPose = glm::inverse(viewportView_.view);
         const glm::vec3 forward = -glm::normalize(glm::vec3(cameraPose[2]));
@@ -1532,11 +1754,33 @@ void App::toolbarView() {
         const glm::vec3 up(cameraPose[1]);
         freeRoll_ = std::atan2(glm::dot(up, right), glm::dot(up, glm::cross(right, forward)));
     }
+    mode_ = mode;
+}
+
+void App::toolbarView() {
+    const auto &s = *scenario_;
+    sameLineIfFits(ui(130));
+    ImGui::SetNextItemWidth(ui(130));
+    toolbarOldMode_ = mode_;
+    std::string views = "Orbit";
+    views += '\0';
+    views += "Free camera";
+    views += '\0';
+    for (const auto &camera : s.cameras) {
+        views += camera.id;
+        views += '\0';
+    }
+    views += '\0';
+    int mode = mode_;
+    if (ImGui::Combo("##view", &mode, views.c_str()))
+        setViewMode(mode);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Camera: orbit, free camera (WASD), or look through a robot camera");
 }
 
 void App::toolbarFocus() {
-    sameLineIfFits(toolbarLeft_ > 640 ? 132 : 110);
-    ImGui::SetNextItemWidth(toolbarLeft_ > 640 ? 132 : 110);
+    sameLineIfFits(toolbarLeft_ > 640 ? 150 : 120);
+    ImGui::SetNextItemWidth(toolbarLeft_ > 640 ? 150 : 120);
     std::string focuses;
     for (const auto &name : focusNames_) {
         focuses += name;
@@ -1545,47 +1789,65 @@ void App::toolbarFocus() {
     focuses += '\0';
     if (ImGui::Combo("##focus", &selectedFocus_, focuses.c_str()))
         focus(focusNames_.at(std::size_t(selectedFocus_)));
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Focus: jump the camera to the vehicle, a mechanism or a course element");
 }
 
 void App::toolbarFollow() {
-    sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("Follow").x);
     if (!presetFor(focusName_).follow)
         follow_ = false;
     ImGui::BeginDisabled(!presetFor(focusName_).follow);
-    ImGui::Checkbox("Follow", &follow_);
+    toggleChip("Follow", &follow_);
     ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Keep the camera on the focus target as it moves (panning detaches it)");
 }
 
 void App::toolbarLabels() {
-    sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("Labels").x);
-    ImGui::Checkbox("Labels", &labels_);
+    toggleChip("Labels", &labels_);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Name the course elements in the view");
 }
 
 void App::toolbarTf() {
-    sameLineIfFits(ImGui::CalcTextSize("TF").x + 2 * ImGui::GetStyle().FramePadding.x);
-    if (ImGui::Button("TF") || openTfPopup_) {
-        openTfPopup_ = false;
-        ImGui::OpenPopup("TF display");
-    }
+    if (toggleChipWithMenu("TF", &showTf_, "tf_settings"))
+        tfOpen_ = !tfOpen_;
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("TF frames: names, axis length and the frame tree");
+    tfAnchor_ = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y};
+}
+
+void App::drawTfWindow() {
     tfTreeOpen_ = false;
-    if (ImGui::BeginPopup("TF display")) {
-        tfTreeOpen_ = true;
-        ImGui::Checkbox("Show TF frames", &showTf_);
-        ImGui::Checkbox("Frame names", &tfNames_);
-        ImGui::SetNextItemWidth(220);
-        ImGui::SliderFloat("Axis length", &tfAxisLength_, .02f, 1.f, "%.2f m");
-        ImGui::TextUnformatted("X: red   Y: green   Z: blue");
-        drawTfTree(tfTree_, scenario_->mapFrame);
-        ImGui::TextDisabled("Axes show through objects. Unavailable frames cannot reach the fixed frame.");
-        ImGui::TextDisabled("%s", demoMode_ ? "Preview: robot-pack frames at the preview pose."
-                                            : "Raw ROS TF in the fixed frame, including localization drift.");
-        ImGui::EndPopup();
+    const auto toggles = [this] {
+        pins::Checkbox("Show TF frames", &showTf_);
+        pins::Checkbox("Frame names", &tfNames_);
+    };
+    if (tfOpen_) {
+        focusIfRequested(kTfFrames);
+        if (beginToolWindow(kTfFrames, &tfOpen_, ui(ImVec2(420, 520)), tfAnchor_)) {
+            windowContextMenu("tf");
+            tfTreeOpen_ = true;
+            pins::beginScope("tf", "TF frames");
+            toggles();
+            pins::endScope();
+            ImGui::SetNextItemWidth(ui(220));
+            ImGui::SliderFloat("Axis length", &tfAxisLength_, .02f, 1.f, "%.2f m");
+            ImGui::TextUnformatted("X: red   Y: green   Z: blue");
+            drawTfTree(tfTree_, scenario_->mapFrame);
+            ImGui::TextDisabled("Axes show through objects. Unavailable frames cannot reach the fixed frame.");
+            ImGui::TextDisabled("%s", demoMode_ ? "Preview: robot-pack frames at the preview pose."
+                                                : "Raw ROS TF in the fixed frame, including localization drift.");
+        }
+        ImGui::End();
     }
+    if (pins::needsDrawing("tf"))
+        pins::drawOffscreen("tf", "TF frames", toggles);
 }
 
 void App::drawDetectionSettings(bool includeEnable) {
     if (includeEnable) {
-        ImGui::Checkbox("Show detections", &detections_);
+        pins::Checkbox("Show detections", &detections_);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Detector markers (%s), placed once when observed and then fixed in the world.\n"
                               "Truth: simulator pose at image capture. Estimate: TF at the image stamp.",
@@ -1594,9 +1856,9 @@ void App::drawDetectionSettings(bool includeEnable) {
     if (ros_->truthPlacementAvailable()) {
         // Truth/both only exist with a simulator; a real robot has the estimate alone.
         ImGui::BeginDisabled(!detections_);
-        ImGui::SetNextItemWidth(130);
+        ImGui::SetNextItemWidth(ui(130));
         int placement = int(ros_->detectionMode());
-        if (ImGui::Combo("Placement", &placement, "Pose source\0Truth\0Estimate\0Both\0"))
+        if (pins::Combo("Placement", &placement, "Pose source\0Truth\0Estimate\0Both\0"))
             ros_->setDetectionMode(DetectionMode(placement));
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
@@ -1604,7 +1866,7 @@ void App::drawDetectionSettings(bool includeEnable) {
                               "estimate (RViz-like TF), or both (truth solid, estimate cyan outline).");
     }
     bool keep = !ros_->honorDeleteAll();
-    if (ImGui::Checkbox("Keep detections (ignore DELETEALL)", &keep))
+    if (pins::Checkbox("Keep detections (ignore DELETEALL)", &keep))
         ros_->setHonorDeleteAll(!keep);
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("The detector clears its markers every frame; keeping them lets each observation live out\n"
@@ -1620,7 +1882,7 @@ void App::drawMappingMeshList() {
         "Meshes (" + std::to_string(shown) + "/" + std::to_string(mappingMarkers_.size()) + " shown)###mapping_meshes";
     if (!ImGui::TreeNode(title.c_str()))
         return;
-    ImGui::SetNextItemWidth(260);
+    ImGui::SetNextItemWidth(ui(260));
     ImGui::InputTextWithHint("##mesh_filter", "Search label, mesh or frame", meshFilter_, sizeof(meshFilter_));
     const bool filtering = meshFilter_[0] != 0;
     // While filtering, the buttons act on the matches only.
@@ -1642,7 +1904,7 @@ void App::drawMappingMeshList() {
             continue;
         any = true;
         ImGui::PushID(marker.name.c_str());
-        ImGui::Checkbox(marker.label.c_str(), &marker.visible);
+        pins::Checkbox(marker.label.c_str(), &marker.visible);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Mesh %s at TF frame %s", marker.mesh.c_str(), marker.frame.c_str());
         ImGui::PopID();
@@ -1660,13 +1922,13 @@ void App::drawPointCloudSettings() {
     ImGui::SeparatorText("Point clouds");
     for (auto &layer : ros_->pointClouds) {
         ImGui::PushID(layer.id.c_str());
-        ImGui::Checkbox(layer.title.c_str(), &layer.enabled);
+        pins::Checkbox(layer.title.c_str(), &layer.enabled);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s\nNewest message only, placed once in the fixed frame%s.", layer.topic.c_str(),
                               ros_->truthActive() ? " (camera clouds at the simulator truth pose)" : "");
         if (layer.enabled) {
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(80);
+            ImGui::SetNextItemWidth(ui(80));
             ImGui::SliderFloat("##size", &layer.size, 1, 8, "%.0f px");
             ImGui::SameLine();
             const bool stale = layer.data && std::chrono::duration<double>(Clock::now() - layer.received).count() > 2;
@@ -1684,16 +1946,12 @@ void App::drawPointCloudSettings() {
 void App::toolbarDetections() {
     if (demoMode_)
         return;
-    sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
-                   ImGui::CalcTextSize("Detections").x + ImGui::GetFrameHeight() + 4);
-    ImGui::Checkbox("Detections", &detections_);
+    if (toggleChipWithMenu("Detections", &detections_, "detection_options"))
+        ImGui::OpenPopup("detection_options");
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Detector markers (%s), placed once when observed and then fixed in the world.\n"
                           "Truth: simulator pose at image capture. Estimate: TF at the image stamp.",
                           ros_->detectionTopic.c_str());
-    ImGui::SameLine();
-    if (ImGui::ArrowButton("##detection_options", ImGuiDir_Down))
-        ImGui::OpenPopup("detection_options");
     if (ImGui::BeginPopup("detection_options")) {
         drawDetectionSettings(false);
         ImGui::EndPopup();
@@ -1703,8 +1961,7 @@ void App::toolbarDetections() {
 void App::toolbarMpcPath() {
     if (demoMode_)
         return;
-    sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("MPC path").x);
-    ImGui::Checkbox("MPC path", &showMpc_);
+    toggleChip("MPC path", &showMpc_);
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Predicted MPC trajectory over its horizon (%s, orange).\n"
                           "Drawn relative to the simulator vehicle, so localization drift does not offset it.\n"
@@ -1715,8 +1972,7 @@ void App::toolbarMpcPath() {
 void App::toolbarThrust() {
     if (demoMode_ || scenario_->thrusterMounts.empty())
         return;
-    sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("Thrust").x);
-    ImGui::Checkbox("Thrust", &showThrust_);
+    toggleChip("Thrust", &showThrust_);
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Commanded thruster forces (%s) as arrows from each thruster along its axis,\n"
                           "%.2f m per newton; nothing is drawn while the controller is not publishing.",
@@ -1725,7 +1981,8 @@ void App::toolbarThrust() {
 
 void App::toolbarPreviewTask() {
     if (demoMode_ && !demoNames_.empty()) {
-        ImGui::SameLine();
+        sameLineIfFits(ui(170));
+        ImGui::SetNextItemWidth(ui(170));
         std::string choices;
         for (const auto &name : demoNames_) {
             choices += name;
@@ -1743,6 +2000,23 @@ void App::drawToolbar(float left, int &oldMode) {
     if (composition_)
         composition_->drawToolbar();
     oldMode = toolbarOldMode_;
+    for (const auto &entry : windowEntries())
+        if (pins_[entry.key])
+            pinnedWindowButton(entry);
+    pins::drawPinned(); // controls pinned from the panels
+    // Customize: the trailing button or a right-click anywhere on the toolbar.
+    sameLineIfFits(ImGui::GetFrameHeight());
+    if (ImGui::Button("+", {ImGui::GetFrameHeight(), 0}))
+        ImGui::OpenPopup("toolbar_customize");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Customize the toolbar (or right-click it): show or hide its buttons, pin windows");
+    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && ImGui::IsMouseReleased(ImGuiMouseButton_Right) &&
+        !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId)) // a pinned control's own menu takes its click
+        ImGui::OpenPopup("toolbar_customize");
+    if (ImGui::BeginPopup("toolbar_customize")) {
+        drawToolbarCustomization();
+        ImGui::EndPopup();
+    }
 }
 
 // Host-provided toolbar items and panels: an explicit table, no static self-registration. Each type can be
@@ -1776,103 +2050,479 @@ void App::registerHostItems() {
         });
 }
 
+// The frame: menu bar and command bar (fixed), then the dock space holding the pool view and every window.
 void App::drawInterface(double time, float dt) {
-    auto &io = ImGui::GetIO();
-    const float W = io.DisplaySize.x, H = io.DisplaySize.y;
-    ImGui::SetNextWindowPos({0, 0});
-    ImGui::SetNextWindowSize({W, H});
-    ImGui::Begin("Nereus", nullptr,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar |
-                     ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::SetScrollY(0);
-    const std::string headerTitle = lookup(config_, {"branding", "header"}).as<std::string>("NEREUS");
-    std::string headerSubtitle = scenario_ ? scenarioLabel(*scenario_) : "";
-    std::transform(headerSubtitle.begin(), headerSubtitle.end(), headerSubtitle.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-    headerSubtitle = lookup(config_, {"branding", "subtitle"}).as<std::string>(headerSubtitle);
-    ImGui::PushFont(window_->title);
-    ImGui::TextUnformatted(headerTitle.c_str());
+    pins::newFrame();
+    handleShortcuts();
+    drawMenuBar();
+    drawCommandBar();
+    auto *viewport = ImGui::GetMainViewport();
+    if (!pendingPreset_.empty() && scenario_) {
+        applyPreset(pendingPreset_);
+        pendingPreset_.clear();
+    }
+    ImGuiDockNodeFlags dockFlags = ImGuiDockNodeFlags_NoCloseButton; // each tab has its own close box
+    if (layoutLocked_)
+        dockFlags |= ImGuiDockNodeFlags_NoUndocking | ImGuiDockNodeFlags_NoResize | ImGuiDockNodeFlags_NoDocking;
+    ImGui::DockSpaceOverViewport(dockspace_, viewport, dockFlags);
+    updateSides();
+    if (scenario_ && runTracking_)
+        runScore_.reset(runTracking_->state().score);
+    drawPoolView(time, dt);
+    if (scenario_) {
+        drawCameraWindows();
+        drawMapWindow();
+        drawSceneSettingsWindow();
+        drawDisplayWindow();
+        drawTfWindow();
+        if (composition_) {
+            composition_->drawPanels();
+            composition_->drawWindows();
+        }
+    }
+    drawHelpWindow();
+    pins::drawMenu();
+    handleWindowEdges();
+    windowStates_.update();
+}
+
+void App::drawMenuBar() {
+    // 35 px at the desktop's scale whatever the interface scale, like other applications' title bars (VS Code's):
+    // the padding sets the bar's height and centres the menus; font, spacing and the dropdowns at that scale too.
+    const float t = window_->contentScale();
+    ImGui::PushFont(window_->menu);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10 * t, 9 * t));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14 * t, 12 * t));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(4 * t, 4 * t));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10 * t, (35 * t - ImGui::GetFontSize()) * .5f));
+    const bool open = ImGui::BeginMainMenuBar();
+    ImGui::PopStyleVar();
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10 * t, 7 * t)); // inside the dropdowns
+    if (!open) {
+        ImGui::PopStyleVar(4);
+        ImGui::PopFont();
+        return;
+    }
+    if (ImGui::BeginMenu("View")) {
+        drawViewMenu();
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Windows")) {
+        drawWindowsMenu();
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Layout")) {
+        drawLayoutMenu();
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Help")) {
+        ImGui::MenuItem("Controls & shortcuts", "F1", &helpOpen_);
+        ImGui::EndMenu();
+    }
+    const char *state = maximized_ ? "Pool view maximized (Ctrl+Space restores)" : layoutLocked_ ? "Layout locked" : "";
+    if (*state) {
+        ImGui::SameLine(0, 24);
+        ImGui::TextDisabled("%s", state);
+    }
+    if (window_->customTitleBar())
+        drawWindowControls();
+    ImGui::EndMainMenuBar();
+    ImGui::PopStyleVar(4);
     ImGui::PopFont();
-    ImGui::SameLine();
-    ImGui::TextColored(muted, " / ");
-    ImGui::SameLine();
-    ImGui::TextUnformatted(headerSubtitle.c_str());
-    const float statusWidth = ImGui::CalcTextSize(status_.c_str()).x + 2 * ImGui::GetStyle().FramePadding.x;
-    if (composition_) // header items (robot telemetry, recording) sit just left of the status pill
-        composition_->drawHeader(W - 18 - statusWidth - ImGui::GetStyle().ItemSpacing.x);
-    ImGui::SameLine(W - 18 - statusWidth);
-    pill(status_, demoMode_ ? ImVec4(.94f, .73f, .35f, 1) : (ros_->poseFresh() ? cyan : muted));
-    ImGui::Separator();
+}
+
+// The viewer's own title bar (no system decorations): the menu bar's empty space moves the window (drag) or
+// maximizes it (double-click), with minimize / maximize / close at its right end.
+void App::drawWindowControls() {
+    const bool empty = ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive();
+    if (empty && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        titleDrag_ = false;
+        window_->toggleMaximized();
+    } else if (empty && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        titleDrag_ = true;
+    if (titleDrag_ && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 3)) {
+        titleDrag_ = false;
+        window_->beginMove(); // the window manager moves it (snapping, tiling) until the button is released
+    }
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        titleDrag_ = false;
+    const float t = window_->contentScale(), buttonWidth = 46 * t, height = ImGui::GetWindowHeight();
+    const ImVec2 origin(ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - 3 * buttonWidth, ImGui::GetWindowPos().y);
+    auto *draw = ImGui::GetWindowDrawList();
+    const auto &p = palette();
+    for (int i = 0; i < 3; ++i) {
+        const ImVec2 min(origin.x + i * buttonWidth, origin.y), max(min.x + buttonWidth, min.y + height);
+        ImGui::SetCursorScreenPos(min);
+        ImGui::PushID(i);
+        const bool clicked = ImGui::InvisibleButton("##window_button", {buttonWidth, height});
+        ImGui::PopID();
+        const bool hovered = ImGui::IsItemHovered(), held = ImGui::IsItemActive();
+        const bool close = i == 2;
+        if (hovered || held)
+            draw->AddRectFilled(
+                min, max,
+                ImGui::GetColorU32(
+                    close ? (held ? p.dangerPressed : p.dangerHovered)
+                          : ImGui::GetStyle().Colors[held ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered]));
+        const auto ink = ImGui::GetColorU32(close && (hovered || held) ? p.dangerText : p.text);
+        const ImVec2 c((min.x + max.x) * .5f, (min.y + max.y) * .5f);
+        if (i == 0)
+            draw->AddLine({c.x - 5 * t, c.y + .5f * t}, {c.x + 5 * t, c.y + .5f * t}, ink, 1.2f * t);
+        else if (i == 1 && window_->maximized()) { // restore: two overlapping squares
+            draw->AddRect({c.x - 5 * t, c.y - 3 * t}, {c.x + 3 * t, c.y + 5 * t}, ink, 0, 0, 1.2f * t);
+            draw->AddLine({c.x - 3 * t, c.y - 5 * t}, {c.x + 5 * t, c.y - 5 * t}, ink, 1.2f * t);
+            draw->AddLine({c.x + 5 * t, c.y - 5 * t}, {c.x + 5 * t, c.y + 3 * t}, ink, 1.2f * t);
+        } else if (i == 1)
+            draw->AddRect({c.x - 5 * t, c.y - 5 * t}, {c.x + 5 * t, c.y + 5 * t}, ink, 0, 0, 1.2f * t);
+        else {
+            draw->AddLine({c.x - 5 * t, c.y - 5 * t}, {c.x + 5 * t, c.y + 5 * t}, ink, 1.2f * t);
+            draw->AddLine({c.x - 5 * t, c.y + 5 * t}, {c.x + 5 * t, c.y - 5 * t}, ink, 1.2f * t);
+        }
+        if (hovered)
+            ImGui::SetTooltip("%s", i == 0   ? "Minimize"
+                                    : i == 1 ? (window_->maximized() ? "Restore" : "Maximize")
+                                             : "Close");
+        if (clicked) {
+            if (i == 0)
+                window_->minimize();
+            else if (i == 1)
+                window_->toggleMaximized();
+            else
+                window_->requestClose();
+        }
+    }
+}
+
+// Without system decorations the window's own edges resize it (through the window manager), as borders would.
+void App::handleWindowEdges() {
+    const auto &io = ImGui::GetIO();
+    if (!window_->customTitleBar() || window_->maximized() || !ImGui::IsMousePosValid() || ImGui::IsAnyItemActive())
+        return;
+    const auto m = io.MousePos;
+    const float w = io.DisplaySize.x, h = io.DisplaySize.y, border = 5 * window_->contentScale();
+    if (m.x < 0 || m.y < 0 || m.x >= w || m.y >= h)
+        return;
+    const bool left = m.x < border, right = m.x >= w - border, top = m.y < border, bottom = m.y >= h - border;
+    const int edge = top && left       ? 0
+                     : top && right    ? 2
+                     : bottom && right ? 4
+                     : bottom && left  ? 6
+                     : top             ? 1
+                     : right           ? 3
+                     : bottom          ? 5
+                     : left            ? 7
+                                       : -1;
+    if (edge < 0)
+        return;
+    ImGui::SetMouseCursor(edge == 1 || edge == 5   ? ImGuiMouseCursor_ResizeNS
+                          : edge == 3 || edge == 7 ? ImGuiMouseCursor_ResizeEW
+                          : edge == 0 || edge == 4 ? ImGuiMouseCursor_ResizeNWSE
+                                                   : ImGuiMouseCursor_ResizeNESW);
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        window_->beginResize(edge);
+}
+
+// A theme for the whole interface; the operator's choice is remembered (viewer.yaml in the config directory).
+void App::setTheme(const std::string &id) {
+    const auto before = currentThemeInfo();
+    if (!applyTheme(id))
+        return;
+    savePreference("theme", YAML::Node(id));
+    const auto &after = currentThemeInfo();
+    if (after.fontFamily != before.fontFamily || after.fontPoints != before.fontPoints)
+        pendingUiScale_ = resolvedUiScale(); // reload the fonts between frames
+}
+
+// The operator's interface preferences (theme, scale) in viewer.yaml in the config directory.
+void App::savePreference(const char *key, const YAML::Node &value) {
+    if (!persist_ || preferencesFile_.empty())
+        return;
+    try {
+        YAML::Node preferences(YAML::NodeType::Map);
+        if (fs::exists(preferencesFile_))
+            preferences = YAML::LoadFile(preferencesFile_.string());
+        preferences[key] = value;
+        fs::create_directories(preferencesFile_.parent_path());
+        std::ofstream(preferencesFile_) << preferences << '\n';
+    } catch (const std::exception &error) {
+        std::cerr << "nereus-viewer: " << key << " not saved: " << error.what() << '\n';
+    }
+}
+
+float App::resolvedUiScale() const {
+    return uiScaleSetting_ > 0 ? uiScaleSetting_ : window_->contentScale();
+}
+
+void App::setUiScale(float setting) {
+    uiScaleSetting_ = setting;
+    pendingUiScale_ = resolvedUiScale();
+    savePreference("interface_scale", setting > 0 ? YAML::Node(setting) : YAML::Node("auto"));
+}
+
+void App::applyPendingUiScale() {
+    if (pendingUiScale_ <= 0)
+        return;
+    const auto &theme = currentThemeInfo(); // a theme with its own font (the desktop's Qt font)
+    window_->loadFonts(pendingUiScale_, window_->contentScale(), theme.fontFamily, theme.fontPoints);
+    setInterfaceScale(pendingUiScale_);
+    pendingUiScale_ = -1;
+}
+
+void App::drawScaleMenu() {
+    if (!ImGui::BeginMenu("Interface scale"))
+        return;
+    for (const float scale : {1.f, 1.25f, 1.5f, 1.75f, 2.f}) {
+        char label[16];
+        std::snprintf(label, sizeof(label), "%d %%", int(std::lround(scale * 100)));
+        if (ImGui::MenuItem(label, nullptr, uiScaleSetting_ == scale))
+            setUiScale(scale);
+    }
+    char desktop[48];
+    std::snprintf(desktop, sizeof(desktop), "Match desktop (%d %%)", int(std::lround(window_->contentScale() * 100)));
+    if (ImGui::MenuItem(desktop, nullptr, uiScaleSetting_ <= 0))
+        setUiScale(0);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Size everything like the desktop's other applications (GNOME's display scale).");
+    ImGui::EndMenu();
+}
+
+void App::drawViewMenu() {
     if (!scenario_) {
-        ImGui::Dummy({1, 40});
+        ImGui::TextDisabled("Waiting for the scenario");
+        ImGui::Separator();
+        drawThemeMenu();
+        drawScaleMenu();
+        return;
+    }
+    ImGui::SeparatorText("Camera");
+    if (ImGui::MenuItem("Orbit", nullptr, mode_ == 0))
+        setViewMode(0);
+    if (ImGui::MenuItem("Free camera", nullptr, mode_ == 1))
+        setViewMode(1);
+    for (std::size_t i = 0; i < scenario_->cameras.size(); ++i)
+        if (ImGui::MenuItem(scenario_->cameras[i].id.c_str(), nullptr, mode_ == int(i) + 2))
+            setViewMode(int(i) + 2);
+    if (ImGui::BeginMenu("Focus")) {
+        for (const auto &name : focusNames_)
+            if (ImGui::MenuItem(name.c_str(), nullptr, focusName_ == name))
+                focus(name);
+        ImGui::EndMenu();
+    }
+    ImGui::MenuItem("Follow", nullptr, &follow_, presetFor(focusName_).follow);
+    ImGui::SeparatorText("Overlays");
+    ImGui::MenuItem("Labels", nullptr, &labels_);
+    ImGui::MenuItem("TF frames", nullptr, &showTf_);
+    ImGui::MenuItem("Detections", nullptr, &detections_, !demoMode_);
+    ImGui::MenuItem("MPC path", nullptr, &showMpc_, !demoMode_);
+    ImGui::MenuItem("Thrust", nullptr, &showThrust_, !demoMode_ && !scenario_->thrusterMounts.empty());
+    ImGui::Separator();
+    if (ImGui::MenuItem("Maximize pool view", "Ctrl+Space", maximized_))
+        toggleMaximized();
+    ImGui::MenuItem("Frame stats", "F3", &showProfile_);
+    ImGui::Separator();
+    if (ImGui::MenuItem("Left panels", "Ctrl+[", sideShown(Side::Left)))
+        toggleSide(Side::Left);
+    if (ImGui::MenuItem("Right panels", "Ctrl+]", sideShown(Side::Right)))
+        toggleSide(Side::Right);
+    ImGui::Separator();
+    drawThemeMenu();
+    drawScaleMenu();
+}
+
+void App::drawThemeMenu() {
+    if (!ImGui::BeginMenu("Theme"))
+        return;
+    for (const auto &theme : themes()) {
+        if (ImGui::MenuItem(theme.label.c_str(), nullptr, currentTheme() == theme.id))
+            setTheme(theme.id);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", theme.description.c_str());
+    }
+    ImGui::EndMenu();
+}
+
+void App::drawWindowsMenu() {
+    if (!scenario_) {
+        ImGui::TextDisabled("Waiting for the scenario");
+        return;
+    }
+    if (composition_ && !composition_->empty()) {
+        ImGui::SeparatorText("Panels");
+        composition_->drawPanelMenuItems();
+    }
+    ImGui::SeparatorText("Cameras");
+    for (std::size_t i = 0; i < scenario_->cameras.size() && i < cards_.size(); ++i)
+        if (ImGui::MenuItem(scenario_->cameras[i].title.c_str(), nullptr, &cards_[i].open) && cards_[i].open)
+            focusOnce_.insert(cameraWindowName(scenario_->cameras[i])); // reopened: shown on top
+    ImGui::MenuItem("Course map", nullptr, &mapOpen_);
+    ImGui::SeparatorText("Tools");
+    ImGui::MenuItem("Scene settings", nullptr, &sceneOpen_);
+    ImGui::MenuItem("Display", nullptr, &displayOpen_);
+    ImGui::MenuItem("TF frames", nullptr, &tfOpen_);
+    if (composition_)
+        composition_->drawToolMenuItems();
+}
+
+void App::drawLayoutMenu() {
+    ImGui::SeparatorText("Built-in");
+    for (const auto &preset : layoutPresets()) {
+        if (ImGui::MenuItem(preset.label.c_str(), preset.shortcut.c_str()))
+            pendingPreset_ = preset.id;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s\nAlso reopens the default windows.", preset.description.c_str());
+    }
+    ImGui::SeparatorText("Saved");
+    const auto names = savedLayouts(layoutDir_);
+    if (ImGui::BeginMenu("Load", !names.empty())) {
+        for (const auto &name : names)
+            if (ImGui::MenuItem(name.c_str()))
+                requestLayout(name);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Save current as", !layoutDir_.empty())) {
+        ImGui::SetNextItemWidth(ui(200));
+        if (ImGui::IsWindowAppearing())
+            ImGui::SetKeyboardFocusHere();
+        const bool entered = ImGui::InputTextWithHint("##layout_name", "Layout name", layoutName_, sizeof(layoutName_),
+                                                      ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SameLine();
+        ImGui::BeginDisabled(layoutFileStem(layoutName_).empty());
+        if (ImGui::Button("Save") || (entered && !layoutFileStem(layoutName_).empty())) {
+            saveLayout(layoutName_);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndDisabled();
+        if (std::find(names.begin(), names.end(), layoutFileStem(layoutName_)) != names.end())
+            ImGui::TextDisabled("Replaces the saved layout of that name.");
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Delete", !names.empty())) {
+        for (const auto &name : names)
+            if (ImGui::MenuItem(name.c_str())) {
+                std::error_code error;
+                fs::remove(layoutDir_ / (name + ".ini"), error);
+                layoutMessage_ = error ? "Could not delete " + name + ": " + error.message() : "Deleted " + name;
+            }
+        ImGui::EndMenu();
+    }
+    if (!layoutDir_.empty() && ImGui::IsItemHovered())
+        ImGui::SetTooltip("Saved layouts live in %s", layoutDir_.c_str());
+    ImGui::Separator();
+    ImGui::MenuItem("Lock layout", nullptr, &layoutLocked_);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Stop windows from being undocked, docked or resized by accident (closing still works).");
+    if (ImGui::MenuItem("Maximize pool view", "Ctrl+Space", maximized_))
+        toggleMaximized();
+    if (!layoutMessage_.empty()) {
+        ImGui::Separator();
+        ImGui::TextDisabled("%s", layoutMessage_.c_str());
+    }
+}
+
+// Always visible whatever the layout: branding, the pinned panel controls (Enable / KILL), robot status chips
+// and the pose-source pill.
+void App::drawCommandBar() {
+    const float height = ui(52), padding = ui(9);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, padding));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, palette().bar);
+    const bool open = ImGui::BeginViewportSideBar("##command_bar", ImGui::GetMainViewport(), ImGuiDir_Up, height,
+                                                  ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
+                                                      ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+    if (open) {
+        const float W = ImGui::GetWindowWidth(), inner = height - 2 * padding;
+        const std::string headerTitle = lookup(config_, {"branding", "header"}).as<std::string>("NEREUS");
+        std::string headerSubtitle = scenario_ ? scenarioLabel(*scenario_) : "";
+        std::transform(headerSubtitle.begin(), headerSubtitle.end(), headerSubtitle.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+        headerSubtitle = lookup(config_, {"branding", "subtitle"}).as<std::string>(headerSubtitle);
+        ImGui::PushFont(window_->title);
+        ImGui::SetCursorPosY(padding + (inner - ImGui::GetFontSize()) * .5f);
+        ImGui::TextUnformatted(headerTitle.c_str());
+        ImGui::PopFont();
+        ImGui::SameLine();
+        ImGui::SetCursorPosY(padding + (inner - ImGui::GetFontSize()) * .5f);
+        ImGui::TextColored(palette().muted, "/");
+        ImGui::SameLine();
+        ImGui::SetCursorPosY(padding + (inner - ImGui::GetFontSize()) * .5f);
+        ImGui::TextUnformatted(headerSubtitle.c_str());
+        if (composition_) { // pinned controls: Enable / KILL and the robot's state
+            ImGui::SameLine(0, ui(32));
+            ImGui::SetCursorPosY(padding);
+            composition_->drawPinned();
+        }
+        const float statusWidth = ImGui::CalcTextSize(status_.c_str()).x + 2 * ImGui::GetStyle().FramePadding.x;
+        if (composition_) { // header items (robot telemetry, recording) sit just left of the status pill
+            ImGui::SameLine();
+            ImGui::SetCursorPosY(padding + (inner - ImGui::GetFrameHeight()) * .5f);
+            composition_->drawHeader(W - 16 - statusWidth - ImGui::GetStyle().ItemSpacing.x);
+        }
+        ImGui::SameLine(W - 16 - statusWidth);
+        ImGui::SetCursorPosY(padding + (inner - ImGui::GetFrameHeight()) * .5f);
+        pill(status_, demoMode_ ? palette().warn : (ros_->poseFresh() ? palette().accent : palette().muted));
+    }
+    ImGui::End();
+}
+
+// The 3D pool view: the configured toolbar on top, the rendered scene below with its overlays. It fills the
+// dock space's central node; other windows dock around it.
+void App::drawPoolView(double time, float dt) {
+    ImGuiWindowClass single;
+    single.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_AutoHideTabBar;
+    ImGui::SetNextWindowClass(&single);
+    ImGui::SetNextWindowDockID(dockspace_, ImGuiCond_FirstUseEver);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui(ImVec2(0, 0)));
+    const bool visible =
+        ImGui::Begin(kPoolView, nullptr,
+                     ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse);
+    ImGui::PopStyleVar();
+    if (!scenario_) {
+        ImGui::SetCursorPos(ui(ImVec2(24, 24)));
         ImGui::TextColored(
-            muted, "Waiting for the bridge scenario document (%s) ...",
+            palette().muted, "Waiting for the bridge scenario document (%s) ...",
             !opt_.scenarioTopic.empty()
                 ? opt_.scenarioTopic.c_str()
                 : lookup(config_, {"scenario_topic"}).as<std::string>("/talos/simulator/scenario").c_str());
         ImGui::End();
         return;
     }
-    if (runTracking_)
-        runScore_.reset(runTracking_->state().score);
-    const auto contentOrigin = ImGui::GetCursorScreenPos();
-    const float contentHeight = H - contentOrigin.y - 12;
-    const bool configuredPanels = composition_ && !composition_->empty();
-    bool hasPanels = configuredPanels && composition_->sidebarVisible();
-    float panelWidth = configuredPanels ? composition_->width(W) : 0;
-    if (!cameraSidebarResized_)
-        cameraSidebarWidth_ = glm::clamp(W * .29f, 335.f, 445.f);
-    const float sidebarBudget = W - 36 - (configuredPanels ? 16 : 0) - 16 - 360;
-    const float maxPanelWidth =
-        std::max(300.f, std::min(600.f, sidebarBudget - (cameraSidebarVisible_ ? cameraSidebarWidth_ : 0)));
-    panelWidth = glm::clamp(panelWidth, 300.f, maxPanelWidth);
-    if (configuredPanels) {
-        const float previous = panelWidth;
-        if (panelEdge_.draw(contentOrigin, contentHeight, hasPanels, panelWidth, maxPanelWidth) != hasPanels)
-            composition_->toggleSidebar();
-        composition_->setWidth(panelWidth, panelWidth != previous);
-        hasPanels = composition_->sidebarVisible();
+    if (!visible) { // covered by another tab: the camera windows still need their renders
+        PhaseTimer timer{profiler_, Phase::Scene, false};
+        const auto scene = model_->build(buildState());
+        renderLocalCards(time, scene);
+        ImGui::End();
+        return;
     }
-    const float sidebar = configuredPanels ? (hasPanels ? panelWidth : 0) + 16 : 0;
-    const float maxCameraWidth = std::max(300.f, std::min(600.f, sidebarBudget - (hasPanels ? panelWidth : 0)));
-    cameraSidebarWidth_ = glm::clamp(cameraSidebarWidth_, 300.f, maxCameraWidth);
-    const float previousCameraWidth = cameraSidebarWidth_;
-    ImGui::PushID("camera_sidebar");
-    cameraSidebarVisible_ = cameraEdge_.draw({W - 18, contentOrigin.y}, contentHeight, cameraSidebarVisible_,
-                                             cameraSidebarWidth_, maxCameraWidth, true);
-    ImGui::PopID();
-    if (cameraSidebarWidth_ != previousCameraWidth)
-        cameraSidebarResized_ = true;
-    ros_->setCamerasWanted(cameraSidebarVisible_);
-    const float side = cameraSidebarVisible_ ? cameraSidebarWidth_ : 0;
-    const float left = W - 36 - sidebar - side - 16;
-    if (hasPanels) {
-        ImGui::SetCursorScreenPos(contentOrigin);
-        composition_->drawSidebar(contentHeight);
-    }
-    ImGui::SetCursorScreenPos({contentOrigin.x + sidebar, contentOrigin.y});
-    ImGui::BeginChild("left", {left, contentHeight}, ImGuiChildFlags_None,
-                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::SetScrollY(0);
-    ImGui::BeginChild("toolbar", {left, toolbarHeight_}, ImGuiChildFlags_None,
+    const float width = std::max(16.f, ImGui::GetContentRegionAvail().x);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui(ImVec2(10, 7)));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ui(ImVec2(6, 6)));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, palette().toolbar);
+    ImGui::BeginChild("toolbar", {width, toolbarHeight_}, ImGuiChildFlags_AlwaysUseWindowPadding,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     int oldMode = mode_;
-    drawToolbar(left, oldMode);
-    toolbarHeight_ = std::max(80.f, ImGui::GetCursorPosY());
+    drawToolbar(width, oldMode);
+    toolbarHeight_ =
+        std::max(ImGui::GetFrameHeight() + ui(14), ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y + ui(7));
     ImGui::EndChild();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+    auto &io = ImGui::GetIO();
     const float viewHeight = std::max(1.f, ImGui::GetContentRegionAvail().y);
     const ImVec2 position = ImGui::GetCursorScreenPos();
-    bool hovered = ImGui::IsMouseHoveringRect(position, {position.x + left, position.y + viewHeight});
+    bool hovered = ImGui::IsMouseHoveringRect(position, {position.x + width, position.y + viewHeight});
     // Dropdowns can overlap the viewport. Selecting Free camera must not also consume that click as a
     // mouse-capture request.
-    hovered = hovered && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && mode_ == oldMode &&
+    hovered = hovered && ImGui::IsWindowHovered() && mode_ == oldMode &&
               !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+    // The tabs that bring back a snapped-shut side take their own clicks, not the camera's.
+    for (const Side side : {Side::Left, Side::Right})
+        hovered = hovered && !sides_[int(side)].dragging && !drawSideHandle(side, position, {width, viewHeight}, false);
     panels::Viewport panelView{viewportView_.projection,
                                viewportView_.view,
                                viewportView_.eye,
                                {position.x, position.y},
-                               {left, viewHeight},
+                               {width, viewHeight},
                                hovered && mode_ == 0,
                                bool(glfwGetWindowAttrib(window_->handle(), GLFW_FOCUSED))};
     // Commands live in the estimate frame; anchored on the truth robot, draw them re-rooted there (offset
@@ -1881,14 +2531,14 @@ void App::drawInterface(double time, float dt) {
         panelView.displayFromCommand = body_ * glm::inverse(estimateBody_);
     const bool dragging = composition_ && mode_ == 0 && composition_->input(panelView);
     bool unused = false;
-    SensorView view = viewFor(left / viewHeight, dt, hovered && !dragging, viewHeight, unused);
+    SensorView view = viewFor(width / viewHeight, dt, hovered && !dragging, viewHeight, unused);
     viewportView_ = view;
     // Keep sensor aspect ratios when a camera view is promoted to the large viewport.
-    float iw = left, ih = viewHeight;
+    float iw = width, ih = viewHeight;
     const SensorCamera *sensor = mode_ >= 2 ? &scenario_->cameras[std::size_t(mode_ - 2)] : nullptr;
     if (sensor) {
         const float aspect = float(sensor->k.width) / float(sensor->k.height);
-        ih = std::min(viewHeight, left / aspect);
+        ih = std::min(viewHeight, width / aspect);
         iw = ih * aspect;
     }
     const int rw = std::max(16, int(iw)), rh = std::max(16, int(ih));
@@ -1930,8 +2580,8 @@ void App::drawInterface(double time, float dt) {
     lastFrame_ = frame;
     haveFrame_ = true;
     if (mode_ == 0 && hovered && !dragging && !io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F))
-        focusAtCursor(view, frame, position, left, viewHeight);
-    const ImVec2 imagePos(position.x + (left - iw) / 2, position.y + (viewHeight - ih) / 2);
+        focusAtCursor(view, frame, position, width, viewHeight);
+    const ImVec2 imagePos(position.x + (width - iw) / 2, position.y + (viewHeight - ih) / 2);
     ImGui::SetCursorScreenPos(imagePos);
     // A promoted sensor view shows the bridge's depth image instead while its card is on DEPTH.
     const std::size_t sensorIndex = sensor ? std::size_t(mode_ - 2) : 0;
@@ -1968,11 +2618,11 @@ void App::drawInterface(double time, float dt) {
         composition_->drawOverlays(panelView);
     }
     auto *d = ImGui::GetWindowDrawList();
-    d->AddRect(position, {position.x + left, position.y + viewHeight}, IM_COL32(38, 62, 72, 255), 5, 0, 1);
-    d->AddRectFilled({position.x + 14, position.y + 14}, {position.x + 237, position.y + 43}, IM_COL32(8, 22, 29, 225),
-                     4);
+    d->AddRect(position, {position.x + width, position.y + viewHeight}, IM_COL32(38, 62, 72, 255), 5, 0, 1);
+    d->AddRectFilled({position.x + ui(14), position.y + ui(14)}, {position.x + ui(237), position.y + ui(43)},
+                     IM_COL32(8, 22, 29, 225), 4);
     d->AddText(
-        window_->small, 12, {position.x + 25, position.y + 22}, color(white),
+        window_->small, window_->small->FontSize, {position.x + ui(25), position.y + ui(22)}, color(white),
         (scenario_->poolId + " / " + fixed(scenario_->poolLength, 1) + " x " + fixed(scenario_->poolWidth, 2) + " m")
             .c_str());
     if (showProfile_ && !profiler_.recent().empty()) {
@@ -1994,17 +2644,19 @@ void App::drawInterface(double time, float dt) {
         ImGui::PushFont(window_->small);
         const ImVec2 size = ImGui::CalcTextSize(profileText_.c_str());
         ImGui::PopFont();
-        d->AddRectFilled({position.x + 14, position.y + 50}, {position.x + 30 + size.x, position.y + 62 + size.y},
-                         IM_COL32(8, 22, 29, 225), 4);
-        d->AddText(window_->small, 12, {position.x + 22, position.y + 56}, color(white), profileText_.c_str());
+        d->AddRectFilled({position.x + ui(14), position.y + ui(50)},
+                         {position.x + ui(30) + size.x, position.y + ui(62) + size.y}, IM_COL32(8, 22, 29, 225), 4);
+        d->AddText(window_->small, window_->small->FontSize, {position.x + ui(22), position.y + ui(56)}, color(white),
+                   profileText_.c_str());
     }
     if (runScore_ && runScore_["total"]) {
         std::string readout = fixed(runScore_["total"].as<double>(), 1) + " pts   /   " + runTime();
         if (runScore_["running"].as<bool>(false))
             readout += "  RUNNING";
-        d->AddRectFilled({position.x + left - 310, position.y + 12}, {position.x + left - 12, position.y + 43},
-                         IM_COL32(8, 22, 29, 225), 4);
-        d->AddText(window_->small, 14, {position.x + left - 298, position.y + 21}, color(cyan), readout.c_str());
+        d->AddRectFilled({position.x + width - ui(310), position.y + ui(12)},
+                         {position.x + width - ui(12), position.y + ui(43)}, IM_COL32(8, 22, 29, 225), 4);
+        d->AddText(window_->small, window_->small->FontSize * 14 / 12,
+                   {position.x + width - ui(298), position.y + ui(21)}, color(cyan), readout.c_str());
     }
     if (labels_ && mode_ < 2 && presetFor(focusName_).labels) {
         for (const auto &key : focusNames_) {
@@ -2017,37 +2669,553 @@ void App::drawInterface(double time, float dt) {
             p /= p.w;
             if (std::abs(p.x) > .94 || std::abs(p.y) > .85 || p.z > 1)
                 continue;
-            const ImVec2 at(position.x + (p.x * .5f + .5f) * left, position.y + (.5f - p.y * .5f) * viewHeight);
+            const ImVec2 at(position.x + (p.x * .5f + .5f) * width, position.y + (.5f - p.y * .5f) * viewHeight);
             d->AddCircleFilled(at, 3, color(cyan));
-            d->AddLine(at, {at.x + 10, at.y - 14}, color(cyan));
-            d->AddRectFilled({at.x + 9, at.y - 31}, {at.x + 105, at.y - 11}, IM_COL32(8, 22, 29, 215), 3);
-            d->AddText(window_->small, 12, {at.x + 16, at.y - 28}, color(white), key.c_str());
+            d->AddLine(at, {at.x + ui(10), at.y - ui(14)}, color(cyan));
+            d->AddRectFilled({at.x + ui(9), at.y - ui(31)}, {at.x + ui(105), at.y - ui(11)}, IM_COL32(8, 22, 29, 215),
+                             3);
+            d->AddText(window_->small, window_->small->FontSize, {at.x + ui(16), at.y - ui(28)}, color(white),
+                       key.c_str());
         }
     }
     const char *controls =
         mode_ == 1 ? "CLICK  mouse look    WASD  move    SPACE / SHIFT  up / down    CTRL  fast    ESC  release"
                    : "LEFT DRAG  orbit   RIGHT / MIDDLE DRAG  pan   SCROLL  zoom   F  focus cursor";
-    d->AddRectFilled({position.x, position.y + viewHeight - 30}, {position.x + left, position.y + viewHeight},
+    d->AddRectFilled({position.x, position.y + viewHeight - ui(30)}, {position.x + width, position.y + viewHeight},
                      IM_COL32(6, 18, 26, 205));
-    d->AddText(window_->small, 12, {position.x + 14, position.y + viewHeight - 21}, color(white), controls);
-    ImGui::EndChild();
-    if (cameraSidebarVisible_) {
-        ImGui::SetCursorScreenPos({W - 18 - side, contentOrigin.y});
-        ImGui::BeginChild("right", {side, contentHeight}, ImGuiChildFlags_None);
-        const float cardWidth = ImGui::GetContentRegionAvail().x;
-        for (std::size_t i = 0; i < ros_->feeds.size(); ++i)
-            drawCameraCard(i, cardWidth, cardWidth);
-        drawMinimap(cardWidth);
-        ImGui::PushFont(window_->small);
-        ImGui::TextWrapped("%s", demoMode_ ? "Scene preview. Start the simulator bridge to stream live cameras."
-                                           : "Images are rendered by the bridge at the physics pose. Observer controls "
-                                             "do not move the vehicle.");
-        ImGui::PopFont();
-        ImGui::EndChild();
+    d->AddText(window_->small, window_->small->FontSize, {position.x + ui(14), position.y + viewHeight - ui(21)},
+               color(white), controls);
+    for (const Side side : {Side::Left, Side::Right})
+        drawSideHandle(side, position, {width, viewHeight}, true);
+    ImGui::End();
+}
+
+// Snap shut: a side dragged narrower than kSnapWidth closes, like the old sidebars' edges; pulled back past
+// kOpenWidth it reopens; widths from kRememberWidth up are what it reopens at otherwise.
+constexpr float kSnapWidth = 150, kOpenWidth = 180, kRememberWidth = 220;
+
+bool App::sideShown(Side side) const {
+    return !sides_[int(side)].collapsed && sideWidth(dockspace_, side) > 0;
+}
+
+// While the border is dragged: narrower than kSnapWidth snaps the side shut at once, and the drag carries on
+// (pull back past kOpenWidth to reopen it, the width following the mouse) until the button is let go.
+void App::updateSides() {
+    if (!scenario_ || maximized_ || ImGui::GetMainViewport()->WorkSize.x < 500)
+        return;
+    const auto *root = ImGui::DockBuilderGetNode(dockspace_);
+    const float mouse = ImGui::GetIO().MousePos.x;
+    for (const Side side : {Side::Left, Side::Right}) {
+        auto &state = sides_[int(side)];
+        const float width = sideWidth(dockspace_, side);
+        if (state.dragging) {
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                state.dragging = false;
+                if (!state.collapsed && state.pending <= 0 && width >= kRememberWidth)
+                    state.width = width;
+            } else if (root) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                const float pulled = side == Side::Left ? mouse - root->Pos.x : root->Pos.x + root->Size.x - mouse;
+                if (state.collapsed && pulled >= kOpenWidth) {
+                    expandSide(side);
+                    state.pending = pulled;
+                } else if (!state.collapsed && pulled < kSnapWidth)
+                    collapseSide(side);
+                else if (!state.collapsed)
+                    state.pending = std::max(kSnapWidth, pulled);
+            }
+        }
+        if (!state.collapsed && state.pending > 0 && width > 0) { // reopened: at the dragged width
+            setSideWidth(dockspace_, side, state.pending);
+            if (!state.dragging) {
+                state.width = std::max(kRememberWidth, state.pending);
+                state.pending = 0;
+            }
+            continue;
+        }
+        if (state.dragging || state.collapsed || width <= 0)
+            continue;
+        if (width < kSnapWidth && !layoutLocked_) { // the dock border dragged (or loaded) this narrow
+            collapseSide(side);
+            state.dragging = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+        } else if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) && width >= kRememberWidth)
+            state.width = width;
+    }
+}
+
+void App::collapseSide(Side side) {
+    auto &state = sides_[int(side)];
+    const auto names = sideWindows(dockspace_, side);
+    if (names.empty())
+        return;
+    // Back to a usable width first: the closed column keeps it for when it opens again (or is saved).
+    if (state.width < kRememberWidth)
+        state.width = std::max(kRememberWidth, ImGui::GetMainViewport()->WorkSize.x * .24f);
+    setSideWidth(dockspace_, side, state.width);
+    state.keys.clear();
+    for (const auto &entry : windowEntries())
+        if (*entry.open && std::find(names.begin(), names.end(), entry.name) != names.end()) {
+            state.keys.push_back(entry.key);
+            *entry.open = false;
+        }
+    state.collapsed = !state.keys.empty();
+}
+
+void App::expandSide(Side side) {
+    auto &state = sides_[int(side)];
+    for (const auto &entry : windowEntries())
+        if (std::find(state.keys.begin(), state.keys.end(), entry.key) != state.keys.end())
+            *entry.open = true;
+    state.collapsed = false;
+    state.keys.clear();
+    state.pending = 0;
+}
+
+void App::toggleSide(Side side) {
+    if (sides_[int(side)].collapsed)
+        expandSide(side);
+    else
+        collapseSide(side);
+}
+
+void App::resetSides() {
+    for (auto &state : sides_)
+        state = {};
+}
+
+// A snapped-shut side's edge on the pool view, as the old sidebars had: invisible until hovered (resize cursor, a
+// thin line and grip), dragged out to bring the panels back at that width. With draw false it only reports
+// whether it has the pointer.
+bool App::drawSideHandle(Side side, ImVec2 viewPos, ImVec2 viewSize, bool draw) {
+    auto &state = sides_[int(side)];
+    if (!state.collapsed)
+        return false;
+    const bool left = side == Side::Left;
+    const float w = ui(10);
+    const ImVec2 min(left ? viewPos.x : viewPos.x + viewSize.x - w, viewPos.y), max(min.x + w, viewPos.y + viewSize.y);
+    if (!draw)
+        return ImGui::IsMouseHoveringRect(min, max) || state.dragging;
+    ImGui::SetCursorScreenPos(min);
+    ImGui::InvisibleButton(left ? "##show_left_panels" : "##show_right_panels", {w, viewSize.y});
+    const bool hovered = ImGui::IsItemHovered();
+    if (ImGui::IsItemActivated())
+        state.dragging = true; // updateSides follows the mouse from here
+    if (hovered || state.dragging) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+        const float mouse = ImGui::GetIO().MousePos.x;
+        const float x =
+            state.dragging ? std::clamp(mouse, viewPos.x, viewPos.x + viewSize.x) : (left ? min.x + 2 : max.x - 2);
+        const auto tint = ImGui::GetColorU32(palette().accent);
+        const float middle = viewPos.y + viewSize.y * .5f;
+        auto *d = ImGui::GetWindowDrawList();
+        d->AddLine({x, viewPos.y}, {x, viewPos.y + viewSize.y}, tint, 2);
+        d->AddRectFilled({x - 2, middle - 20}, {x + 2, middle + 20}, tint, 2);
+    }
+    if (hovered && !state.dragging)
+        ImGui::SetTooltip(left ? "Drag right to show the panels" : "Drag left to show the panels");
+    return hovered || state.dragging;
+}
+
+// The layout as saved: from before Maximize, and with snapped-shut sides open as they were.
+std::string App::layoutSnapshot() {
+    if (maximized_)
+        return beforeMaximize_;
+    std::vector<bool *> reopened;
+    for (const auto &state : sides_)
+        for (const auto &entry : windowEntries())
+            if (!*entry.open && std::find(state.keys.begin(), state.keys.end(), entry.key) != state.keys.end()) {
+                *entry.open = true;
+                reopened.push_back(entry.open);
+            }
+    std::string text = ImGui::SaveIniSettingsToMemory();
+    for (auto *flag : reopened)
+        *flag = false;
+    return text;
+}
+
+void App::drawCameraWindows() {
+    camerasShown_ = false;
+    for (std::size_t i = 0; i < ros_->feeds.size() && i < cards_.size(); ++i) {
+        cardVisible_[i] = 0;
+        if (!cards_[i].open)
+            continue;
+        camerasShown_ = true;
+        const auto name = cameraWindowName(*ros_->feeds[i].camera);
+        focusIfRequested(name);
+        ImGui::SetNextWindowSize(ui(ImVec2(440, 360)), ImGuiCond_FirstUseEver);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui(ImVec2(10, 8)));
+        const bool visible = ImGui::Begin(name.c_str(), &cards_[i].open);
+        ImGui::PopStyleVar();
+        if (visible) {
+            windowContextMenu("camera." + ros_->feeds[i].camera->id);
+            pins::beginScope("camera." + ros_->feeds[i].camera->id, ros_->feeds[i].camera->title);
+            drawCameraCard(i);
+            pins::endScope();
+        }
+        ImGui::End();
+    }
+    for (std::size_t i = 0; i < ros_->feeds.size() && i < cards_.size(); ++i) // pinned controls of hidden ones
+        if (pins::needsDrawing("camera." + ros_->feeds[i].camera->id))
+            pins::drawOffscreen("camera." + ros_->feeds[i].camera->id, ros_->feeds[i].camera->title,
+                                [&] { drawCameraCard(i); });
+    ros_->setCamerasWanted(camerasShown_);
+}
+
+void App::drawHelpWindow() {
+    if (!helpOpen_)
+        return;
+    const auto *viewport = ImGui::GetMainViewport();
+    focusIfRequested(kHelp);
+    if (beginToolWindow(kHelp, &helpOpen_, ui(ImVec2(600, 0)),
+                        {viewport->WorkPos.x + viewport->WorkSize.x * .5f - 300, viewport->WorkPos.y + 80})) {
+        windowContextMenu("help");
+        const auto table = [](const char *id, std::initializer_list<std::pair<const char *, const char *>> rows) {
+            if (!ImGui::BeginTable(id, 2, ImGuiTableFlags_RowBg))
+                return;
+            ImGui::TableSetupColumn("keys", ImGuiTableColumnFlags_WidthFixed, ui(170));
+            ImGui::TableSetupColumn("action", ImGuiTableColumnFlags_WidthStretch);
+            for (const auto &[keys, action] : rows) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextColored(palette().accent, "%s", keys);
+                ImGui::TableNextColumn();
+                ImGui::TextWrapped("%s", action);
+            }
+            ImGui::EndTable();
+        };
+        ImGui::SeparatorText("Pool view");
+        table("view_keys",
+              {{"Left drag", "orbit"},
+               {"Right / middle drag", "pan (detaches Follow)"},
+               {"Scroll", "zoom"},
+               {"F", "focus on the point under the cursor"},
+               {"Free camera", "click for mouse look, WASD move, Space / Shift up / down, Ctrl fast, "
+                               "Esc release"},
+               {"Gizmo", "drag an arrow to move, a ring to rotate; Esc during a drag restores the start"}});
+        ImGui::SeparatorText("Shortcuts");
+        table("shortcuts", {{"Ctrl+Space", "maximize the pool view / restore the layout"},
+                            {"Ctrl+Shift+1 / 2 / 3", "Standard / Wide view / Camera wall layout"},
+                            {"Ctrl+[ / Ctrl+]", "snap the left / right panels shut, or bring them back"},
+                            {"F1", "this window"},
+                            {"F3", "frame-time stats"}});
+        ImGui::SeparatorText("Windows");
+        ImGui::PushStyleColor(ImGuiCol_Text, palette().muted);
+        ImGui::TextWrapped(
+            "Every panel, camera, the course map and the tool windows can be moved: drag a window's tab onto "
+            "another window to dock it there (the arrows show where), next to it to split the space, or away "
+            "to float it. Drag the borders between windows to resize. Close a window with its x and reopen it "
+            "from the Windows menu. The layout is saved when the viewer closes; Layout > Save current as keeps "
+            "named layouts, and Layout > Standard puts everything back. Right-click a window's tab to pin it to the "
+            "toolbar, or any button, checkbox or dropdown in a panel to pin that control; right-click the toolbar (or "
+            "its +) to choose its buttons. View > Theme changes the colours, View > Interface scale the size.");
+        ImGui::PopStyleColor();
     }
     ImGui::End();
+}
+
+void App::handleShortcuts() {
+    if (ImGui::GetIO().WantTextInput)
+        return;
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Space, ImGuiInputFlags_RouteGlobal))
+        toggleMaximized();
+    const auto &presets = layoutPresets();
+    for (std::size_t i = 0; i < presets.size() && i < 9; ++i)
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey(ImGuiKey_1 + int(i)),
+                            ImGuiInputFlags_RouteGlobal))
+            pendingPreset_ = presets[i].id;
+    if (ImGui::Shortcut(ImGuiKey_F1, ImGuiInputFlags_RouteGlobal))
+        helpOpen_ = !helpOpen_;
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_LeftBracket, ImGuiInputFlags_RouteGlobal))
+        toggleSide(Side::Left);
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_RightBracket, ImGuiInputFlags_RouteGlobal))
+        toggleSide(Side::Right);
+}
+
+// --------------------------------------------------------------------------------------------- layout
+
+std::vector<App::WindowEntry> App::windowEntries() {
+    std::vector<WindowEntry> entries;
+    if (composition_) {
+        const auto flags = composition_->visibility();
+        const auto windows = composition_->panelWindows(); // same order
+        for (std::size_t i = 0; i < flags.size() && i < windows.size(); ++i)
+            entries.push_back({flags[i].first, windows[i].name, windows[i].name.substr(0, windows[i].name.find("###")),
+                               flags[i].second});
+    }
+    if (scenario_)
+        for (std::size_t i = 0; i < scenario_->cameras.size() && i < cards_.size(); ++i)
+            entries.push_back({"camera." + scenario_->cameras[i].id, cameraWindowName(scenario_->cameras[i]),
+                               scenario_->cameras[i].title, &cards_[i].open});
+    entries.push_back({"map", kCourseMap, "Course map", &mapOpen_});
+    entries.push_back({"scene_settings", kSceneSettings, "Scene settings", &sceneOpen_});
+    entries.push_back({"display", kDisplay, "Display", &displayOpen_});
+    entries.push_back({"tf", kTfFrames, "TF frames", &tfOpen_});
+    entries.push_back({"help", kHelp, "Controls & shortcuts", &helpOpen_});
+    return entries;
+}
+
+WindowStates::Flags App::windowFlags() {
+    WindowStates::Flags flags;
+    for (const auto &entry : windowEntries())
+        flags.emplace_back(entry.key, entry.open);
+    return flags;
+}
+
+// The operator's toolbar: which configured items show ("toolbar.<id>") and which windows are pinned to it
+// ("pin.<key>"). Saved with the layout; the built-in layouts leave it alone.
+WindowStates::Flags App::toolbarFlags() {
+    WindowStates::Flags flags;
     if (composition_)
-        composition_->drawWindows();
+        for (const auto &item : composition_->toolbarItems())
+            flags.emplace_back("toolbar." + item.id, item.visible);
+    for (const auto &entry : windowEntries())
+        flags.emplace_back("pin." + entry.key, &pins_[entry.key]);
+    return flags;
+}
+
+// The configured state of windows seen for the first time, which the built-in layouts restore.
+void App::rememberDefaults() {
+    for (const auto &[key, flag] : windowFlags())
+        defaultOpen_.emplace(key, *flag);
+    for (const auto &[key, flag] : toolbarFlags())
+        defaultOpen_.emplace(key, *flag);
+}
+
+void App::resetToolbar() {
+    pins::clear();
+    for (const auto &[key, flag] : toolbarFlags()) {
+        const auto value = defaultOpen_.find(key);
+        *flag = value != defaultOpen_.end() && value->second;
+    }
+}
+
+// Shows a closed window on top, or brings an open one forward (selects its tab).
+void App::showWindow(const WindowEntry &entry) {
+    if (entry.key.rfind("panel.", 0) == 0 && composition_)
+        composition_->focusPanel(entry.key.substr(6));
+    else if (!*entry.open) {
+        *entry.open = true;
+        focusOnce_.insert(entry.name);
+    } else
+        ImGui::SetWindowFocus(entry.name.c_str());
+}
+
+// Right-click on a window's tab (or title bar): pin it to the toolbar, or close it.
+void App::windowContextMenu(const std::string &key) {
+    if (!ImGui::BeginPopupContextItem("##window_menu"))
+        return;
+    bool &pinned = pins_[key];
+    if (ImGui::MenuItem("Pin to toolbar", nullptr, pinned))
+        pinned = !pinned;
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("A toolbar button that shows this window, brings it to the front or hides it");
+    if (ImGui::MenuItem("Close"))
+        for (const auto &entry : windowEntries())
+            if (entry.key == key)
+                *entry.open = false;
+    ImGui::EndPopup();
+}
+
+// A pinned window's toolbar button: lit while the window is in front; shows it, brings it forward, or hides it.
+void App::pinnedWindowButton(const WindowEntry &entry) {
+    const bool front = *entry.open && windowInFront(entry.name.c_str());
+    ImGui::PushID(entry.key.c_str());
+    sameLineIfFits(buttonWidth(entry.label.c_str()));
+    pushActiveColors(front);
+    if (ImGui::Button(entry.label.c_str())) {
+        if (front)
+            *entry.open = false;
+        else
+            showWindow(entry);
+    }
+    popActiveColors();
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s %s (pinned: right-click the toolbar to unpin)",
+                          front         ? "Hide"
+                          : *entry.open ? "Bring forward"
+                                        : "Show",
+                          entry.label.c_str());
+    ImGui::PopID();
+}
+
+namespace {
+// Toolbar item names for the customization menu (a configured `title:` wins).
+std::string toolbarLabel(const std::string &type) {
+    static const std::map<std::string, std::string> labels{{"view", "Camera"},
+                                                           {"focus", "Focus"},
+                                                           {"follow", "Follow"},
+                                                           {"labels", "Labels"},
+                                                           {"tf", "TF"},
+                                                           {"mpc_path", "MPC path"},
+                                                           {"thrust", "Thrust"},
+                                                           {"detections", "Detections"},
+                                                           {"pool_viewer", "Display"},
+                                                           {"scene_settings", "Scene"},
+                                                           {"panels_menu", "Windows"},
+                                                           {"preview_task", "Preview task"},
+                                                           {"simulation", "Simulation"},
+                                                           {"run", "Run tracking"},
+                                                           {"motion", "Enable / KILL"},
+                                                           {"telemetry", "Telemetry"},
+                                                           {"recording", "Recording"}};
+    const auto found = labels.find(type);
+    return found == labels.end() ? type : found->second;
+}
+} // namespace
+
+void App::drawToolbarCustomization() {
+    if (composition_ && !composition_->toolbarItems().empty()) {
+        ImGui::SeparatorText("Toolbar buttons");
+        for (const auto &item : composition_->toolbarItems()) {
+            ImGui::PushID(item.id.c_str());
+            ImGui::Checkbox(item.title.empty() ? toolbarLabel(item.type).c_str() : item.title.c_str(), item.visible);
+            ImGui::PopID();
+        }
+    }
+    ImGui::SeparatorText("Pinned controls");
+    pins::drawCustomization();
+    ImGui::SeparatorText("Pinned windows");
+    ImGui::TextDisabled("Also: right-click a window's tab > Pin to toolbar");
+    for (const auto &entry : windowEntries()) {
+        ImGui::PushID(entry.key.c_str());
+        ImGui::Checkbox(entry.label.c_str(), &pins_[entry.key]);
+        ImGui::PopID();
+    }
+    ImGui::Separator();
+    if (ImGui::Button("Reset toolbar"))
+        resetToolbar();
+}
+
+// --open: windows shown at start whatever the saved layout says.
+void App::applyCommandLineWindows() {
+    commandLineDone_ = true;
+    for (const auto &name : opt_.open) {
+        sceneOpen_ |= name == "scene-settings";
+        if (name == "map")
+            mapOpen_ = focusMap_ = true;
+        tfOpen_ |= name == "tf";
+        displayOpen_ |= name == "pool-viewer" || name == "display";
+        helpOpen_ |= name == "help";
+    }
+}
+
+std::string App::defaultPreset() const {
+    const auto configured = lookup(config_, {"layout"}).as<std::string>("standard");
+    if (findPreset(configured))
+        return configured;
+    std::cerr << "nereus-viewer: unknown layout '" << configured << "' in the host config; using standard\n";
+    return "standard";
+}
+
+// A built-in preset by id, a saved layout by name, or an .ini file by path.
+void App::requestLayout(const std::string &name) {
+    if (findPreset(name)) {
+        pendingPreset_ = name;
+        return;
+    }
+    fs::path file = name;
+    if (!fs::exists(file) && !layoutDir_.empty())
+        file = layoutDir_ / (layoutFileStem(name) + ".ini");
+    std::ifstream in(file);
+    if (!in) {
+        layoutMessage_ = "No layout '" + name + "'";
+        std::cerr << "nereus-viewer: no built-in or saved layout '" << name << "'\n";
+        if (!layoutReady_)
+            pendingPreset_ = defaultPreset();
+        return;
+    }
+    std::stringstream text;
+    text << in.rdbuf();
+    pendingIni_ = text.str();
+    maximized_ = false;
+    resetSides();
+    layoutReady_ = true;
+    layoutMessage_ = "Loaded " + file.stem().string();
+}
+
+// Ini text can only be loaded between frames (before NewFrame); the loop calls this.
+void App::applyPendingIni() {
+    if (pendingIni_.empty())
+        return;
+    const auto text = std::move(pendingIni_);
+    pendingIni_.clear();
+    ImGui::LoadIniSettingsFromMemory(text.c_str(), text.size());
+}
+
+void App::applyPreset(const std::string &id) {
+    const auto *found = findPreset(id);
+    LayoutPreset preset = found ? *found : layoutPresets().front();
+    const auto size = ImGui::GetMainViewport()->WorkSize;
+    if (preset.id == "standard" && composition_ && size.x > 0) // the composition's sidebar width
+        preset.left = std::clamp(composition_->width(size.x) / size.x, .15f, .45f);
+    for (const auto &[key, flag] : windowFlags()) {
+        const auto value = defaultOpen_.find(key);
+        if (value != defaultOpen_.end())
+            *flag = value->second;
+    }
+    resetSides();
+    if (!presetApplied_) // the session's first layout keeps the windows --open asked for
+        applyCommandLineWindows();
+    presetApplied_ = true;
+    maximized_ = false;
+    std::vector<LayoutWindow> windows;
+    for (const auto &camera : scenario_->cameras)
+        windows.push_back({cameraWindowName(camera), Dock::Right, true, false});
+    windows.push_back({kCourseMap, Dock::RightBottom, false, false});
+    if (composition_)
+        for (const auto &panel : composition_->panelWindows())
+            windows.push_back({panel.name, panel.dock, false, panel.selected});
+    buildLayout(dockspace_, size, preset, kPoolView, windows);
+    layoutReady_ = true;
+    layoutMessage_ = preset.label + " layout";
+}
+
+void App::saveLayout(const std::string &name) {
+    const auto stem = layoutFileStem(name);
+    if (stem.empty() || layoutDir_.empty())
+        return;
+    try {
+        fs::create_directories(layoutDir_);
+        std::ofstream out(layoutDir_ / (stem + ".ini"));
+        out << layoutSnapshot();
+        if (!out)
+            throw std::runtime_error("write failed");
+        layoutMessage_ = "Saved " + stem;
+    } catch (const std::exception &error) {
+        layoutMessage_ = "Could not save " + stem + ": " + error.what();
+    }
+}
+
+// Maximize: close every window but the pool view, remembering the layout; again: restore it exactly.
+void App::toggleMaximized() {
+    if (maximized_) {
+        pendingIni_ = beforeMaximize_;
+        maximized_ = false;
+        return;
+    }
+    beforeMaximize_ = layoutSnapshot(); // restoring reopens snapped-shut sides too
+    resetSides();
+    for (const auto &[key, flag] : windowFlags())
+        *flag = false;
+    maximized_ = true;
+}
+
+// The session layout, written when ImGui reports a change (rate-limited) and on exit. While maximized the
+// layout from before is what gets saved.
+void App::persistLayout(bool force) {
+    auto &io = ImGui::GetIO();
+    if (!persist_ || !layoutReady_ || (!force && !io.WantSaveIniSettings))
+        return;
+    io.WantSaveIniSettings = false;
+    std::error_code error;
+    fs::create_directories(sessionIni_.parent_path(), error);
+    std::ofstream out(sessionIni_);
+    out << layoutSnapshot();
+}
+
+void App::focusIfRequested(const std::string &window) {
+    if (focusOnce_.erase(window))
+        ImGui::SetNextWindowFocus();
 }
 
 // Local camera cards: this viewer's own render from each sensor pose (the truth pose live, the fixed preview
@@ -2064,7 +3232,7 @@ double App::cardPeriod(std::size_t camera) const {
 }
 
 void App::renderLocalCards(double t, const rendering::Scene &mainScene) {
-    if (!scenario_ || !model_ || !(demoMode_ || opt_.localCameras) || !cameraSidebarVisible_)
+    if (!scenario_ || !model_ || !(demoMode_ || opt_.localCameras) || !camerasShown_)
         return;
     if (!demoMode_ && !(ros_->truthActive() && ros_->poseFresh()))
         return; // no simulator truth pose to render from
@@ -2219,27 +3387,10 @@ int App::loop() {
                           << ") distance=" << distance_ << " follow=" << follow_ << "\n";
         }
         profiler_.setPosition(body_[3].x, body_[3].y, body_[3].z);
+        applyPendingIni(); // a layout chosen last frame (saved layout, maximize restore)
+        applyPendingUiScale();
         window_->beginFrame();
         drawInterface(t, dt);
-        if (largeMap_ && scenario_) {
-            ImGui::SetNextWindowSize({1000, 620}, ImGuiCond_FirstUseEver);
-            if (focusMap_) {
-                ImGui::SetNextWindowFocus();
-                ImGui::SetNextWindowCollapsed(false);
-                focusMap_ = false;
-            }
-            if (ImGui::Begin("Course map", &largeMap_)) {
-                ImGui::TextDisabled("SCROLL zoom / DRAG pan / CLICK a task to focus the pool view");
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Fit pool")) {
-                    mapZoom_ = 1;
-                    mapPan_ = {0, 0};
-                }
-                auto space = ImGui::GetContentRegionAvail();
-                drawCourseMap(space.x, std::max(100.f, space.y), true);
-            }
-            ImGui::End();
-        }
         if (opt_.frames > 0 && window_->imguiErrors() > 0)
             throw std::runtime_error("ImGui validation failed during capture run");
         // A capture run starts counting once the scene exists (the scenario topic can arrive late).
@@ -2251,6 +3402,7 @@ int App::loop() {
         if (ImGui::IsKeyPressed(ImGuiKey_F3, false) && !ImGui::GetIO().WantTextInput)
             showProfile_ = !showProfile_;
         window_->present(last, opt_.screenshot);
+        persistLayout(false);
         const auto preSwap = Clock::now();
         window_->swap();
         const auto postSwap = Clock::now();
@@ -2266,8 +3418,8 @@ int App::loop() {
             if (scenario_)
                 std::cout << "capture: status=" << status_ << " detections stored/placed=" << ros_->detectionCount()
                           << "/" << ros_->placedDetections.size() << " mpc_points=" << ros_->mpcPath.size()
-                          << " planned_points=" << ros_->plannedPath.size()
-                          << " props=" << ros_->props.size() << " projectiles=" << ros_->projectiles.size()
+                          << " planned_points=" << ros_->plannedPath.size() << " props=" << ros_->props.size()
+                          << " projectiles=" << ros_->projectiles.size()
                           << " magnet_lights=" << ros_->magnetLights.size() << " tf_frames=" << tf_.frames.size()
                           << " camera_frames=" << (ros_->feeds.empty() ? 0 : ros_->feeds[0].frames) << " body=("
                           << body_[3].x << "," << body_[3].y << "," << body_[3].z << ")";

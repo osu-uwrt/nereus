@@ -1,6 +1,7 @@
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panels/pose_math.hpp"
+#include "nereus/ros_viewer/pins.hpp"
 #include <cmath>
 #include <cstdio>
 #include <imgui.h>
@@ -68,35 +69,56 @@ class MotionPanel final : public Panel {
         // Always switchable once connected; a robot seen enabled, or another operator on the switch, offers KILL.
         const bool canKill = s.enabled || s.pending || s.competing || (s.observedKilled && !*s.observedKilled);
         ImGui::BeginDisabled(!motion);
-        ImGui::PushStyleColor(ImGuiCol_Button, canKill ? ImVec4(.65f, .16f, .19f, 1) : ImVec4(.12f, .48f, .46f, 1));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                              canKill ? ImVec4(.8f, .22f, .25f, 1) : ImVec4(.16f, .6f, .56f, 1));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, canKill ? ImVec4(.55f, .12f, .15f, 1) : ImVec4(.1f, .4f, .38f, 1));
-        if (ImGui::Button(canKill ? "KILL###enable_kill" : "Enable###enable_kill", size)) {
+        const auto &p = palette();
+        ImGui::PushStyleColor(ImGuiCol_Button, canKill ? p.danger : p.active);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, canKill ? p.dangerHovered : p.activeHovered);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, canKill ? p.dangerPressed : p.activePressed);
+        ImGui::PushStyleColor(ImGuiCol_Text, canKill ? p.dangerText : p.activeText);
+        if (pins::Button(canKill ? "KILL###enable_kill" : "Enable###enable_kill", size)) {
             if (canKill)
                 kill();
             else
                 motion->enable();
         }
-        ImGui::PopStyleColor(3);
+        ImGui::PopStyleColor(4);
         ImGui::EndDisabled();
     }
+    // "Robot: enabled" etc., coloured by the robot's reported kill state.
+    const char *stateText(const MotionState &s, ImVec4 &tint) const {
+        const auto &p = palette();
+        tint = !motion ? p.muted : s.observedKilled.value_or(true) ? p.robotKilled : p.robotEnabled;
+        return !motion            ? "Preview / controls disconnected"
+               : s.observedKilled ? (*s.observedKilled ? "Robot: killed" : "Robot: enabled")
+                                  : "Robot: state unknown";
+    }
     void toolbar() override {
-        nereus::ros_viewer::sameLineIfFits(90);
+        nereus::ros_viewer::sameLineIfFits(ui(90));
         enableKillButton({90, ImGui::GetFrameHeight()});
     }
+    // Command bar: always visible whatever the window layout, so KILL is never behind a closed or tabbed window.
     void pinned() override {
         const auto s = motion ? motion->state() : MotionState{};
-        enableKillButton({ImGui::GetContentRegionAvail().x, std::max(36.f, ImGui::GetFrameHeight())});
-        if (!motion)
-            ImGui::TextDisabled("Preview / controls disconnected");
-        else
-            ImGui::TextColored(s.observedKilled.value_or(true) ? ImVec4(1, .65, .4, 1) : ImVec4(.3, 1, .65, 1),
-                               "Robot: %s",
-                               s.observedKilled ? (*s.observedKilled ? "killed" : "enabled") : "state unknown");
+        const float height = std::max(ui(34), ImGui::GetFrameHeight());
+        enableKillButton({ui(132), height});
+        // The robot's state beside it, centred on the button (drawn directly: a Text after a tall button takes
+        // the line's text baseline instead).
+        const float top = ImGui::GetItemRectMin().y; // the button's, not its line's (it may continue a line)
+        ImGui::SameLine();
+        const ImVec2 at(ImGui::GetCursorScreenPos().x, top);
+        ImVec4 tint;
+        const char *text = stateText(s, tint);
+        ImGui::Dummy({ImGui::CalcTextSize(text).x, height});
+        ImGui::GetWindowDrawList()->AddText({at.x, at.y + (height - ImGui::GetFontSize()) * .5f},
+                                            ImGui::GetColorU32(tint), text);
     }
     void draw() override {
         const auto s = motion ? motion->state() : MotionState{};
+        // Enable / KILL here too (also pinned in the command bar), full width with the robot's state under it.
+        enableKillButton({ImGui::GetContentRegionAvail().x, std::max(ui(36), ImGui::GetFrameHeight())});
+        ImVec4 tint;
+        const char *state = stateText(s, tint);
+        ImGui::TextColored(tint, "%s", state);
+        ImGui::Separator();
         if (s.fresh && (!initialized || (!dirty && !s.hasCommand)))
             copy(s.actual);
         if (s.revision != revision) {
@@ -115,28 +137,26 @@ class MotionPanel final : public Panel {
             if (choice == Mode::Feedforward)
                 ImGui::SameLine();
             ImGui::BeginDisabled(choice == Mode::Feedforward && !s.supportsFeedforward);
-            if (s.mode == choice)
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(.12f, .48f, .46f, 1));
-            if (ImGui::Button(choice == Mode::Position ? "Position" : "Feedforward", {modeWidth, 0})) {
+            nereus::ros_viewer::pushActiveColors(s.mode == choice);
+            if (pins::Button(choice == Mode::Position ? "Position" : "Feedforward", {modeWidth, 0})) {
                 selected = choice;
                 motion->activate(choice, s.actual);
                 copy(s.actual);
                 dirty = false;
             }
-            if (s.mode == choice)
-                ImGui::PopStyleColor();
+            nereus::ros_viewer::popActiveColors();
             ImGui::EndDisabled();
         }
         if (s.mode == Mode::Feedforward)
             ImGui::TextWrapped("Feedforward controller mode; pose feedback is disabled.");
         ImGui::EndDisabled();
-        ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(2, 2));
+        ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ui(ImVec2(2, 2)));
         if (ImGui::BeginTable("pose", 5, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
-            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 36);
+            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, ui(36));
             ImGui::TableSetupColumn("Actual");
             ImGui::TableSetupColumn("Commanded");
             ImGui::TableSetupColumn("Error");
-            ImGui::TableSetupColumn("Target", ImGuiTableColumnFlags_WidthFixed, 66);
+            ImGui::TableSetupColumn("Target", ImGuiTableColumnFlags_WidthFixed, ui(66));
             ImGui::TableNextRow();
             for (const char *heading : {"", "Actual", "Commanded", "Error", "Target"}) {
                 ImGui::TableNextColumn();
@@ -181,10 +201,10 @@ class MotionPanel final : public Panel {
         const float extraWidth = std::max(0.f, ImGui::GetContentRegionAvail().x - actionsWidth) / (hasDive ? 3 : 2);
         const auto actionSize = [&](const char *label) {
             return ImVec2(ImGui::CalcTextSize(label).x + 2 * ImGui::GetStyle().FramePadding.x + extraWidth,
-                          std::max(40.f, ImGui::GetFrameHeight()));
+                          std::max(ui(40), ImGui::GetFrameHeight()));
         };
         ImGui::BeginDisabled(!motion || !s.fresh || s.pending || s.blocked);
-        if (ImGui::Button("Current", actionSize("Current"))) {
+        if (pins::Button("Current", actionSize("Current"))) {
             copy(s.actual);
             dirty = true;
         }
@@ -193,14 +213,14 @@ class MotionPanel final : public Panel {
         ImGui::BeginDisabled(unavailable);
         const bool finite = std::isfinite(position.x + position.y + position.z + degrees.x + degrees.y + degrees.z);
         ImGui::BeginDisabled(!finite);
-        if (ImGui::Button("Command", actionSize("Command"))) {
+        if (pins::Button("Command", actionSize("Command"))) {
             motion->activate(selected, nereus::ros_viewer::rpyPose(position, glm::radians(degrees)));
             dirty = false;
         }
         ImGui::EndDisabled();
         if (hasDive)
             ImGui::SameLine();
-        if (hasDive && ImGui::Button("Dive in place", actionSize("Dive in place"))) {
+        if (hasDive && pins::Button("Dive in place", actionSize("Dive in place"))) {
             copy(s.actual);
             position.z = diveZ;
             degrees.x = degrees.y = 0;
