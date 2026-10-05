@@ -92,8 +92,15 @@ def hydrodynamics(resolved):
     scales = resolved["bridge"]["thrusters"].get("input_scales", [1] * len(order))
     p = thrusters[0]["parameters"]
     for key in ("delay_s", "rise_time_s", "fall_time_s", "slew_rate_n_s", "forward_limit_n", "reverse_limit_n",
-                "deadband_n", "forward_scale", "reverse_scale", "propeller_radius_m"):
+                "deadband_n", "propeller_radius_m"):
         _same(thrusters, key, key)
+    # Forward/reverse scales may differ per thruster (identified per thruster); riptide_mpc reads them as
+    # thruster_forward_scales / thruster_reverse_scales (bridge order), else the shared values.
+    per_thruster = {}
+    for key, name in (("forward_scale", "thruster_forward_scales"), ("reverse_scale", "thruster_reverse_scales")):
+        values = [by_id[thruster]["parameters"][key] for thruster in order]
+        if len(set(values)) > 1:
+            per_thruster[name] = values
     return {
         "schema_version": 1,
         "robot": robot["id"],
@@ -127,6 +134,7 @@ def hydrodynamics(resolved):
         },
         "thruster_efficiencies": [by_id[name]["parameters"]["efficiency"] * scale
                                   for name, scale in zip(order, scales)],
+        **per_thruster,
     }
 
 
