@@ -21,6 +21,9 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <array>
 #include <cctype>
+#include <ctime>
+#include <sys/wait.h>
+#include <spawn.h>
 #include <cmath>
 #include <cfloat>
 #include <cstring>
@@ -35,6 +38,8 @@
 #include <sstream>
 #include <mutex>
 #include <thread>
+
+extern char **environ;
 
 namespace nereus::ros_viewer::host {
 namespace {
@@ -160,6 +165,20 @@ int fuzzyScore(const std::string &text, const std::string &query) {
     }
     return score;
 }
+// A folder in the desktop's file manager (xdg-open), without waiting for it.
+void openFolder(const fs::path &folder) {
+    pid_t pid = 0;
+    const std::string path = folder.string();
+    char *argv[] = {const_cast<char *>("xdg-open"), const_cast<char *>(path.c_str()), nullptr};
+    if (posix_spawnp(&pid, "xdg-open", nullptr, nullptr, argv, environ) == 0)
+        std::thread([pid] { waitpid(pid, nullptr, 0); }).detach();
+}
+fs::path screenshotDirectory() {
+    const char *home = std::getenv("HOME");
+    const fs::path base = home ? fs::path(home) : fs::temp_directory_path();
+    return (fs::exists(base / "Pictures") ? base / "Pictures" : base) / "Nereus";
+}
+const fs::path kRunRecords = "/tmp/nereus_sim"; // sim.launch.py's run records
 // Map editing's 2D chart colours, from the theme: the canvas around the pool, a floor one step from it toward
 // the accent, lane lines a quiet stroke on the floor, the pool rim.
 struct PlanPalette {
@@ -405,6 +424,17 @@ class App {
     void setUiScale(float setting); // remembered in viewer.yaml
     void applyPendingUiScale();     // between frames: fonts and style at the new scale
     void applyPendingTheme();       // between frames: a theme chosen in the menu
+    // File menu: the pool, the prior map's file, screenshots, folders, quit.
+    void drawFileMenu();
+    void drawFilePopups();
+    void openPriorMap(const fs::path &file);
+    void requestScreenshot();
+    void notify(const std::string &message, bool error = false); // the pool view's status line, for a few seconds
+    std::vector<fs::path> recentMaps_;
+    char openMapPath_[512] = {};
+    bool openMapPopup_ = false, reloadMapPopup_ = false;
+    int screenshotCountdown_ = 0; // frames until the window is saved (the menu that asked has closed by then)
+    fs::path screenshotPath_;
     std::string pendingTheme_;
     // The command centre (VS Code's): a search box in the title bar (Ctrl+P) over everything the menus do.
     struct PaletteCommand {
@@ -711,6 +741,13 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
             theme = YAML::LoadFile(preferencesFile_.string())["theme"].as<std::string>("");
         } catch (const std::exception &error) {
             std::cerr << "nereus-viewer: ignoring " << preferencesFile_ << ": " << error.what() << '\n';
+        }
+    if (persist_ && fs::exists(preferencesFile_)) // File > Open recent
+        try {
+            for (const auto &path : YAML::LoadFile(preferencesFile_.string())["recent_prior_maps"])
+                if (fs::is_regular_file(path.as<std::string>()))
+                    recentMaps_.push_back(path.as<std::string>());
+        } catch (const std::exception &) {
         }
     if (theme.empty())
         theme = lookup(config_, {"theme"}).as<std::string>(themes().front().id);
@@ -2544,6 +2581,7 @@ void App::drawInterface(double time, float dt) {
         drawMapWindows();
     drawUnsavedMapPrompt();
     drawHelpWindow();
+    drawFilePopups();
     drawCommandPalette();
     drawFloatingEdges();
     pins::drawMenu();
@@ -2620,6 +2658,7 @@ void App::drawMenuBar() {
         if (ImGui::IsMouseHoveringRect(at, {at.x + size, at.y + size}))
             ImGui::SetTooltip("Nereus");
     }
+    menu("File", [&] { drawFileMenu(); });
     menu("View", [&] { drawViewMenu(); });
     menu("Windows", [&] { drawWindowsMenu(); });
     menu("Layout", [&] { drawLayoutMenu(); });
@@ -2750,6 +2789,27 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
     for (const auto &pack : poolSwitch_.packs)
         if (pack.poolId != scenario_->poolId)
             add("Pool", pack.poolLabel, false, [this, pack] { switchPool(pack); });
+    add("File", "Open prior map...", false, [this] {
+        std::snprintf(openMapPath_, sizeof(openMapPath_), "%s", priorMap_->file().c_str());
+        openMapPopup_ = true;
+    });
+    for (const auto &path : recentMaps_)
+        add("File", "Open recent: " + path.filename().string() + "  (" + path.parent_path().string() + ")",
+            path == priorMap_->file(), [this, path] { openPriorMap(path); });
+    if (priorMap_->dirty())
+        add("File", "Save prior map", false, [this] { priorMap_->save(); });
+    if (priorMap_->loaded())
+        add("File", "Reload prior map", false, [this] {
+            if (priorMap_->dirty())
+                reloadMapPopup_ = true;
+            else
+                priorMap_->reload();
+        });
+    add("File", "Save screenshot", false, [this] { requestScreenshot(); });
+    if (fs::exists(kRunRecords))
+        add("File", "Open run records", false, [] { openFolder(kRunRecords); });
+    add("File", "Open settings folder", false, [this] { openFolder(configDirectory()); });
+    add("File", "Quit", false, [this] { window_->requestClose(); });
     add("Help", "Controls & shortcuts", helpOpen_, [this] { helpOpen_ = true; });
     return out;
 }
@@ -3037,6 +3097,145 @@ void App::drawScaleMenu() {
     ImGui::EndMenu();
 }
 
+
+void App::notify(const std::string &message, bool error) {
+    poolSwitch_.message = message;
+    poolSwitch_.messageError = error;
+    poolSwitch_.messageUntil = Clock::now() + std::chrono::seconds(5);
+}
+
+void App::requestScreenshot() {
+    std::error_code error;
+    fs::create_directories(screenshotDirectory(), error);
+    const auto now = std::time(nullptr);
+    char stamp[32];
+    std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", std::localtime(&now));
+    screenshotPath_ = screenshotDirectory() / ("nereus-" + std::string(stamp) + ".png");
+    screenshotCountdown_ = 2;
+}
+
+void App::openPriorMap(const fs::path &file) {
+    priorMap_->open(file);
+    const bool ok = priorMap_->loaded() && priorMap_->file() == file;
+    notify(priorMap_->message().empty() ? file.filename().string() : priorMap_->message(), !ok);
+    if (!ok)
+        return;
+    recentMaps_.erase(std::remove(recentMaps_.begin(), recentMaps_.end(), file), recentMaps_.end());
+    recentMaps_.insert(recentMaps_.begin(), file);
+    if (recentMaps_.size() > 6)
+        recentMaps_.resize(6);
+    YAML::Node list(YAML::NodeType::Sequence);
+    for (const auto &path : recentMaps_)
+        list.push_back(path.string());
+    savePreference("recent_prior_maps", list);
+}
+
+// File: what the viewer reads and writes. The pool (a scenario), the prior map's file, screenshots, the folders
+// its records and settings live in, and quitting.
+void App::drawFileMenu() {
+    if (scenario_) {
+        sectionTitle("Pool");
+        if (ImGui::BeginMenu("Switch pool")) {
+            drawPoolMenu();
+            ImGui::EndMenu();
+        }
+    }
+    sectionTitle("Prior map");
+    if (ImGui::MenuItem("Open...")) {
+        std::snprintf(openMapPath_, sizeof(openMapPath_), "%s", priorMap_->file().c_str());
+        openMapPopup_ = true;
+    }
+    if (ImGui::BeginMenu("Open recent", !recentMaps_.empty())) {
+        for (const auto &path : recentMaps_) {
+            ImGui::PushID(path.c_str());
+            if (ImGui::MenuItem(path.parent_path().parent_path().filename().empty()
+                                    ? path.filename().c_str()
+                                    : (path.parent_path().parent_path().filename() / path.filename()).c_str(),
+                                nullptr, path == priorMap_->file()))
+                openPriorMap(path);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", path.c_str());
+            ImGui::PopID();
+        }
+        ImGui::EndMenu();
+    }
+    if (ImGui::MenuItem("Save", "Ctrl+S", false, priorMap_->loaded() && priorMap_->dirty()))
+        priorMap_->save();
+    if (ImGui::MenuItem("Reload", nullptr, false, priorMap_->loaded())) {
+        if (priorMap_->dirty())
+            reloadMapPopup_ = true;
+        else
+            priorMap_->reload();
+    }
+    if (priorMap_->loaded() && ImGui::IsItemHovered())
+        ImGui::SetTooltip("Read %s again", priorMap_->file().c_str());
+    sectionTitle("Capture");
+    if (ImGui::MenuItem("Save screenshot", "F12"))
+        requestScreenshot();
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("The whole window, as a PNG in %s", screenshotDirectory().c_str());
+    if (ImGui::MenuItem("Open screenshots folder", nullptr, false, fs::exists(screenshotDirectory())))
+        openFolder(screenshotDirectory());
+    sectionTitle("Folders");
+    if (ImGui::MenuItem("Open run records", nullptr, false, fs::exists(kRunRecords)))
+        openFolder(kRunRecords);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("%s: one folder per simulator run (log, scores, bags)", kRunRecords.c_str());
+    if (ImGui::MenuItem("Open settings folder", nullptr, false, fs::exists(configDirectory())))
+        openFolder(configDirectory());
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("%s: preferences, the saved arrangement and named layouts", configDirectory().c_str());
+    ImGui::Separator();
+    if (ImGui::MenuItem("Quit", "Ctrl+Q"))
+        window_->requestClose(); // asks first when the prior map has unsaved edits
+}
+
+// The File menu's dialogs: a prior map's path to open, and confirming a reload over unsaved edits.
+void App::drawFilePopups() {
+    if (openMapPopup_) {
+        ImGui::OpenPopup("Open prior map");
+        openMapPopup_ = false;
+    }
+    if (reloadMapPopup_) {
+        ImGui::OpenPopup("Reload prior map?");
+        reloadMapPopup_ = false;
+    }
+    ImGui::SetNextWindowSize({ui(620), 0});
+    if (ImGui::BeginPopupModal("Open prior map", nullptr, ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::TextWrapped("A riptide_mapping config.yaml (the robot workspace's source tree).");
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::IsWindowAppearing())
+            ImGui::SetKeyboardFocusHere();
+        const bool entered = ImGui::InputText("##path", openMapPath_, sizeof(openMapPath_),
+                                              ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+        const fs::path path = openMapPath_;
+        const bool exists = fs::is_regular_file(path);
+        if (!exists && openMapPath_[0])
+            ImGui::TextColored(palette().error, "No such file");
+        ImGui::BeginDisabled(!exists);
+        if (ImGui::Button("Open") || (entered && exists)) {
+            openPriorMap(path);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    if (ImGui::BeginPopupModal("Reload prior map?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted("Discard the unsaved changes and read the file again?");
+        if (ImGui::Button("Reload")) {
+            priorMap_->reload();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+}
+
 void App::drawViewMenu() {
     if (!scenario_) {
         ImGui::TextDisabled("Waiting for the scenario");
@@ -3045,12 +3244,8 @@ void App::drawViewMenu() {
         drawScaleMenu();
         return;
     }
-    sectionTitle("Scene");
-    if (ImGui::BeginMenu("Pool")) {
-        drawPoolMenu();
-        ImGui::EndMenu();
-    }
     if (workspace_ == Workspace::Map) { // the map tools are in the pool view's toolbar
+        sectionTitle("Map");
         if (ImGui::MenuItem("2D view", nullptr, planView_)) {
             planView_ = !planView_;
             if (planView_ && !planFitted_)
@@ -3847,6 +4042,9 @@ void App::drawHelpWindow() {
         sectionTitle("Shortcuts");
         table("shortcuts", {{"Ctrl+P", "search: windows, layouts, themes, views, focus targets"},
                             {"Ctrl+M", "edit the prior map / done"},
+                            {"Ctrl+S", "save the prior map"},
+                            {"F12", "save a screenshot (Pictures/Nereus)"},
+                            {"Ctrl+Q", "quit (asks first if the prior map has unsaved edits)"},
                             {"Ctrl+Space", "maximize the pool view / restore the layout"},
                             {"Ctrl+Shift+1 / 2 / 3", "Standard / Wide view / Camera wall layout"},
                             {"Ctrl+[ / Ctrl+]", "snap the left / right panels shut, or bring them back"},
@@ -3880,6 +4078,14 @@ void App::handleShortcuts() {
             pendingPreset_ = presets[i].id;
     if (ImGui::Shortcut(ImGuiKey_F1, ImGuiInputFlags_RouteGlobal))
         helpOpen_ = !helpOpen_;
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Q, ImGuiInputFlags_RouteGlobal))
+        window_->requestClose(); // asks first when the prior map has unsaved edits
+    if (ImGui::Shortcut(ImGuiKey_F12, ImGuiInputFlags_RouteGlobal))
+        requestScreenshot();
+    // Ctrl+S saves the prior map from anywhere (map editing handles its own)
+    if (workspace_ != Workspace::Map && priorMap_->dirty() &&
+        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
+        priorMap_->save();
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_P, ImGuiInputFlags_RouteGlobal) && scenario_)
         paletteFocus_ = true; // the title bar's search box takes the keyboard
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_LeftBracket, ImGuiInputFlags_RouteGlobal))
@@ -4389,7 +4595,10 @@ int App::loop() {
         const bool last = opt_.frames > 0 && frames >= opt_.frames;
         if (ImGui::IsKeyPressed(ImGuiKey_F3, false) && !ImGui::GetIO().WantTextInput)
             showProfile_ = !showProfile_;
-        window_->present(last, opt_.screenshot);
+        const bool shot = screenshotCountdown_ > 0 && --screenshotCountdown_ == 0; // File > Save screenshot
+        window_->present(last || shot, shot ? screenshotPath_ : fs::path(opt_.screenshot));
+        if (shot)
+            notify("Saved screenshot " + screenshotPath_.string());
         persistLayout(false);
         const auto preSwap = Clock::now();
         window_->swap();

@@ -99,6 +99,16 @@ Right-click the pool view's toolbar, or click its **+**, to choose what it shows
 
 The toolbar is saved with the layout (and with named layouts); the built-in layouts leave it as it is.
 
+## File menu
+
+- **Pool**: switch the pool (in the simulator, the supervisor restarts it there).
+- **Prior map**: Open (a riptide_mapping `config.yaml` by path), Open recent, Save (Ctrl+S, from anywhere), Reload
+  (asks first over unsaved edits). Map editing (Edit map, Ctrl+M) is where it is changed.
+- **Capture**: Save screenshot (F12: the whole window, a PNG in `~/Pictures/Nereus/`), and that folder.
+- **Folders**: the simulator's run records (`/tmp/nereus_sim/`) and the viewer's settings (`~/.config/nereus/`:
+  preferences, the saved arrangement, named layouts), in the desktop's file manager.
+- **Quit** (Ctrl+Q), asking first when the prior map has unsaved edits.
+
 ## Search (Ctrl+P)
 
 The box in the middle of the title bar (or Ctrl+P) searches everything the menus do: windows, layouts, themes,

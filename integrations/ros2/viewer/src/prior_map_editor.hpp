@@ -73,6 +73,16 @@ class PriorMapEditor {
     void save() {
         saveFile();
     }
+    void open(const std::filesystem::path &file) { // a riptide_mapping config.yaml (errors go to the status line)
+        openFile(file);
+    }
+    void reload() { // the file again, dropping unsaved edits
+        openFile(configPath_);
+    }
+    // The editor's last status line ("Saved ...", "Loaded ...", or what went wrong).
+    const std::string &message() const {
+        return message_;
+    }
     const std::filesystem::path &file() const {
         return configPath_;
     }

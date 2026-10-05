@@ -102,6 +102,8 @@ First version for the team.
     - Themes are data: one YAML file each in `content/viewer/themes/` (the code keeps only the legibility floor
       and a built-in fallback).
     - Board telemetry (FOG, CPU, batteries) shows as readouts (dot, label, bold value) instead of boxed chips.
+    - A File menu: switch pool, open / open recent / save (Ctrl+S anywhere) / reload the prior map, save a
+      screenshot (F12, `~/Pictures/Nereus`), open the run records and settings folders, quit (Ctrl+Q).
     - A command centre in the title bar (Ctrl+P), as VS Code's: fuzzy search over windows, layouts, themes, scales,
       focus targets, camera views, toggles and pools (Enable and KILL are left out on purpose).
     - Theme changes apply between frames (picking one could leave a mix of two themes), tab styles are part of
