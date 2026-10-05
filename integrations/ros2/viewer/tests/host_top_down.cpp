@@ -38,8 +38,9 @@ TEST(TopDown, ProjectsTheFootprintWithItsColourAndARim) {
     EXPECT_LT(inside[1], 20);
     EXPECT_EQ(pixel(image, 5, 20)[3], 0);
     EXPECT_EQ(pixel(image, 15, 5)[3], 0);
-    // the footprint's edge is darker than its middle
-    EXPECT_LT(pixel(image, 10, 20)[0], inside[0]);
+    // its levels: the full size gets a darker edge than its middle
+    const auto levels = topDownLevels(image);
+    EXPECT_LT(pixel(levels[0], 10, 20)[0], pixel(levels[0], 15, 20)[0]);
 }
 
 TEST(TopDown, TheHighestSurfaceWins) {
@@ -62,11 +63,17 @@ TEST(TopDown, BoundsFollowThePlacement) {
     EXPECT_FLOAT_EQ(hi.y, -1);
 }
 
-TEST(TopDown, TheHaloGrowsTheSilhouette) {
-    const auto dot = box({1.9f, 1.9f, 0}, {2.1f, 2.1f, 1}, {1, 1, 1});
-    const auto image = bakeTopDown({{dot, glm::mat4(1)}}, {0, 0}, {4, 4}, 10);
-    const auto halo = haloOf(image, 5);
-    EXPECT_EQ(pixel(image, 15, 20)[3], 0);  // half a metre from the post: empty in the image
-    EXPECT_EQ(pixel(halo, 16, 20)[3], 255); // within the halo's 5 px
-    EXPECT_EQ(pixel(halo, 5, 20)[3], 0);    // beyond it
+TEST(TopDown, ThinPropsStayOpaqueInEverySmallerLevel) {
+    // a 5 cm post in a 4 m image at 32 px/m: under 2 px wide, gone from an averaged mip chain's small levels
+    const auto post = box({1.98f, 0, 0}, {2.03f, 4, 1}, {1, 1, 1});
+    const auto levels = topDownLevels(bakeTopDown({{post, glm::mat4(1)}}, {0, 0}, {4, 4}, 32));
+    ASSERT_GE(levels.size(), 6u); // 128, 64, 32, 16, 8, 4, ...
+    for (std::size_t i = 0; i < 6; ++i) {
+        const auto &level = levels[i];
+        int opaque = 0;
+        for (int x = 0; x < level.width; ++x)
+            opaque += pixel(level, x, level.height / 2)[3] == 255;
+        EXPECT_GE(opaque, 1) << "level " << i; // the post is still drawn, solid
+        EXPECT_LE(opaque, 2) << "level " << i; // and not grown into a smear
+    }
 }

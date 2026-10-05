@@ -499,7 +499,7 @@ class App {
         GLuint texture = 0;
         glm::vec2 low{0}, high{0};
     };
-    TopDownTexture courseImage_, courseHalo_, robotImage_;
+    TopDownTexture courseImage_, robotImage_;
     const SceneModel *topDownFor_ = nullptr;
     void bakeTopDownImages();
     StatusLights lights_;
@@ -878,7 +878,7 @@ App::~App() {
         glDeleteFramebuffers(1, &readFbo_);
     if (drawFbo_)
         glDeleteFramebuffers(1, &drawFbo_);
-    for (GLuint texture : {logoTrident_, logoSonar_, courseImage_.texture, courseHalo_.texture, robotImage_.texture})
+    for (GLuint texture : {logoTrident_, logoSonar_, courseImage_.texture, robotImage_.texture})
         if (texture)
             glDeleteTextures(1, &texture);
     renderer_.reset();
@@ -1795,15 +1795,6 @@ void App::drawCourseMap(float width, float height, bool compact) {
         bakeTopDownImages();
     if (courseImage_.texture) {
         const glm::vec2 lo = courseImage_.low, hi = courseImage_.high; // image row 0 is the top (pool y high)
-        // under the props, their silhouette grown 25 cm in the theme's ink, so thin and pale props stay visible
-        // at the whole pool's scale; it fades as the map zooms in and the props draw large enough themselves
-        const float halo = std::clamp(.5f - .14f * (mapZoom_ - 1), 0.f, .5f);
-        if (courseHalo_.texture && halo > 0) {
-            const ImVec4 ink = palette().text;
-            d->AddImageQuad(textureID(courseHalo_.texture), poolXY({lo.x, hi.y}), poolXY(hi), poolXY({hi.x, lo.y}),
-                            poolXY(lo), {0, 0}, {1, 0}, {1, 1}, {0, 1},
-                            ImGui::GetColorU32(ImVec4(ink.x, ink.y, ink.z, halo)));
-        }
         d->AddImageQuad(textureID(courseImage_.texture), poolXY({lo.x, hi.y}), poolXY(hi), poolXY({hi.x, lo.y}),
                         poolXY(lo), {0, 0}, {1, 0}, {1, 1}, {0, 1});
     }
@@ -1879,25 +1870,29 @@ void App::drawCourseMap(float width, float height, bool compact) {
 // reset), and the robot's visuals in its base frame.
 void App::bakeTopDownImages() {
     topDownFor_ = model_.get();
-    const auto upload = [](const TopDownImage &image, TopDownTexture &out) {
+    // each image with its own smaller sizes (topDownLevels: thin props stay solid and outlined when drawn small)
+    const auto upload = [](TopDownImage image, TopDownTexture &out) {
         if (out.texture)
             glDeleteTextures(1, &out.texture);
         out = {};
-        if (image.width == 0)
+        const auto levels = topDownLevels(std::move(image));
+        if (levels.empty())
             return;
         glGenTextures(1, &out.texture);
         glBindTexture(GL_TEXTURE_2D, out.texture);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                     image.rgba.data());
-        glGenerateMipmap(GL_TEXTURE_2D);
+        for (std::size_t i = 0; i < levels.size(); ++i)
+            glTexImage2D(GL_TEXTURE_2D, GLint(i), GL_RGBA, levels[i].width, levels[i].height, 0, GL_RGBA,
+                         GL_UNSIGNED_BYTE, levels[i].rgba.data());
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, GLint(levels.size() - 1));
+        const auto &image0 = levels.front();
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glBindTexture(GL_TEXTURE_2D, 0);
-        out.low = image.low;
-        out.high = image.high;
+        out.low = image0.low;
+        out.high = image0.high;
     };
     if (!model_ || !scenario_)
         return;
@@ -1923,7 +1918,6 @@ void App::bakeTopDownImages() {
         bakeTopDown(course, {-margin, -margin}, {scenario_->poolLength + margin, scenario_->poolWidth + margin}, 48,
                     readPng);
     upload(courseImage, courseImage_);
-    upload(haloOf(courseImage, 12), courseHalo_); // 25 cm at 48 px per metre
     // the robot: its visuals in base_link (root placed as the pack's convention puts it under base_link)
     const glm::mat4 baseFromRoot = toGlm(model_->worldFromRoot(glm::mat4(1)).cast<float>());
     std::vector<TopDownPart> robot;

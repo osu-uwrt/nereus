@@ -26,9 +26,11 @@ using ImageReader = std::function<bool(const std::filesystem::path &, int &width
 // The parts' top-down image over [low, high] at `pixelsPerMetre` (capped at `maximumSide` pixels a side).
 TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, glm::vec2 high, float pixelsPerMetre,
                          const ImageReader &readImage = {}, int maximumSide = 4096);
-// The image's silhouette grown by `radius` pixels (a square max filter), as a white mask in the alpha channel: the
-// halo that keeps thin or pale props visible on a small map.
-TopDownImage haloOf(const TopDownImage &image, int radius);
+// The image and its smaller sizes for the GPU (a mip chain, each level half the last), made so thin props survive
+// being drawn small: a pixel is opaque when any pixel under it is, its colour the average of those that are (an
+// ordinary mip chain averages a pole into a faint smear). Each level then gets its own 1 px dark edge, so props
+// keep a crisp outline at every zoom. Level 0 is the full-size image.
+std::vector<TopDownImage> topDownLevels(TopDownImage image);
 // The parts' extent in the plane (x, y), or an empty box (low > high) when there are none.
 std::pair<glm::vec2, glm::vec2> topDownBounds(const std::vector<TopDownPart> &parts);
 } // namespace nereus::ros_viewer::host

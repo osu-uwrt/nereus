@@ -30,44 +30,6 @@ std::pair<glm::vec2, glm::vec2> topDownBounds(const std::vector<TopDownPart> &pa
     return {low, high};
 }
 
-TopDownImage haloOf(const TopDownImage &image, int radius) {
-    TopDownImage halo = image;
-    const int w = image.width, h = image.height;
-    std::vector<std::uint8_t> alpha(std::size_t(w) * std::size_t(h)), across(alpha.size());
-    for (std::size_t i = 0; i < alpha.size(); ++i)
-        alpha[i] = image.rgba[i * 4 + 3];
-    // separable max filter: rows, then columns (a running count of covered pixels in the window)
-    for (int y = 0; y < h; ++y) {
-        int covered = 0;
-        const auto at = [&](int x) { return alpha[std::size_t(y) * std::size_t(w) + std::size_t(x)] > 0; };
-        for (int x = 0; x < std::min(radius, w); ++x)
-            covered += at(x);
-        for (int x = 0; x < w; ++x) {
-            if (x + radius < w)
-                covered += at(x + radius);
-            if (x - radius - 1 >= 0)
-                covered -= at(x - radius - 1);
-            across[std::size_t(y) * std::size_t(w) + std::size_t(x)] = covered > 0 ? 255 : 0;
-        }
-    }
-    for (int x = 0; x < w; ++x) {
-        int covered = 0;
-        const auto at = [&](int y) { return across[std::size_t(y) * std::size_t(w) + std::size_t(x)] > 0; };
-        for (int y = 0; y < std::min(radius, h); ++y)
-            covered += at(y);
-        for (int y = 0; y < h; ++y) {
-            if (y + radius < h)
-                covered += at(y + radius);
-            if (y - radius - 1 >= 0)
-                covered -= at(y - radius - 1);
-            const std::size_t i = std::size_t(y) * std::size_t(w) + std::size_t(x);
-            halo.rgba[i * 4] = halo.rgba[i * 4 + 1] = halo.rgba[i * 4 + 2] = 255;
-            halo.rgba[i * 4 + 3] = covered > 0 ? 255 : 0;
-        }
-    }
-    return halo;
-}
-
 TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, glm::vec2 high, float pixelsPerMetre,
                          const ImageReader &readImage, int maximumSide) {
     TopDownImage image;
@@ -155,24 +117,70 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
             }
         }
     }
-    // a thin darker edge where a prop meets the floor, so small props stay crisp on the map
-    std::vector<std::uint8_t> edged = image.rgba;
-    for (int y = 0; y < image.height; ++y)
-        for (int x = 0; x < image.width; ++x) {
-            const std::size_t at = std::size_t(y) * std::size_t(image.width) + std::size_t(x);
-            if (!image.rgba[at * 4 + 3])
-                continue;
-            bool rim = false;
-            for (const auto [dx, dy] : {std::pair{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
-                const int nx = x + dx, ny = y + dy;
-                rim |= nx < 0 || ny < 0 || nx >= image.width || ny >= image.height ||
-                       !image.rgba[(std::size_t(ny) * std::size_t(image.width) + std::size_t(nx)) * 4 + 3];
-            }
-            if (rim)
-                for (int k = 0; k < 3; ++k)
-                    edged[at * 4 + k] = std::uint8_t(edged[at * 4 + k] * 55 / 100);
-        }
-    image.rgba = std::move(edged);
     return image;
+}
+
+namespace {
+// A 1 px darker edge where a prop meets the floor (the outline that keeps small props crisp); thin features are
+// left their own colour, as darkening them would dim them whole.
+void darkenEdges(TopDownImage &image) {
+    std::vector<std::uint8_t> edged = image.rgba;
+    const auto opaque = [&](int x, int y) {
+        return x >= 0 && y >= 0 && x < image.width && y < image.height &&
+               image.rgba[(std::size_t(y) * std::size_t(image.width) + std::size_t(x)) * 4 + 3] > 0;
+    };
+    for (int y = 0; y < image.height; ++y)
+        for (int x = 0; x < image.width; ++x)
+            // the border of something with a body; a feature only a pixel thin (a pole drawn small) keeps its colour
+            if (opaque(x, y) && (!opaque(x + 1, y) || !opaque(x - 1, y) || !opaque(x, y + 1) || !opaque(x, y - 1)) &&
+                (opaque(x + 1, y) || opaque(x - 1, y)) && (opaque(x, y + 1) || opaque(x, y - 1))) {
+                const std::size_t at = (std::size_t(y) * std::size_t(image.width) + std::size_t(x)) * 4;
+                for (int k = 0; k < 3; ++k)
+                    edged[at + std::size_t(k)] = std::uint8_t(edged[at + std::size_t(k)] * 55 / 100);
+            }
+    image.rgba = std::move(edged);
+}
+// Half the size: opaque when any of the (up to) four pixels under it is, their opaque colours averaged.
+TopDownImage halve(const TopDownImage &image) {
+    TopDownImage half;
+    half.width = std::max(1, image.width / 2);
+    half.height = std::max(1, image.height / 2);
+    half.low = image.low;
+    half.high = image.high;
+    half.rgba.assign(std::size_t(half.width) * std::size_t(half.height) * 4, 0);
+    for (int y = 0; y < half.height; ++y)
+        for (int x = 0; x < half.width; ++x) {
+            int sum[3] = {0, 0, 0}, count = 0;
+            for (int dy = 0; dy < 2; ++dy)
+                for (int dx = 0; dx < 2; ++dx) {
+                    const int sx = std::min(image.width - 1, 2 * x + dx), sy = std::min(image.height - 1, 2 * y + dy);
+                    const auto *p = &image.rgba[(std::size_t(sy) * std::size_t(image.width) + std::size_t(sx)) * 4];
+                    if (!p[3])
+                        continue;
+                    for (int k = 0; k < 3; ++k)
+                        sum[k] += p[k];
+                    ++count;
+                }
+            if (!count)
+                continue;
+            auto *q = &half.rgba[(std::size_t(y) * std::size_t(half.width) + std::size_t(x)) * 4];
+            for (int k = 0; k < 3; ++k)
+                q[k] = std::uint8_t(sum[k] / count);
+            q[3] = 255;
+        }
+    return half;
+}
+} // namespace
+
+std::vector<TopDownImage> topDownLevels(TopDownImage image) {
+    std::vector<TopDownImage> levels;
+    if (image.width == 0)
+        return levels;
+    levels.push_back(std::move(image));
+    while (levels.back().width > 1 || levels.back().height > 1)
+        levels.push_back(halve(levels.back())); // from the plain image (edges are added per level below)
+    for (auto &level : levels)
+        darkenEdges(level);
+    return levels;
 }
 } // namespace nereus::ros_viewer::host

@@ -97,7 +97,8 @@ First version for the team.
       desktop's units.
     - Camera images carry no overlay: Truth / ROS sits beside RGB / Depth, and the live rate is in the header.
     - The course map draws the props and the robot as top-down images baked once from their meshes (no live
-      rendering), with the task names beside them and a halo that keeps thin props visible zoomed out. The bins
+      rendering), with the task names beside them; the images carry their own smaller sizes (coverage-preserving, each
+      with a 1 px outline) so thin props stay crisp zoomed out. The bins
       and octagon labels show again: the host config now uses the 2026 pack's names (`bins`, `surface`).
     - Themes are data: one YAML file each in `content/viewer/themes/` (the code keeps only the legibility floor
       and a built-in fallback).
