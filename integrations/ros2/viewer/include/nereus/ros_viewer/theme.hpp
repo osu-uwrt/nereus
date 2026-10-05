@@ -2,6 +2,7 @@
 // "on" fills, KILL, robot state, bars). The 3D view and its overlays keep their own colours in every theme.
 #pragma once
 #include <cstring>
+#include <filesystem>
 #include <imgui.h>
 #include <string>
 #include <vector>
@@ -15,13 +16,20 @@ struct Palette {
     ImVec4 warn, error;                                      // status levels
     ImVec4 robotEnabled, robotKilled;                        // robot state beside Enable / KILL
     ImVec4 bar, toolbar;                                     // menu / command bar, pool view toolbar strip
+    ImVec4 change, changeText;                               // the lamp (a running clock) and its ink
+    ImVec4 enable, enableHovered, enablePressed, enableText; // Enable (the robot is off): its own action ink
 };
 struct Theme {
     std::string id, label, description;
     std::string fontFamily; // empty: the viewer's own font (DejaVu Sans)
     float fontPoints = 0;   // the family's size in points (at 96 dpi), 0: the viewer's sizes
+    // Font files shipped with the viewer (content/viewer/fonts), in place of a family: body, bold, large figures.
+    std::string fontRegular, fontStrong, fontFigures;
 };
-// Built-in themes, the default (abyss) first.
+// Themes are data: one YAML file each (content/viewer/themes). loadThemes reads a directory (replacing the
+// built-in fallback) and returns a warning per file it could not use; themes() lists them by their `order`, the
+// default first.
+std::vector<std::string> loadThemes(const std::filesystem::path &directory);
 const std::vector<Theme> &themes();
 const Theme &currentThemeInfo();
 // Applies a theme to the current ImGui context's style and to palette(); false (and no change) if unknown.
@@ -49,18 +57,73 @@ struct TypeRamp {
 };
 void setTypeRamp(const TypeRamp &);
 const TypeRamp &typeRamp();
-// A section title: bold body text over a rule (ImGui::SeparatorText in the strong font).
+// A section title in the strong font: over a rule (ImGui::SeparatorText), or in a ruled theme the text with a
+// heavy rule beneath it, the way a results sheet heads each event.
 void sectionTitle(const char *text);
-// A table's header row in the strong font.
+// A table's header row in the strong font (a ruled theme draws a heavy rule under it).
 void tableHeaders();
+// Under a header row drawn by hand (TableHeader per column): the ruled theme's heavy rule; nothing otherwise.
+void ruleUnderHeaders();
+// The theme draws heads ruled (heavy ink rules, no header fills).
+bool ruledTheme();
+// Corner radius of status chips: a capsule unless the theme squares them off.
+float chipRounding(float height);
+
+// Surfaces inside the theme. The board (menu and command bars) can carry its own palette: inside
+// beginSurface(Surface::Board) .. endSurface(), palette() and ImGui's text, button, frame and popup colours are
+// the board's; Surface::Sheet restores the panels' colours inside a board (a menu's dropdown). Nest freely.
+enum class Surface { Sheet, Board };
+void beginSurface(Surface);
+void endSurface();
+// Only a surface's popup colours (background, border): for a menu on the board whose dropdown is a sheet, pushed
+// before BeginMenu (which creates the dropdown) while the menu's label keeps the board's colours.
+void pushPopupColors(Surface);
+void popPopupColors();
+
+// A readout on the board (FOG 41.2°C, PORT 86 %): a level dot, the label in muted text, the value in bold (in
+// `valueInk`); no box, so it reads as an instrument, not a button. Returns hover for a tooltip.
+inline float readoutWidth(const char *label, const char *value) {
+    float width = ui(13) + ImGui::CalcTextSize(label).x + ui(5);
+    if (auto *font = typeRamp().strong)
+        width += font->CalcTextSizeA(font->FontSize, 1e9f, 0, value).x;
+    else
+        width += ImGui::CalcTextSize(value).x;
+    return width;
+}
+inline bool statusReadout(const char *label, const char *value, ImVec4 dot, ImVec4 valueInk) {
+    const ImVec2 at = ImGui::GetCursorScreenPos(), size{readoutWidth(label, value), ImGui::GetFrameHeight()};
+    ImGui::InvisibleButton("##readout", size);
+    auto *draw = ImGui::GetWindowDrawList();
+    const float middle = at.y + size.y * .5f, radius = ui(3.5f);
+    draw->AddCircleFilled({at.x + radius, middle}, radius, ImGui::GetColorU32(dot));
+    const float labelX = at.x + ui(13);
+    draw->AddText({labelX, middle - ImGui::GetFontSize() * .5f}, ImGui::GetColorU32(palette().muted), label);
+    ImFont *font = typeRamp().strong ? typeRamp().strong : ImGui::GetFont();
+    draw->AddText(font, font->FontSize, {labelX + ImGui::CalcTextSize(label).x + ui(5), middle - font->FontSize * .5f},
+                  ImGui::GetColorU32(valueInk), value);
+    return ImGui::IsItemHovered();
+}
 // A panel's explanation of what it shows once connected (muted, wrapped).
 inline void emptyState(const char *text) {
     ImGui::PushStyleColor(ImGuiCol_Text, palette().muted);
     ImGui::TextWrapped("%s", text);
     ImGui::PopStyleColor();
 }
-// A status chip: an outlined capsule with a status dot and the text in the status colour. It reads as a label, not
-// a button (buttons are filled rectangles); returns hover for a tooltip.
+// A theme with bevels (Classic: a border shadow): edges drawn raised (light above / left, shadow below / right) or
+// sunken (the reverse), as Qt's Windows style draws buttons and fields.
+inline bool bevelledTheme() {
+    return ImGui::GetStyle().Colors[ImGuiCol_BorderShadow].w > 0;
+}
+inline void bevel(ImDrawList *draw, ImVec2 min, ImVec2 max, bool raised) {
+    const ImU32 light = ImGui::GetColorU32(ImGuiCol_Border), shadow = ImGui::GetColorU32(ImGuiCol_BorderShadow);
+    const ImU32 topLeft = raised ? light : shadow, bottomRight = raised ? shadow : light;
+    draw->AddLine({min.x, max.y - 1}, {min.x, min.y}, topLeft);
+    draw->AddLine({min.x, min.y}, {max.x - 1, min.y}, topLeft);
+    draw->AddLine({max.x - 1, min.y}, {max.x - 1, max.y - 1}, bottomRight);
+    draw->AddLine({max.x - 1, max.y - 1}, {min.x, max.y - 1}, bottomRight);
+}
+// A status chip: an outlined capsule with a status dot and the text in the status colour (in a bevelled theme, a
+// sunken status-bar panel, as Qt draws one). It reads as a label, not a button; returns hover for a tooltip.
 inline float statusChipWidth(const char *text) {
     return ImGui::CalcTextSize(text, nullptr, true).x + 2 * ImGui::GetStyle().FramePadding.x + ui(13);
 }
@@ -69,10 +132,14 @@ inline bool statusChip(const char *text, ImVec4 tint) {
     ImGui::InvisibleButton("##status_chip", size);
     auto *draw = ImGui::GetWindowDrawList();
     const ImVec2 end{at.x + size.x, at.y + size.y};
-    const float radius = size.y * .5f, pad = ImGui::GetStyle().FramePadding.x, dot = ui(3.5f);
-    draw->AddRectFilled(at, end, ImGui::GetColorU32({tint.x, tint.y, tint.z, .08f}), radius);
-    draw->AddRect(at, end, ImGui::GetColorU32({tint.x, tint.y, tint.z, .6f}), radius, 0, ui(1));
-    draw->AddCircleFilled({at.x + pad + dot, at.y + radius}, dot, ImGui::GetColorU32(tint));
+    const float radius = chipRounding(size.y), pad = ImGui::GetStyle().FramePadding.x, dot = ui(3.5f);
+    if (bevelledTheme()) {
+        bevel(draw, at, end, false);
+    } else {
+        draw->AddRectFilled(at, end, ImGui::GetColorU32({tint.x, tint.y, tint.z, .08f}), radius);
+        draw->AddRect(at, end, ImGui::GetColorU32({tint.x, tint.y, tint.z, .6f}), radius, 0, ui(1));
+    }
+    draw->AddCircleFilled({at.x + pad + dot, at.y + size.y * .5f}, dot, ImGui::GetColorU32(tint));
     const char *shown = std::strstr(text, "##");
     draw->AddText({at.x + pad + ui(13), at.y + (size.y - ImGui::GetFontSize()) * .5f}, ImGui::GetColorU32(tint), text,
                   shown);

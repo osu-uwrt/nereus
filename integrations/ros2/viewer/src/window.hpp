@@ -1,5 +1,6 @@
 // GLFW/GLEW/ImGui context of the host: one window, DejaVu fonts, the dark pool-viewer theme.
 #pragma once
+#include "nereus/ros_viewer/theme.hpp"
 #include <filesystem>
 #include <imgui.h>
 #include <string>
@@ -43,9 +44,11 @@ class Window {
     ImFont *strong = nullptr;      // the body size in bold: section titles, table headers
     ImFont *smallStrong = nullptr; // the small size in bold: chart labels
     ImFont *menu = nullptr; // the title bar's menus, at the desktop's scale like other apps' title bars
-    // Loads the fonts at the interface scale (`ui`) and the title bar's at `titleBar`; between frames only. A
-    // family (fontconfig name, e.g. a Qt theme's) at its point size replaces the viewer's DejaVu Sans.
-    void loadFonts(float ui, float titleBar, const std::string &family = {}, float points = 0);
+    ImFont *titleSmall = nullptr; // the title bar's search box (smaller than its menus, as VS Code's)
+    // Loads the fonts at the interface scale (`ui`) and the title bar's at `titleBar`; between frames only. The
+    // theme's own font files (in `fontDirectory`) or family (fontconfig name, e.g. a Qt theme's) at its point size
+    // replace the viewer's DejaVu Sans.
+    void loadFonts(float ui, float titleBar, const Theme &theme = {}, const std::filesystem::path &fontDirectory = {});
     // The desktop's UI scale for this window (GNOME at 200 %: 2), as other applications size themselves.
     float contentScale() const;
     int imguiErrors() const;

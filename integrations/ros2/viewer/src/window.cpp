@@ -33,6 +33,20 @@ Window::Window(int width, int height, const std::string &titleText, bool hidden,
         glfwTerminate();
         throw std::runtime_error("Cannot create an OpenGL 3.3 window");
     }
+    // The configured size is at 100 %: on a scaled desktop (GNOME at 200 %) the window opens that size in the
+    // desktop's units, or maximized when that would not fit the screen. Capture runs keep the exact pixels.
+    if (!hidden) {
+        float scaleX = 1, scaleY = 1;
+        glfwGetWindowContentScale(window_, &scaleX, &scaleY);
+        int areaX = 0, areaY = 0, areaW = 0, areaH = 0;
+        if (GLFWmonitor *monitor = glfwGetPrimaryMonitor())
+            glfwGetMonitorWorkarea(monitor, &areaX, &areaY, &areaW, &areaH);
+        const int scaledW = int(float(width) * scaleX), scaledH = int(float(height) * scaleY);
+        if (areaW > 0 && (scaledW > areaW * 0.92 || scaledH > areaH * 0.92))
+            glfwMaximizeWindow(window_);
+        else if (scaleX > 1.01f)
+            glfwSetWindowSize(window_, scaledW, scaledH);
+    }
     if (custom_ && !glfwGetX11Display()) { // no window-manager protocol to move / resize with
         custom_ = false;
         glfwSetWindowAttrib(window_, GLFW_DECORATED, GLFW_TRUE);
@@ -92,31 +106,45 @@ std::string fontFile(const std::string &family, const char *style) {
 }
 } // namespace
 
-void Window::loadFonts(float ui, float titleBar, const std::string &family, float points) {
+void Window::loadFonts(float ui, float titleBar, const Theme &theme, const std::filesystem::path &fontDirectory) {
     auto &io = ImGui::GetIO();
     io.Fonts->Clear();
     std::filesystem::path font = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                          bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+                          bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", figures;
     float body = 15; // pixels at 100 %; the other sizes keep their ratios to it
-    if (const auto regular = fontFile(family, "Regular"); !regular.empty()) {
+    const auto shipped = [&](const std::string &name) {
+        return name.empty() ? std::filesystem::path() : fontDirectory / name;
+    };
+    if (!theme.fontRegular.empty() && std::filesystem::exists(shipped(theme.fontRegular))) {
+        font = shipped(theme.fontRegular);
+        bold = std::filesystem::exists(shipped(theme.fontStrong)) ? shipped(theme.fontStrong) : font;
+        if (std::filesystem::exists(shipped(theme.fontFigures)))
+            figures = shipped(theme.fontFigures);
+        if (theme.fontPoints > 0)
+            body = theme.fontPoints * 96.f / 72.f;
+    } else if (const auto regular = fontFile(theme.fontFamily, "Regular"); !regular.empty()) {
         font = regular;
-        const auto heavy = fontFile(family, "Bold");
+        const auto heavy = fontFile(theme.fontFamily, "Bold");
         bold = heavy.empty() ? regular : heavy;
-        if (points > 0)
-            body = points * 96.f / 72.f;
+        if (theme.fontPoints > 0)
+            body = theme.fontPoints * 96.f / 72.f;
     }
     const float k = body / 15;
     if (std::filesystem::exists(font)) {
         normal = io.Fonts->AddFontFromFileTTF(font.c_str(), 15 * k * ui);
         const auto *heavy = std::filesystem::exists(bold) ? bold.c_str() : font.c_str();
+        // large figures (run clock, score, the wordmark): the theme's figure face, else the body's
+        const auto *display = figures.empty() ? nullptr : figures.c_str();
         strong = io.Fonts->AddFontFromFileTTF(heavy, 15 * k * ui);
         smallStrong = io.Fonts->AddFontFromFileTTF(heavy, 12 * k * ui);
         small = io.Fonts->AddFontFromFileTTF(font.c_str(), 12 * k * ui);
-        title = io.Fonts->AddFontFromFileTTF(std::filesystem::exists(bold) ? bold.c_str() : font.c_str(), 21 * k * ui);
-        number = io.Fonts->AddFontFromFileTTF(font.c_str(), 25 * k * ui);
-        menu = io.Fonts->AddFontFromFileTTF(font.c_str(), 13 * k * titleBar);
+        title = io.Fonts->AddFontFromFileTTF(display ? display : heavy, (display ? 23 : 21) * k * ui);
+        number = io.Fonts->AddFontFromFileTTF(display ? display : font.c_str(), (display ? 28 : 25) * k * ui);
+        // title-bar menus at VS Code's cap height: 13 px in a full-width face (DejaVu, Ubuntu), 16 in the narrow Barlow
+        menu = io.Fonts->AddFontFromFileTTF(font.c_str(), (figures.empty() ? 13 : 16) * k * titleBar);
+        titleSmall = io.Fonts->AddFontFromFileTTF(font.c_str(), (figures.empty() ? 12 : 14) * k * titleBar);
     } else
-        normal = small = title = number = menu = strong = smallStrong = io.Fonts->AddFontDefault();
+        normal = small = title = number = menu = strong = smallStrong = titleSmall = io.Fonts->AddFontDefault();
     io.FontDefault = normal;
     setTypeRamp({strong, number, small, smallStrong});
     io.Fonts->Build();

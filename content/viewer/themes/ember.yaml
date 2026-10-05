@@ -1,0 +1,7 @@
+# Warm charcoal with an orange accent.
+id: ember
+label: Ember
+description: "Warm charcoal with an orange accent"
+order: 8
+# every surface derived from four colours: the background, body and secondary text, and the accent
+derive: {background: "#171312", text: "#f2e6db", muted: "#9e8c80", accent: "#ff8c33", rounding: 6}

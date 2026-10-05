@@ -20,7 +20,8 @@ target_link_libraries(nereus_viewer_host_core PUBLIC nereus_glm nereus_mesh_asse
 target_compile_features(nereus_viewer_host_core PUBLIC cxx_std_17)
 target_compile_definitions(nereus_viewer_host_core PRIVATE NEREUS_PACK_CONTENT="${PROJECT_SOURCE_DIR}/content/packs")
 
-add_library(nereus_viewer_host STATIC ros_side.cpp scene_model.cpp overlay_draw.cpp window.cpp app.cpp prior_map_editor.cpp)
+add_library(nereus_viewer_host STATIC ros_side.cpp scene_model.cpp overlay_draw.cpp window.cpp app.cpp prior_map_editor.cpp
+            top_down.cpp)
 target_include_directories(nereus_viewer_host PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(nereus_viewer_host PUBLIC nereus_viewer_host_core nereus_scene_rendering nereus_viewer_panels nereus_imgui
   ament_index_cpp::ament_index_cpp PRIVATE glfw GLEW::GLEW OpenGL::GL PNG::PNG X11::X11 Fontconfig::Fontconfig)
@@ -58,6 +59,11 @@ if(BUILD_TESTING)
     NEREUS_TEST_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../tests/host_prior_map_config.yaml")
   target_compile_options(host_prior_map_editor_test PRIVATE -UNDEBUG)
   add_test(NAME host_prior_map_editor COMMAND host_prior_map_editor_test)
+  # The course map's top-down images (CPU only).
+  add_executable(host_top_down_test ../tests/host_top_down.cpp top_down.cpp)
+  target_link_libraries(host_top_down_test PRIVATE nereus_viewer_host_core GTest::gtest_main)
+  target_compile_options(host_top_down_test PRIVATE -UNDEBUG)
+  add_test(NAME host_top_down COMMAND host_top_down_test)
   # Window/render smoke: needs a display; validates every ImGui frame and writes a screenshot.
   if(DEFINED ENV{DISPLAY} OR DEFINED ENV{WAYLAND_DISPLAY})
     add_test(NAME host_demo_capture COMMAND nereus-viewer --demo

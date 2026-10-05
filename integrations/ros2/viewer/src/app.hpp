@@ -29,7 +29,7 @@ struct Options {
     std::string priorMap;               // prior map editor's config.yaml (empty: host yaml prior_map.config)
     std::string workspace;              // start workspace: operate (default) | map
     std::string layout;                 // start layout: built-in preset, saved layout name or .ini path (empty: last)
-    std::string theme;                  // abyss | midnight | daylight | contrast (empty: last chosen, else host yaml)
+    std::string theme;                  // heat-sheet | timing-board | abyss | ... (empty: last chosen, else host yaml)
     std::optional<bool> systemTitleBar; // system window decorations instead of the viewer's title bar
     std::string uiScale;                // interface scale: a factor (1 = 100 %) or auto (empty: last chosen)
     std::vector<float> injectF;         // test aid: hover this window position and press F mid-run

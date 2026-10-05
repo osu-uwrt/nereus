@@ -75,6 +75,42 @@ First version for the team.
   save says it was checked; editable x / y / z / yaw cells in the map's object table; the inspector names the stored
   pose and the resulting map position; empty preview states say what a panel holds; Calibrate tag; Pose gizmo
   toggle explained; a scannable Help; themed Vision legend; visible inactive tabs; a real Fit pool button.
+- Viewer theme **Heat sheet** (the new default) and its night twin **Timing board**, one world from a swim meet's results
+  sheets and the pool timing board:
+  - White (by day) or charcoal (by night) sheets with ruled heads and hairline rows.
+  - An ink or black board for the menu and command bars, carrying the run clock and score as large figures.
+  - Barlow TF fonts with tabular figures, shipped in `content/viewer/fonts`.
+  - Lane blue for selection, amber for the running clock, and touch red for KILL.
+  - Shared changes in every theme:
+    - Themes can carry their own board palette, spacing, fonts and ruled heads.
+    - Undocked windows get edges and shadows.
+    - Layouts widen with the interface scale.
+    - Camera windows are titled "Forward camera" and "Downward camera".
+    - Enable is go green in every theme.
+    - No pool chip over the 3D view.
+    - The camera status band is drawn in the board's colours.
+    - Motion has **Zero roll & pitch** beside *Pose gizmo*.
+    - Mapping's tag calibration reads **Calibrate**, with a progress bar.
+    - The title bar carries the Nereus mark (trident and sonar), is sized like VS Code's, and has a hairline over the
+      command bar. The command bar leads with the robot and pool.
+    - The interface scale follows the desktop by default, and the window opens at its configured size in the
+      desktop's units.
+    - Camera images carry no overlay: Truth / ROS sits beside RGB / Depth, and the live rate is in the header.
+    - The course map draws the props and the robot as top-down images baked once from their meshes (no live
+      rendering), with the task names beside them and a halo that keeps thin props visible zoomed out. The bins
+      and octagon labels show again: the host config now uses the 2026 pack's names (`bins`, `surface`).
+    - Themes are data: one YAML file each in `content/viewer/themes/` (the code keeps only the legibility floor
+      and a built-in fallback).
+    - Board telemetry (FOG, CPU, batteries) shows as readouts (dot, label, bold value) instead of boxed chips.
+    - A command centre in the title bar (Ctrl+P), as VS Code's: fuzzy search over windows, layouts, themes, scales,
+      focus targets, camera views, toggles and pools (Enable and KILL are left out on purpose).
+    - Theme changes apply between frames (picking one could leave a mix of two themes), tab styles are part of
+      theme files, Classic draws switches and status panels with Qt's bevels, robot-frame map origins drag along
+      their X / Y arrows, and camera cards no longer jitter at a width right at the edge.
+    - Two-way choices are sliding switches (RGB / Depth, Truth / ROS, Position / Feedforward, 3D / 2D, AprilTag /
+      Robot frame).
+    - The Motion table shows plain figures (no highlight or bold), and "Dive in place" no longer jumps rows while
+      the panel is resized.
 - Viewer design pass, round 2: a type ramp (bold section titles and table headers, run time and score as large
   figures); status chips are outlined capsules with a status dot, no longer shaped like buttons; input boxes,
   checkboxes and buttons stand out from their panel in every theme; table headers on a neutral band; numeric

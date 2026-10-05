@@ -30,8 +30,5 @@ inline const char *levelName(Level level) {
         return "No data";
     }
 }
-// statusChip() is theme.hpp's outlined status capsule (the same as the viewer's status pill).
-inline float chipWidth(const char *text) {
-    return statusChipWidth(text);
-}
+// statusChip() and statusReadout() are theme.hpp's (the outlined status capsule, the board readout).
 } // namespace nereus::ros_viewer::panels

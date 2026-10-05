@@ -1,6 +1,7 @@
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/pins.hpp"
+#include <algorithm>
 #include <cstdio>
 #include <imgui.h>
 namespace nereus::ros_viewer::panels {
@@ -33,15 +34,19 @@ class MappingPanel final : public Panel {
         ImGui::EndDisabled();
         ImGui::BeginDisabled(!mapping || (!s.calibrating && (!s.calibrationReady || samples < 1 || samples > 65535 ||
                                                              !parent[0] || !child[0] || std::string(parent) == child)));
-        if (pins::Button(s.calibrating ? "Cancel calibration###tag_cal" : "Calibrate tag###tag_cal", {-1, ui(36)})) {
+        if (pins::Button(s.calibrating ? "Cancel###tag_cal" : "Calibrate###tag_cal", {-1, ui(36)})) {
             if (s.calibrating)
                 mapping->cancelCalibration();
             else
                 mapping->calibrate(parent, child, samples);
         }
         ImGui::EndDisabled();
-        if (s.calibrating)
-            ImGui::Text("Samples: %u / %d", s.samples, samples);
+        if (s.calibrating) { // progress: the samples taken of those asked for
+            char progress[48];
+            std::snprintf(progress, sizeof(progress), "%u / %d samples", s.samples, samples);
+            ImGui::ProgressBar(samples > 0 ? std::min(1.f, float(s.samples) / float(samples)) : 0.f, {-1, 0},
+                               progress);
+        }
         if (mapping && !s.calibrationMessage.empty())
             ImGui::TextWrapped("%s", s.calibrationMessage.c_str());
         sectionTitle("Mapping target");

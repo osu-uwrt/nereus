@@ -120,7 +120,7 @@ class PriorMapEditor {
         std::vector<prior_map::Object> objects;
         prior_map::Origin origin;
     };
-    enum class Handle { None, Body, X, Y, Z, Yaw, OriginBody, OriginYaw };
+    enum class Handle { None, Body, X, Y, Z, Yaw, OriginBody, OriginYaw, OriginX, OriginY };
 
     // files
     void openFile(const std::filesystem::path &);
@@ -148,6 +148,8 @@ class PriorMapEditor {
     std::optional<Extent> extentOf(const prior_map::Object &) const; // none: a frame on a meshed assembly
     bool onRobotOrigin(const View &, const glm::vec2 &mouse) const; // robot-frame origin under the pointer
     bool onOriginRing(const View &, const glm::vec2 &mouse) const;
+    // The map axis (0 x, 1 y) whose origin arrow is under the pointer, or -1 (robot-frame origins drag by them).
+    int onOriginArrow(const View &, const glm::vec2 &mouse) const;
     float handleLength(const View &, const glm::vec3 &center) const; // metres for ~90 px on screen
     // window parts
     void drawFileBar();

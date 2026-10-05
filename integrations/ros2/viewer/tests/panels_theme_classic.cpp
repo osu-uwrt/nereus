@@ -8,6 +8,7 @@
 using namespace nereus::ros_viewer;
 
 int main() {
+    assert(loadThemes(NEREUS_VIEWER_THEMES).empty());
     const Theme *classic = nullptr;
     for (const auto &theme : themes())
         if (theme.id == "classic")

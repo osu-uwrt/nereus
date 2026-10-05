@@ -2,6 +2,7 @@
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/theme.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <imgui_internal.h>
@@ -164,6 +165,128 @@ bool Combo(const char *label, int *current, const char *items) {
         changed = true;
     }
     now.current = *current;
+    return changed;
+}
+
+bool Switch(const char *label, int *current, std::initializer_list<const char *> choices, float width,
+            unsigned disabled) {
+    const std::vector<const char *> items(choices);
+    const int count = int(items.size());
+    if (count == 0)
+        return false;
+    std::string key;
+    if (scoped()) { // pinnable: recorded as a dropdown of the same choices
+        key = keyOf(label);
+        auto &r = record(key, Kind::Combo, label);
+        r.items.assign(items.begin(), items.end());
+    }
+    const auto &style = ImGui::GetStyle();
+    const auto &p = palette();
+    std::vector<float> widths(static_cast<std::size_t>(count));
+    float total = 0;
+    for (int i = 0; i < count; ++i) {
+        widths[std::size_t(i)] = width > 0 ? width / float(count)
+                                           : ImGui::CalcTextSize(items[std::size_t(i)], nullptr, true).x + 2 * style.FramePadding.x;
+        total += widths[std::size_t(i)];
+    }
+    const float height = ImGui::GetFrameHeight(), rounding = style.FrameRounding;
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    ImGui::PushID(label);
+    const ImGuiID id = ImGui::GetID("##switch");
+    bool changed = false;
+    int hovered = -1;
+    ImGui::BeginGroup();
+    float x = 0;
+    for (int i = 0; i < count; ++i) {
+        ImGui::SetCursorScreenPos({at.x + x, at.y});
+        ImGui::PushID(i);
+        ImGui::BeginDisabled((disabled >> i) & 1u);
+        if (ImGui::InvisibleButton("##choice", {widths[std::size_t(i)], height}) && *current != i) {
+            *current = i;
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+            hovered = i;
+        ImGui::EndDisabled();
+        ImGui::PopID();
+        x += widths[std::size_t(i)];
+    }
+    ImGui::SetCursorScreenPos(at);
+    ImGui::Dummy({total, height}); // the group's extent, one item for the pin menu and tooltips
+    ImGui::EndGroup();
+    if (!key.empty()) {
+        offerMenu(key);
+        int value = 0;
+        auto &now = board().records[key];
+        if (take(key, value) && !now.disabled && value - 1 >= 0 && value - 1 < count && value - 1 != *current &&
+            !((disabled >> (value - 1)) & 1u)) {
+            *current = value - 1;
+            changed = true;
+        }
+        now.current = *current;
+    }
+    // The thumb slides toward the chosen choice (an exponential ease-out over about 120 ms).
+    const int chosen = std::clamp(*current, 0, count - 1);
+    float targetX = 0;
+    for (int i = 0; i < chosen; ++i)
+        targetX += widths[std::size_t(i)];
+    auto *storage = ImGui::GetStateStorage();
+    float *thumbX = storage->GetFloatRef(id, targetX), *thumbW = storage->GetFloatRef(id + 1, widths[std::size_t(chosen)]);
+    const float follow = 1 - std::exp(-ImGui::GetIO().DeltaTime * 28);
+    *thumbX += (targetX - *thumbX) * follow;
+    *thumbW += (widths[std::size_t(chosen)] - *thumbW) * follow;
+    if (std::abs(targetX - *thumbX) < .5f && std::abs(widths[std::size_t(chosen)] - *thumbW) < .5f) {
+        *thumbX = targetX;
+        *thumbW = widths[std::size_t(chosen)];
+    }
+    auto *draw = ImGui::GetWindowDrawList();
+    const ImVec2 end(at.x + total, at.y + height);
+    if (bevelledTheme()) { // Qt's toggle buttons: each choice raised, the chosen one pressed in and highlighted
+        x = 0;
+        for (int i = 0; i < count; ++i) {
+            const float w = widths[std::size_t(i)];
+            const ImVec2 min(at.x + x, at.y), max(at.x + x + w, end.y);
+            const bool on = i == chosen;
+            draw->AddRectFilled(min, max,
+                                ImGui::GetColorU32(on ? p.active
+                                                      : style.Colors[i == hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button]));
+            bevel(draw, min, max, !on);
+            const char *text = items[std::size_t(i)];
+            const ImVec2 size = ImGui::CalcTextSize(text, nullptr, true);
+            const ImVec4 ink = ((disabled >> i) & 1u) ? p.muted : on ? p.activeText : p.text;
+            draw->AddText({min.x + (w - size.x) * .5f + (on ? 1 : 0), min.y + (height - size.y) * .5f + (on ? 1 : 0)},
+                          ImGui::GetColorU32(ink), text, ImGui::FindRenderedTextEnd(text));
+            x += w;
+        }
+        ImGui::PopID();
+        return changed;
+    }
+    draw->AddRectFilled(at, end, ImGui::GetColorU32(ImGuiCol_FrameBg), rounding);
+    if (hovered >= 0 && hovered != chosen) {
+        float hx = 0;
+        for (int i = 0; i < hovered; ++i)
+            hx += widths[std::size_t(i)];
+        draw->AddRectFilled({at.x + hx, at.y}, {at.x + hx + widths[std::size_t(hovered)], end.y},
+                            ImGui::GetColorU32(ImGuiCol_FrameBgHovered), rounding);
+    }
+    const float inset = std::max(1.f, ui(2));
+    draw->AddRectFilled({at.x + *thumbX + inset, at.y + inset}, {at.x + *thumbX + *thumbW - inset, end.y - inset},
+                        ImGui::GetColorU32(p.active), std::max(0.f, rounding - inset * .5f));
+    if (style.FrameBorderSize > 0)
+        draw->AddRect(at, end, ImGui::GetColorU32(ImGuiCol_Border), rounding, 0, style.FrameBorderSize);
+    x = 0;
+    for (int i = 0; i < count; ++i) {
+        const char *text = items[std::size_t(i)];
+        const ImVec2 size = ImGui::CalcTextSize(text, nullptr, true);
+        const float w = widths[std::size_t(i)];
+        // a label the thumb covers (more than half) takes the "on" text colour
+        const float covered = std::max(0.f, std::min(at.x + x + w, at.x + *thumbX + *thumbW) - std::max(at.x + x, at.x + *thumbX));
+        const ImVec4 ink = ((disabled >> i) & 1u) ? p.muted : covered > w * .5f ? p.activeText : p.text;
+        draw->AddText({at.x + x + (w - size.x) * .5f, at.y + (height - size.y) * .5f}, ImGui::GetColorU32(ink), text,
+                      ImGui::FindRenderedTextEnd(text));
+        x += w;
+    }
+    ImGui::PopID();
     return changed;
 }
 

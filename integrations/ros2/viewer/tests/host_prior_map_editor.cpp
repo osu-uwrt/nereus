@@ -228,6 +228,37 @@ TEST_F(EditorTest, DraggingTheRobotMovesARobotFrameOrigin) {
     EXPECT_NEAR(editor->origin().x, 10, 1e-9); // one undo step
 }
 
+TEST_F(EditorTest, AnOriginArrowMovesARobotFrameOriginAlongItsAxis) {
+    pm::Origin robot;
+    robot.robot = true;
+    robot.x = 10;
+    robot.y = 5;
+    editor->setOrigin(robot);
+    const glm::vec3 eye(10, 5, 10);
+    view.viewProjection = glm::ortho(-8.f * 800 / 600, 8.f * 800 / 600, -8.f, 8.f, .05f, 40.f) *
+                          glm::lookAt(eye, eye - glm::vec3(0, 0, 1), {0, 1, 0});
+    view.plan = true;
+    // grab the X arrow a metre out (clear of the robot) and pull diagonally: only x follows
+    const auto at = pixel(11, 5, 0), to = pixel(12.5, 6, 0);
+    frame(at, false);
+    frame(at, true);
+    for (int i = 1; i <= 10; ++i)
+        frame(at + (to - at) * (float(i) / 10), true);
+    frame(to, false);
+    EXPECT_NEAR(editor->origin().x, 11.5, .03);
+    EXPECT_NEAR(editor->origin().y, 5, 1e-6);
+    const double x = editor->origin().x;
+    // and the Y arrow moves it along y only
+    const auto up = pixel(11.5, 6, 0), further = pixel(10.5, 7.5, 0);
+    frame(up, false);
+    frame(up, true);
+    for (int i = 1; i <= 10; ++i)
+        frame(up + (further - up) * (float(i) / 10), true);
+    frame(further, false);
+    EXPECT_NEAR(editor->origin().x, x, 1e-6);
+    EXPECT_NEAR(editor->origin().y, 6.5, .03);
+}
+
 TEST_F(EditorTest, DoubleClickLooksAtTheProp) {
     const auto gate = pose("gate");
     const auto at = pixel(gate.x, gate.y, gate.z);

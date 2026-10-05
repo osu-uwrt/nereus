@@ -99,23 +99,62 @@ Right-click the pool view's toolbar, or click its **+**, to choose what it shows
 
 The toolbar is saved with the layout (and with named layouts); the built-in layouts leave it as it is.
 
+## Search (Ctrl+P)
+
+The box in the middle of the title bar (or Ctrl+P) searches everything the menus do: windows, layouts, themes,
+interface scales, focus targets, camera views, view toggles, pools, map editing and Help. Type a few letters in
+order (`cwall` finds the Camera wall layout), choose with the arrows and Enter; Esc or a click elsewhere closes it.
+Enable and KILL are deliberately not in it.
+
 ## Themes
 
-View → *Theme* ▸ **Abyss** (dark teal, the default), **Midnight** (neutral dark with a blue accent), **Daylight**
-(light, for a bright room or a sunny pool deck), **High contrast** (black, white and yellow), **Ocean** (navy and
-blue), **Arctic** (slate and frost blue), **Ember** (charcoal and orange), **Sonar** (green on black), **Paper**
-(warm light) and **Classic** (Qt's Windows-style grey with bevels and the Ubuntu font, like RViz on this desktop).
-The choice is remembered (`~/.config/nereus/viewer.yaml`); `--theme NAME` or the host config's `theme:` set it too. The
-3D scene looks the same in every theme; its overlays (labels, the pool chip, the controls strip) and the course map
-follow the theme. Every theme keeps secondary, status and accent text and the labels of lit buttons at 5:1 contrast
-or better against what they sit on, for a sunny pool deck.
+View → *Theme* ▸ **Heat sheet** (the default) and **Timing board** are one world in a day and a night variant,
+taken from a swim meet's results sheets and the pool's timing board:
+
+- **Sheets**: panels are white sheets on a rule-grey ground by day, charcoal by night, with square corners. Section
+  and column heads carry a heavy ink rule; table rows are ruled with hairlines.
+- **Figures**: every number is set in Barlow TF, Barlow with tabular figures (`content/viewer/fonts`, SIL OFL; rebuilt
+  by `make_fonts.py`), so columns line up.
+- **The board**: the menu and command bars are ink by day and black by night, with white type. The run clock and
+  score sit on it as large figures, lit amber while a run is on. In map editing, a lane-blue rule runs along its foot.
+- **Colour jobs**: lane blue is selection and "on". Amber lights the running clock. Touch red is KILL. Enable is go
+  green (in every theme), never the blue of a lit toggle; its label says Enable or KILL, so colour is never the only
+  cue.
+- **Switches**: a choice between two (RGB / Depth, Truth / ROS, Position / Feedforward, 3D / 2D, AprilTag / Robot
+  frame) is one joined control whose thumb slides to the chosen side. Pinned to the toolbar, it shows as a dropdown.
+
+The other themes: **Abyss** (dark teal), **Midnight** (neutral dark with a blue accent), **Daylight** (light), **High
+contrast** (black, white and yellow), **Ocean** (navy and blue), **Arctic** (slate and frost blue), **Ember** (charcoal
+and orange), **Sonar** (green on black), **Paper** (warm light) and **Classic** (Qt's Windows-style grey with bevels
+and the Ubuntu font, like RViz on this desktop).
+
+The choice is remembered (`~/.config/nereus/viewer.yaml`); `--theme NAME` or the host config's `theme:` set it too.
+
+Each theme is one YAML file in `content/viewer/themes/`; add a file to add a theme (no code). A file gives `id`,
+`label`, `description`, `order` (the menu's order, lowest first, the first is the default) and optional `fonts`
+(`family` and `points` for a desktop font, or `regular` / `strong` / `figures` files in `content/viewer/fonts`). Its
+colours either come from four with `derive: {background, text, muted, accent, rounding}` (every surface is derived)
+or are listed in `surfaces` (window, frame, button, tab, ...) and `palette` (text, muted, accent, active, danger,
+warn, error, robot states, bar, enable, ...), as `"#rrggbb"` or `"#rrggbbaa"`. `shape` and `spacing` set corners,
+borders, padding and the tabs' look (`tab_rounding`, `tab_border`, `tab_bar_border`, `tab_overline`); a
+`border_shadow` surface makes the theme bevelled (Qt-style raised buttons, sunken status panels, toggle switches as
+pressed buttons); `style: {ruled: true}` rules the heads; a `board` block gives the menu and command bars their
+own colours. Unknown keys are refused, and the viewer reports a file it cannot use and carries on. Whatever a file
+says, the viewer holds every theme's text to the legibility floor below. The
+3D scene looks the same in every theme. Its overlays (labels, the controls strip) and the course map follow the
+theme. The course map draws each prop's top-down footprint (true size and heading) under the task dots. Camera
+images carry no overlay: the Truth / ROS switch beside RGB / Depth shows the source (in the simulator), and the
+header line shows the camera, its resolution and the live rate. Every theme keeps secondary, status and accent text and the labels of lit buttons at
+5:1 contrast or better against what they sit on, for a sunny pool deck. Undocked windows carry a hairline edge and a soft shadow.
+At a larger interface scale, the side columns of the built-in layouts widen.
 
 ## Interface scale
 
-The title bar follows the desktop's display scale (GNOME at 200 %: twice the size), like other applications'
-title bars. Everything else is at the viewer's own 100 % unless you choose View → *Interface scale* ▸ 100–200 % or
-*Match desktop*; the choice is remembered, and `--ui-scale 1.5` / `--ui-scale auto` or the host config's
-`interface_scale:` set it too.
+The title bar (the Nereus mark, the menus and the window buttons) follows the desktop's display scale (GNOME at
+200 %: twice the size), sized like VS Code's. The rest follows the desktop too (*Match desktop*, the default), or a
+fixed View → *Interface scale* ▸ 100–200 %. The choice is remembered; `--ui-scale 1.5` / `--ui-scale auto` or the
+host config's `interface_scale:` set it too. The window opens at the configured size in the desktop's units, or
+maximized when that does not fit.
 
 The viewer saves your arrangement when it closes (`~/.config/nereus/viewer_layout.ini`) and starts with it next
 time. `--layout NAME` starts with a built-in layout (`standard`, `wide`, `cameras`), a saved layout's name or an
@@ -139,7 +178,8 @@ cell. In sim none of these publishers run, so all four chips stay grey.
 2. Pick **Position** or **Feedforward**.
 3. Drag the gizmo in the 3D view (arrows move, rings rotate; `Esc` during a drag restores the start), or type a
    target in the table and press **Command**. **Current** copies the robot's pose into the table; **Dive in
-   place** targets the current x/y and heading, level, at the configured depth (`dive_z`).
+   place** targets the current x/y and heading, level, at the configured depth (`dive_z`). **Zero roll & pitch**
+   (beside *Pose gizmo*) holds the current position and heading and levels the robot where it is.
 
 If the viewer freezes or the pose goes stale, it releases manual control and the robot holds its last command;
 it never kills on its own. Another operator sending on the same kill switch (for example RViz's control panel)
@@ -149,7 +189,8 @@ does kill: use one operator at a time.
 
 - **Autonomy**: pick a tree, **Start** / **Stop**; the execution stack shows the running nodes. Manual control is
   blocked while a tree owns the robot.
-- **Mapping**: tag calibration, reset, and the mapping target (**Lock map**).
+- **Mapping**: tag calibration (**Calibrate**, with a progress bar of the samples taken), reset, and the mapping
+  target (**Lock map**).
 - **Actuators**: arm/disarm, fire torpedoes, drop markers, open/close the claw, reload.
 
 ## Recording

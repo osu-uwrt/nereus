@@ -232,7 +232,9 @@ ownership:
             ImGui::Render();
             assert(drawLog == std::vector<std::string>{"toolbar:scene_settings"});
         }
-        // Themes restyle everything; unknown names change nothing.
+        // Themes restyle everything; unknown names change nothing. Every shipped theme file loads.
+        assert(nereus::ros_viewer::loadThemes(NEREUS_VIEWER_THEMES).empty());
+        assert(nereus::ros_viewer::themes().size() >= 12);
         for (const auto &theme : nereus::ros_viewer::themes()) {
             assert(nereus::ros_viewer::applyTheme(theme.id) && nereus::ros_viewer::currentTheme() == theme.id);
             assert(ImGui::GetStyle().WindowMenuButtonPosition == ImGuiDir_None);

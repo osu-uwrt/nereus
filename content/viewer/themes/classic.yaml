@@ -1,0 +1,51 @@
+# Qt's Windows style on this desktop (RViz and the other Qt tools): the "win 2000 grey" palette of QWindowsStyle,
+# raised bevels (a light edge, the shadow 1 px below / right) and the Ubuntu font.
+id: classic
+label: Classic
+description: "Windows-style grey with bevelled controls and the Ubuntu font, like the desktop's Qt tools (RViz)"
+order: 11
+fonts: {family: Ubuntu, points: 11}
+shape: {window_rounding: 0, frame_rounding: 0, tab_rounding: 0, window_border: 1, frame_border: 1, scrollbar: 14, tab_border: 1, tab_overline: 0}
+spacing: {window_padding: [14, 12], frame_padding: [10, 7], item_spacing: [10, 9], cell_padding: [4, 2]}
+surfaces:
+  window: "#d4d0c8"
+  child: "#d4d0c8"
+  popup: "#d4d0c8"
+  frame: "#ffffff"
+  frame_hovered: "#d9d9ec"
+  frame_active: "#b3b3d9"
+  button: "#d4d0c8"
+  button_hovered: "#ddd9d3"
+  button_pressed: "#6a6864"
+  border: "#ffffff"
+  border_shadow: "#000000"
+  header: "#000080"
+  header_hovered: "#262693"
+  header_pressed: "#000060"
+  title: "#a0a0a4"
+  title_active: "#a0a0a4"
+  tab: "#d4d0c8"
+  tab_hovered: "#ddd9d3"
+  tab_selected: "#e0e0f0"
+  tab_dimmed: "#d4d0c8"
+  tab_dimmed_selected: "#f0f0f7"
+  scroll_grab: "#e9e7e3"
+  table_row_alt: "#0000000d"
+palette:
+  text: "#000000"
+  muted: "#555350"
+  accent: "#000080"
+  active: "#000080"
+  active_hovered: "#262693"
+  active_pressed: "#000060"
+  active_text: "#ffffff"
+  danger: "#b81a1f"
+  danger_hovered: "#d6292e"
+  danger_pressed: "#991217"
+  danger_text: "#ffffff"
+  warn: "#7a4500"
+  error: "#940000"
+  robot_enabled: "#005c1f"
+  robot_killed: "#8c3300"
+  bar: "#d4d0c8"
+  toolbar: "#d4d0c8"

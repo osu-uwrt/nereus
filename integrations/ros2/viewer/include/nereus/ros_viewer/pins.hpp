@@ -5,6 +5,7 @@
 // tab is drawn off screen so its pinned controls keep working.
 #pragma once
 #include <functional>
+#include <initializer_list>
 #include <imgui.h>
 #include <string>
 #include <vector>
@@ -27,6 +28,12 @@ struct Scope {
 bool Button(const char *label, const ImVec2 &size = ImVec2(0, 0));
 bool Checkbox(const char *label, bool *value);
 bool Combo(const char *label, int *current, const char *itemsSeparatedByZeros);
+// A switch between a few choices ("RGB" / "Depth"): the choices joined in one track, the chosen one under a thumb
+// that slides to it. `width` 0: each choice as wide as its label, else the track's width shared evenly; a choice
+// whose bit is set in `disabled` is shown greyed and cannot be chosen. Pinned, its toolbar copy is a dropdown of the
+// same choices; `label`'s text (before "##") names it there.
+bool Switch(const char *label, int *current, std::initializer_list<const char *> choices, float width = 0,
+            unsigned disabled = 0);
 
 // Called once per frame by the host.
 void newFrame();

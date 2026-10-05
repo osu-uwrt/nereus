@@ -1,5 +1,6 @@
 #include "prior_map_editor.hpp"
 #include "nereus/ros_viewer/panel_layout.hpp"
+#include "nereus/ros_viewer/pins.hpp"
 #include "nereus/ros_viewer/panels/pose_math.hpp"
 #include "nereus/ros_viewer/theme.hpp"
 #include <algorithm>
@@ -413,6 +414,32 @@ bool PriorMapEditor::onOriginRing(const View &view, const glm::vec2 &mouse) cons
     return false;
 }
 
+// The origin's X / Y arrows as drawn (2D: 64 px long; 3D: 0.7 m), clear of the origin itself (the robot drags it).
+int PriorMapEditor::onOriginArrow(const View &view, const glm::vec2 &mouse) const {
+    if (!origin_.robot)
+        return -1;
+    const auto map = worldFromMap();
+    const glm::vec3 o(map[3]);
+    ImVec2 po;
+    if (!project(view.viewProjection, view.origin, view.size, o, po))
+        return -1;
+    const float metres = view.plan ? ui(64) / pixelsPerMetre(view.viewProjection, view.origin, view.size, o) : .7f;
+    int best = -1;
+    float nearest = ui(8);
+    for (int axis = 0; axis < 2; ++axis) {
+        ImVec2 tip;
+        if (!project(view.viewProjection, view.origin, view.size, o + glm::normalize(glm::vec3(map[axis])) * metres, tip))
+            continue;
+        float fraction = 0;
+        const float d = segmentDistance(mouse, {po.x, po.y}, {tip.x, tip.y}, fraction);
+        if (d < nearest && glm::length(mouse - glm::vec2(po.x, po.y)) > ui(10)) {
+            nearest = d;
+            best = axis;
+        }
+    }
+    return best;
+}
+
 // A nudge in the pool frame (dx, dy, dz in metres, dyaw in degrees), the subtree riding along.
 void PriorMapEditor::moveSelected(double dx, double dy, double dz, double dyaw) {
     auto *o = pm::find(doc_.objects, selected_);
@@ -619,8 +646,10 @@ bool PriorMapEditor::input(const View &view) {
     }
     auto *selected = pm::find(doc_.objects, selected_);
     const bool movable = selected && !selected->locked && !selected->hidden;
-    // Dragging the robot-frame origin (the robot): across the pool, or turning it with its ring.
-    if (drag_ == Handle::OriginBody || drag_ == Handle::OriginYaw) {
+    // Dragging the robot-frame origin (the robot): across the pool, along one map axis by its arrow, or turning it
+    // with its ring.
+    if (drag_ == Handle::OriginBody || drag_ == Handle::OriginYaw || drag_ == Handle::OriginX ||
+        drag_ == Handle::OriginY) {
         if (ImGui::IsKeyPressed(ImGuiKey_Escape)) { // put it back; no undo step
             origin_ = startOrigin_;
             doc_.objects = startObjects_;
@@ -639,8 +668,14 @@ bool PriorMapEditor::input(const View &view) {
         auto next = startOrigin_;
         glm::vec3 hit;
         if (planeHit(ray, center, {0, 0, 1}, hit)) {
-            if (drag_ == Handle::OriginBody) {
-                const glm::vec3 inPool(glm::inverse(pool_.poolToWorld) * glm::vec4(center + (hit - grab_), 1));
+            if (drag_ == Handle::OriginBody || drag_ == Handle::OriginX || drag_ == Handle::OriginY) {
+                glm::vec3 moved = hit - grab_;
+                if (drag_ != Handle::OriginBody) { // only along the arrow's map axis (a move never turns the origin)
+                    const auto map = worldFromMap();
+                    const glm::vec3 axis = glm::normalize(glm::vec3(map[drag_ == Handle::OriginX ? 0 : 1]));
+                    moved = axis * glm::dot(moved, axis);
+                }
+                const glm::vec3 inPool(glm::inverse(pool_.poolToWorld) * glm::vec4(center + moved, 1));
                 next.x = inPool.x;
                 next.y = inPool.y;
             } else {
@@ -769,14 +804,15 @@ bool PriorMapEditor::input(const View &view) {
     // The robot-frame origin (the robot): its ring turns it; the robot itself drags it (in 3D once selected, as props).
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && origin_.robot) {
         const bool ring = onOriginRing(view, mouse);
-        if (ring || (onRobotOrigin(view, mouse) && (view.plan || originSelected_))) {
+        const int arrow = ring ? -1 : onOriginArrow(view, mouse);
+        if (ring || arrow >= 0 || (onRobotOrigin(view, mouse) && (view.plan || originSelected_))) {
             const glm::vec3 center(worldFromMap()[3]);
             glm::vec3 point;
             if (planeHit(ray, center, {0, 0, 1}, point)) {
                 record();
                 originSelected_ = true;
                 selected_.clear();
-                drag_ = ring ? Handle::OriginYaw : Handle::OriginBody;
+                drag_ = ring ? Handle::OriginYaw : arrow == 0 ? Handle::OriginX : arrow == 1 ? Handle::OriginY : Handle::OriginBody;
                 startOrigin_ = origin_;
                 startObjects_ = doc_.objects;
                 grab_ = point;
@@ -827,8 +863,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
         return;
     labelFont_ = typeRamp().smallStrong ? typeRamp().smallStrong : small;
     std::vector<std::pair<ImVec2, ImVec2>> taken; // what labels keep clear of: badges, chips, the scale bar
-    // the view's own chips: the scene name (top left) and, in 2D, the scale bar (top right)
-    taken.push_back({{view.origin.x, view.origin.y}, {view.origin.x + ui(340), view.origin.y + ui(48)}});
+    // the view's own chip: in 2D, the scale bar (top right)
     if (view.plan)
         taken.push_back({{view.origin.x + view.size.x - ui(200), view.origin.y},
                          {view.origin.x + view.size.x, view.origin.y + ui(70)}});
@@ -848,8 +883,10 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
         const float metres = view.plan ? ui(64) / pixelsPerMetre(view.viewProjection, view.origin, view.size, o) : .7f;
         for (int i = 0; i < (view.plan ? 2 : 3); ++i) {
             ImVec2 tip;
-            if (proj(o + glm::normalize(glm::vec3(map[i])) * metres, tip))
-                arrow(d, po, tip, colors[i], view.plan ? ui(3.5f) : ui(3));
+            if (proj(o + glm::normalize(glm::vec3(map[i])) * metres, tip)) {
+                const bool dragged = (i == 0 && drag_ == Handle::OriginX) || (i == 1 && drag_ == Handle::OriginY);
+                arrow(d, po, tip, colors[i], (view.plan ? ui(3.5f) : ui(3)) * (dragged ? 1.6f : 1.f));
+            }
         }
         if (!origin_.robot)
             d->AddRect({po.x - ui(7), po.y - ui(7)}, {po.x + ui(7), po.y + ui(7)}, IM_COL32(255, 255, 255, 230), 0, 0,
@@ -1384,6 +1421,7 @@ void PriorMapEditor::drawObjects() {
     }
     if (typeRamp().strong)
         ImGui::PopFont();
+    ruleUnderHeaders();
     std::function<void(const pm::Object &)> row = [&](const pm::Object &o) {
         std::vector<const pm::Object *> children;
         for (const auto &c : doc_.objects)
@@ -1407,7 +1445,9 @@ void PriorMapEditor::drawObjects() {
         if (o.hidden || o.locked)
             ImGui::PushStyleColor(ImGuiCol_Text, palette().muted);
         // the prop's colour (its badge / dot in the view) as a dot before the name
-        const bool opened = ImGui::TreeNodeEx(o.name.c_str(), flags, "    %s", o.name.c_str());
+        // (the label starts after room for the dot, in whole spaces of this font)
+        const std::string room(std::size_t(std::ceil(ui(17) / std::max(1.f, ImGui::CalcTextSize(" ").x))), ' ');
+        const bool opened = ImGui::TreeNodeEx(o.name.c_str(), flags, "%s%s", room.c_str(), o.name.c_str());
         {
             const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
             const float x = min.x + ImGui::GetTreeNodeToLabelSpacing() + ui(5);
@@ -1448,6 +1488,7 @@ void PriorMapEditor::drawObjects() {
             ImGui::PushStyleColor(ImGuiCol_Text, o.hidden || o.locked ? palette().muted : palette().text);
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0));
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {ui(3), ImGui::GetStyle().FramePadding.y});
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0); // cells, not boxes, in an outlined theme
             ImGui::PushID(o.name.c_str()); // one ID per row's cells
             for (int i = 0; i < 4; ++i) {
                 ImGui::TableNextColumn();
@@ -1485,7 +1526,7 @@ void PriorMapEditor::drawObjects() {
                 ImGui::PopID();
             }
             ImGui::PopID();
-            ImGui::PopStyleVar();
+            ImGui::PopStyleVar(2);
             ImGui::PopStyleColor(2);
         }
         if (opened && !children.empty()) {
@@ -1718,11 +1759,10 @@ void PriorMapEditor::drawOriginInspector() {
                                                              "the origin, its ring to turn it."
                                            : "AprilTag: the map origin is the tag on a wall, at a line / wall "
                                              "intersection, +X into the pool.");
-    for (const bool robot : {false, true}) {
-        if (robot)
-            ImGui::SameLine(0, 1);
-        pushActiveColors(origin_.robot == robot);
-        if (ImGui::Button(robot ? "Robot frame" : "AprilTag") && origin_.robot != robot) {
+    int kind = origin_.robot ? 1 : 0;
+    if (pins::Switch("Origin##origin_kind", &kind, {"AprilTag", "Robot frame"})) {
+        const bool robot = kind == 1;
+        {
             // Back to where the last origin of that kind was; the first time, from here: a robot frame keeps the
             // heading, a tag snaps to the nearest spot facing +X out of the wall.
             const auto remembered = origins_.find(pool_.id + (robot ? "/robot" : "/tag"));
@@ -1745,9 +1785,8 @@ void PriorMapEditor::drawOriginInspector() {
             }
             setOrigin(next);
         }
-        popActiveColors();
     }
-    // the action on its own line: the pair above is a mode, this places it
+    // the action on its own line: the switch above is a mode, this places it
     pushActiveColors(placing_);
     if (ImGui::Button(placing_ ? "Placing... (Esc)###place" : "Place origin in the view###place"))
         placing_ = !placing_;

@@ -1,0 +1,48 @@
+# Deep water: the viewer's original dark teal.
+id: abyss
+label: Abyss
+description: "Dark teal"
+order: 2
+shape: {window_rounding: 8, frame_rounding: 5, tab_rounding: 5, window_border: 1, frame_border: 0, scrollbar: 14}
+spacing: {window_padding: [14, 12], frame_padding: [10, 7], item_spacing: [10, 9], cell_padding: [4, 2]}
+surfaces:
+  window: "#090d11"
+  child: "#0d1317"
+  popup: "#0b1115fa"
+  frame: "#151f25"
+  frame_hovered: "#1c2b33"
+  frame_active: "#213840"
+  button: "#16242b"
+  button_hovered: "#21454a"
+  button_pressed: "#1c5c59"
+  border: "#1f2e36"
+  header: "#174045"
+  header_hovered: "#215254"
+  header_pressed: "#1c615e"
+  title: "#0a0f13"
+  title_active: "#0f1a1f"
+  tab: "#0f171c"
+  tab_hovered: "#21454a"
+  tab_selected: "#162930"
+  tab_dimmed: "#0b1115"
+  tab_dimmed_selected: "#121f24"
+  scroll_grab: "#1f333b"
+  table_row_alt: "#ffffff06"
+palette:
+  text: "#deebf2"
+  muted: "#7891a3"
+  accent: "#52dbd1"
+  active: "#1f7a75"
+  active_hovered: "#29998f"
+  active_pressed: "#1a6661"
+  active_text: "#deebf2"
+  danger: "#a62930"
+  danger_hovered: "#cc3840"
+  danger_pressed: "#8c1f26"
+  danger_text: "#ffffff"
+  warn: "#f0ba59"
+  error: "#f55c54"
+  robot_enabled: "#4dffa6"
+  robot_killed: "#ffa666"
+  bar: "#070b0f"
+  toolbar: "#0b1115"

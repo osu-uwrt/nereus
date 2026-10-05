@@ -1,0 +1,48 @@
+# Black, white and yellow with outlined controls: the most legible at a glance.
+id: contrast
+label: High contrast
+description: "Black, white and yellow, outlined controls"
+order: 5
+shape: {window_rounding: 0, frame_rounding: 0, tab_rounding: 0, window_border: 1, frame_border: 1, scrollbar: 14, tab_border: 1}
+spacing: {window_padding: [14, 12], frame_padding: [10, 7], item_spacing: [10, 9], cell_padding: [4, 2]}
+surfaces:
+  window: "#000000"
+  child: "#080808"
+  popup: "#050505"
+  frame: "#0f0f0f"
+  frame_hovered: "#242424"
+  frame_active: "#333333"
+  button: "#141414"
+  button_hovered: "#383838"
+  button_pressed: "#525252"
+  border: "#b3b3b3"
+  header: "#403800"
+  header_hovered: "#594f00"
+  header_pressed: "#736600"
+  title: "#000000"
+  title_active: "#1a1a1a"
+  tab: "#000000"
+  tab_hovered: "#404040"
+  tab_selected: "#1f1f1f"
+  tab_dimmed: "#000000"
+  tab_dimmed_selected: "#141414"
+  scroll_grab: "#808080"
+  table_row_alt: "#ffffff0f"
+palette:
+  text: "#ffffff"
+  muted: "#c7c7c7"
+  accent: "#ffdb00"
+  active: "#ffdb00"
+  active_hovered: "#ffeb59"
+  active_pressed: "#d9b800"
+  active_text: "#000000"
+  danger: "#e60000"
+  danger_hovered: "#ff3333"
+  danger_pressed: "#b30000"
+  danger_text: "#ffffff"
+  warn: "#ff9900"
+  error: "#ff4040"
+  robot_enabled: "#33ff4d"
+  robot_killed: "#ff9900"
+  bar: "#000000"
+  toolbar: "#0d0d0d"

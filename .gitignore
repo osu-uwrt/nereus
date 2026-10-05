@@ -9,7 +9,7 @@ compile_commands.json
 /.venv/
 /.mypy_cache/
 /.ruff_cache/
-/.pytest_cache/
+.pytest_cache/
 *.egg-info/
 # Local development links into build/ (python/src extension modules and content/shader symlinks)
 *.so
@@ -20,3 +20,4 @@ compile_commands.json
 /collaboration_logs/
 graphify*
 .graphify*
+.impeccable/

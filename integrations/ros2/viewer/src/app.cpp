@@ -9,6 +9,7 @@
 #include "nereus/ros_viewer/theme.hpp"
 #include "overlay_draw.hpp"
 #include "prior_map_editor.hpp"
+#include "top_down.hpp"
 #include "scenario_packs.hpp"
 #include "ros_side.hpp"
 #include "scene_model.hpp"
@@ -139,6 +140,26 @@ float hdrFor(float display) {
     const float x = (-b - std::sqrt(std::max(0.f, b * b - 4 * a * c))) / (2 * a);
     return std::clamp(x, 0.f, 1.15f);
 }
+// How well `text` matches a typed `query` (letters in order, any case; lower is better), or -1: earlier, closer
+// together and at word starts ranks first, as VS Code's quick open.
+int fuzzyScore(const std::string &text, const std::string &query) {
+    int score = 0;
+    std::size_t at = 0;
+    long last = -1;
+    for (const char wanted : query) {
+        if (wanted == ' ')
+            continue;
+        const auto lower = [](char c) { return char(std::tolower(static_cast<unsigned char>(c))); };
+        while (at < text.size() && lower(text[at]) != lower(wanted))
+            ++at;
+        if (at == text.size())
+            return -1;
+        const bool wordStart = at == 0 || !std::isalnum(static_cast<unsigned char>(text[at - 1]));
+        score += int(at) - int(last) - 1 + (wordStart ? 0 : 2);
+        last = long(at++);
+    }
+    return score;
+}
 // Map editing's 2D chart colours, from the theme: the canvas around the pool, a floor one step from it toward
 // the accent, lane lines a quiet stroke on the floor, the pool rim.
 struct PlanPalette {
@@ -153,7 +174,8 @@ PlanPalette planPalette() {
     const bool dark = .2126f * bg.x + .7152f * bg.y + .0722f * bg.z < .5f;
     PlanPalette out;
     out.canvas = ImVec4(bg.x, bg.y, bg.z, 1);
-    out.floor = mix(out.canvas, p.accent, dark ? .16f : .12f);
+    // a ruled theme keeps the chart in its sheet's own greys (no tinted floor); the others lean to the accent
+    out.floor = ruledTheme() ? mix(out.canvas, p.text, dark ? .07f : .06f) : mix(out.canvas, p.accent, dark ? .16f : .12f);
     out.line = mix(out.floor, p.text, dark ? .22f : .20f);
     out.rim = mix(out.canvas, p.text, dark ? .16f : .20f);
     return out;
@@ -236,6 +258,7 @@ struct CardTexture {
     int rgbWidth = 0, rgbHeight = 0, depthWidth = 0, depthHeight = 0;
     bool flipped = false; // rendered (bottom-up) rather than decoded (top-down)
     bool open = true;     // its camera window is shown
+    bool metaInline = true; // the camera / resolution line sits on the button row (else its own line)
 };
 
 // Dockable host windows. The part after ### is the window's identity in saved layouts; the title can change.
@@ -374,12 +397,28 @@ class App {
     void resetToolbar();
     void drawWindowControls();
     void handleWindowEdges();
+    void drawFloatingEdges(); // hairline edges and soft shadows for undocked windows
     void setTheme(const std::string &id);
     // Interface scale: 0 follows the desktop (the window's content scale); the title bar always does.
     float uiScaleSetting_ = 1, pendingUiScale_ = -1;
     float resolvedUiScale() const;
     void setUiScale(float setting); // remembered in viewer.yaml
     void applyPendingUiScale();     // between frames: fonts and style at the new scale
+    void applyPendingTheme();       // between frames: a theme chosen in the menu
+    std::string pendingTheme_;
+    // The command centre (VS Code's): a search box in the title bar (Ctrl+P) over everything the menus do.
+    struct PaletteCommand {
+        std::string group, label;
+        bool checked = false;
+        std::function<void()> run;
+    };
+    std::vector<PaletteCommand> paletteCommands();
+    void drawCommandCenter(float titleScale);
+    void drawCommandPalette();
+    bool paletteOpen_ = false, paletteFocus_ = false, paletteTyping_ = false, paletteEnter_ = false;
+    char paletteQuery_[128] = {};
+    int paletteIndex_ = 0;
+    ImVec2 paletteBox_{0, 0}, paletteBoxSize_{0, 0}; // the title bar's search box, the results drop from it
     void drawScaleMenu();
     void savePreference(const char *key, const YAML::Node &value);
     // Side columns snapped shut (dragged nearly closed, the View menu, Ctrl+[ / Ctrl+]): their windows close and
@@ -420,6 +459,15 @@ class App {
     std::unique_ptr<RosSide> ros_;
     std::optional<Scenario> scenario_;
     std::unique_ptr<SceneModel> model_;
+    // The course map's top-down images, baked once per scene model (top_down.hpp): the course's props in pool
+    // coordinates, and the robot in its base frame (drawn turned to its heading).
+    struct TopDownTexture {
+        GLuint texture = 0;
+        glm::vec2 low{0}, high{0};
+    };
+    TopDownTexture courseImage_, courseHalo_, robotImage_;
+    const SceneModel *topDownFor_ = nullptr;
+    void bakeTopDownImages();
     StatusLights lights_;
     ThrusterVisuals thrusters_;
     std::string pendingScenario_;
@@ -463,6 +511,7 @@ class App {
     rendering::RenderedFrame lastFrame_;
     bool haveFrame_ = false;
     GLuint readFbo_ = 0, drawFbo_ = 0;
+    GLuint logoTrident_ = 0, logoSonar_ = 0; // the title bar's mark (white masks, tinted)
     // settings
     Look look_;
     ObserverSettings observer_;
@@ -653,6 +702,9 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     // Theme: --theme, else the operator's last choice (viewer.yaml in the config directory), else the host config.
     if (!configHome.empty())
         preferencesFile_ = configHome / "viewer.yaml";
+    // themes are data (content/viewer/themes); a file that cannot be read is reported and skipped
+    for (const auto &warning : loadThemes(contentDirectory() / "themes"))
+        std::cerr << "nereus-viewer: theme: " << warning << '\n';
     std::string theme = opt_.theme;
     if (theme.empty() && persist_ && fs::exists(preferencesFile_))
         try {
@@ -744,6 +796,24 @@ void App::loadLogo() {
     for (const int size : {16, 24, 32, 48, 64, 128, 256})
         sizes.push_back(icons / ("nereus-" + std::to_string(size) + ".png"));
     window_->setIcon(sizes);
+    // and in the title bar: the bare mark (no tile) as two white masks the bar tints, mipmapped to stay crisp small
+    const auto mask = [&](const char *file, GLuint &texture) {
+        int width = 0, height = 0;
+        std::vector<unsigned char> rgba;
+        if (!readPng(icons / file, width, height, rgba))
+            return;
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    };
+    mask("nereus-trident-128.png", logoTrident_);
+    mask("nereus-sonar-128.png", logoSonar_);
 }
 
 App::~App() {
@@ -767,6 +837,9 @@ App::~App() {
         glDeleteFramebuffers(1, &readFbo_);
     if (drawFbo_)
         glDeleteFramebuffers(1, &drawFbo_);
+    for (GLuint texture : {logoTrident_, logoSonar_, courseImage_.texture, courseHalo_.texture, robotImage_.texture})
+        if (texture)
+            glDeleteTextures(1, &texture);
     renderer_.reset();
     ros_.reset();
     window_.reset();
@@ -1481,16 +1554,25 @@ void App::drawCameraCard(std::size_t index) {
     const bool canLocal = demoMode_ || ros_->truthActive();
     const bool depthShown = feed.wantDepth && tex.depth;
     const bool local = demoMode_ || (canLocal && !feed.rosMode);
-    // RGB / Depth as a two-way switch, then "Main view" to show this camera in the pool view.
-    for (const bool depth : {false, true}) {
-        if (depth)
-            ImGui::SameLine(0, 1);
-        pushActiveColors(feed.wantDepth == depth);
-        if (pins::Button(depth ? "Depth" : "RGB") && feed.wantDepth != depth) {
-            feed.wantDepth = depth;
+    // RGB / Depth, in the simulator Truth / ROS (the card's source: this viewer's render at the truth pose, or
+    // the images the bridge publishes to the robot stack), then "Main view" to show this camera in the pool view.
+    int image = feed.wantDepth ? 1 : 0;
+    if (pins::Switch("Image##image", &image, {"RGB", "Depth"})) {
+        feed.wantDepth = image == 1;
+        ros_->refreshCameras();
+    }
+    const bool sourceToggle = canLocal && !demoMode_;
+    if (sourceToggle) {
+        ImGui::SameLine();
+        int source = feed.rosMode ? 1 : 0;
+        if (pins::Switch("Source##source", &source, {"Truth", "ROS"})) {
+            feed.rosMode = source == 1;
             ros_->refreshCameras();
+            cardDue_[index] = 0; // render the local view immediately when switching back
         }
-        popActiveColors();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Truth: rendered by this viewer at the truth pose (no sensor noise, no bridge latency).\n"
+                              "ROS: the images the bridge publishes, as the robot stack receives them.");
     }
     ImGui::SameLine();
     const int cameraMode = int(index) + 2;
@@ -1502,17 +1584,27 @@ void App::drawCameraCard(std::size_t index) {
         ImGui::SetTooltip(mode_ == cameraMode ? "Back to the orbit camera"
                                               : "Look through this camera in the pool view");
     ImGui::PushFont(window_->small);
-    const std::string model =
-        camera.model + "  /  " + std::to_string(camera.k.width) + " x " + std::to_string(camera.k.height);
-    const float modelWidth = ImGui::CalcTextSize(model.c_str()).x;
-    if (ImGui::GetContentRegionAvail().x > modelWidth + ui(120)) {
-        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - modelWidth); // takes the buttons' text baseline
-        ImGui::TextColored(palette().muted, "%s", model.c_str());
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Preview: %d x %d%s", depthShown ? tex.depthWidth : tex.rgbWidth,
-                              depthShown ? tex.depthHeight : tex.rgbHeight,
-                              !demoMode_ && !canLocal ? "\nROS image topic (no simulator truth pose)" : "");
+    // the camera, its resolution, and the live rate of the images the bridge publishes (when that is the source)
+    std::string model = camera.model + "  /  " + std::to_string(camera.k.width) + " x " + std::to_string(camera.k.height);
+    if (!demoMode_ && !local && feed.connected()) {
+        char rate[24];
+        std::snprintf(rate, sizeof(rate), "  /  %.1f Hz", feed.hz);
+        model += rate;
     }
+    const float modelWidth = ImGui::CalcTextSize(model.c_str()).x;
+    // the model at the right end of the button row, only where the row leaves room for it after the buttons
+    const float rowEnd = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x; // the last button's right edge
+    // (on its own line under the buttons when the row is too narrow: the resolution is never dropped)
+    // with some hysteresis, so a width right at the edge cannot flip it every frame
+    const float room = ImGui::GetWindowContentRegionMax().x - rowEnd;
+    tex.metaInline = room >= modelWidth + ui(tex.metaInline ? 16 : 40);
+    if (tex.metaInline)
+        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - modelWidth); // takes the buttons' text baseline
+    ImGui::TextColored(palette().muted, "%s", model.c_str());
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Preview: %d x %d%s", depthShown ? tex.depthWidth : tex.rgbWidth,
+                          depthShown ? tex.depthHeight : tex.rgbHeight,
+                          !demoMode_ && !canLocal ? "\nROS image topic (no simulator truth pose)" : "");
     ImGui::PopFont();
     const auto available = ImGui::GetContentRegionAvail();
     const float aspect = float(camera.k.width) / float(camera.k.height);
@@ -1532,76 +1624,25 @@ void App::drawCameraCard(std::size_t index) {
     }
     cardVisible_[index] = ImGui::IsItemVisible();
     const bool ready = demoMode_ || !local || ros_->poseFresh();
-    if (!ready || !texture) {
-        auto *draw = ImGui::GetWindowDrawList();
-        if (texture)
-            draw->AddRectFilled(pos, {pos.x + w, pos.y + h}, IM_COL32(4, 13, 19, 175));
-        draw->AddText({pos.x + 18, pos.y + 18}, color(muted),
-                      !ready                 ? "Waiting for pose"
-                      : local && !depthShown ? "Rendering local view"
-                                             : "Awaiting camera image");
-    }
-    // The source and rate on a dark band across the image's foot (fixed light text: it reads on any image and theme)
     const ImVec2 below = ImGui::GetCursorScreenPos();
-    ImGui::PushFont(window_->small);
-    const float band = ImGui::GetFontSize() + ui(10);
+    // No overlay on the image: the source is the Truth / ROS switch, the rate is in the header. While there is
+    // nothing to show, the reason sits centred on a veil in the board's colours.
+    beginSurface(Surface::Board);
     auto *draw = ImGui::GetWindowDrawList();
-    draw->AddRectFilled({pos.x, pos.y + h - band}, {pos.x + w, pos.y + h}, IM_COL32(4, 13, 19, 200));
-    draw->PushClipRect({pos.x, pos.y + h - band}, {pos.x + w, pos.y + h}, true);
-    ImGui::SetCursorScreenPos({pos.x + ui(8), pos.y + h - band + ui(5)});
-    const ImVec4 live(.45f, .93f, .84f, 1), quiet(.78f, .83f, .87f, 1);
-    ImGui::PushStyleColor(ImGuiCol_Text, quiet);
-    ImGui::PushStyleColor(ImGuiCol_TextDisabled, quiet);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {ui(8), 0});
-    const bool connected = !demoMode_ && feed.connected();
-    const bool depthFromRos = feed.wantDepth && !demoMode_;
-    ImGui::TextColored(local && !depthFromRos ? live
-                       : connected            ? live
-                                              : quiet,
-                       "%s",
-                       demoMode_                ? "PREVIEW ONLY"
-                       : local && !depthFromRos ? "LOCAL VIEW"
-                       : connected              ? "CONNECTED"
-                                                : "NO SENSOR OUTPUT");
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", demoMode_ ? "Scene preview. Start the simulator bridge to stream live cameras."
-                                          : "Images are rendered by the bridge at the physics pose. Observer "
-                                            "controls do not move the vehicle.");
-    ImGui::SameLine();
-    const bool sourceToggle = canLocal && !demoMode_;
-    if (sourceToggle) {
-        // Simulator: the source label toggles the card between this viewer's truth-pose render and
-        // the images the bridge publishes to the robot stack.
-        const bool stack = feed.rosMode;
-        pushActiveColors(stack);
-        if (ImGui::SmallButton(stack ? "ROS (stack)###source" : "truth pose###source")) {
-            feed.rosMode = !stack;
-            ros_->refreshCameras();
-            cardDue_[index] = 0; // render the local view immediately when switching back
-        }
-        popActiveColors();
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip(
-                "Click to switch the card's source.\n"
-                "truth pose: rendered by this viewer at the truth pose (no sensor noise, no bridge latency).\n"
-                "ROS (stack): the images the bridge publishes, as the robot stack receives them.");
-        ImGui::SameLine();
+    const ImVec4 strip = palette().bar;
+    draw->PushClipRect(pos, {pos.x + w, pos.y + h}, true);
+    if (!ready || !texture) {
+        draw->AddRectFilled(pos, {pos.x + w, pos.y + h},
+                            ImGui::GetColorU32(ImVec4(strip.x, strip.y, strip.z, texture ? .7f : 1.f)));
+        const char *waiting = !ready                 ? "Waiting for pose"
+                              : local && !depthShown ? "Rendering the local view"
+                                                     : "Waiting for camera images";
+        const ImVec2 size = ImGui::CalcTextSize(waiting);
+        draw->AddText({pos.x + (w - size.x) * .5f, pos.y + (h - size.y) * .5f}, ImGui::GetColorU32(palette().muted),
+                      waiting);
     }
-    if (local && !depthFromRos)
-        ImGui::TextDisabled(sourceToggle ? "|  RGB" : "  truth pose  |  RGB");
-    else
-        ImGui::TextDisabled("  %.1f Hz  |  %s", connected ? feed.hz : 0., feed.wantDepth ? "METRES" : "RECTIFIED RGB");
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip(local && !depthFromRos
-                              ? "Rendered by this viewer from the truth pose (no sensor noise, no bridge latency)."
-                              : "Camera images are rendered and published by the simulator bridge.\n"
-                                "Depth is rendered geometry with the pack's sensor noise model.\n"
-                                "Topic: %s",
-                          feed.wantDepth ? camera.depthTopic.c_str() : camera.rgbTopic.c_str());
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(2);
     draw->PopClipRect();
-    ImGui::PopFont();
+    endSurface();
     ImGui::SetCursorScreenPos(below);
     ImGui::Dummy({0, 0});
     ImGui::PopID();
@@ -1685,7 +1726,7 @@ void App::drawCourseMap(float width, float height, bool compact) {
     auto *d = ImGui::GetWindowDrawList();
     const auto chart = planPalette(); // the same chart colours as map editing's 2D view, from the theme
     const ImU32 lineColor = ImGui::GetColorU32(chart.line);
-    d->AddRectFilled(a, {a.x + width, a.y + height}, ImGui::GetColorU32(chart.canvas), 5);
+    d->AddRectFilled(a, {a.x + width, a.y + height}, ImGui::GetColorU32(chart.canvas), ImGui::GetStyle().FrameRounding);
     d->PushClipRect(a, {a.x + width, a.y + height}, true);
     const ImVec2 cornerA = poolXY({0, 0}), cornerB = poolXY({length, poolWidth});
     const ImVec2 poolMin(std::min(cornerA.x, cornerB.x), std::min(cornerA.y, cornerB.y)),
@@ -1708,6 +1749,23 @@ void App::drawCourseMap(float width, float height, bool compact) {
     }
     d->AddRect(poolMin, poolMax, ImGui::GetColorU32(chart.rim), 0, 0, 2);
     const ImVec4 accent = palette().accent;
+    // The course's props as their baked top-down image (as map editing's 2D view shows them), under the labels.
+    if (model_ && topDownFor_ != model_.get())
+        bakeTopDownImages();
+    if (courseImage_.texture) {
+        const glm::vec2 lo = courseImage_.low, hi = courseImage_.high; // image row 0 is the top (pool y high)
+        // under the props, their silhouette grown 25 cm in the theme's ink, so thin and pale props stay visible
+        // at the whole pool's scale; it fades as the map zooms in and the props draw large enough themselves
+        const float halo = std::clamp(.5f - .14f * (mapZoom_ - 1), 0.f, .5f);
+        if (courseHalo_.texture && halo > 0) {
+            const ImVec4 ink = palette().text;
+            d->AddImageQuad(textureID(courseHalo_.texture), poolXY({lo.x, hi.y}), poolXY(hi), poolXY({hi.x, lo.y}),
+                            poolXY(lo), {0, 0}, {1, 0}, {1, 1}, {0, 1},
+                            ImGui::GetColorU32(ImVec4(ink.x, ink.y, ink.z, halo)));
+        }
+        d->AddImageQuad(textureID(courseImage_.texture), poolXY({lo.x, hi.y}), poolXY(hi), poolXY({hi.x, lo.y}),
+                        poolXY(lo), {0, 0}, {1, 0}, {1, 1}, {0, 1});
+    }
     for (std::size_t i = 1; i < trail_.size(); ++i)
         d->AddLine(xy(trail_[i - 1]), xy(trail_[i]), ImGui::GetColorU32(ImVec4(accent.x, accent.y, accent.z, .6f)), 1.5f);
     // Labels take the first free spot beside their dot (right, then left, below then above), clear of the other
@@ -1737,7 +1795,7 @@ void App::drawCourseMap(float width, float height, bool compact) {
         if (found == s.landmarks.end())
             continue;
         const auto p = xy(glm::vec3(found->second.world[3]));
-        d->AddCircleFilled(p, compact ? ui(4) : ui(5), color(palette().accent));
+        // no marker: the prop draws itself (the baked image); its label sits beside it and the spot takes the click
         if (!compact || !hiddenInMinimap) {
             ImFont *font = compact ? window_->small : window_->normal;
             const std::string text = compact && relabelMinimap ? entry["minimap_label"].as<std::string>() : key;
@@ -1761,12 +1819,79 @@ void App::drawCourseMap(float width, float height, bool compact) {
             focus(key);
     }
     const auto p = xy(glm::vec3(body_[3]));
-    const auto tip = xy(glm::vec3(body_[3]) + glm::vec3(body_[0]) * 1.3f);
-    const ImU32 robot = ImGui::GetColorU32(palette().warn); // the vehicle: the theme's warm status colour
-    d->AddCircleFilled(p, 6, robot);
-    d->AddLine(p, tip, robot, 3);
+    const ImU32 robot = ImGui::GetColorU32(palette().warn); // the vehicle's name: the theme's warm status colour
+    if (robotImage_.texture) { // the robot's own top-down image, turned to its heading
+        const glm::vec2 lo = robotImage_.low, hi = robotImage_.high;
+        const auto at = [&](float x, float y) { return xy(glm::vec3(body_ * glm::vec4(x, y, 0, 1))); };
+        d->AddImageQuad(textureID(robotImage_.texture), at(lo.x, hi.y), at(hi.x, hi.y), at(hi.x, lo.y), at(lo.x, lo.y),
+                        {0, 0}, {1, 0}, {1, 1}, {0, 1});
+        d->AddCircle(p, ui(8), robot, 0, ui(1.5f)); // findable at the whole pool's scale
+    } else {
+        d->AddCircleFilled(p, 6, robot);
+        d->AddLine(p, xy(glm::vec3(body_[3]) + glm::vec3(body_[0]) * 1.3f), robot, 3);
+    }
     d->AddText(window_->small, window_->small->FontSize, {p.x + ui(8), p.y - ui(15)}, robot, s.robotId.c_str());
     d->PopClipRect();
+}
+
+// Bakes the course map's top-down images (once per scene model): the task props in pool coordinates (as placed at
+// reset), and the robot's visuals in its base frame.
+void App::bakeTopDownImages() {
+    topDownFor_ = model_.get();
+    const auto upload = [](const TopDownImage &image, TopDownTexture &out) {
+        if (out.texture)
+            glDeleteTextures(1, &out.texture);
+        out = {};
+        if (image.width == 0)
+            return;
+        glGenTextures(1, &out.texture);
+        glBindTexture(GL_TEXTURE_2D, out.texture);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     image.rgba.data());
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        out.low = image.low;
+        out.high = image.high;
+    };
+    if (!model_ || !scenario_)
+        return;
+    const auto &pack = model_->pack();
+    const auto &instances = pack.staticScene().instances;
+    const auto &sources = pack.staticSources();
+    const auto toGlm = [](const Eigen::Matrix4f &m) {
+        glm::mat4 out;
+        for (int c = 0; c < 4; ++c)
+            for (int r = 0; r < 4; ++r)
+                out[c][r] = m(r, c);
+        return out;
+    };
+    std::vector<TopDownPart> course;
+    for (std::size_t i = 0; i < instances.size() && i < sources.size(); ++i)
+        if (sources[i].role == "task" && instances[i].mesh && instances[i].visible)
+            course.push_back({instances[i].mesh, scenario_->worldToPool * toGlm(instances[i].transform)});
+    for (const auto &prop : pack.propVisuals())
+        if (prop.mesh)
+            course.push_back({prop.mesh, scenario_->worldToPool * toGlm(prop.world_from_asset_at_reset.cast<float>())});
+    const float margin = 1;
+    const auto courseImage =
+        bakeTopDown(course, {-margin, -margin}, {scenario_->poolLength + margin, scenario_->poolWidth + margin}, 48,
+                    readPng);
+    upload(courseImage, courseImage_);
+    upload(haloOf(courseImage, 12), courseHalo_); // 25 cm at 48 px per metre
+    // the robot: its visuals in base_link (root placed as the pack's convention puts it under base_link)
+    const glm::mat4 baseFromRoot = toGlm(model_->worldFromRoot(glm::mat4(1)).cast<float>());
+    std::vector<TopDownPart> robot;
+    for (const auto &visual : pack.robotVisuals())
+        if (visual.mesh)
+            robot.push_back({visual.mesh, baseFromRoot * toGlm(visual.rootFromAsset().cast<float>())});
+    const auto [low, high] = topDownBounds(robot);
+    if (low.x < high.x)
+        upload(bakeTopDown(robot, low - glm::vec2(.02f), high + glm::vec2(.02f), 400, readPng, 1024), robotImage_);
 }
 
 void App::drawMapWindow() {
@@ -2419,24 +2544,29 @@ void App::drawInterface(double time, float dt) {
         drawMapWindows();
     drawUnsavedMapPrompt();
     drawHelpWindow();
+    drawCommandPalette();
+    drawFloatingEdges();
     pins::drawMenu();
     handleWindowEdges();
     windowStates_.update();
 }
 
 void App::drawMenuBar() {
-    // 35 px at the desktop's scale whatever the interface scale, like other applications' title bars (VS Code's):
-    // the padding sets the bar's height and centres the menus. The dropdowns are content: the interface scale's
-    // font and spacing (as the panels), and never taller than the window (they scroll).
+    // 35 px at the desktop's scale with 13 px menus, as VS Code's and other applications' title bars: the padding
+    // sets the bar's height and centres the menus. The dropdowns are content (the panels' font and spacing at the
+    // interface scale), never taller than the window.
     const float t = window_->contentScale();
     const ImGuiStyle content = ImGui::GetStyle();
     const auto menu = [&](const char *label, const std::function<void()> &body) {
         ImGui::SetNextWindowSizeConstraints({0, 0}, {FLT_MAX, ImGui::GetMainViewport()->WorkSize.y - ui(12)});
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, content.WindowPadding); // read as the dropdown begins
+        pushPopupColors(Surface::Sheet);                                          // the dropdown is a sheet
         const bool shown = ImGui::BeginMenu(label);
+        popPopupColors();
         ImGui::PopStyleVar();
         if (!shown)
             return;
+        beginSurface(Surface::Sheet); // the dropdown is a sheet, not the board
         ImGui::PushFont(window_->normal);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, content.FramePadding);
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, content.ItemSpacing);
@@ -2444,20 +2574,51 @@ void App::drawMenuBar() {
         body();
         ImGui::PopStyleVar(3);
         ImGui::PopFont();
+        endSurface();
         ImGui::EndMenu();
     };
+    beginSurface(Surface::Board);
     ImGui::PushFont(window_->menu);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10 * t, 9 * t));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14 * t, 12 * t));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(4 * t, 4 * t));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10 * t, (35 * t - ImGui::GetFontSize()) * .5f));
+    // the title strip a step darker than the command bar below it, with a hairline between (as VS Code's)
+    const ImVec4 bar = palette().bar;
+    const float shade = .2126f * bar.x + .7152f * bar.y + .0722f * bar.z < .5f ? .32f : .06f;
+    ImGui::PushStyleColor(ImGuiCol_MenuBarBg, ImVec4(bar.x * (1 - shade), bar.y * (1 - shade), bar.z * (1 - shade), 1));
     const bool open = ImGui::BeginMainMenuBar();
+    ImGui::PopStyleColor();
     ImGui::PopStyleVar();
+    if (open) {
+        const ImVec2 at = ImGui::GetWindowPos();
+        const float bottom = at.y + ImGui::GetWindowHeight() - 1;
+        auto *draw = ImGui::GetWindowDrawList(); // the bar's own list: open menus draw over it
+        draw->PushClipRect(at, {at.x + ImGui::GetWindowWidth(), bottom + 1}, false);
+        draw->AddLine({at.x, bottom + .5f}, {at.x + ImGui::GetWindowWidth(), bottom + .5f},
+                      ImGui::GetColorU32(ImGuiCol_Border), std::max(1.f, t));
+        draw->PopClipRect();
+    }
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10 * t, 7 * t)); // inside the dropdowns
     if (!open) {
         ImGui::PopStyleVar(4);
         ImGui::PopFont();
+        endSurface();
         return;
+    }
+    if (logoTrident_) { // the mark at the bar's left end, before the menus: drawn on the bar, its width reserved;
+        // the trident in the bar's text colour, the sonar pings in its accent
+        const float size = 23 * t, height = ImGui::GetWindowHeight();
+        const ImVec2 at(ImGui::GetCursorScreenPos().x + 2 * t, ImGui::GetWindowPos().y + (height - size) * .5f);
+        auto *draw = ImGui::GetWindowDrawList();
+        if (logoSonar_)
+            draw->AddImage(textureID(logoSonar_), at, {at.x + size, at.y + size}, {0, 0}, {1, 1},
+                           ImGui::GetColorU32(palette().accent));
+        draw->AddImage(textureID(logoTrident_), at, {at.x + size, at.y + size}, {0, 0}, {1, 1},
+                       ImGui::GetColorU32(palette().text));
+        ImGui::Dummy({size + 4 * t, 1});
+        if (ImGui::IsMouseHoveringRect(at, {at.x + size, at.y + size}))
+            ImGui::SetTooltip("Nereus");
     }
     menu("View", [&] { drawViewMenu(); });
     menu("Windows", [&] { drawWindowsMenu(); });
@@ -2468,11 +2629,210 @@ void App::drawMenuBar() {
         ImGui::SameLine(0, 24);
         ImGui::TextDisabled("%s", state);
     }
+    drawCommandCenter(t);
     if (window_->customTitleBar())
         drawWindowControls();
     ImGui::EndMainMenuBar();
     ImGui::PopStyleVar(4);
     ImGui::PopFont();
+    endSurface();
+}
+
+// The command centre: a search box in the title bar, centred between the menus and the window buttons (as VS
+// Code's). Typing in it (click, or Ctrl+P) drops the matches down from it.
+void App::drawCommandCenter(float t) {
+    if (!scenario_)
+        return;
+    const float barWidth = ImGui::GetWindowWidth(), buttons = window_->customTitleBar() ? 3 * 46 * t : 0;
+    const float left = ImGui::GetCursorPosX() + 24 * t, right = barWidth - buttons - 24 * t;
+    const float width = std::min(420 * t, right - left);
+    if (width < 180 * t) { // no room in the bar: the results still open (Ctrl+P) under where it would be
+        paletteBox_ = {ImGui::GetWindowPos().x + (barWidth - 420 * t) * .5f, ImGui::GetWindowPos().y};
+        paletteBoxSize_ = {420 * t, ImGui::GetWindowHeight()};
+        return;
+    }
+    const float height = std::min(ImGui::GetWindowHeight() - 8 * t, 22 * t); // VS Code's command centre
+    const float x = std::clamp((barWidth - width) * .5f, left, right - width);
+    const ImVec2 at(ImGui::GetWindowPos().x + x, ImGui::GetWindowPos().y + (ImGui::GetWindowHeight() - height) * .5f);
+    paletteBox_ = at;
+    paletteBoxSize_ = {width, height};
+    const float rounding = std::min(height * .5f, ImGui::GetStyle().FrameRounding * t + 2 * t);
+    ImGui::SetCursorScreenPos(at);
+    ImGui::PushFont(window_->titleSmall);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {26 * t, (height - ImGui::GetFontSize()) * .5f});
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, std::max(1.f, t * .75f));
+    if (paletteFocus_) { // Ctrl+P: the menu bar takes no keyboard focus itself, so activate the box by its id
+        ImGui::FocusWindow(ImGui::GetCurrentWindow());
+        ImGui::ActivateItemByID(ImGui::GetID("##command_center"));
+        paletteFocus_ = false;
+    }
+    ImGui::SetNextItemWidth(width);
+    if (ImGui::InputTextWithHint("##command_center", "Search Nereus", paletteQuery_, sizeof(paletteQuery_),
+                                 ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
+        paletteEnter_ = true;
+    if (ImGui::IsItemActivated()) {
+        paletteOpen_ = true;
+        paletteIndex_ = 0;
+    }
+    if (ImGui::IsItemEdited())
+        paletteIndex_ = 0;
+    paletteTyping_ = ImGui::IsItemActive();
+    const bool hovered = ImGui::IsItemHovered();
+    ImGui::PopStyleVar(3);
+    if (hovered && !paletteTyping_)
+        ImGui::SetTooltip("Search windows, layouts, themes, views and focus targets (Ctrl+P)");
+    // a magnifier at its left; the shortcut at its right while it is empty and idle
+    auto *draw = ImGui::GetWindowDrawList();
+    const ImU32 ink = ImGui::GetColorU32(palette().muted);
+    const ImVec2 lens(at.x + 13 * t, at.y + height * .5f - .7f * t);
+    draw->AddCircle(lens, 3.8f * t, ink, 0, 1.2f * t);
+    draw->AddLine({lens.x + 2.7f * t, lens.y + 2.7f * t}, {lens.x + 5.5f * t, lens.y + 5.5f * t}, ink, 1.2f * t);
+    if (!paletteTyping_ && !paletteQuery_[0]) {
+        const char *keys = "Ctrl+P";
+        const float keysWidth = ImGui::CalcTextSize(keys).x;
+        draw->AddText({at.x + width - keysWidth - 10 * t, at.y + (height - ImGui::GetFontSize()) * .5f}, ink, keys);
+    }
+    ImGui::PopFont();
+}
+
+// Everything the palette can run: the menus' items, as commands. Enable and KILL are not here on purpose: a
+// fuzzy match must never start or stop the robot.
+std::vector<App::PaletteCommand> App::paletteCommands() {
+    std::vector<PaletteCommand> out;
+    const auto add = [&](const std::string &group, const std::string &label, bool checked, std::function<void()> run) {
+        out.push_back({group, label, checked, std::move(run)});
+    };
+    for (const auto &entry : windowEntries())
+        add("Window", entry.label, *entry.open, [this, entry] { showWindow(entry); });
+    if (workspace_ == Workspace::Operate) {
+        for (const auto &preset : layoutPresets())
+            add("Layout", preset.label, false, [this, id = preset.id] { pendingPreset_ = id; });
+        for (const auto &name : savedLayouts(layoutDir_))
+            add("Layout", name, false, [this, name] { requestLayout(name); });
+        for (const auto &name : focusNames_)
+            add("Focus", name, focusName_ == name, [this, name] { focus(name); });
+        add("Camera", "Orbit", mode_ == 0, [this] { setViewMode(0); });
+        add("Camera", "Free camera", mode_ == 1, [this] { setViewMode(1); });
+        for (std::size_t i = 0; i < scenario_->cameras.size(); ++i)
+            add("Camera", "Look through the " + scenario_->cameras[i].title, mode_ == int(i) + 2,
+                [this, i] { setViewMode(int(i) + 2); });
+        add("View", "Follow", follow_, [this] { follow_ = !follow_; });
+        add("View", "Labels", labels_, [this] { labels_ = !labels_; });
+        add("View", "TF frames", showTf_, [this] { showTf_ = !showTf_; });
+        if (!demoMode_) {
+            add("View", "Detections", detections_, [this] { detections_ = !detections_; });
+            add("View", "MPC path", showMpc_, [this] { showMpc_ = !showMpc_; });
+            if (!scenario_->thrusterMounts.empty())
+                add("View", "Thrust", showThrust_, [this] { showThrust_ = !showThrust_; });
+        }
+        add("Map", "Edit prior map", false, [this] { setWorkspace(Workspace::Map); });
+    } else {
+        add("Map", "2D view", planView_, [this] {
+            planView_ = !planView_;
+            if (planView_ && !planFitted_)
+                fitPlan();
+        });
+        add("Map", "Done editing the map", false, [this] { setWorkspace(Workspace::Operate); });
+    }
+    add("View", "Maximize pool view", maximized_, [this] { toggleMaximized(); });
+    add("View", "Left panels", sideShown(Side::Left), [this] { toggleSide(Side::Left); });
+    add("View", "Right panels", sideShown(Side::Right), [this] { toggleSide(Side::Right); });
+    add("View", "Frame stats", showProfile_, [this] { showProfile_ = !showProfile_; });
+    for (const auto &theme : themes())
+        add("Theme", theme.label, currentTheme() == theme.id, [this, id = theme.id] { setTheme(id); });
+    add("Interface scale", "Match desktop", uiScaleSetting_ <= 0, [this] { setUiScale(0); });
+    for (const float scale : {1.f, 1.25f, 1.5f, 1.75f, 2.f})
+        add("Interface scale", std::to_string(int(std::lround(scale * 100))) + " %",
+            uiScaleSetting_ > 0 && std::abs(uiScaleSetting_ - scale) < .01f, [this, scale] { setUiScale(scale); });
+    if (poolSwitch_.packs.empty())
+        poolSwitch_.packs = scenarioPacks();
+    for (const auto &pack : poolSwitch_.packs)
+        if (pack.poolId != scenario_->poolId)
+            add("Pool", pack.poolLabel, false, [this, pack] { switchPool(pack); });
+    add("Help", "Controls & shortcuts", helpOpen_, [this] { helpOpen_ = true; });
+    return out;
+}
+
+// The matches, dropped down from the title bar's search box while it is in use: the arrows choose, Enter or a
+// click runs one, Esc or a click elsewhere closes them.
+void App::drawCommandPalette() {
+    if (!paletteOpen_ || !scenario_)
+        return;
+    const auto close = [&] {
+        paletteOpen_ = paletteEnter_ = false;
+        paletteQuery_[0] = 0;
+        paletteIndex_ = 0;
+    };
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        close();
+        return;
+    }
+    const auto *viewport = ImGui::GetMainViewport();
+    const float width = std::min(std::max(paletteBoxSize_.x, ui(520)), viewport->Size.x - ui(24));
+    const float x = std::clamp(paletteBox_.x + (paletteBoxSize_.x - width) * .5f, viewport->Pos.x + ui(12),
+                               viewport->Pos.x + viewport->Size.x - width - ui(12));
+    ImGui::SetNextWindowPos({x, paletteBox_.y + paletteBoxSize_.y + ui(3)});
+    ImGui::SetNextWindowSizeConstraints({width, 0}, {width, viewport->Size.y * .7f});
+    ImGui::Begin("##command_results", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse |
+                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow()); // over every window, as a dropdown
+    // the matches, best first (ties keep the menus' order); with nothing typed, everything in that order
+    auto commands = paletteCommands();
+    std::vector<std::pair<int, std::size_t>> ranked;
+    for (std::size_t i = 0; i < commands.size(); ++i) {
+        const int label = fuzzyScore(commands[i].label, paletteQuery_),
+                  full = fuzzyScore(commands[i].group + " " + commands[i].label, paletteQuery_);
+        const int score = label >= 0 ? label : full >= 0 ? full + 50 : -1;
+        if (score >= 0)
+            ranked.push_back({score, i});
+    }
+    std::stable_sort(ranked.begin(), ranked.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+    const int shownCount = int(std::min<std::size_t>(ranked.size(), 14));
+    if (paletteTyping_ && ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+        paletteIndex_ = std::min(paletteIndex_ + 1, std::max(0, shownCount - 1));
+    if (paletteTyping_ && ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+        paletteIndex_ = std::max(paletteIndex_ - 1, 0);
+    paletteIndex_ = std::clamp(paletteIndex_, 0, std::max(0, shownCount - 1));
+    std::function<void()> run;
+    if (paletteEnter_ && shownCount > 0)
+        run = commands[ranked[std::size_t(paletteIndex_)].second].run;
+    paletteEnter_ = false;
+    if (shownCount == 0)
+        ImGui::TextDisabled("No match");
+    const float groupWidth = ImGui::CalcTextSize("Interface scale").x + ui(16);
+    for (int row = 0; row < shownCount; ++row) {
+        const auto &command = commands[ranked[std::size_t(row)].second];
+        ImGui::PushID(row);
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        if (ImGui::Selectable("##row", row == paletteIndex_, 0, {0, ImGui::GetTextLineHeight() + ui(6)}))
+            run = command.run;
+        if (ImGui::IsItemHovered() && (ImGui::GetIO().MouseDelta.x != 0 || ImGui::GetIO().MouseDelta.y != 0))
+            paletteIndex_ = row;
+        auto *draw = ImGui::GetWindowDrawList();
+        const float y = at.y + ui(3);
+        draw->AddText({at.x + ui(4), y}, ImGui::GetColorU32(palette().muted), command.group.c_str());
+        draw->AddText({at.x + groupWidth, y}, ImGui::GetColorU32(palette().text), command.label.c_str());
+        if (command.checked) { // the current choice / an option that is on
+            const char *on = "on";
+            draw->AddText({at.x + ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(on).x - ui(4), y},
+                          ImGui::GetColorU32(palette().accent), on);
+        }
+        ImGui::PopID();
+    }
+    if (ranked.size() > std::size_t(shownCount))
+        ImGui::TextDisabled("%zu more: keep typing", ranked.size() - std::size_t(shownCount));
+    const bool overResults = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+    ImGui::End();
+    // a click on a row keeps them open until it lands; anywhere else (the box no longer in use) closes them
+    const bool overBox = ImGui::IsMouseHoveringRect(paletteBox_, {paletteBox_.x + paletteBoxSize_.x,
+                                                                  paletteBox_.y + paletteBoxSize_.y});
+    if (run || (!paletteTyping_ && !overResults && !overBox && !ImGui::IsMouseDown(ImGuiMouseButton_Left)))
+        close();
+    if (run)
+        run();
 }
 
 // The viewer's own title bar (no system decorations): the menu bar's empty space moves the window (drag) or
@@ -2537,6 +2897,42 @@ void App::drawWindowControls() {
     }
 }
 
+// Floating windows (undocked tool windows, the scorecard, Help) stand off the docked sheets: a hairline edge and
+// a soft shadow below, drawn only outside each window so nothing covers its content.
+void App::drawFloatingEdges() {
+    auto &g = *ImGui::GetCurrentContext();
+    const ImU32 edge = ImGui::GetColorU32(ImGuiCol_Border);
+    const bool light = palette().text.x < .5f;
+    for (ImGuiWindow *window : g.Windows) {
+        if (!window->Active || window->Hidden || window->DockIsActive || window->DockNodeAsHost ||
+            (window->Flags & (ImGuiWindowFlags_ChildWindow | ImGuiWindowFlags_Popup | ImGuiWindowFlags_Tooltip |
+                              ImGuiWindowFlags_NoTitleBar)))
+            continue;
+        auto *draw = window->DrawList;
+        const ImRect box = window->Rect();
+        const ImVec2 view = ImGui::GetMainViewport()->Size;
+        // the four bands around the window, each clipped to its side so the shadow never lands on the window
+        const ImRect sides[] = {{{0, 0}, {view.x, box.Min.y}},
+                                {{0, box.Max.y}, view},
+                                {{0, box.Min.y}, {box.Min.x, box.Max.y}},
+                                {{box.Max.x, box.Min.y}, {view.x, box.Max.y}}};
+        const float rounding = window->WindowRounding, drop = ui(4);
+        for (const auto &side : sides) {
+            draw->PushClipRect(side.Min, side.Max, false);
+            for (int i = 1; i <= 10; ++i) {
+                const float spread = ui(float(i) * 1.4f), fade = 1 - float(i) / 11;
+                draw->AddRect({box.Min.x - spread, box.Min.y - spread + drop},
+                              {box.Max.x + spread, box.Max.y + spread + drop},
+                              IM_COL32(0, 0, 0, int((light ? 22 : 48) * fade * fade)), rounding + spread, 0, ui(1.6f));
+            }
+            draw->PopClipRect();
+        }
+        draw->PushClipRect({0, 0}, view, false);
+        draw->AddRect(box.Min, box.Max, edge, rounding, 0, 1);
+        draw->PopClipRect();
+    }
+}
+
 // Without system decorations the window's own edges resize it (through the window manager), as borders would.
 void App::handleWindowEdges() {
     const auto &io = ImGui::GetIO();
@@ -2567,13 +2963,24 @@ void App::handleWindowEdges() {
 }
 
 // A theme for the whole interface; the operator's choice is remembered (viewer.yaml in the config directory).
+// The theme changes between frames (applyPendingTheme): mid-frame, colours pushed by the board and menus would
+// be popped back as the old theme's when they close, leaving a mix of two themes.
 void App::setTheme(const std::string &id) {
+    pendingTheme_ = id;
+}
+
+void App::applyPendingTheme() {
+    if (pendingTheme_.empty())
+        return;
+    const std::string id = std::move(pendingTheme_);
+    pendingTheme_.clear();
     const auto before = currentThemeInfo();
     if (!applyTheme(id))
         return;
     savePreference("theme", YAML::Node(id));
     const auto &after = currentThemeInfo();
-    if (after.fontFamily != before.fontFamily || after.fontPoints != before.fontPoints)
+    if (after.fontFamily != before.fontFamily || after.fontPoints != before.fontPoints ||
+        after.fontRegular != before.fontRegular)
         pendingUiScale_ = resolvedUiScale(); // reload the fonts between frames
 }
 
@@ -2607,7 +3014,7 @@ void App::applyPendingUiScale() {
     if (pendingUiScale_ <= 0)
         return;
     const auto &theme = currentThemeInfo(); // a theme with its own font (the desktop's Qt font)
-    window_->loadFonts(pendingUiScale_, window_->contentScale(), theme.fontFamily, theme.fontPoints);
+    window_->loadFonts(pendingUiScale_, window_->contentScale(), theme, contentDirectory() / "fonts");
     setInterfaceScale(pendingUiScale_);
     pendingUiScale_ = -1;
 }
@@ -2799,6 +3206,7 @@ void App::drawLayoutMenu() {
 // Always visible whatever the layout: branding, the pinned panel controls (Enable / KILL), robot status chips
 // and the pose-source pill.
 void App::drawCommandBar() {
+    beginSurface(Surface::Board); // the board: its own colours in a theme that has them
     const float height = ui(52), padding = ui(9);
     // Editing the map: the bar takes on the accent colour, as far as its text stays legible (muted 5:1, text 7:1;
     // at most half way, so Enable keeps its contrast).
@@ -2807,7 +3215,7 @@ void App::drawCommandBar() {
     const auto tinted = [&](float t) {
         return ImVec4(bar.x + (accent.x - bar.x) * t, bar.y + (accent.y - bar.y) * t, bar.z + (accent.z - bar.z) * t, 1);
     };
-    float tint = .45f;
+    float tint = ruledTheme() ? 0.f : .45f; // a ruled board keeps its ink and takes a lane-blue rule instead
     while (tint > .1f && (contrastRatio(palette().muted, tinted(tint)) < 5 || contrastRatio(palette().text, tinted(tint)) < 7))
         tint -= .025f;
     const ImVec4 editBar = tinted(tint);
@@ -2820,6 +3228,11 @@ void App::drawCommandBar() {
     ImGui::PopStyleVar();
     if (open) {
         const float W = ImGui::GetWindowWidth(), inner = height - 2 * padding;
+        if (editingMap && tint == 0) { // editing the map on a ruled board: a lane-blue rule along its foot
+            const ImVec2 at = ImGui::GetWindowPos();
+            ImGui::GetWindowDrawList()->AddRectFilled({at.x, at.y + height - ui(4)}, {at.x + W, at.y + height},
+                                                      ImGui::GetColorU32(palette().active));
+        }
         const std::string headerTitle = lookup(config_, {"branding", "header"}).as<std::string>("NEREUS");
         std::string headerSubtitle = scenario_ ? scenarioLabel(*scenario_) : "";
         std::transform(headerSubtitle.begin(), headerSubtitle.end(), headerSubtitle.begin(),
@@ -2834,16 +3247,21 @@ void App::drawCommandBar() {
                 headerSubtitle += "  \u00b7  simulator paused";
             ImGui::PushStyleColor(ImGuiCol_Text, palette().text);
         }
-        ImGui::PushFont(window_->title);
-        ImGui::SetCursorPosY(padding + (inner - ImGui::GetFontSize()) * .5f);
-        ImGui::TextUnformatted(headerTitle.c_str());
-        ImGui::PopFont();
-        ImGui::SameLine();
-        ImGui::SetCursorPosY(padding + (inner - ImGui::GetFontSize()) * .5f);
-        ImGui::TextColored(palette().muted, "/");
-        ImGui::SameLine();
+        // the robot and pool (or the map being edited) lead the board; the product's name is the title bar's logo,
+        // or the host config's branding header when it sets one
+        if (lookup(config_, {"branding", "header"})) {
+            ImGui::PushFont(window_->title);
+            ImGui::SetCursorPosY(padding + (inner - ImGui::GetFontSize()) * .5f);
+            ImGui::TextUnformatted(headerTitle.c_str());
+            ImGui::PopFont();
+            ImGui::SameLine();
+        }
+        if (window_->strong)
+            ImGui::PushFont(window_->strong);
         ImGui::SetCursorPosY(padding + (inner - ImGui::GetFontSize()) * .5f);
         ImGui::TextUnformatted(headerSubtitle.c_str());
+        if (window_->strong)
+            ImGui::PopFont();
         if (editingMap)
             ImGui::PopStyleColor();
         if (composition_) { // pinned controls: Enable / KILL and the robot's state
@@ -2853,9 +3271,39 @@ void App::drawCommandBar() {
         }
         const float statusWidth = statusChipWidth(status_.c_str());
         const float spacing = ImGui::GetStyle().ItemSpacing.x, edit = editMapButtonWidth();
-        if (composition_) { // header items (robot telemetry, recording) sit just left of Edit map and the status
+        // The run on the board: its clock and score as board figures (amber while it runs), left of the chips.
+        const bool run = runScore_ && runScore_["total"], running = run && runScore_["running"].as<bool>(false);
+        const std::string clock = run ? runTime() : "", points = run ? fixed(runScore_["total"].as<double>(), 1) : "";
+        float clockWidth = 0, clockText = 0, pointsText = 0;
+        if (run) {
+            ImGui::PushFont(window_->number);
+            clockText = ImGui::CalcTextSize(clock.c_str()).x;
+            pointsText = ImGui::CalcTextSize(points.c_str()).x;
+            ImGui::PopFont();
+            clockWidth = clockText + ui(16) + pointsText + ui(6) + ImGui::CalcTextSize("pts").x + ui(28);
+        }
+        const float right = W - 16 - statusWidth - spacing - (edit > 0 ? edit + spacing : 0);
+        if (composition_) { // header items (robot telemetry, recording) sit just left of the run, Edit map, status
             ImGui::SetCursorPosY(padding + (inner - ImGui::GetFrameHeight()) * .5f); // a fresh line (no SameLine)
-            composition_->drawHeader(W - 16 - statusWidth - spacing - (edit > 0 ? edit + spacing : 0));
+            composition_->drawHeader(right - clockWidth);
+        }
+        if (run) {
+            ImGui::PushFont(window_->number);
+            const float figureTop = padding + (inner - ImGui::GetFontSize()) * .5f, baseline = ImGui::GetFontSize();
+            ImGui::SameLine(right - clockWidth + ui(12));
+            ImGui::SetCursorPosY(figureTop);
+            ImGui::TextColored(running ? palette().change : palette().text, "%s", clock.c_str()); // lit while running
+            const bool hovered = ImGui::IsItemHovered();
+            ImGui::SameLine(0, ui(16));
+            ImGui::SetCursorPosY(figureTop);
+            ImGui::TextUnformatted(points.c_str());
+            ImGui::PopFont();
+            ImGui::SameLine(0, ui(6));
+            ImGui::SetCursorPosY(figureTop + baseline - ImGui::GetFontSize() - ui(3)); // on the figures' baseline
+            ImGui::TextColored(palette().muted, "pts");
+            if (hovered || ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", running ? "Run time (simulation time) and score: running"
+                                                : "Run time (simulation time) and score: stopped");
         }
         if (edit > 0) {
             ImGui::SameLine(W - 16 - statusWidth - spacing - edit);
@@ -2867,9 +3315,10 @@ void App::drawCommandBar() {
         }
         ImGui::SameLine(W - 16 - statusWidth);
         ImGui::SetCursorPosY(padding + (inner - ImGui::GetFrameHeight()) * .5f);
-        pill(status_, demoMode_ ? palette().warn : (ros_->poseFresh() ? palette().accent : palette().muted));
+        pill(status_, ros_->poseFresh() && !demoMode_ ? palette().accent : palette().muted); // a mode, not a warning
     }
     ImGui::End();
+    endSurface();
 }
 
 // The 3D pool view: the configured toolbar on top, the rendered scene below with its overlays. It fills the
@@ -3108,21 +3557,11 @@ void App::drawPoolView(double time, float dt) {
         priorMap_->drawOverlay(editorView, window_->small);
     }
     auto *d = ImGui::GetWindowDrawList();
-    d->AddRect(position, {position.x + width, position.y + viewHeight}, ImGui::GetColorU32(ImGuiCol_Border), 5, 0, 1);
-    // the pool's name (its pack's label, else its id) and size
+    d->AddRect(position, {position.x + width, position.y + viewHeight}, ImGui::GetColorU32(ImGuiCol_Border),
+               ImGui::GetStyle().WindowRounding, 0, 1); // the theme's corners (square in a ruled theme)
+    // (no pool chip over the scene: the board names the robot and pool, View > Pool lists and switches pools)
     if (poolSwitch_.packs.empty())
         poolSwitch_.packs = scenarioPacks();
-    std::string poolName = scenario_->poolId;
-    for (const auto &pack : poolSwitch_.packs)
-        if (pack.poolId == scenario_->poolId)
-            poolName = pack.poolLabel;
-    const std::string poolChip =
-        poolName + "  \u00b7  " + fixed(scenario_->poolLength, 1) + " x " + fixed(scenario_->poolWidth, 2) + " m";
-    const ImVec2 poolText = window_->small->CalcTextSizeA(window_->small->FontSize, 1e9f, 0, poolChip.c_str());
-    d->AddRectFilled({position.x + ui(14), position.y + ui(14)},
-                     {position.x + ui(36) + poolText.x, position.y + ui(22) + poolText.y + ui(8)}, chipFill(), 4);
-    d->AddText(window_->small, window_->small->FontSize, {position.x + ui(25), position.y + ui(22)},
-               color(palette().text), poolChip.c_str());
     drawPoolSwitchStatus(position);
     if (showProfile_ && !profiler_.recent().empty()) {
         if (time - profileCachedAt_ > .5) {
@@ -3148,15 +3587,6 @@ void App::drawPoolView(double time, float dt) {
         d->AddText(window_->small, window_->small->FontSize, {position.x + ui(22), position.y + ui(56)}, color(palette().text),
                    profileText_.c_str());
     }
-    if (runScore_ && runScore_["total"]) {
-        std::string readout = fixed(runScore_["total"].as<double>(), 1) + " pts   /   " + runTime();
-        if (runScore_["running"].as<bool>(false))
-            readout += "  RUNNING";
-        d->AddRectFilled({position.x + width - ui(310), position.y + ui(12)},
-                         {position.x + width - ui(12), position.y + ui(43)}, chipFill(), 4);
-        d->AddText(window_->small, window_->small->FontSize * 14 / 12,
-                   {position.x + width - ui(298), position.y + ui(21)}, color(palette().accent), readout.c_str());
-    }
     if (labels_ && mode_ < 2 && presetFor(focusName_).labels && !priorMap_->hidesCourse()) {
         for (const auto &key : focusNames_) {
             const auto found = scenario_->landmarks.find(key);
@@ -3181,10 +3611,21 @@ void App::drawPoolView(double time, float dt) {
             d->AddText(font, font->FontSize, {at.x + ui(16), at.y - ui(28)}, color(palette().text), key.c_str());
         }
     }
-    const char *controls =
-        planActive() ? "DRAG FLOOR / RIGHT / MIDDLE DRAG  pan   SCROLL  zoom   F  fit pool   DOUBLE-CLICK  centre a prop"
-        : mode_ == 1 ? "CLICK  mouse look    WASD  move    SPACE / SHIFT  up / down    CTRL  fast    ESC  release"
-                     : "LEFT DRAG  orbit   RIGHT / MIDDLE DRAG  pan   SCROLL  zoom   F  focus cursor";
+    // the controls strip: the longest wording that fits the view's width
+    const char *const hints[3][3] = {
+        {"LEFT DRAG  orbit   RIGHT / MIDDLE DRAG  pan   SCROLL  zoom   F  focus cursor",
+         "DRAG  orbit   RIGHT DRAG  pan   SCROLL  zoom   F  focus", "DRAG  orbit   SCROLL  zoom"},
+        {"CLICK  mouse look    WASD  move    SPACE / SHIFT  up / down    CTRL  fast    ESC  release",
+         "WASD  move   SPACE / SHIFT  up / down   ESC  release", "WASD  move   ESC  release"},
+        {"DRAG FLOOR / RIGHT / MIDDLE DRAG  pan   SCROLL  zoom   F  fit pool   DOUBLE-CLICK  centre a prop",
+         "DRAG  pan   SCROLL  zoom   F  fit pool", "DRAG  pan   SCROLL  zoom"}};
+    const int hintSet = planActive() ? 2 : mode_ == 1 ? 1 : 0;
+    const char *controls = hints[hintSet][2];
+    for (const char *hint : hints[hintSet])
+        if (window_->small->CalcTextSizeA(window_->small->FontSize, 1e9f, 0, hint).x + ui(28) <= width) {
+            controls = hint;
+            break;
+        }
     d->AddRectFilled({position.x, position.y + viewHeight - ui(30)}, {position.x + width, position.y + viewHeight},
                      chipFill());
     d->AddText(window_->small, window_->small->FontSize, {position.x + ui(14), position.y + viewHeight - ui(21)},
@@ -3348,7 +3789,10 @@ void App::drawCameraWindows() {
         focusIfRequested(name);
         ImGui::SetNextWindowSize(ui(ImVec2(440, 360)), ImGuiCond_FirstUseEver);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui(ImVec2(10, 8)));
-        const bool visible = ImGui::Begin(name.c_str(), &cards_[i].open);
+        // no scrollbar: the image is fitted to the window (a scrollbar coming and going would change the width the
+        // card lays out in, and the card would jitter between two sizes)
+        const bool visible = ImGui::Begin(name.c_str(), &cards_[i].open,
+                                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
         ImGui::PopStyleVar();
         if (visible) {
             windowContextMenu("camera." + ros_->feeds[i].camera->id);
@@ -3381,7 +3825,11 @@ void App::drawHelpWindow() {
             for (const auto &[keys, action] : rows) {
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                ImGui::TextColored(palette().accent, "%s", keys);
+                if (typeRamp().strong) // the keys in bold ink (colour stays for state)
+                    ImGui::PushFont(typeRamp().strong);
+                ImGui::TextUnformatted(keys);
+                if (typeRamp().strong)
+                    ImGui::PopFont();
                 ImGui::TableNextColumn();
                 ImGui::TextWrapped("%s", action);
             }
@@ -3397,7 +3845,8 @@ void App::drawHelpWindow() {
                                "Esc release"},
                {"Gizmo", "drag an arrow to move, a ring to rotate; Esc during a drag restores the start"}});
         sectionTitle("Shortcuts");
-        table("shortcuts", {{"Ctrl+M", "edit the prior map / done"},
+        table("shortcuts", {{"Ctrl+P", "search: windows, layouts, themes, views, focus targets"},
+                            {"Ctrl+M", "edit the prior map / done"},
                             {"Ctrl+Space", "maximize the pool view / restore the layout"},
                             {"Ctrl+Shift+1 / 2 / 3", "Standard / Wide view / Camera wall layout"},
                             {"Ctrl+[ / Ctrl+]", "snap the left / right panels shut, or bring them back"},
@@ -3431,6 +3880,8 @@ void App::handleShortcuts() {
             pendingPreset_ = presets[i].id;
     if (ImGui::Shortcut(ImGuiKey_F1, ImGuiInputFlags_RouteGlobal))
         helpOpen_ = !helpOpen_;
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_P, ImGuiInputFlags_RouteGlobal) && scenario_)
+        paletteFocus_ = true; // the title bar's search box takes the keyboard
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_LeftBracket, ImGuiInputFlags_RouteGlobal))
         toggleSide(Side::Left);
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_RightBracket, ImGuiInputFlags_RouteGlobal))
@@ -3662,6 +4113,14 @@ void App::applyPreset(const std::string &id) {
     const auto size = ImGui::GetMainViewport()->WorkSize;
     if (preset.id == "standard" && composition_ && size.x > 0) // the composition's sidebar width
         preset.left = std::clamp(composition_->width(size.x) / size.x, .15f, .45f);
+    // The side columns and the upper left panel never go below what their content needs at this interface scale
+    // (a small window or a large scale), so tabs and tables keep their content instead of truncating; a large
+    // window keeps the preset's shares.
+    if (size.x > 0 && size.y > 0) {
+        preset.left = std::clamp(ui(400) / size.x, preset.left, std::max(preset.left, .32f)); // the pool view keeps 36 %+
+        preset.right = std::clamp(ui(400) / size.x, preset.right, std::max(preset.right, .32f));
+        preset.leftTop = std::clamp(ui(620) / size.y, preset.leftTop, std::max(preset.leftTop, .82f));
+    }
     for (const auto &[key, flag] : windowFlags()) {
         const auto value = defaultOpen_.find(key);
         if (value != defaultOpen_.end())
@@ -3916,6 +4375,7 @@ int App::loop() {
         }
         profiler_.setPosition(body_[3].x, body_[3].y, body_[3].z);
         applyPendingIni(); // a layout chosen last frame (saved layout, maximize restore)
+        applyPendingTheme(); // before the scale: a theme with its own fonts reloads them
         applyPendingUiScale();
         window_->beginFrame();
         drawInterface(t, dt);
@@ -4214,20 +4674,15 @@ void App::applyMapLayout() {
 // The pool view toolbar in the Map workspace: 3D / 2D, the map tools, the pool.
 void App::drawMapToolbar(float width) {
     (void)width;
-    for (const bool plan : {false, true}) {
-        if (plan)
-            ImGui::SameLine(0, 0);
-        pushActiveColors(planView_ == plan);
-        if (ImGui::Button(plan ? "2D###plan" : "3D###perspective") && planView_ != plan) {
-            planView_ = plan;
-            if (plan && !planFitted_)
-                fitPlan();
-        }
-        popActiveColors();
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip(plan ? "Straight down at the pool: drag props across it, height stays put"
-                                   : "The 3D view: orbit, and move props in height too");
+    int view = planView_ ? 1 : 0;
+    if (pins::Switch("View##map_view", &view, {"3D", "2D"})) {
+        planView_ = view == 1;
+        if (planView_ && !planFitted_)
+            fitPlan();
     }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("3D: orbit, and move props in height too.\n2D: straight down at the pool; drag props across "
+                          "it, height stays put.");
     if (planView_) {
         ImGui::SameLine();
         if (ImGui::Button("Fit"))

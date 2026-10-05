@@ -1,4 +1,5 @@
-"""The Nereus logo (trident and sonar): the mark as SVG, and PNG icons; small sizes use heavier strokes.
+"""The Nereus logo (trident and sonar): the mark as SVG, PNG icons (small sizes use heavier strokes), and the bare
+mark's two parts as white masks for the viewer's title bar.
 
 Regenerate: uv run --with cairosvg python content/viewer/icons/make_icons.py docs/images content/viewer/icons
 """
@@ -47,6 +48,28 @@ def mark(small=False):
 """
 
 
+def glyph(part):
+    """The bare mark (no tile) in white, for the title bar to tint: part "trident" or "sonar" (the pings)."""
+    if part == "sonar":
+        body = "\n".join(f'  <path d="{arc(256, 404, r, 28, 152)}" fill="none" stroke="#fff" stroke-width="22" '
+                         f'stroke-linecap="round" opacity="{o}"/>' for r, o in ((92, .95), (150, .6), (208, .3)))
+    else:
+        body = """  <g fill="none" stroke="#fff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 404 L256 128"/>
+    <path d="M178 138 L178 186 Q178 226 218 226 L294 226 Q334 226 334 186 L334 138"/>
+  </g>
+  <g fill="#fff">
+    <path d="M256 70 L232 132 L280 132 Z"/>
+    <path d="M178 92 L160 146 L196 146 Z"/>
+    <path d="M334 92 L316 146 L352 146 Z"/>
+  </g>"""
+    # the mark's own extent (x 40..472, y 60..420), so it fills the title bar's square
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 52 432 432" width="432" height="432">
+{body}
+</svg>
+"""
+
+
 DOCS.mkdir(parents=True, exist_ok=True)
 ICONS.mkdir(parents=True, exist_ok=True)
 (DOCS / "logo.svg").write_text(mark())
@@ -55,4 +78,7 @@ for size in (16, 24, 32, 48, 64, 128, 256, 512):
     svg = mark(small=size <= 48)
     (ICONS / f"nereus-{size}.png").write_bytes(cairosvg.svg2png(bytestring=svg.encode(), output_width=size,
                                                                 output_height=size))
+for part in ("trident", "sonar"): # white masks the viewer tints (its title bar)
+    (ICONS / f"nereus-{part}-128.png").write_bytes(cairosvg.svg2png(bytestring=glyph(part).encode(), output_width=128,
+                                                                    output_height=128))
 print(sorted(p.name for p in ICONS.iterdir()))

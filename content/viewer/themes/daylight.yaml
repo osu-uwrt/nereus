@@ -1,0 +1,48 @@
+# Light, for a sunny pool deck where a dark screen washes out.
+id: daylight
+label: Daylight
+description: "Light, for bright rooms and a sunny pool deck"
+order: 4
+shape: {window_rounding: 6, frame_rounding: 5, tab_rounding: 5, window_border: 1, frame_border: 0, scrollbar: 14}
+spacing: {window_padding: [14, 12], frame_padding: [10, 7], item_spacing: [10, 9], cell_padding: [4, 2]}
+surfaces:
+  window: "#f0f2f5"
+  child: "#fafbfc"
+  popup: "#fcfcfffc"
+  frame: "#dbe3e8"
+  frame_hovered: "#ccdbe3"
+  frame_active: "#bdd6de"
+  button: "#d9e0e6"
+  button_hovered: "#c2dbe0"
+  button_pressed: "#a3cfd4"
+  border: "#bdc7cf"
+  header: "#b8dbde"
+  header_hovered: "#a8d4d9"
+  header_pressed: "#94c9cf"
+  title: "#e0e6eb"
+  title_active: "#d1dee6"
+  tab: "#dee3e8"
+  tab_hovered: "#bddbe0"
+  tab_selected: "#fafbfc"
+  tab_dimmed: "#e6e9ed"
+  tab_dimmed_selected: "#f2f5f7"
+  scroll_grab: "#b8c2c9"
+  table_row_alt: "#00000009"
+palette:
+  text: "#121c26"
+  muted: "#5c6e7d"
+  accent: "#00808c"
+  active: "#73cccc"
+  active_hovered: "#85dbd9"
+  active_pressed: "#61b8b8"
+  active_text: "#081f24"
+  danger: "#cc242b"
+  danger_hovered: "#e63338"
+  danger_pressed: "#ad1a21"
+  danger_text: "#ffffff"
+  warn: "#bf7300"
+  error: "#cc2424"
+  robot_enabled: "#008c40"
+  robot_killed: "#cc5900"
+  bar: "#dbe3e8"
+  toolbar: "#e6ebf0"

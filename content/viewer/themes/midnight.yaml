@@ -1,0 +1,48 @@
+# Neutral graphite with a blue accent, square-ish corners.
+id: midnight
+label: Midnight
+description: "Neutral dark grey with a blue accent"
+order: 3
+shape: {window_rounding: 4, frame_rounding: 3, tab_rounding: 3, window_border: 1, frame_border: 0, scrollbar: 14}
+spacing: {window_padding: [14, 12], frame_padding: [10, 7], item_spacing: [10, 9], cell_padding: [4, 2]}
+surfaces:
+  window: "#191a1d"
+  child: "#1f2024"
+  popup: "#1c1d21fa"
+  frame: "#2a2b31"
+  frame_hovered: "#33363d"
+  frame_active: "#38404f"
+  button: "#2e2f36"
+  button_hovered: "#3d4557"
+  button_pressed: "#334d75"
+  border: "#363840"
+  header: "#334261"
+  header_hovered: "#3d5278"
+  header_pressed: "#45618f"
+  title: "#131417"
+  title_active: "#1c1e24"
+  tab: "#1c1d21"
+  tab_hovered: "#3d4a66"
+  tab_selected: "#292b33"
+  tab_dimmed: "#191a1d"
+  tab_dimmed_selected: "#222429"
+  scroll_grab: "#3d4047"
+  table_row_alt: "#ffffff08"
+palette:
+  text: "#e6e8ed"
+  muted: "#8a8f9e"
+  accent: "#6ba8ff"
+  active: "#3366bd"
+  active_hovered: "#427adb"
+  active_pressed: "#2b57a3"
+  active_text: "#ffffff"
+  danger: "#b82e33"
+  danger_hovered: "#db4045"
+  danger_pressed: "#992429"
+  danger_text: "#ffffff"
+  warn: "#fabd4d"
+  error: "#ff6661"
+  robot_enabled: "#6be68c"
+  robot_killed: "#ffa861"
+  bar: "#131417"
+  toolbar: "#1d1e22"

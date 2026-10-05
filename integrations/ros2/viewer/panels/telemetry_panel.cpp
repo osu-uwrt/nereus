@@ -4,21 +4,26 @@
 #include <imgui.h>
 namespace nereus::ros_viewer::panels {
 namespace {
-// Header / toolbar form: one chip per reading ("FOG 41.2°C"), tinted by level, details on hover.
+// Header / toolbar form: one readout per reading ("FOG 41.2°C": dot, label, value), coloured by level, details on
+// hover.
 // Sidebar form: the same readings with their details.
 class TelemetryPanel final : public Panel {
     std::shared_ptr<Telemetry> telemetry;
 
-    static std::string chipText(const Reading &reading) {
-        return reading.label + " " + reading.value;
+    // the value in the level's colour when it needs attention, plain when fine, muted when stale
+    static ImVec4 valueInk(Level level) {
+        return level == Level::Warn || level == Level::Error ? levelColor(level)
+               : level == Level::Ok                          ? palette().text
+                                                             : palette().muted;
     }
     void chips(const TelemetryState &s) {
         for (std::size_t i = 0; i < s.readings.size(); ++i) {
             const auto &reading = s.readings[i];
             if (i)
-                ImGui::SameLine(0, ui(6));
+                ImGui::SameLine(0, ui(14));
             ImGui::PushID(int(i));
-            if (statusChip(chipText(reading).c_str(), levelColor(reading.level)))
+            if (statusReadout(reading.label.c_str(), reading.value.c_str(), levelColor(reading.level),
+                              valueInk(reading.level)))
                 ImGui::SetTooltip("%s: %s\n%s", reading.label.c_str(), levelName(reading.level),
                                   reading.detail.c_str());
             ImGui::PopID();
@@ -37,7 +42,7 @@ class TelemetryPanel final : public Panel {
         const auto s = telemetry->state();
         float width = 0;
         for (const auto &reading : s.readings)
-            width += chipWidth(chipText(reading).c_str()) + ui(6);
+            width += readoutWidth(reading.label.c_str(), reading.value.c_str()) + ui(14);
         sameLineIfFits(width);
         chips(s);
     }
