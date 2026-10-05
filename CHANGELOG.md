@@ -109,7 +109,8 @@ First version for the team.
     - A File menu: switch pool, open / open recent / save (Ctrl+S anywhere) / reload the prior map, save a
       screenshot (F12, `~/Pictures/Nereus`), open the run records and settings folders, quit (Ctrl+Q).
     - A command centre in the title bar (Ctrl+P), as VS Code's: fuzzy search over windows, layouts, themes, scales,
-      focus targets, camera views, toggles and pools (Enable and KILL are left out on purpose).
+      focus targets, camera views, toggles and pools, and every pinnable control in every window (closed ones
+      run off screen); Enable and KILL are left out on purpose.
     - Theme changes apply between frames (picking one could leave a mix of two themes), tab styles are part of
       theme files, Classic draws switches and status panels with Qt's bevels, robot-frame map origins drag along
       their X / Y arrows, and camera cards no longer jitter at a width right at the edge.

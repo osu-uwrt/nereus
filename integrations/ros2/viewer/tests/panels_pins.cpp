@@ -1,6 +1,7 @@
 // Controls pinned to the toolbar (headless ImGui): the pinned copy drives the original button / checkbox / combo,
 // follows its disabled state, keeps working with its window not drawn, and survives the ini.
 #include "nereus/ros_viewer/pins.hpp"
+#include <algorithm>
 #include <cassert>
 #include <cfloat>
 #include <imgui.h>
@@ -126,7 +127,35 @@ int main() {
     ImGui::LoadIniSettingsFromMemory(ini.c_str(), ini.size());
     assert((pins::pinnedKeys() == std::vector<std::string>{"panel.a/ffc/start", "panel.a/Mode"}));
     frame();
+
+    // The search index: every control drawn so far, triggered as a click would, even with its panel closed (drawn
+    // off screen for it); a census draws a closed panel's controls into the index.
+    pins::clear();
+    panelShown = true;
+    frame();
+    const auto controls = pins::controls();
+    const auto find = [&](const std::string &key) {
+        return std::find_if(controls.begin(), controls.end(), [&](const pins::Control &c) { return c.key == key; });
+    };
+    assert(find("panel.a/Arm") != controls.end() && find("panel.a/Arm")->window == "Panel A");
+    assert(find("panel.a/Mode")->kind == pins::Control::Kind::Choice && find("panel.a/Mode")->items.size() == 3);
+    panelShown = false;
+    const bool wasArmed = armed;
+    pins::trigger("panel.a/Arm");
+    frame();
+    assert(armed != wasArmed); // toggled off screen
+    pins::trigger("panel.a/Mode", 2);
+    frame();
+    assert(mode == 2);
+    const int firedBefore = fired;
+    pins::trigger("panel.a/fire");
+    frame();
+    assert(fired == firedBefore + 1);
+    frame();
+    assert(!pins::needsDrawing("panel.a")); // nothing pending, nothing pinned: no off-screen drawing
+    pins::requestCensus();
+    assert(pins::needsDrawing("panel.a"));
     (void)mode;
     ImGui::DestroyContext();
-    std::cout << "PASS: pinned buttons, checkboxes, scoped keys, disabled state, off-screen panels, ini\n";
+    std::cout << "PASS: pinned buttons, checkboxes, scoped keys, disabled state, off-screen panels, ini, search index\n";
 }

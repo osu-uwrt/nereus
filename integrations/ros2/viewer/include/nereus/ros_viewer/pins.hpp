@@ -35,6 +35,23 @@ bool Combo(const char *label, int *current, const char *itemsSeparatedByZeros);
 bool Switch(const char *label, int *current, std::initializer_list<const char *> choices, float width = 0,
             unsigned disabled = 0);
 
+// The search index: every pinnable control drawn so far (in any window, open or not), as last drawn.
+struct Control {
+    enum class Kind { Button, Checkbox, Choice };
+    std::string key, label, window; // the window's title
+    Kind kind = Kind::Button;
+    bool checked = false, disabled = false;
+    int current = 0;                // a choice's selection
+    std::vector<std::string> items; // a choice's options
+};
+std::vector<Control> controls();
+// Runs a control as a click on it would (a choice: picks `choice`), the next time its window draws; a window that
+// is closed or behind a tab is drawn off screen for it.
+void trigger(const std::string &key, int choice = 0);
+// Draws every window's controls once off screen (this frame and the next), so the index holds windows never
+// opened yet.
+void requestCensus();
+
 // Called once per frame by the host.
 void newFrame();
 void drawMenu(); // the right-click menu, at top level after all windows

@@ -2713,6 +2713,7 @@ void App::drawCommandCenter(float t) {
     if (ImGui::IsItemActivated()) {
         paletteOpen_ = true;
         paletteIndex_ = 0;
+        pins::requestCensus(); // every window's controls into the index, closed ones too
     }
     if (ImGui::IsItemEdited())
         paletteIndex_ = 0;
@@ -2811,6 +2812,19 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
     add("File", "Open settings folder", false, [this] { openFolder(configDirectory()); });
     add("File", "Quit", false, [this] { window_->requestClose(); });
     add("Help", "Controls & shortcuts", helpOpen_, [this] { helpOpen_ = true; });
+    // Every control in every window (as pinning knows them): run as a click on it would, in its window or, when
+    // that is closed or behind a tab, off screen. Unavailable ones are left out, and so are Enable / KILL.
+    for (const auto &control : pins::controls()) {
+        if (control.disabled || control.key.find("enable_kill") != std::string::npos || control.window.empty())
+            continue;
+        if (control.kind == pins::Control::Kind::Choice) {
+            for (std::size_t i = 0; i < control.items.size(); ++i)
+                add(control.window, control.label + ": " + control.items[i], int(i) == control.current,
+                    [key = control.key, i] { pins::trigger(key, int(i)); });
+        } else
+            add(control.window, control.label, control.kind == pins::Control::Kind::Checkbox && control.checked,
+                [key = control.key] { pins::trigger(key); });
+    }
     return out;
 }
 
@@ -2862,7 +2876,10 @@ void App::drawCommandPalette() {
     paletteEnter_ = false;
     if (shownCount == 0)
         ImGui::TextDisabled("No match");
-    const float groupWidth = ImGui::CalcTextSize("Interface scale").x + ui(16);
+    float groupWidth = ImGui::CalcTextSize("Interface scale").x;
+    for (int row = 0; row < shownCount; ++row)
+        groupWidth = std::max(groupWidth, ImGui::CalcTextSize(commands[ranked[std::size_t(row)].second].group.c_str()).x);
+    groupWidth = std::min(groupWidth + ui(16), width * .4f);
     for (int row = 0; row < shownCount; ++row) {
         const auto &command = commands[ranked[std::size_t(row)].second];
         ImGui::PushID(row);

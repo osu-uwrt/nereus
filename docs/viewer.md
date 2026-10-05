@@ -112,7 +112,10 @@ The toolbar is saved with the layout (and with named layouts); the built-in layo
 ## Search (Ctrl+P)
 
 The box in the middle of the title bar (or Ctrl+P) searches everything the menus do: windows, layouts, themes,
-interface scales, focus targets, camera views, view toggles, pools, map editing and Help. Type a few letters in
+interface scales, focus targets, camera views, view toggles, pools, map editing and Help; and every button,
+checkbox, dropdown choice and switch in every window (the controls that can be pinned to the toolbar), listed by
+window ("Display  Water", "Motion  Mode: Feedforward"), even windows that are closed: running one does what a
+click on it would. Type a few letters in
 order (`cwall` finds the Camera wall layout), choose with the arrows and Enter; Esc or a click elsewhere closes it.
 Enable and KILL are deliberately not in it.
 

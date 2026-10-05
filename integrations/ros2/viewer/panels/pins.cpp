@@ -31,6 +31,7 @@ struct Board {
     std::vector<std::string> parts;
     std::set<std::string> seen; // scopes whose widgets ran this frame
     std::string menuKey;        // the control the right-click menu is for
+    int censusUntil = -1;       // draw every scope off screen until this frame (the search index)
 };
 Board &board() {
     static Board instance;
@@ -314,9 +315,43 @@ bool needsDrawing(const std::string &scope) {
     const auto &b = board();
     if (b.seen.count(scope))
         return false;
+    if (ImGui::GetFrameCount() <= b.censusUntil) // the search is indexing every window
+        return true;
     const std::string prefix = scope + "/";
-    return std::any_of(b.pinned.begin(), b.pinned.end(),
-                       [&](const std::string &key) { return key.compare(0, prefix.size(), prefix) == 0; });
+    const auto inScope = [&](const std::string &key) { return key.compare(0, prefix.size(), prefix) == 0; };
+    return std::any_of(b.pinned.begin(), b.pinned.end(), inScope) ||
+           std::any_of(b.pending.begin(), b.pending.end(), [&](const auto &p) { return inScope(p.first); });
+}
+
+std::vector<Control> controls() {
+    std::vector<Control> out;
+    for (const auto &[key, r] : board().records) {
+        Control c;
+        c.key = key;
+        c.label = r.label.empty() ? key.substr(key.rfind('/') + 1) : r.label;
+        c.window = r.scopeTitle;
+        c.kind = r.kind == Kind::Button ? Control::Kind::Button
+                 : r.kind == Kind::Checkbox ? Control::Kind::Checkbox
+                                            : Control::Kind::Choice;
+        c.checked = r.value;
+        c.disabled = r.disabled;
+        c.current = r.current;
+        c.items = r.items;
+        out.push_back(std::move(c));
+    }
+    return out;
+}
+
+void trigger(const std::string &key, int choice) {
+    auto &b = board();
+    const auto found = b.records.find(key);
+    if (found == b.records.end())
+        return;
+    b.pending[key] = found->second.kind == Kind::Combo ? choice + 1 : 1;
+}
+
+void requestCensus() {
+    board().censusUntil = ImGui::GetFrameCount() + 1;
 }
 
 void drawOffscreen(const std::string &scope, const std::string &title, const std::function<void()> &body) {
