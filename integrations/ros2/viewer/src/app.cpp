@@ -438,6 +438,7 @@ class App {
     bool persist_ = false, layoutReady_ = false, layoutLocked_ = false, maximized_ = false, commandLineDone_ = false,
          presetApplied_ = false;
     char layoutName_[64]{};
+    void loadLogo();
     Clock::time_point start_;
     double frameSeconds_ = 0;
     // profiling
@@ -506,6 +507,7 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     defaultOpen_ = {{"map", true}, {"scene_settings", false}, {"display", false}, {"tf", false}, {"help", false}};
     windowStates_.install();
     pins::install();
+    loadLogo();
     const auto configHome = configDirectory();
     persist_ = opt_.frames == 0 && !configHome.empty();
     if (!configHome.empty()) {
@@ -584,6 +586,15 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
                 : lookup(config_, {"scenario_topic"}).as<std::string>("/talos/simulator/scenario");
         ros_->watchScenario(topic, [this](const std::string &json) { pendingScenario_ = json; });
     }
+}
+
+// The logo (content/viewer/icons) as the window's icon, at every size.
+void App::loadLogo() {
+    const auto icons = contentDirectory() / "icons";
+    std::vector<fs::path> sizes;
+    for (const int size : {16, 24, 32, 48, 64, 128, 256})
+        sizes.push_back(icons / ("nereus-" + std::to_string(size) + ".png"));
+    window_->setIcon(sizes);
 }
 
 App::~App() {

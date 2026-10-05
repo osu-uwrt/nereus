@@ -183,6 +183,22 @@ void Window::toggleMaximized() {
 void Window::requestClose() {
     glfwSetWindowShouldClose(window_, GLFW_TRUE);
 }
+void Window::setIcon(const std::vector<std::filesystem::path> &pngs) {
+    std::vector<std::vector<unsigned char>> pixels;
+    std::vector<GLFWimage> images;
+    pixels.reserve(pngs.size());
+    for (const auto &path : pngs) {
+        int width = 0, height = 0;
+        std::vector<unsigned char> rgba;
+        if (!readPng(path, width, height, rgba))
+            continue;
+        pixels.push_back(std::move(rgba));
+        images.push_back({width, height, pixels.back().data()});
+    }
+    if (!images.empty())
+        glfwSetWindowIcon(window_, int(images.size()), images.data());
+}
+
 void Window::beginMove() {
     moveResize(8); // _NET_WM_MOVERESIZE_MOVE
 }
@@ -216,6 +232,22 @@ void Window::moveResize(long direction) {
     XSendEvent(display, DefaultRootWindow(display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
     XFlush(display);
     ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+}
+
+bool readPng(const std::filesystem::path &path, int &width, int &height, std::vector<unsigned char> &rgba) {
+    png_image image{};
+    image.version = PNG_IMAGE_VERSION;
+    if (!png_image_begin_read_from_file(&image, path.c_str()))
+        return false;
+    image.format = PNG_FORMAT_RGBA;
+    rgba.resize(PNG_IMAGE_SIZE(image));
+    if (!png_image_finish_read(&image, nullptr, rgba.data(), 0, nullptr)) {
+        png_image_free(&image);
+        return false;
+    }
+    width = int(image.width);
+    height = int(image.height);
+    return true;
 }
 
 void writePng(const std::filesystem::path &path, int width, int height, const std::vector<unsigned char> &rgb) {

@@ -36,6 +36,8 @@ class Window {
     void toggleMaximized();
     bool maximized() const;
     void requestClose();
+    // The window's icon (dock, task switcher) from PNG files of several sizes; missing files are skipped.
+    void setIcon(const std::vector<std::filesystem::path> &pngs);
     ImFont *normal = nullptr, *small = nullptr, *title = nullptr, *number = nullptr;
     ImFont *menu = nullptr; // the title bar's menus, at the desktop's scale like other apps' title bars
     // Loads the fonts at the interface scale (`ui`) and the title bar's at `titleBar`; between frames only. A
@@ -53,4 +55,6 @@ class Window {
 };
 // Writes RGB8 rows (top row first) as a PNG; throws on failure.
 void writePng(const std::filesystem::path &, int width, int height, const std::vector<unsigned char> &rgb);
+// Reads a PNG as RGBA8 rows (top row first); false if it cannot be read.
+bool readPng(const std::filesystem::path &, int &width, int &height, std::vector<unsigned char> &rgba);
 } // namespace nereus::ros_viewer::host

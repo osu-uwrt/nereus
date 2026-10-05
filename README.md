@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/images/logo.svg" alt="Nereus logo: a trident rising out of sonar pings" width="128"></p>
+
 # Nereus
 
 A config-driven underwater robot simulator and operator interface, built to test a real ROS 2 robot stack
