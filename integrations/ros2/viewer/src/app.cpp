@@ -424,6 +424,10 @@ class App {
     void setUiScale(float setting); // remembered in viewer.yaml
     void applyPendingUiScale();     // between frames: fonts and style at the new scale
     void applyPendingTheme();       // between frames: a theme chosen in the menu
+    // Until the scenario is in: the mark pinging over rising water, and what the viewer is waiting for.
+    void drawLoadingScreen();
+    bool buildingShown_ = false; // the scenario arrived: one frame says "Building the scene" before the load
+    float loadingLevel_ = 0;     // the loading screen's water, 0..1 of its height
     // File menu: the pool, the prior map's file, screenshots, folders, quit.
     void drawFileMenu();
     void drawFilePopups();
@@ -2580,6 +2584,8 @@ void App::drawInterface(double time, float dt) {
     } else if (scenario_)
         drawMapWindows();
     drawUnsavedMapPrompt();
+    if (!scenario_)
+        drawLoadingScreen();
     drawHelpWindow();
     drawFilePopups();
     drawCommandPalette();
@@ -3098,6 +3104,89 @@ void App::drawScaleMenu() {
 }
 
 
+// The loading screen, over everything under the title bar: the Nereus mark with its sonar pinging outward, water
+// rising from the bottom (further once the scene is being built), the name and the status. Drawn, not rendered:
+// it costs nothing while the simulator starts.
+void App::drawLoadingScreen() {
+    const auto *viewport = ImGui::GetMainViewport();
+    const float top = 35 * window_->contentScale(); // the title bar stays usable
+    const ImVec2 origin(viewport->Pos.x, viewport->Pos.y + top), size(viewport->Size.x, viewport->Size.y - top);
+    ImGui::SetNextWindowPos(origin);
+    ImGui::SetNextWindowSize(size);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+    ImGui::Begin("##loading", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImGui::PopStyleVar(2);
+    ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow()); // over the dock space (focused at start)
+    beginSurface(Surface::Board); // the board's colours: ink by day, black by night
+    const auto &p = palette();
+    auto *draw = ImGui::GetWindowDrawList();
+    const float t = float(ImGui::GetTime());
+    const ImVec2 end(origin.x + size.x, origin.y + size.y);
+    draw->AddRectFilled(origin, end, ImGui::GetColorU32(p.bar));
+    // the water: rising toward a third of the height while waiting, to over half once the scene is building
+    auto &level = loadingLevel_;
+    const float target = buildingShown_ ? .55f : .34f;
+    level += (target - level) * (1 - std::exp(-ImGui::GetIO().DeltaTime * (buildingShown_ ? 3.f : .35f)));
+    const ImVec4 bar = p.bar, pool(.10f, .62f, .78f, 1);
+    const auto water = [&](float amount, float alpha) {
+        return ImGui::GetColorU32(ImVec4(bar.x + (pool.x - bar.x) * amount, bar.y + (pool.y - bar.y) * amount,
+                                         bar.z + (pool.z - bar.z) * amount, alpha));
+    };
+    const float surface = end.y - size.y * level, step = ui(4);
+    for (int layer = 0; layer < 2; ++layer) { // a slower back wave, then the front one with its bright edge
+        const float amplitude = ui(layer ? 7 : 10), speed = layer ? 1.3f : -.8f, wave = layer ? .011f : .007f;
+        std::vector<ImVec2> crest;
+        for (float x = origin.x; x <= end.x + step; x += step) {
+            const float y = surface + (layer ? 0 : -ui(6)) + amplitude * std::sin((x - origin.x) * wave / ui(1) + t * speed) +
+                            amplitude * .45f * std::sin((x - origin.x) * wave * 2.3f / ui(1) - t * speed * 1.7f);
+            draw->AddRectFilled({x, y}, {std::min(x + step, end.x), end.y}, water(layer ? .42f : .26f, 1));
+            crest.push_back({x, y});
+        }
+        if (layer)
+            draw->AddPolyline(crest.data(), int(crest.size()), water(.75f, .8f), 0, ui(2));
+    }
+    // the mark, above the water: its sonar pings rising from the trident's foot, then the trident
+    const float mark = ui(128);
+    const ImVec2 corner(origin.x + (size.x - mark) * .5f, std::min(surface - mark - ui(90), origin.y + size.y * .5f - mark));
+    const ImVec2 foot(corner.x + mark * .5f, corner.y + mark * .815f);
+    const ImVec4 accent = p.accent;
+    for (int ping = 0; ping < 3; ++ping) {
+        const float phase = std::fmod(t * .45f + float(ping) / 3, 1.f);
+        const float radius = mark * (.14f + .42f * phase), fade = std::pow(1 - phase, 1.5f);
+        draw->PathArcTo(foot, radius, -2.65f, -.49f, 32);
+        draw->PathStroke(ImGui::GetColorU32(ImVec4(accent.x, accent.y, accent.z, .9f * fade)), 0, ui(4));
+    }
+    if (logoTrident_)
+        draw->AddImage(textureID(logoTrident_), corner, {corner.x + mark, corner.y + mark}, {0, 0}, {1, 1},
+                       ImGui::GetColorU32(p.text));
+    // the name and what the viewer is waiting for
+    ImFont *title = window_->title, *small = window_->small;
+    const char *name = "Nereus";
+    const ImVec2 nameSize = title->CalcTextSizeA(title->FontSize, 1e9f, 0, name);
+    float y = corner.y + mark + ui(18);
+    draw->AddText(title, title->FontSize, {origin.x + (size.x - nameSize.x) * .5f, y}, ImGui::GetColorU32(p.text), name);
+    y += nameSize.y + ui(10);
+    const std::string topic = !opt_.scenarioTopic.empty()
+                                  ? opt_.scenarioTopic
+                                  : lookup(config_, {"scenario_topic"}).as<std::string>("/talos/simulator/scenario");
+    const std::string status = buildingShown_ ? "Building the scene" : "Waiting for the scenario from the simulator";
+    const ImVec2 statusSize = ImGui::CalcTextSize(status.c_str());
+    draw->AddText({origin.x + (size.x - statusSize.x) * .5f, y}, ImGui::GetColorU32(p.text), status.c_str());
+    y += statusSize.y + ui(6);
+    std::string detail = buildingShown_ ? "meshes, textures and the course map" : topic;
+    if (!buildingShown_ && ImGui::GetTime() > 20)
+        detail = topic + "  \u00b7  is the simulator running? (ros2 launch integrations/uwrt/launch/sim.launch.py)";
+    const ImVec2 detailSize = small->CalcTextSizeA(small->FontSize, 1e9f, 0, detail.c_str());
+    draw->AddText(small, small->FontSize, {origin.x + (size.x - detailSize.x) * .5f, y}, ImGui::GetColorU32(p.muted),
+                  detail.c_str());
+    endSurface();
+    ImGui::End();
+}
+
 void App::notify(const std::string &message, bool error) {
     poolSwitch_.message = message;
     poolSwitch_.messageError = error;
@@ -3520,7 +3609,8 @@ void App::drawCommandBar() {
 // dock space's central node; other windows dock around it.
 void App::drawPoolView(double time, float dt) {
     ImGuiWindowClass single;
-    single.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_AutoHideTabBar;
+    // no tab bar at all (an auto-hidden one leaves ImGui's little corner marker on the view)
+    single.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_NoTabBar;
     ImGui::SetNextWindowClass(&single);
     ImGui::SetNextWindowDockID(dockspace_, ImGuiCond_FirstUseEver);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui(ImVec2(0, 0)));
@@ -4555,7 +4645,11 @@ int App::loop() {
             ros_->spin();
         }
         updatePoolSwitch();
-        if (!pendingScenario_.empty()) {
+        // the first scenario: one frame of "Building the scene" first (the load holds the frame while it builds)
+        if (!pendingScenario_.empty() && !scenario_ && !buildingShown_)
+            buildingShown_ = true;
+        else if (!pendingScenario_.empty()) {
+            buildingShown_ = false;
             const auto json = std::move(pendingScenario_);
             pendingScenario_.clear();
             try {

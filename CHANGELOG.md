@@ -102,6 +102,9 @@ First version for the team.
     - Themes are data: one YAML file each in `content/viewer/themes/` (the code keeps only the legibility floor
       and a built-in fallback).
     - Board telemetry (FOG, CPU, batteries) shows as readouts (dot, label, bold value) instead of boxed chips.
+    - A loading screen while the scenario is on its way: the Nereus mark pinging over rising water, what the viewer
+      is waiting for (and, after 20 s, a hint to start the simulator); "Building the scene" while it loads. The pool
+      view no longer shows ImGui's corner marker (its tab bar is off, not auto-hidden).
     - A File menu: switch pool, open / open recent / save (Ctrl+S anywhere) / reload the prior map, save a
       screenshot (F12, `~/Pictures/Nereus`), open the run records and settings folders, quit (Ctrl+Q).
     - A command centre in the title bar (Ctrl+P), as VS Code's: fuzzy search over windows, layouts, themes, scales,
