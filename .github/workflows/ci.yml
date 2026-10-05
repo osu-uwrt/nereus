@@ -47,7 +47,7 @@ jobs:
           apt-get update
           apt-get install -y cmake g++ libeigen3-dev libyaml-cpp-dev nlohmann-json3-dev libgtest-dev \
             libbullet-dev libassimp-dev libglfw3-dev libglew-dev libegl-dev libgl1-mesa-dev libpng-dev \
-            libjpeg-dev libopencv-dev xvfb xauth python3-pip ros-humble-robot-localization
+            libjpeg-dev libopencv-dev libfontconfig1-dev xvfb xauth python3-pip ros-humble-robot-localization
           python3 -m pip install numpy "ruamel.yaml>=0.18,<0.20" "jsonschema>=4.21,<5" "referencing>=0.34,<1" \
             "pytest>=8.4"   # the image's distro pytest predates --disable-plugin-autoload (pyproject addopts)
       - name: Build riptide_msgs2 and chameleon_tf_msgs
