@@ -182,8 +182,8 @@ ui:
     - {value: rescue, label: Search & Rescue}
   - {key: heading_coin, label: Heading coin flip, type: bool, default: true}
   - {key: role_coin, label: Role coin flip, type: bool, default: true}
-  focus: [Course, Vehicle, gate, torpedo, bin, table, Payloads, Claw, octagon]
-  demo_targets: [gate, torpedo, bin, table]
+  focus: [Course, Vehicle, gate, torpedo, slalom, bins, table, Payloads, Claw]
+  demo_targets: [gate, torpedo, bins, table]
   manual_adjustment: true
   score_note: Pinger awards await future acoustic integration. No session countdown or automatic time bonus is applied to individual runs.
   score_fields:
@@ -191,7 +191,7 @@ ui:
   - {key: time_bonus_eligible, label: Time-bonus prerequisites met}
   previews:
     gate: {depth: 0.75}
-    bin: {depth: 0.55, camera: dfc}
+    bins: {depth: 0.55, camera: dfc}
     table: {depth: 0.55, camera: dfc}
   run_inspections:
   - {label: Inspect launcher, target: Payloads}

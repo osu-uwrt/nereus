@@ -90,7 +90,8 @@ First version for the team.
     - No pool chip over the 3D view.
     - The camera status band is drawn in the board's colours.
     - Motion has **Zero roll & pitch** beside *Pose gizmo*.
-    - Mapping's tag calibration reads **Calibrate**, with a progress bar.
+    - Mapping's tag calibration reads **Calibrate**, with a progress bar. Progress bars (tag and mag calibration)
+      keep their label at the left, drawn over the filled part in the ink that contrasts with the fill.
     - The title bar carries the Nereus mark (trident and sonar), is sized like VS Code's, and has a hairline over the
       command bar. The command bar leads with the robot and pool.
     - The interface scale follows the desktop by default, and the window opens at its configured size in the
@@ -98,8 +99,10 @@ First version for the team.
     - Camera images carry no overlay: Truth / ROS sits beside RGB / Depth, and the live rate is in the header.
     - The course map draws the props and the robot as top-down images baked once from their meshes (no live
       rendering), with the task names beside them; the images carry their own smaller sizes (coverage-preserving, each
-      with a 1 px outline) so thin props stay crisp zoomed out. The bins
-      and octagon labels show again: the host config now uses the 2026 pack's names (`bins`, `surface`).
+      with a 1 px outline) so thin props stay crisp zoomed out. The map
+      names gate, slalom, torpedo, bins and table (one slalom label; the surface task unlabelled), and the pool view
+      labels the same tasks (the 2026 pack's focus list named `bin` and `octagon`, which no landmark has), with
+      white leader lines.
     - Themes are data: one YAML file each in `content/viewer/themes/` (the code keeps only the legibility floor
       and a built-in fallback).
     - Board telemetry (FOG, CPU, batteries) shows as readouts (dot, label, bold value) instead of boxed chips.

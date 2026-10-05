@@ -26,6 +26,16 @@ class Window {
     void beginFrame();                                                           // poll events + ImGui NewFrame
     void present(bool screenshotFrame, const std::filesystem::path &screenshot); // render ImGui, optional PNG
     void swap();                                                                 // present the frame (blocks on vsync)
+    // Frames from another thread while this one is busy (the loading screen while the scene builds): this thread
+    // keeps the frame it just drew (keepFrame, before swap) and detaches; the other makes the GL context current
+    // there and draws ImGui frames over the kept one without GLFW's window calls (main-thread only, so no input
+    // meanwhile), then releases it for this thread to reattach. ImGui is that thread's alone in between.
+    void keepFrame();
+    void detach();
+    void reattach();
+    void currentOnThisThread(bool current);
+    void beginDetachedFrame(float dt);
+    void presentDetached();
     bool customTitleBar() const {
         return custom_;
     }
@@ -55,7 +65,11 @@ class Window {
 
   private:
     void moveResize(long direction);
+    void render(int width, int height); // ImGui's draw data over a cleared framebuffer
     bool backendReady_ = false;
+    bool detached_ = false;    // another thread is drawing (contentScale answers from the last query)
+    mutable float scale_ = 1;  // the last content scale queried
+    unsigned kept_ = 0;        // the frame kept for detached frames (a texture, until reattach)
     GLFWwindow *window_ = nullptr;
     bool custom_ = false;
 };

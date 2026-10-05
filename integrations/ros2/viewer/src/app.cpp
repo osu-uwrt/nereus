@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <array>
+#include <atomic>
 #include <cctype>
 #include <ctime>
 #include <sys/wait.h>
@@ -426,6 +427,12 @@ class App {
     void applyPendingTheme();       // between frames: a theme chosen in the menu
     // Until the scenario is in: the mark pinging over rising water, and what the viewer is waiting for.
     void drawLoadingScreen();
+    // Runs `work` (the scene's build) here while another thread keeps the loading screen moving: that thread has
+    // the GL context and ImGui meanwhile, so `work` must touch neither. Only over the loading screen, and not in
+    // capture runs (one thread, frame for frame).
+    void animateLoadingWhile(const std::function<void()> &work);
+    bool loadingOnThread() const;
+    std::string loadingTopic_;   // the scenario topic the loading screen names (read on this thread, first)
     bool buildingShown_ = false; // the scenario arrived: one frame says "Building the scene" before the load
     float loadingLevel_ = 0;     // the loading screen's water, 0..1 of its height
     // File menu: the pool, the prior map's file, screenshots, folders, quit.
@@ -1019,6 +1026,7 @@ void App::loadScenario(const std::string &json) {
     const std::size_t hash = std::hash<std::string>{}(json);
     if (hash == loadedHash_)
         return;
+    animateLoadingWhile([&] { // the heavy part: packs, meshes, textures; no ImGui or GL in here
     auto parsed = parseScenario(json, config_, opt_.packDir);
     loadedHash_ = hash;
     // Replace dependents before the scenario they point to.
@@ -1053,6 +1061,7 @@ void App::loadScenario(const std::string &json) {
     ros_->attach(*scenario_, config_, lights_, thrusters_, !demoMode_);
     loadMappingMarkers();
     setupPriorMap();
+    });
     look_.appearance = scenario_->appearance;
     look_.equipment = lookup(config_, {"equipment_visible"}).as<bool>(true);
     cards_.assign(scenario_->cameras.size(), {});
@@ -3181,9 +3190,11 @@ void App::drawLoadingScreen() {
     float y = corner.y + mark + ui(18);
     draw->AddText(title, title->FontSize, {origin.x + (size.x - nameSize.x) * .5f, y}, ImGui::GetColorU32(p.text), name);
     y += nameSize.y + ui(10);
-    const std::string topic = !opt_.scenarioTopic.empty()
-                                  ? opt_.scenarioTopic
-                                  : lookup(config_, {"scenario_topic"}).as<std::string>("/talos/simulator/scenario");
+    if (loadingTopic_.empty()) // first drawn on the main thread (config_ is not the loading thread's to read)
+        loadingTopic_ = !opt_.scenarioTopic.empty()
+                            ? opt_.scenarioTopic
+                            : lookup(config_, {"scenario_topic"}).as<std::string>("/talos/simulator/scenario");
+    const std::string &topic = loadingTopic_;
     const std::string status = buildingShown_ ? "Building the scene" : "Waiting for the scenario from the simulator";
     const ImVec2 statusSize = ImGui::CalcTextSize(status.c_str());
     draw->AddText({origin.x + (size.x - statusSize.x) * .5f, y}, ImGui::GetColorU32(p.text), status.c_str());
@@ -3196,6 +3207,43 @@ void App::drawLoadingScreen() {
                   detail.c_str());
     endSurface();
     ImGui::End();
+}
+
+bool App::loadingOnThread() const {
+    return !scenario_ && buildingShown_ && opt_.frames == 0 && !opt_.hidden;
+}
+
+void App::animateLoadingWhile(const std::function<void()> &work) {
+    if (!loadingOnThread()) {
+        work();
+        return;
+    }
+    std::atomic<bool> done{false};
+    window_->detach();
+    std::thread animation([&] {
+        window_->currentOnThisThread(true);
+        for (auto previous = Clock::now(); !done.load();) {
+            const auto now = Clock::now();
+            window_->beginDetachedFrame(float(std::chrono::duration<double>(now - previous).count()));
+            previous = now;
+            drawLoadingScreen();
+            window_->presentDetached();
+            std::this_thread::sleep_until(now + std::chrono::microseconds(16667)); // 60 Hz (vsync may be off)
+        }
+        window_->currentOnThisThread(false);
+    });
+    const auto finish = [&] {
+        done = true;
+        animation.join();
+        window_->reattach();
+    };
+    try {
+        work();
+    } catch (...) {
+        finish();
+        throw;
+    }
+    finish();
 }
 
 void App::notify(const std::string &message, bool error) {
@@ -3895,15 +3943,15 @@ void App::drawPoolView(double time, float dt) {
             if (std::abs(p.x) > .94 || std::abs(p.y) > .85 || p.z > 1)
                 continue;
             const ImVec2 at(position.x + (p.x * .5f + .5f) * width, position.y + (.5f - p.y * .5f) * viewHeight);
-            d->AddCircleFilled(at, 3, color(palette().accent));
-            d->AddLine(at, {at.x + ui(10), at.y - ui(14)}, color(palette().accent));
-            // a plate fitted to the name, edged in the accent like its leader line
+            // white over the water whatever the theme (the accent's blue sinks into it)
+            d->AddCircleFilled(at, 3, IM_COL32_WHITE);
+            d->AddLine(at, {at.x + ui(10), at.y - ui(14)}, IM_COL32_WHITE);
+            // a plate fitted to the name, edged in white like its leader line
             ImFont *font = typeRamp().smallStrong ? typeRamp().smallStrong : window_->small;
             const float text = font->CalcTextSizeA(font->FontSize, 1e9f, 0, key.c_str()).x;
             const ImVec2 min(at.x + ui(9), at.y - ui(31)), max(at.x + ui(23) + text, at.y - ui(11));
             d->AddRectFilled(min, max, chipFill(), ui(3));
-            d->AddRect(min, max, ImGui::GetColorU32(ImVec4(palette().accent.x, palette().accent.y, palette().accent.z, .55f)),
-                       ui(3), 0, ui(1));
+            d->AddRect(min, max, IM_COL32(255, 255, 255, 140), ui(3), 0, ui(1));
             d->AddText(font, font->FontSize, {at.x + ui(16), at.y - ui(28)}, color(palette().text), key.c_str());
         }
     }
@@ -4656,18 +4704,18 @@ int App::loop() {
             ros_->spin();
         }
         updatePoolSwitch();
-        // the first scenario: one frame of "Building the scene" first (the load holds the frame while it builds)
+        // the first scenario: one frame of "Building the scene" first (kept: the loading thread draws over it)
         if (!pendingScenario_.empty() && !scenario_ && !buildingShown_)
             buildingShown_ = true;
         else if (!pendingScenario_.empty()) {
-            buildingShown_ = false;
             const auto json = std::move(pendingScenario_);
             pendingScenario_.clear();
             try {
-                loadScenario(json);
+                loadScenario(json); // the loading screen keeps moving meanwhile (animateLoadingWhile)
             } catch (const std::exception &error) {
                 std::cerr << "nereus-viewer: rejecting scenario document: " << error.what() << '\n';
             }
+            buildingShown_ = false;
         }
         if (composition_)
             composition_->touch();
@@ -4704,6 +4752,8 @@ int App::loop() {
         window_->present(last || shot, shot ? screenshotPath_ : fs::path(opt_.screenshot));
         if (shot)
             notify("Saved screenshot " + screenshotPath_.string());
+        if (loadingOnThread())
+            window_->keepFrame(); // the "Building the scene" frame: under the loading thread's frames
         persistLayout(false);
         const auto preSwap = Clock::now();
         window_->swap();

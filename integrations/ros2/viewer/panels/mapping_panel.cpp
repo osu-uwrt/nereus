@@ -44,8 +44,7 @@ class MappingPanel final : public Panel {
         if (s.calibrating) { // progress: the samples taken of those asked for
             char progress[48];
             std::snprintf(progress, sizeof(progress), "%u / %d samples", s.samples, samples);
-            ImGui::ProgressBar(samples > 0 ? std::min(1.f, float(s.samples) / float(samples)) : 0.f, {-1, 0},
-                               progress);
+            progressBar(samples > 0 ? float(s.samples) / float(samples) : 0.f, progress);
         }
         if (mapping && !s.calibrationMessage.empty())
             ImGui::TextWrapped("%s", s.calibrationMessage.c_str());

@@ -69,7 +69,7 @@ class ElectricalPanel final : public Panel {
         }
         ImGui::EndDisabled();
         if (s.magCalRunning || s.magCalProgress > 0)
-            ImGui::ProgressBar(s.magCalProgress, {-1, 0});
+            progressBar(s.magCalProgress);
         muted(s.magCalReady || s.magCalRunning ? s.magCalMessage : "Mag cal action unavailable");
         if (s.registerValue != shownValue) { // a read fills the value field, as RViz does
             shownValue = s.registerValue;

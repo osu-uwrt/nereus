@@ -1,6 +1,7 @@
 // Viewer themes: the whole ImGui style plus the few colours the viewer and its panels draw themselves (accent,
 // "on" fills, KILL, robot state, bars). The 3D view and its overlays keep their own colours in every theme.
 #pragma once
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <imgui.h>
@@ -121,6 +122,45 @@ inline void bevel(ImDrawList *draw, ImVec2 min, ImVec2 max, bool raised) {
     draw->AddLine({min.x, min.y}, {max.x - 1, min.y}, topLeft);
     draw->AddLine({max.x - 1, min.y}, {max.x - 1, max.y - 1}, bottomRight);
     draw->AddLine({max.x - 1, max.y - 1}, {min.x, max.y - 1}, bottomRight);
+}
+// A progress bar whose label stays at its left; over the filled part the label is drawn again in whichever of the
+// theme's inks (text, window paper) stands out more from the fill, so it reads wherever the fill has reached.
+// No label: the percentage.
+inline void progressBar(float fraction, const char *label = nullptr) {
+    fraction = fraction > 0 ? (fraction < 1 ? fraction : 1) : 0;
+    char percent[16];
+    if (!label) {
+        std::snprintf(percent, sizeof(percent), "%.0f %%", double(fraction * 100));
+        label = percent;
+    }
+    const auto &style = ImGui::GetStyle();
+    const ImVec2 at = ImGui::GetCursorScreenPos(), size{ImGui::GetContentRegionAvail().x, ImGui::GetFrameHeight()};
+    ImGui::Dummy(size);
+    auto *draw = ImGui::GetWindowDrawList();
+    const ImVec2 end{at.x + size.x, at.y + size.y};
+    const float filled = at.x + size.x * fraction, rounding = style.FrameRounding;
+    draw->AddRectFilled(at, end, ImGui::GetColorU32(ImGuiCol_FrameBg), rounding);
+    if (filled > at.x) { // the bar's own shape, cut at the fill
+        draw->PushClipRect(at, {filled, end.y}, true);
+        draw->AddRectFilled(at, end, ImGui::GetColorU32(ImGuiCol_PlotHistogram), rounding);
+        draw->PopClipRect();
+    }
+    if (bevelledTheme())
+        bevel(draw, at, end, false);
+    else if (style.FrameBorderSize > 0)
+        draw->AddRect(at, end, ImGui::GetColorU32(ImGuiCol_Border), rounding, 0, style.FrameBorderSize);
+    const ImVec4 fill = style.Colors[ImGuiCol_PlotHistogram], ink = style.Colors[ImGuiCol_Text],
+                 paper = style.Colors[ImGuiCol_WindowBg];
+    const ImVec4 onFill = contrastRatio(ink, fill) >= contrastRatio(paper, fill) ? ink : ImVec4(paper.x, paper.y, paper.z, 1);
+    const ImVec2 text{at.x + style.FramePadding.x, at.y + (size.y - ImGui::GetFontSize()) * .5f};
+    draw->PushClipRect({filled, at.y}, end, true);
+    draw->AddText(text, ImGui::GetColorU32(ink), label);
+    draw->PopClipRect();
+    if (filled > at.x) {
+        draw->PushClipRect(at, {filled, end.y}, true);
+        draw->AddText(text, ImGui::GetColorU32(onFill), label);
+        draw->PopClipRect();
+    }
 }
 // A status chip: an outlined capsule with a status dot and the text in the status colour (in a bevelled theme, a
 // sunken status-bar panel, as Qt draws one). It reads as a label, not a button; returns hover for a tooltip.

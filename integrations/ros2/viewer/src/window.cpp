@@ -75,9 +75,11 @@ Window::Window(int width, int height, const std::string &titleText, bool hidden,
 }
 
 float Window::contentScale() const {
+    if (detached_)
+        return scale_;
     float x = 1, y = 1;
     glfwGetWindowContentScale(window_, &x, &y);
-    return std::isfinite(x) && x > 0 ? x : 1;
+    return scale_ = std::isfinite(x) && x > 0 ? x : 1;
 }
 
 namespace {
@@ -181,11 +183,7 @@ void Window::present(bool screenshotFrame, const std::filesystem::path &screensh
     ImGui::Render();
     int w = 0, h = 0;
     glfwGetFramebufferSize(window_, &w, &h);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, w, h);
-    glClearColor(.028f, .043f, .057f, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    render(w, h);
     if (screenshotFrame && !screenshot.empty()) {
         std::vector<unsigned char> pixels(std::size_t(w) * std::size_t(h) * 3), flipped(pixels.size());
         glReadBuffer(GL_BACK);
@@ -198,8 +196,63 @@ void Window::present(bool screenshotFrame, const std::filesystem::path &screensh
         std::cout << "Saved " << screenshot << '\n';
     }
 }
+void Window::render(int width, int height) {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, width, height);
+    glClearColor(.028f, .043f, .057f, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
 void Window::swap() {
     glfwSwapBuffers(window_);
+}
+void Window::keepFrame() {
+    int w = 0, h = 0;
+    glfwGetFramebufferSize(window_, &w, &h);
+    if (w <= 0 || h <= 0)
+        return;
+    GLint bound = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &bound);
+    if (!kept_)
+        glGenTextures(1, &kept_);
+    glBindTexture(GL_TEXTURE_2D, kept_);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glReadBuffer(GL_BACK);
+    glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 0, 0, w, h, 0);
+    glBindTexture(GL_TEXTURE_2D, GLuint(bound));
+}
+void Window::detach() {
+    contentScale(); // fresh, for the other thread
+    detached_ = true;
+    glfwMakeContextCurrent(nullptr);
+}
+void Window::currentOnThisThread(bool current) {
+    glfwMakeContextCurrent(current ? window_ : nullptr);
+}
+void Window::reattach() {
+    glfwMakeContextCurrent(window_);
+    detached_ = false;
+    if (kept_) { // kept for one stretch of detached frames
+        glDeleteTextures(1, &kept_);
+        kept_ = 0;
+    }
+}
+void Window::beginDetachedFrame(float dt) {
+    ImGui_ImplOpenGL3_NewFrame();
+    auto &io = ImGui::GetIO();
+    io.DeltaTime = std::max(dt, 1e-4f); // the display size stays the last frame's
+    ImGui::NewFrame();
+    if (kept_) // the kept frame under everything (GL's rows run bottom-up)
+        ImGui::GetBackgroundDrawList()->AddImage(ImTextureID(kept_), {0, 0}, io.DisplaySize, {0, 1}, {1, 0});
+}
+void Window::presentDetached() {
+    ImGui::Render();
+    const auto &io = ImGui::GetIO();
+    render(int(io.DisplaySize.x * io.DisplayFramebufferScale.x), int(io.DisplaySize.y * io.DisplayFramebufferScale.y));
+    glfwSwapBuffers(window_); // allowed from any thread
 }
 void Window::minimize() {
     glfwIconifyWindow(window_);

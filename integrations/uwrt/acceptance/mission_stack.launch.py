@@ -1,6 +1,7 @@
 """The UWRT stack as riptide_bringup2 simulation.launch.py brings it up (hardware:=none), minus the
 simulator itself: every node uses the simulation clock; navigation, control, perception, mapping
-and autonomy come from bringup.
+and autonomy come from bringup. The AprilTag detector (hardware.launch.py's, which hardware:=none skips)
+runs on the simulated forward camera, for the mapping panel's tag calibration.
 
 Controller selection is passed through to bringup / control_system.launch.py / riptide_mpc (empty =
 that launch file's own default):
@@ -12,7 +13,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration as LC
-from launch_ros.actions import SetParameter
+from launch_ros.actions import PushRosNamespace, SetParameter
 
 PASSTHROUGH = {
     "active_control_model": "controller: 'mpc' runs riptide_mpc, anything else complete_controller",
@@ -41,6 +42,15 @@ def _stack(context):
                 IncludeLaunchDescription(
                     AnyLaunchDescriptionSource(share("riptide_bringup2") + "/launch/bringup.launch.py"),
                     launch_arguments=arguments.items(),
+                ),
+                GroupAction(
+                    [
+                        PushRosNamespace("talos"),
+                        IncludeLaunchDescription(
+                            AnyLaunchDescriptionSource(share("riptide_hardware2") + "/launch/apriltag.launch.py"),
+                            launch_arguments={"robot": "talos"}.items(),
+                        ),
+                    ]
                 ),
             ],
         )

@@ -158,7 +158,7 @@ ui:
        choices: [{value: repair, label: Survey & Repair}, {value: rescue, label: Search & Rescue}]}
     - {key: heading_coin, label: Heading coin flip, type: bool, default: true}
     - {key: role_coin, label: Role coin flip, type: bool, default: true}
-  focus: [Course, Vehicle, gate, torpedo, bins, table, Payloads, Claw, surface]
+  focus: [Course, Vehicle, gate, torpedo, slalom, bins, table, Payloads, Claw]
   demo_targets: [gate, torpedo, bins, table]
   manual_adjustment: true
   score_note: Pinger awards await future acoustic integration. No session countdown or automatic time bonus is applied to individual runs.
@@ -178,9 +178,7 @@ ui:
     - {key: role, label: Scored role}
   map_landmarks:
     - gate
-    - {name: slalom_front, minimap_label: slalom}
-    - {name: slalom_back, hidden_in_minimap: true}
+    - slalom
     - torpedo
     - bins
     - table
-    - {name: surface, minimap_label: octagon}
