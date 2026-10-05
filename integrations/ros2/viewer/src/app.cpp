@@ -5,9 +5,11 @@
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panels/ros_providers.hpp"
+#include "nereus/ros_viewer/panels/pose_math.hpp"
 #include "nereus/ros_viewer/pins.hpp"
 #include "nereus/ros_viewer/theme.hpp"
 #include "overlay_draw.hpp"
+#include "pose_command.hpp"
 #include "prior_map_editor.hpp"
 #include "top_down.hpp"
 #include "scenario_packs.hpp"
@@ -46,6 +48,9 @@ namespace nereus::ros_viewer::host {
 namespace {
 namespace fs = std::filesystem;
 namespace panels = nereus::ros_viewer::panels;
+// Keyboard driving's steps ([ / ] choose): metres along the heading and degrees of turn per key press
+constexpr float kDriveMetres[] = {.05f, .1f, .25f, .5f, 1.f};
+constexpr float kDriveDegrees[] = {2.f, 5.f, 15.f, 30.f, 45.f};
 
 // Drawn over the 3D view and the course map, so the same in every theme (the interface uses palette()).
 const ImVec4 muted(.47f, .57f, .64f, 1); // on the camera cards' dark video area, in every theme
@@ -451,8 +456,24 @@ class App {
     struct PaletteCommand {
         std::string group, label;
         bool checked = false;
-        std::function<void()> run;
+        std::function<void()> run; // none: a note (how to finish a move, why it cannot run now)
+        std::string fill;          // instead of running: the search box takes this, for the rest to be typed
     };
+    std::string paletteFill_; // text the search box takes next frame (a command that needs more typing)
+    // The robot from the keyboard: moves typed in the palette ("forward 0.5", "turn 30", "go 1 2 -1 90") and
+    // keyboard driving (WASD, R / F, Q / E, one step a press). Enable / KILL stay off the keyboard.
+    std::shared_ptr<panels::Motion> motion() const;
+    std::shared_ptr<panels::Autonomy> autonomy() const;
+    // Whether the robot takes a pose now (else why not, in `why`); `wait`: only for a moment (a mode change).
+    bool commandable(std::string *why, bool *wait = nullptr) const;
+    PoseTarget poseBase() const; // what a move starts from: the last command, else where the robot is
+    void commandPose(const PoseTarget &);
+    void driveWithKeys();
+    void setDriving(bool on); // on only while the robot takes poses in Position control (else says why)
+    bool driving_ = false;
+    int driveStep_ = 2;                // index into kDriveMetres / kDriveDegrees
+    std::optional<PoseTarget> sent_;   // the last keyboard target, until the robot reports it as its command
+    Clock::time_point sentAt_{};
     std::vector<PaletteCommand> paletteCommands();
     void drawCommandCenter(float titleScale);
     void drawCommandPalette();
@@ -1126,6 +1147,8 @@ void App::buildPanels() {
     task["ui"] = YAML::Clone(scenario_->ui);
     context.documents.emplace("task", task);
     context.focus = [this](const std::string &name) { focus(name); };
+    context.keyboardDriving = [this] { return driving_; };
+    context.setKeyboardDriving = [this](bool on) { setDriving(on); };
     if (opt_.showScorecard)
         context.initialWindows.push_back("run");
     // Without panels the composition is empty (no sidebar) but still owns the default toolbar.
@@ -2550,6 +2573,7 @@ void App::registerHostItems() {
 void App::drawInterface(double time, float dt) {
     pins::newFrame();
     handleShortcuts();
+    driveWithKeys();
     drawMenuBar();
     drawCommandBar();
     auto *viewport = ImGui::GetMainViewport();
@@ -2716,8 +2740,20 @@ void App::drawCommandCenter(float t) {
         paletteFocus_ = false;
     }
     ImGui::SetNextItemWidth(width);
+    const auto takeFill = [](ImGuiInputTextCallbackData *data) {
+        auto &fill = *static_cast<std::string *>(data->UserData);
+        if (!fill.empty()) { // a command that needs more typing: its start, the cursor after it
+            data->DeleteChars(0, data->BufTextLen);
+            data->InsertChars(0, fill.c_str());
+            data->SelectionStart = data->SelectionEnd = data->CursorPos = data->BufTextLen;
+            fill.clear();
+        }
+        return 0;
+    };
     if (ImGui::InputTextWithHint("##command_center", "Search Nereus", paletteQuery_, sizeof(paletteQuery_),
-                                 ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
+                                 ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll |
+                                     ImGuiInputTextFlags_CallbackAlways,
+                                 takeFill, &paletteFill_))
         paletteEnter_ = true;
     if (ImGui::IsItemActivated()) {
         paletteOpen_ = true;
@@ -2730,7 +2766,8 @@ void App::drawCommandCenter(float t) {
     const bool hovered = ImGui::IsItemHovered();
     ImGui::PopStyleVar(3);
     if (hovered && !paletteTyping_)
-        ImGui::SetTooltip("Search windows, layouts, themes, views and focus targets (Ctrl+P)");
+        ImGui::SetTooltip("Search windows, layouts, themes, controls and trees, or type a move: forward 0.5, "
+                          "turn 30, go 2 1 -1.5 90 (Ctrl+P)");
     // a magnifier at its left; the shortcut at its right while it is empty and idle
     auto *draw = ImGui::GetWindowDrawList();
     const ImU32 ink = ImGui::GetColorU32(palette().muted);
@@ -2821,6 +2858,36 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
     add("File", "Open settings folder", false, [this] { openFolder(configDirectory()); });
     add("File", "Quit", false, [this] { window_->requestClose(); });
     add("Help", "Controls & shortcuts", helpOpen_, [this] { helpOpen_ = true; });
+    // The robot: moves to type out (each fills the box with its first word), and keyboard driving
+    if (workspace_ == Workspace::Operate && motion()) {
+        const auto type = [&](const std::string &label, const std::string &fill) {
+            out.push_back({"Robot", label, false, nullptr, fill});
+        };
+        type("Move forward / back / left / right / up / down...", "forward ");
+        type("Turn left / right...", "turn ");
+        type("Go to x y z yaw...", "go ");
+        type("Set x / y / z / roll / pitch / yaw...", "z ");
+        add("Robot", "Drive with the keyboard", driving_, [this] { setDriving(!driving_); });
+    }
+    // Autonomy: each tree to run (as the panel's Start: only while the robot it drives is enabled), Stop
+    if (const auto mission = autonomy()) {
+        const auto s = mission->state();
+        if (s.connected && !s.busy && !s.pending) {
+            const bool may = composition_->mayStart(mission);
+            for (const auto &tree : s.trees)
+                if (may)
+                    add("Autonomy", "Run " + fs::path(tree).filename().string(), false,
+                        [mission, tree] { mission->start(tree); });
+            if (!may && !s.trees.empty())
+                out.push_back({"Autonomy", "Run a tree: enable the robot first", false, nullptr, {}});
+        }
+        if (s.busy)
+            add("Autonomy", "Stop " + (s.activeTree.empty() ? std::string("the tree")
+                                                               : fs::path(s.activeTree).filename().string()),
+                false, [mission] { mission->stop(); });
+        if (s.connected && !s.refreshing)
+            add("Autonomy", "Refresh the tree list", false, [mission] { mission->refresh(); });
+    }
     // Every control in every window (as pinning knows them): run as a click on it would, in its window or, when
     // that is closed or behind a tab, off screen. Unavailable ones are left out, and so are Enable / KILL.
     for (const auto &control : pins::controls()) {
@@ -2862,14 +2929,33 @@ void App::drawCommandPalette() {
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse |
                      ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
     ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow()); // over every window, as a dropdown
+    // a move typed out comes first: where it takes the robot, or how to finish it / why it cannot run now
+    std::vector<PaletteCommand> commands;
+    int typedScore = -1; // first; how to finish a move comes after any matches ("left panels" is a search)
+    if (workspace_ == Workspace::Operate && motion()) {
+        const auto parsed = parseMove(paletteQuery_, poseBase());
+        std::string why;
+        bool wait = false;
+        if (parsed.isMove && !parsed.command) {
+            commands.push_back({"Robot", parsed.error, false, nullptr, {}});
+            typedScore = 1 << 20;
+        }
+        else if (parsed.isMove && !commandable(&why, &wait))
+            commands.push_back({"Robot", wait ? "Waiting for the controller..." : why, false, nullptr, {}});
+        else if (parsed.isMove)
+            commands.push_back({"Robot", parsed.command->summary + "   \u2192   " + describe(parsed.command->target),
+                                false, [this, target = parsed.command->target] { commandPose(target); }, {}});
+    }
+    const std::size_t typed = commands.size();
+    for (auto &command : paletteCommands())
+        commands.push_back(std::move(command));
     // the matches, best first (ties keep the menus' order); with nothing typed, everything in that order
-    auto commands = paletteCommands();
     std::vector<std::pair<int, std::size_t>> ranked;
     for (std::size_t i = 0; i < commands.size(); ++i) {
         const int label = fuzzyScore(commands[i].label, paletteQuery_),
                   full = fuzzyScore(commands[i].group + " " + commands[i].label, paletteQuery_);
-        const int score = label >= 0 ? label : full >= 0 ? full + 50 : -1;
-        if (score >= 0)
+        const int score = i < typed ? typedScore : label >= 0 ? label : full >= 0 ? full + 50 : -2;
+        if (score >= -1)
             ranked.push_back({score, i});
     }
     std::stable_sort(ranked.begin(), ranked.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
@@ -2879,9 +2965,9 @@ void App::drawCommandPalette() {
     if (paletteTyping_ && ImGui::IsKeyPressed(ImGuiKey_UpArrow))
         paletteIndex_ = std::max(paletteIndex_ - 1, 0);
     paletteIndex_ = std::clamp(paletteIndex_, 0, std::max(0, shownCount - 1));
-    std::function<void()> run;
+    const PaletteCommand *chosen = nullptr;
     if (paletteEnter_ && shownCount > 0)
-        run = commands[ranked[std::size_t(paletteIndex_)].second].run;
+        chosen = &commands[ranked[std::size_t(paletteIndex_)].second];
     paletteEnter_ = false;
     if (shownCount == 0)
         ImGui::TextDisabled("No match");
@@ -2894,13 +2980,16 @@ void App::drawCommandPalette() {
         ImGui::PushID(row);
         const ImVec2 at = ImGui::GetCursorScreenPos();
         if (ImGui::Selectable("##row", row == paletteIndex_, 0, {0, ImGui::GetTextLineHeight() + ui(6)}))
-            run = command.run;
+            chosen = &command;
         if (ImGui::IsItemHovered() && (ImGui::GetIO().MouseDelta.x != 0 || ImGui::GetIO().MouseDelta.y != 0))
             paletteIndex_ = row;
         auto *draw = ImGui::GetWindowDrawList();
         const float y = at.y + ui(3);
         draw->AddText({at.x + ui(4), y}, ImGui::GetColorU32(palette().muted), command.group.c_str());
-        draw->AddText({at.x + groupWidth, y}, ImGui::GetColorU32(palette().text), command.label.c_str());
+        // a note (nothing to run) in muted ink
+        draw->AddText({at.x + groupWidth, y},
+                      ImGui::GetColorU32(command.run || !command.fill.empty() ? palette().text : palette().muted),
+                      command.label.c_str());
         if (command.checked) { // the current choice / an option that is on
             const char *on = "on";
             draw->AddText({at.x + ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(on).x - ui(4), y},
@@ -2915,7 +3004,16 @@ void App::drawCommandPalette() {
     // a click on a row keeps them open until it lands; anywhere else (the box no longer in use) closes them
     const bool overBox = ImGui::IsMouseHoveringRect(paletteBox_, {paletteBox_.x + paletteBoxSize_.x,
                                                                   paletteBox_.y + paletteBoxSize_.y});
-    if (run || (!paletteTyping_ && !overResults && !overBox && !ImGui::IsMouseDown(ImGuiMouseButton_Left)))
+    // a command that needs more typing fills the box (a note leaves it as it is) and the box keeps the keyboard
+    std::function<void()> run = chosen ? chosen->run : nullptr;
+    if (chosen && !run) {
+        paletteFill_ = chosen->fill.empty() ? std::string(paletteQuery_) : chosen->fill;
+        std::snprintf(paletteQuery_, sizeof(paletteQuery_), "%s", paletteFill_.c_str());
+        paletteIndex_ = 0;
+        paletteFocus_ = true;
+    }
+    if (run || (!paletteTyping_ && !paletteFocus_ && !overResults && !overBox &&
+                !ImGui::IsMouseDown(ImGuiMouseButton_Left)))
         close();
     if (run)
         run();
@@ -3964,10 +4062,21 @@ void App::drawPoolView(double time, float dt) {
         {"DRAG FLOOR / RIGHT / MIDDLE DRAG  pan   SCROLL  zoom   F  fit pool   DOUBLE-CLICK  centre a prop",
          "DRAG  pan   SCROLL  zoom   F  fit pool", "DRAG  pan   SCROLL  zoom"}};
     const int hintSet = planActive() ? 2 : mode_ == 1 ? 1 : 0;
-    const char *controls = hints[hintSet][2];
-    for (const char *hint : hints[hintSet])
-        if (window_->small->CalcTextSizeA(window_->small->FontSize, 1e9f, 0, hint).x + ui(28) <= width) {
-            controls = hint;
+    std::vector<std::string> wordings(std::begin(hints[hintSet]), std::end(hints[hintSet]));
+    if (driving_ && !planActive() && !mouseCaptured_) { // keyboard driving: its keys and step instead
+        char step[48];
+        std::snprintf(step, sizeof(step), "%g m, %g\u00b0", double(kDriveMetres[driveStep_]),
+                      double(kDriveDegrees[driveStep_]));
+        wordings = {std::string("DRIVING   W / S  forward / back   A / D  left / right   SPACE / SHIFT  up / down   "
+                                "Q / E  turn   [ / ]  step ") + step + "   ESC  stop",
+                    std::string("DRIVING   WASD  move   SPACE / SHIFT  up / down   Q / E  turn   [ ]  ") + step +
+                        "   ESC  stop",
+                    std::string("DRIVING   ") + step + "   ESC  stop"};
+    }
+    const char *controls = wordings.back().c_str();
+    for (const auto &hint : wordings)
+        if (window_->small->CalcTextSizeA(window_->small->FontSize, 1e9f, 0, hint.c_str()).x + ui(28) <= width) {
+            controls = hint.c_str();
             break;
         }
     d->AddRectFilled({position.x, position.y + viewHeight - ui(30)}, {position.x + width, position.y + viewHeight},
@@ -4188,8 +4297,18 @@ void App::drawHelpWindow() {
                {"Free camera", "click for mouse look, WASD move, Space / Shift up / down, Ctrl fast, "
                                "Esc release"},
                {"Gizmo", "drag an arrow to move, a ring to rotate; Esc during a drag restores the start"}});
+        sectionTitle("Robot from the keyboard");
+        table("robot_keys",
+              {{"Ctrl+P, then a move", "forward / back / left / right / up / down 0.5 (metres, along the heading), "
+                                       "turn 30 (left positive), x / y / z -1.5, roll / pitch / yaw 90, "
+                                       "go 2 1 -1.5 90, level; several in a row; Enter sends it"},
+               {"Drive with keys", "Ctrl+P or the Motion panel (Position control): W / S forward / back, A / D "
+                                   "left / right, Space / Shift up / down, Q / E turn: one step a press; [ / ] step "
+                                   "size; Esc stops"},
+               {"Ctrl+P, Run <tree>", "start an autonomy tree (robot enabled); Stop the tree from there too"},
+               {"Enable / KILL", "never from the keyboard: the button in the command bar"}});
         sectionTitle("Shortcuts");
-        table("shortcuts", {{"Ctrl+P", "search: windows, layouts, themes, views, focus targets"},
+        table("shortcuts", {{"Ctrl+P", "search: windows, layouts, themes, controls, trees; robot moves"},
                             {"Ctrl+M", "edit the prior map / done"},
                             {"Ctrl+S", "save the prior map"},
                             {"F12", "save a screenshot (Pictures/Nereus)"},
@@ -5018,6 +5137,118 @@ std::shared_ptr<panels::Simulation> App::simulation() const {
         if (provider && provider->kind() == panels::Kind::Simulation)
             return std::dynamic_pointer_cast<panels::Simulation>(provider);
     return nullptr;
+}
+
+std::shared_ptr<panels::Motion> App::motion() const {
+    if (!composition_ || demoMode_)
+        return nullptr;
+    for (const auto &[name, provider] : composition_->providers())
+        if (provider && provider->kind() == panels::Kind::Motion)
+            return std::dynamic_pointer_cast<panels::Motion>(provider);
+    return nullptr;
+}
+
+std::shared_ptr<panels::Autonomy> App::autonomy() const {
+    if (!composition_ || demoMode_)
+        return nullptr;
+    for (const auto &[name, provider] : composition_->providers())
+        if (provider && provider->kind() == panels::Kind::Autonomy)
+            return std::dynamic_pointer_cast<panels::Autonomy>(provider);
+    return nullptr;
+}
+
+// As the motion panel's Command: the robot enabled, its pose fresh, and nobody else (autonomy, another viewer)
+// commanding it. A mode change in flight is only a wait.
+bool App::commandable(std::string *why, bool *wait) const {
+    const auto m = motion();
+    const auto s = m ? m->state() : panels::MotionState{};
+    const char *reason = !m           ? "No motion control in this session"
+                         : !s.fresh   ? "Waiting for the robot's pose"
+                         : !s.enabled ? "Enable the robot to command a pose (Enable is not in the search)"
+                         : s.blocked  ? "Autonomy is driving: stop the tree to command a pose"
+                         : s.competing ? "Another operator is commanding the robot"
+                         : s.mode == panels::Mode::Feedforward
+                             ? "In Feedforward control: switch the Motion panel to Position to command a pose"
+                             : nullptr;
+    if (wait)
+        *wait = !reason && s.pending;
+    if (why)
+        *why = reason ? reason : "";
+    return !reason && !s.pending;
+}
+
+PoseTarget App::poseBase() const {
+    const auto m = motion();
+    if (!m)
+        return {};
+    const auto s = m->state();
+    const glm::mat4 &from = s.hasCommand && s.mode == panels::Mode::Position ? s.commanded : s.actual;
+    PoseTarget base;
+    base.position = glm::vec3(from[3]);
+    base.degrees = glm::degrees(glm::eulerAngles(glm::quat_cast(glm::mat3(from))));
+    // the last keyboard target until the robot reports it (it arrives a few frames later), so presses add up
+    if (sent_ && Clock::now() - sentAt_ < std::chrono::seconds(1))
+        return *sent_;
+    return base;
+}
+
+void App::commandPose(const PoseTarget &target) {
+    if (const auto m = motion(); m && commandable(nullptr)) {
+        m->activate(panels::Mode::Position, nereus::ros_viewer::rpyPose(target.position, glm::radians(target.degrees)));
+        sent_ = target;
+        sentAt_ = Clock::now();
+    }
+}
+
+void App::setDriving(bool on) {
+    std::string why;
+    bool wait = false;
+    if (on && !commandable(&why, &wait) && !wait) {
+        notify(why, true);
+        return;
+    }
+    driving_ = on;
+}
+
+// Keyboard driving: each press moves the target one step from where it was told to be (no repeat while held,
+// so a held key never runs it away). Off when a text field has the keyboard, the mouse looks around (free
+// camera), or in the Map workspace; it ends on Esc or when the robot stops taking poses (killed, autonomy).
+void App::driveWithKeys() {
+    if (!driving_)
+        return;
+    std::string why;
+    bool wait = false;
+    if (workspace_ != Workspace::Operate || (!commandable(&why, &wait) && !wait)) {
+        driving_ = false;
+        notify(why.empty() ? "Keyboard driving off" : "Keyboard driving off: " + why, !why.empty());
+        return;
+    }
+    const auto &io = ImGui::GetIO();
+    if (io.WantTextInput || mouseCaptured_ || io.KeyCtrl || io.KeyAlt)
+        return;
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+        driving_ = false;
+        return;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket, false))
+        driveStep_ = std::max(0, driveStep_ - 1);
+    if (ImGui::IsKeyPressed(ImGuiKey_RightBracket, false))
+        driveStep_ = std::min(int(std::size(kDriveMetres)) - 1, driveStep_ + 1);
+    if (wait)
+        return;
+    const float metres = kDriveMetres[driveStep_], degrees = kDriveDegrees[driveStep_];
+    float forward = 0, left = 0, up = 0, turn = 0;
+    const auto pressed = [](ImGuiKey key) { return ImGui::IsKeyPressed(key, false); };
+    forward += pressed(ImGuiKey_W) ? metres : 0;
+    forward -= pressed(ImGuiKey_S) ? metres : 0;
+    left += pressed(ImGuiKey_A) ? metres : 0;
+    left -= pressed(ImGuiKey_D) ? metres : 0;
+    up += pressed(ImGuiKey_Space) ? metres : 0; // as the free camera
+    up -= pressed(ImGuiKey_LeftShift) || pressed(ImGuiKey_RightShift) ? metres : 0;
+    turn += pressed(ImGuiKey_Q) ? degrees : 0;
+    turn -= pressed(ImGuiKey_E) ? degrees : 0;
+    if (forward != 0 || left != 0 || up != 0 || turn != 0)
+        commandPose(stepped(poseBase(), forward, left, up, turn));
 }
 
 // The Map workspace's arrangement: the object tree left, the inspector right, the pool view between.

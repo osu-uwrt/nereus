@@ -48,6 +48,8 @@ bool targetInput(float *value) {
 class MotionPanel final : public Panel {
     std::shared_ptr<Motion> motion;
     std::function<void()> kill, drawOverlayControls;
+    std::function<bool()> keyboardDriving;
+    std::function<void(bool)> setKeyboardDriving;
     glm::vec3 position{0}, degrees{0};
     bool initialized = false, dirty = false, hasDive;
     Mode selected = Mode::Position;
@@ -62,7 +64,8 @@ class MotionPanel final : public Panel {
   public:
     explicit MotionPanel(const Binding &b)
         : motion(std::dynamic_pointer_cast<Motion>(b.provider)), kill(b.kill),
-          drawOverlayControls(b.drawOverlayControls), hasDive(bool(b.options["dive_z"])),
+          drawOverlayControls(b.drawOverlayControls), keyboardDriving(b.keyboardDriving),
+          setKeyboardDriving(b.setKeyboardDriving), hasDive(bool(b.options["dive_z"])),
           diveZ(b.options["dive_z"].as<float>(0)) {}
     void enableKillButton(ImVec2 size) {
         const auto s = motion ? motion->state() : MotionState{};
@@ -297,6 +300,21 @@ class MotionPanel final : public Panel {
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
             ImGui::SetTooltip("Command the current position and yaw with roll and pitch at zero (the robot levels "
                               "where it is)");
+        // keyboard driving (the host's): Position control only, as it steps a pose target
+        if (keyboardDriving && setKeyboardDriving) {
+            bool on = keyboardDriving();
+            nereus::ros_viewer::sameLineIfFits(ImGui::CalcTextSize("Drive with keys").x + ImGui::GetFrameHeight() +
+                                               ImGui::GetStyle().ItemInnerSpacing.x);
+            ImGui::BeginDisabled(!on && (unavailable || s.mode == Mode::Feedforward));
+            if (pins::Checkbox("Drive with keys", &on))
+                setKeyboardDriving(on);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip(s.mode == Mode::Feedforward
+                                      ? "Switch to Position control to drive with keys"
+                                      : "Step the target from the keyboard: W / S forward / back, A / D left / right, "
+                                        "Space / Shift up / down, Q / E turn, [ / ] step size, Esc stops");
+        }
     }
 };
 } // namespace

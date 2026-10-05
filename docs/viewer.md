@@ -119,6 +119,33 @@ click on it would. Type a few letters in
 order (`cwall` finds the Camera wall layout), choose with the arrows and Enter; Esc or a click elsewhere closes it.
 Enable and KILL are deliberately not in it.
 
+### The robot and autonomy from the keyboard
+
+Type a move and Enter sends it (Operate workspace; as the Motion panel's **Command**, only while the robot is
+enabled and not in Feedforward control, its pose is fresh and no tree or other operator is driving it). Moves start from the pose last commanded,
+so they add up while the robot travels; the first row reads back the move and where it ends up.
+
+| Typed | Does |
+|---|---|
+| `forward 0.5`, `back`, `left`, `right`, `up`, `down` | metres along the heading (level with the water; up is +z) |
+| `turn 30`, `turn right 45` | yaw by degrees, left positive |
+| `x 2`, `y 1`, `z -1.5`, `roll 0`, `pitch 0`, `yaw 90` | that axis to the value |
+| `go 2 1 -1.5 90` (or `go x y z`, `go x y z roll pitch yaw`) | the whole pose |
+| `level` | roll and pitch to zero |
+
+Several in a row run in order (`turn 90 forward 1`, `x 2 yaw 180`); units are optional (`0.5m`, `30deg`).
+The Robot entries (*Move…*, *Turn…*, *Go to…*, *Set…*) put the first word in the box for the rest to be typed.
+
+**Drive with the keyboard** (in the search, or **Drive with keys** in the Motion panel; Position control only)
+moves the target one step a key press: W / S forward / back,
+A / D left / right, Space / Shift up / down, Q / E turn; `[` / `]` choose the step (5 cm / 2° up to 1 m / 45°, 25 cm /
+15° to start). Holding a key does not repeat. The pool view's key strip shows the keys and step while it is on;
+Esc, the Map workspace, Feedforward, a kill or a tree starting ends it. Keys go to a text field when one has the keyboard, and
+to the free camera while it has the mouse.
+
+**Run <tree>** starts an autonomy tree, under the same rule as the Autonomy panel's Start (the robot it drives
+enabled); **Stop** stops the running one, **Refresh the tree list** asks again.
+
 ## Themes
 
 View → *Theme* ▸ **Heat sheet** (the default) and **Timing board** are one world in a day and a night variant,

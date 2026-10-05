@@ -12,6 +12,9 @@ struct Context {
     std::map<std::string, YAML::Node> documents{};
     std::function<void(const std::string &)> focus{};
     std::vector<std::string> initialWindows{};
+    // The host's keyboard driving (WASD from the keyboard), shown and switched in the Motion panel; empty: none.
+    std::function<bool()> keyboardDriving{};
+    std::function<void(bool)> setKeyboardDriving{};
 };
 struct Viewport {
     glm::mat4 projection{1}, view{1};
@@ -52,6 +55,8 @@ struct Binding {
     bool showWindow = false;
     std::function<void()> drawOverlayControls{};
     std::function<void()> drawPanelMenu{}; // the Windows popup (toolbar item "panels_menu")
+    std::function<bool()> keyboardDriving{}; // Context's
+    std::function<void(bool)> setKeyboardDriving{};
 };
 struct ProviderFactory {
     Kind kind;
@@ -136,6 +141,9 @@ class Composition {
     const Providers &providers() const {
         return sources;
     }
+    // Whether `mission` may start a tree now: the motion it owns (the `ownership` links) is enabled, fresh, and
+    // neither pending nor contested. The autonomy panel's Start and the command palette both ask.
+    bool mayStart(const std::shared_ptr<Provider> &mission) const;
 
   private:
     struct PanelInstance {

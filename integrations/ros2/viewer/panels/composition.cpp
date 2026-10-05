@@ -216,20 +216,14 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
         b.drawOverlayControls = [this, provider = providerId] { drawOverlayControls(provider); };
         b.drawPanelMenu = [this] { drawPanelMenu(); };
         b.focus = ctx.focus;
+        b.keyboardDriving = ctx.keyboardDriving;
+        b.setKeyboardDriving = ctx.setKeyboardDriving;
         const auto id = item["id"].as<std::string>(item["type"].as<std::string>("")); // toolbar ids default to the type
         b.showWindow = std::find(ctx.initialWindows.begin(), ctx.initialWindows.end(), id) != ctx.initialWindows.end();
         if (!ctx.preview && !providerId.empty())
             b.provider = sources.at(providerId);
         b.options = item["options"] ? item["options"] : YAML::Node(YAML::NodeType::Map);
-        b.mayStart = [this, provider = b.provider] {
-            for (const auto &link : ownership)
-                if (link.mission == provider) {
-                    const auto state = link.motion->state();
-                    if (!state.enabled || !state.fresh || state.pending || state.competing)
-                        return false;
-                }
-            return true;
-        };
+        b.mayStart = [this, provider = b.provider] { return mayStart(provider); };
         b.kill = [this, provider = b.provider] {
             if (auto motion = std::dynamic_pointer_cast<Motion>(provider)) {
                 motion->kill();
@@ -265,6 +259,15 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
                             item["visible"].as<bool>(true),
                             registry.overlays.at(item["type"].as<std::string>()).create(binding(item)),
                             item["provider"].as<std::string>()});
+}
+bool Composition::mayStart(const std::shared_ptr<Provider> &mission) const {
+    for (const auto &link : ownership)
+        if (link.mission == mission) {
+            const auto state = link.motion->state();
+            if (!state.enabled || !state.fresh || state.pending || state.competing)
+                return false;
+        }
+    return true;
 }
 void Composition::syncOwnership() {
     for (const auto &link : ownership)

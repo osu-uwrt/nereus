@@ -113,7 +113,10 @@ First version for the team.
       screenshot (F12, `~/Pictures/Nereus`), open the run records and settings folders, quit (Ctrl+Q).
     - A command centre in the title bar (Ctrl+P), as VS Code's: fuzzy search over windows, layouts, themes, scales,
       focus targets, camera views, toggles and pools, and every pinnable control in every window (closed ones
-      run off screen); Enable and KILL are left out on purpose.
+      run off screen); Enable and KILL are left out on purpose. It also commands the robot: typed moves
+      (`forward 0.5`, `turn 30`, `z -1.5`, `go 2 1 -1.5 90`, `level`) sent from the pose last commanded, keyboard
+      driving (WASD, Space / Shift, Q / E, one step a press, `[` / `]` for the step; also the Motion panel's
+      Drive with keys, Position control only), and Run / Stop for autonomy trees.
     - Theme changes apply between frames (picking one could leave a mix of two themes), tab styles are part of
       theme files, Classic draws switches and status panels with Qt's bevels, robot-frame map origins drag along
       their X / Y arrows, and camera cards no longer jitter at a width right at the edge.
