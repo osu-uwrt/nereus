@@ -96,9 +96,11 @@ bool RosMotion::ready() const {
     return value.fresh && !value.blocked && !value.competing &&
            std::chrono::duration<double>(Steady::now() - lastUi).count() < uiTimeout;
 }
+// Enable is the operator's switch, like the RViz panel: it never waits on pose, the UI watchdog or autonomy.
+// Only a competing operator on the same switch refuses it, since the two would fight over the robot.
 void RosMotion::enable() {
     std::lock_guard<std::mutex> lock(mutex);
-    if (!ready() || value.pending)
+    if (value.pending || value.competing)
         return;
     killLocked("Enable requested");
     value.enabled = true;
@@ -121,7 +123,8 @@ void RosMotion::killLocked(const std::string &message) {
 }
 // Drops the viewer's manual control without touching the enable switch or the controller: the robot keeps
 // its last command. Watchdogs use this (never a kill) so a stalled UI, a lost tether or a slow service
-// cannot kill a robot running on its own; only the KILL button, the physical kill or a competing operator do.
+// cannot kill a robot running on its own; only the KILL button, the physical kill, a competing operator or the
+// viewer coming up (the switch starts killed) do.
 void RosMotion::releaseLocked(const std::string &message) {
     ++generation;
     cancelRequest();
@@ -235,7 +238,7 @@ void RosMotion::tick() {
         target.transform.rotation.z = q.z;
         setpointTf->sendTransform(target);
     }
-    if (session)
-        report();
+    // The switch reports from the first heartbeat, so the robot starts killed whenever the viewer comes up.
+    report();
 }
 } // namespace nereus::ros_viewer::panels

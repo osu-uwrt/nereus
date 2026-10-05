@@ -65,9 +65,9 @@ class MotionPanel final : public Panel {
           diveZ(b.options["dive_z"].as<float>(0)) {}
     void enableKillButton(ImVec2 size) {
         const auto s = motion ? motion->state() : MotionState{};
-        const bool canKill =
-            s.enabled || s.pending || s.blocked || s.competing || (s.observedKilled && !*s.observedKilled);
-        ImGui::BeginDisabled(!motion || (!canKill && (!s.fresh || s.blocked || s.competing)));
+        // Always switchable once connected; a robot seen enabled, or another operator on the switch, offers KILL.
+        const bool canKill = s.enabled || s.pending || s.competing || (s.observedKilled && !*s.observedKilled);
+        ImGui::BeginDisabled(!motion);
         ImGui::PushStyleColor(ImGuiCol_Button, canKill ? ImVec4(.65f, .16f, .19f, 1) : ImVec4(.12f, .48f, .46f, 1));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
                               canKill ? ImVec4(.8f, .22f, .25f, 1) : ImVec4(.16f, .6f, .56f, 1));

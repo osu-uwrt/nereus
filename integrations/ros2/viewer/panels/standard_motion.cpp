@@ -23,9 +23,13 @@ class StandardMotion final : public RosMotion {
     }
     void enable() override {
         std::lock_guard<std::mutex> lock(mutex);
-        if (!ready() || value.pending || !client->service_is_ready())
+        if (value.pending || value.competing)
             return;
         session = true;
+        if (!client->service_is_ready()) {
+            value.message = "Enable service unavailable";
+            return;
+        }
         value.pending = true;
         pendingSince = Steady::now();
         const auto epoch = ++generation;
@@ -40,7 +44,7 @@ class StandardMotion final : public RosMotion {
                                                  if (epoch != generation)
                                                      return;
                                                  value.pending = false;
-                                                 value.enabled = reply.get()->success && ready();
+                                                 value.enabled = reply.get()->success;
                                                  value.message = value.enabled
                                                                      ? "Enabled"
                                                                      : "Enable failed: " + reply.get()->message;

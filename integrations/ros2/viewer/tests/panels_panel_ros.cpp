@@ -118,8 +118,17 @@ int main(int argc, char **argv) {
         }
     };
     spin(1);
-    assert(control->state().fresh);
-    assert(reports.empty() && lin.empty() && ang.empty()); // passive until clicked
+    assert(control->state().fresh && !control->state().enabled);
+    assert(!reports.empty() && reports.back().switch_asserting_kill); // killed from the moment it comes up
+    // Enable is never gated on pose: a stale estimator still lets the operator switch.
+    spin(1.15, true, false);
+    assert(!control->state().fresh);
+    control->enable();
+    spin(.1, true, false);
+    assert(control->state().enabled && !reports.back().switch_asserting_kill);
+    control->kill();
+    spin(.1);
+    assert(!control->state().enabled && reports.back().switch_asserting_kill);
     control->enable();
     spin(.2);
     assert(control->state().enabled && !(control->state().mode == Mode::Position));
@@ -329,7 +338,7 @@ int main(int argc, char **argv) {
         }
     };
     waitStandard(.6);
-    assert(enables.empty() && poses.empty());
+    assert(enables.size() == 1 && !enables.back() && poses.empty()); // disabled once when it comes up
     generic->enable();
     waitStandard(.3);
     assert(generic->state().enabled && !generic->state().supportsFeedforward);
