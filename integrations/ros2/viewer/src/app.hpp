@@ -26,6 +26,8 @@ struct Options {
     std::string detectionPlacement; // pose_source | truth | estimate | both (empty: host yaml)
     bool showTf = false, mpcPath = false, thrust = false, showScorecard = false;
     std::vector<std::string> open;      // windows shown at start: scene-settings, map, tf, display (pool-viewer)
+    std::string priorMap;               // prior map editor's config.yaml (empty: host yaml prior_map.config)
+    std::string workspace;              // start workspace: operate (default) | map
     std::string layout;                 // start layout: built-in preset, saved layout name or .ini path (empty: last)
     std::string theme;                  // abyss | midnight | daylight | contrast (empty: last chosen, else host yaml)
     std::optional<bool> systemTitleBar; // system window decorations instead of the viewer's title bar

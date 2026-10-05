@@ -103,6 +103,10 @@ class RosSide {
     RosSide &operator=(const RosSide &) = delete;
     // Latched scenario document (std_msgs/String JSON, transient_local).
     void watchScenario(const std::string &topic, std::function<void(const std::string &)> callback);
+    // The simulator supervisor (sim.launch.py): its latched JSON status, and a request to restart the
+    // simulator in another scenario pack folder.
+    void watchSupervisor(const std::string &topic, std::function<void(const std::string &)> callback);
+    void requestScenario(const std::string &topic, const std::string &folder);
     // Create every subscription that depends on scenario data; also usable for a demo without a node graph
     // (subscriptions are skipped when `live` is false).
     void attach(const Scenario &, const YAML::Node &config, StatusLights &, ThrusterVisuals &, bool live);
@@ -250,7 +254,8 @@ class RosSide {
     double truthTime_ = 0, otherTime_ = 0; // display stamps of this frame (valid when haveTime_)
     Clock::time_point origin_ = Clock::now();
     std::vector<rclcpp::SubscriptionBase::SharedPtr> subscriptions_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr scenarioSub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr scenarioSub_, supervisorSub_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr scenarioRequest_;
     rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr mpcSub_;
     nav_msgs::msg::Path mpcMessage_;
     bool mpcPending_ = false, mpcFailing_ = false;

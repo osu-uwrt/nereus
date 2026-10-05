@@ -43,6 +43,22 @@ MPC's predicted path; **Thrust** draws the commanded thruster forces (`thruster_
 thruster along its axis, like RViz's thruster wrenches (0.05 m per newton; nothing while the controller is not
 publishing). The same toggles are in the **View** menu.
 
+## Switching pools
+
+**View → Pool** lists every scenario pack in `content/packs/scenarios` by its pool (RoboSub 2026, the RPAC dive
+well); the current one is ticked. The course keeps its map coordinates; the pool, the calibration board and the
+start pose change with the pack.
+
+- **Simulator** (started with `sim.launch.py`): the simulator restarts in the chosen pool. The run starts over in a
+  new record folder (`<output>-2`, `-3`, ...), the robot jumps to the new start pose, the robot stack keeps running
+  and ROS time keeps going forward. The view reloads when the new simulator publishes its scenario. A simulator
+  started some other way can't be switched (the menu says so).
+- **Real robot or a preview** (the viewer was given `--scenario`): only this view reloads in the chosen pool; the
+  robot is not affected.
+
+The prior map editor keeps its map origin per pool. If the new pool's water differs (density, level, current), a
+note warns that an MPC model generated for the first pool is stale.
+
 ## Arranging windows
 
 Every panel, camera, the course map and the tool windows (Scene settings, Display, TF frames, Simulation, the
@@ -184,6 +200,7 @@ bigger (or float it) for full-size labels.
 The toolbar's **Display** button (or Windows → Display) opens it; it stays open while you change things.
 
 - **Water, Pool walls & deck, Pool floor, Surface reflections**: visibility (camera cards always see the pool).
+  **Pool tiles** off draws the walls and floor plain, keeping the lane lines (this view only).
 - **AprilTag board**: the scenario's equipment pack (the calibration board) in this view only; camera cards always
   show it. `equipment_visible` in the host config sets it at startup.
 - **Course**: *Auto* shows the simulator's course in sim and the mapping estimate on the real robot; *Mapping
@@ -199,6 +216,60 @@ The toolbar's **Display** button (or Windows → Display) opens it; it stays ope
 **Scene** (the Scene settings window) has the simulator's mechanism buttons, lighting and water appearance;
 **Simulation** sets the speed (pause, 1x, faster), **Sync sim** to the estimate and **Reset sim**. Both are
 windows: dock them if you use them often.
+
+## Editing the prior map (Dead Reckoning in 3D)
+
+**Edit map** in the command bar (`Ctrl+M`) edits riptide_mapping's `config/config.yaml` in the pool, as the Dead
+Reckoning tool does. While editing, the command bar turns the accent colour and reads *EDITING PRIOR MAP ·
+config.yaml* (with *unsaved* when there are changes), with **Save** and **Done** at its right end; Enable / KILL stay
+where they are. Editing has its own window layout: **Map objects** on the left (the file, Open / Reload / Save, Undo
+/ Redo, *+ Add* and the object table: the tree with lock / hide and, toggled by **x y z**, each prop's x / y / z / yaw
+relative to its parent as the file stores it), the **Inspector** on the right (the selected prop, or the map origin when
+nothing is selected) and the pool view between. **Done** goes back to operating with the layout as it was.
+
+The map is edited against a still scene: a running simulator is paused (the bar says *simulator paused*; Done
+resumes it), Follow is off until Done, and the robot is drawn level (its position and heading only). Each prop is drawn as its RViz mesh at its pose under the map origin; a prop
+with no mesh gets a box, unless it is a frame on a meshed assembly (the bin's targets, the torpedo's holes: their
+labels show them).
+
+The pool view's toolbar holds the map tools: **2D / 3D**, *Fit* (2D), **Display**, *Place origin*, labels (none /
+roots / all), *Hide sim course* and the pool. **Display** is map editing's own look, separate from Operate's: water,
+walls & deck, floor, *Pool tiles* (off: plain walls and floor, the lane lines stay), reflections, the AprilTag board,
+and the lighting (preset, shadows, exposure, ambient). It starts
+with the water off and Sterile lighting (even light, no shadows or caustics) so the floor and its lines read plainly.
+
+- **2D** (the default) looks straight down at the pool (the same render, without perspective), for quick moves
+  across a flat floor: drag a prop to move it in x / y (its height stays), the yellow ring turns it. Drag the floor
+  (or right / middle drag) to pan, scroll to zoom about the pointer, `F` or *Fit* for the whole pool, double-click a
+  prop (or its row in the tree) to centre on it.
+- **3D** orbits; the selected prop has red / green / blue arrows for the map's X / Y and height, and the ring.
+
+A click picks what is under the pointer: a prop's mesh (its bounds), its label or its origin dot.
+- **Select** a prop by clicking it in the view (or its label), or in the object tree. Locked props are
+  click-through in the view, as in Dead Reckoning; the tree still selects them.
+- **Move** it by dragging the prop across the pool, its arrows (3D), or the yellow ring to turn it (`Shift` snaps
+  to 15 degrees). `Esc` during a drag puts it back. Keys:
+  arrows nudge 1 cm along the pool (`Shift` 10 cm), `PgUp` / `PgDn` height, `Q` / `E` turn 1 degree (`Shift` 15),
+  `L` lock, `H` hide, `Delete`, `Esc` deselect. Children ride along with their parent.
+- **Type** a pose relative to the parent (as the file stores it) or in the map; the pool position and depth are
+  shown below. The inspector also sets the parent (re-parenting keeps the prop where it is), the
+  `lock_orientation_to_config` / `point_yaw_at_parent` flags, `class` and covariance; swaps poses or classes with
+  a sibling (the two gate sides, fire / blood); adds a child, duplicates, renames (children follow) and deletes
+  (children move to the map where they are).
+- **Map origin** (nothing selected): *AprilTag* puts it on a wall where a floor line meets it (or a corner), +X into
+  the pool; *Place origin* then click near a line end. *Robot frame* puts it anywhere in the pool with a free
+  heading: it is the robot's start pose, so the robot is drawn there; drag the robot in the view to move the origin
+(in 3D click it first), its yellow ring to turn it. *Turn ±90* and *yaw offset* turn it too. *Pin props to the pool* keeps the props where they are when the
+  origin moves (their map poses change instead). It starts where the scenario has the map (the calibration
+  board).
+- **Undo / Redo** (`Ctrl+Z`, `Ctrl+Shift+Z`) cover every edit. **Save** (`Ctrl+S`) writes only the values that
+  changed: comments, order, other robots' sections and the deprecated entries stay byte for byte, and the result
+  is read back and checked before the file is replaced. The namespace list switches robots in a file with several.
+
+Locks, hidden props, the origin (per pool) and the view options are the editor's own, kept per file in
+`~/.config/nereus/prior_map/`; the Map layout is `~/.config/nereus/map_layout.ini` (Layout → *Reset map layout*).
+`prior_map.config` in the host config (or `--prior-map FILE`) names the file opened at start; `--workspace map`
+starts editing the map. Quitting with unsaved changes asks first.
 
 ## Scoring a run (sim)
 
@@ -218,7 +289,7 @@ All of it is YAML in `content/viewer/`:
 
 | File | Controls |
 | --- | --- |
-| `talos_uwrt_host.yaml` | window size and `title_bar`, default `layout` and `theme`, topics, pose source and delays, estimate ghost/anchors, detections, `point_clouds`, `mapping_markers`, `thrust_arrows`, focus presets |
+| `talos_uwrt_host.yaml` | window size and `title_bar`, default `layout` and `theme`, topics, pose source and delays, estimate ghost/anchors, detections, `point_clouds`, `mapping_markers`, `prior_map`, `thrust_arrows`, focus presets |
 | `talos_uwrt_panels.yaml` | the pool view `toolbar:`, command bar `header:` and the `panels:` windows (order, titles, `dock:` area in the built-in layouts, which start open or as the shown tab), and the providers they talk to (telemetry readings and thresholds, recording services) |
 | `talos_uwrt_thruster_visuals.yaml`, `talos_uwrt_status_lights.yaml` | rotor animation and LED bars |
 

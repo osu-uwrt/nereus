@@ -10,7 +10,7 @@ find_package(X11 REQUIRED) # custom title bar: window-manager move / resize
 find_package(Fontconfig REQUIRED) # a theme's font family (the desktop's Qt font)
 
 # Logic that needs no GL context (tested by tests/host_*).
-add_library(nereus_viewer_host_core STATIC scenario.cpp jpeg_decode.cpp)
+add_library(nereus_viewer_host_core STATIC scenario.cpp scenario_packs.cpp jpeg_decode.cpp prior_map.cpp)
 target_include_directories(nereus_viewer_host_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
   ${PROJECT_SOURCE_DIR}/integrations/ros2/viewer/include)
 target_link_libraries(nereus_viewer_host_core PUBLIC nereus_glm nereus_mesh_assets nereus_pack_scene Eigen3::Eigen yaml-cpp
@@ -20,7 +20,7 @@ target_link_libraries(nereus_viewer_host_core PUBLIC nereus_glm nereus_mesh_asse
 target_compile_features(nereus_viewer_host_core PUBLIC cxx_std_17)
 target_compile_definitions(nereus_viewer_host_core PRIVATE NEREUS_PACK_CONTENT="${PROJECT_SOURCE_DIR}/content/packs")
 
-add_library(nereus_viewer_host STATIC ros_side.cpp scene_model.cpp overlay_draw.cpp window.cpp app.cpp)
+add_library(nereus_viewer_host STATIC ros_side.cpp scene_model.cpp overlay_draw.cpp window.cpp app.cpp prior_map_editor.cpp)
 target_include_directories(nereus_viewer_host PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(nereus_viewer_host PUBLIC nereus_viewer_host_core nereus_scene_rendering nereus_viewer_panels nereus_imgui
   ament_index_cpp::ament_index_cpp PRIVATE glfw GLEW::GLEW OpenGL::GL PNG::PNG X11::X11 Fontconfig::Fontconfig)
@@ -38,7 +38,7 @@ if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
   set(_host_tests viewer_input tf_tree detection_pose status_lights thruster_visuals camera_geometry jpeg scenario
-      display_clock frame_profiler point_cloud mapping_markers)
+      display_clock frame_profiler point_cloud mapping_markers prior_map scenario_packs)
   foreach(name ${_host_tests})
     add_executable(host_${name}_test ../tests/host_${name}.cpp)
     target_link_libraries(host_${name}_test PRIVATE nereus_viewer_host_core GTest::gtest_main)
@@ -48,6 +48,16 @@ if(BUILD_TESTING)
     add_test(NAME host_${name} COMMAND host_${name}_test)
   endforeach()
   target_link_libraries(host_jpeg_test PRIVATE JPEG::JPEG Threads::Threads)
+  target_compile_definitions(host_prior_map_test PRIVATE
+    NEREUS_TEST_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../tests/host_prior_map_config.yaml")
+  # The editor's pointer and keyboard handling in a headless ImGui context (no GL).
+  add_executable(host_prior_map_editor_test ../tests/host_prior_map_editor.cpp prior_map_editor.cpp)
+  target_link_libraries(host_prior_map_editor_test PRIVATE nereus_viewer_host_core nereus_viewer_panels nereus_imgui
+    GTest::gtest_main)
+  target_compile_definitions(host_prior_map_editor_test PRIVATE
+    NEREUS_TEST_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../tests/host_prior_map_config.yaml")
+  target_compile_options(host_prior_map_editor_test PRIVATE -UNDEBUG)
+  add_test(NAME host_prior_map_editor COMMAND host_prior_map_editor_test)
   # Window/render smoke: needs a display; validates every ImGui frame and writes a screenshot.
   if(DEFINED ENV{DISPLAY} OR DEFINED ENV{WAYLAND_DISPLAY})
     add_test(NAME host_demo_capture COMMAND nereus-viewer --demo

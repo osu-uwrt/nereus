@@ -183,6 +183,9 @@ void Window::toggleMaximized() {
 void Window::requestClose() {
     glfwSetWindowShouldClose(window_, GLFW_TRUE);
 }
+void Window::cancelClose() {
+    glfwSetWindowShouldClose(window_, GLFW_FALSE);
+}
 void Window::setIcon(const std::vector<std::filesystem::path> &pngs) {
     std::vector<std::vector<unsigned char>> pixels;
     std::vector<GLFWimage> images;

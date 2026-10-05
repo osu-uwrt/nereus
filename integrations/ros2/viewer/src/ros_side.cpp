@@ -125,6 +125,24 @@ void RosSide::watchScenario(const std::string &topic, std::function<void(const s
         [callback](const std_msgs::msg::String &msg) { callback(msg.data); });
 }
 
+void RosSide::watchSupervisor(const std::string &topic, std::function<void(const std::string &)> callback) {
+    if (!node_)
+        return;
+    supervisorSub_ = node_->create_subscription<std_msgs::msg::String>(
+        topic, rclcpp::QoS(1).reliable().transient_local(),
+        [callback](const std_msgs::msg::String &msg) { callback(msg.data); });
+}
+
+void RosSide::requestScenario(const std::string &topic, const std::string &folder) {
+    if (!node_)
+        return;
+    if (!scenarioRequest_ || scenarioRequest_->get_topic_name() != topic)
+        scenarioRequest_ = node_->create_publisher<std_msgs::msg::String>(topic, rclcpp::QoS(1).reliable());
+    std_msgs::msg::String message;
+    message.data = folder;
+    scenarioRequest_->publish(message);
+}
+
 void RosSide::spin() {
     if (node_)
         executor_->spin_some();

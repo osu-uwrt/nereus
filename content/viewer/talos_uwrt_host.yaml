@@ -72,6 +72,11 @@ mapping_markers:
   ghost: false
   hidden: []
 
+# Prior map editor (the Map workspace, Ctrl+M): the riptide_mapping config.yaml it opens at start (the source tree's copy,
+# not the installed one, so saves reach the robot's next build). --prior-map FILE overrides it.
+prior_map:
+  config: ~/osu-uwrt/release/src/riptide_perception/riptide_mapping/config/config.yaml
+
 # PointCloud2 layers (Vision panel; off until enabled, subscribed only while on). Topics are relative to the
 # robot namespace; the simulator bridge publishes the camera clouds on the ZED driver's topics.
 point_clouds:

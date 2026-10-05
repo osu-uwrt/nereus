@@ -19,12 +19,15 @@ e.g. the pool-identified estimate of the real vehicle.
 
 Run records (resolved.json, execution.json, summary.json, tasks.json) go to `output`
 (default /tmp/nereus_sim/<timestamp>). Ctrl-C stops everything and writes the records.
+
+The simulator runs under sim_supervisor.py, which restarts it in another pool when the viewer asks (View > Pool;
+or `ros2 topic pub --once /talos/simulator/load_scenario std_msgs/msg/String "{data: rpac}"`). Each restart writes
+its records to <output>-2, <output>-3, ...; the robot stack keeps running.
 """
 
 import ctypes.util
 import json
 import os
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -41,11 +44,12 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration as LC
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import sim_supervisor  # noqa: E402  (resolving and the pool table, shared with the supervisor)
+
 ROOT = Path(__file__).resolve().parents[3]
 STACK = ROOT / "integrations/uwrt/acceptance/mission_stack.launch.py"
-# The resolver needs the pack tools' dependencies (ruamel.yaml, jsonschema), which ./build.sh installs into
-# .venv; ros2 launch itself runs under the system Python.
-PYTHON = str(ROOT / ".venv/bin/python") if (ROOT / ".venv/bin/python").exists() else sys.executable
+SUPERVISOR = Path(__file__).resolve().parent / "sim_supervisor.py"
 # Controller selection forwarded to mission_stack.launch.py (and on to riptide_bringup2); empty = its default.
 CONTROLLER_ARGS = {
     "active_control_model": "controller: 'mpc' runs riptide_mpc, anything else complete_controller",
@@ -57,7 +61,7 @@ CONTROLLER_ARGS = {
 
 
 # pool:=<name> picks the matching UWRT scenario; scenario:=<folder> picks any pack instead.
-POOLS = {"robosub": "talos_uwrt", "rpac": "talos_uwrt_rpac"}
+POOLS = sim_supervisor.POOLS
 
 
 def _scenario(context):
@@ -88,7 +92,6 @@ def _mpc_sim_model(context, resolved, output):
     if LC("active_control_model").perform(context) != "mpc" or LC("mpc_model").perform(context) not in ("", "sim"):
         return []
     from ament_index_python.packages import get_package_share_directory as share
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     import mpc_sim_model
 
     robot = json.loads(Path(resolved).read_text())["robot"]["id"]
@@ -108,13 +111,11 @@ def _processes(context):
     scenario = _scenario(context)
     binary = LC("bridge_binary").perform(context)
     resolved = f"{output}.resolved.json"
-    subprocess.run(
-        [PYTHON, "-m", "nereus.packs", "resolve", scenario, "-o", resolved],
-        check=True, cwd=str(ROOT),
-        env={**os.environ, "PYTHONPATH": os.pathsep.join(
-            [str(ROOT / "python/src"), os.environ.get("PYTHONPATH", "")])})
+    sim_supervisor.resolve(scenario, resolved)
     stack_args = [(k, LC(k)) for k in CONTROLLER_ARGS] + _mpc_sim_model(context, resolved, output)
-    command = [binary, resolved, "--output", output]
+    # The supervisor runs `binary <resolved> --output <dir> <options>` and restarts it in another pool on request.
+    command = [sys.executable, str(SUPERVISOR), "--resolved", resolved, "--scenario", scenario, "--output", output,
+               "--", binary]
     if LC("cameras").perform(context).lower() in ("false", "0", "no"):
         command.append("--no-cameras")
     elif LC("always_cameras").perform(context).lower() in ("true", "1", "yes"):
@@ -122,7 +123,7 @@ def _processes(context):
     if LC("camera_supersample").perform(context):
         command += ["--camera-supersample", LC("camera_supersample").perform(context)]
     actions.append(ExecuteProcess(cmd=command, cwd=str(ROOT), output="screen",
-                                  sigterm_timeout="15", name="simulator"))
+                                  sigterm_timeout="20", name="simulator"))
     actions.append(IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(STACK)),
         launch_arguments=stack_args,

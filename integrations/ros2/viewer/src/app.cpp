@@ -8,6 +8,8 @@
 #include "nereus/ros_viewer/pins.hpp"
 #include "nereus/ros_viewer/theme.hpp"
 #include "overlay_draw.hpp"
+#include "prior_map_editor.hpp"
+#include "scenario_packs.hpp"
 #include "ros_side.hpp"
 #include "scene_model.hpp"
 #include "viewer_input.hpp"
@@ -28,6 +30,7 @@
 #include <nereus/rendering/renderer.hpp>
 #include <set>
 #include <sstream>
+#include <mutex>
 #include <thread>
 
 namespace nereus::ros_viewer::host {
@@ -122,6 +125,7 @@ struct Look {
 };
 struct ObserverSettings {
     bool water = true, walls = true, floor = true, reflections = false, shadows = true;
+    bool tiles = true; // the pool's tile grout (off: plain walls and floor; the lane lines stay)
     int lighting = 0; // 0 follows the scene, 1 indoor, 2 outdoor, 3 sterile
     float exposure = 1, brightness = 1, ambient = 1;
     int antialiasing = 1; // supersampling factor of the observer view and camera cards (1 = off)
@@ -201,7 +205,8 @@ struct CardTexture {
 // Dockable host windows. The part after ### is the window's identity in saved layouts; the title can change.
 constexpr const char *kPoolView = "Pool view###pool_view", *kCourseMap = "Course map###course_map",
                      *kSceneSettings = "Scene settings###scene_settings", *kDisplay = "Display###display",
-                     *kTfFrames = "TF frames###tf", *kHelp = "Controls & shortcuts###help";
+                     *kTfFrames = "TF frames###tf", *kHelp = "Controls & shortcuts###help",
+                     *kMapObjects = "Map objects###map_objects", *kMapInspector = "Inspector###map_inspector";
 std::string cameraWindowName(const SensorCamera &camera) {
     return camera.title + "###camera." + camera.id;
 }
@@ -242,12 +247,19 @@ class App {
     SensorView viewFor(float aspect, float dt, bool hovered, float viewportHeight, bool &dragging);
     void handleViewInput(float dt, bool hovered, float viewportHeight);
     void focusAtCursor(const SensorView &, const rendering::RenderedFrame &, ImVec2 origin, float w, float h);
+    // The scene point drawn under `cursor` (pixels from the view's corner), from the frame's depth.
+    std::optional<glm::vec3> depthPoint(const SensorView &, const rendering::RenderedFrame &, glm::vec2 cursor,
+                                        glm::vec2 size);
     void demoTf();
     // --- UI
     void drawInterface(double time, float dt);
     void drawMenuBar();
     void drawViewMenu();
     void drawThemeMenu();
+    void drawPoolMenu();
+    void switchPool(const ScenarioPack &);
+    void updatePoolSwitch();
+    void drawPoolSwitchStatus(ImVec2 position);
     void drawWindowsMenu();
     void drawLayoutMenu();
     void drawCommandBar();
@@ -257,6 +269,24 @@ class App {
     void drawSceneSettingsWindow();
     void drawDisplayWindow();
     void drawTfWindow();
+    void drawMapWindows();
+    // --- workspaces: Operate (the robot) and Map (the prior map editor), each with its own window layout
+    enum class Workspace { Operate, Map };
+    void setWorkspace(Workspace);
+    void applyMapLayout();
+    float editMapButtonWidth() const;
+    void drawEditMapButton();
+    void drawMapButtons(); // Save / Done while editing the map
+    void drawMapToolbar(float width);
+    void drawUnsavedMapPrompt();
+    // the Map workspace's 2D view: the scene from straight above (orthographic), panned and zoomed in x / y
+    bool planActive() const {
+        return workspace_ == Workspace::Map && planView_;
+    }
+    void fitPlan();
+    void handlePlanInput(bool hovered);
+    SensorView planCamera(float aspect) const;
+    void setupPriorMap();
     void drawHelpWindow();
     void handleShortcuts();
     void setViewMode(int mode);
@@ -289,9 +319,13 @@ class App {
     double cardPeriod(std::size_t camera) const;
     void renderLocalCards(double t, const rendering::Scene &mainScene);
     // --- window layout
+    // Where a window is listed in the Windows menu (Help has its own menu).
+    enum class MenuSection { Panels, Cameras, Tools, None };
     struct WindowEntry {
         std::string key, name, label; // stable key ("panel.<id>", "camera.<id>", "map", ...), ImGui name, title
         bool *open;
+        MenuSection section = MenuSection::Tools;
+        const char *tooltip = nullptr; // Windows menu hint
     };
     std::vector<WindowEntry> windowEntries();
     WindowStates::Flags windowFlags();
@@ -352,6 +386,22 @@ class App {
     StatusLights lights_;
     ThrusterVisuals thrusters_;
     std::string pendingScenario_;
+    // View > Pool. A scenario from the simulator's topic is switched by its supervisor (sim.launch.py restarts the
+    // simulator in the new pool and the topic brings the new scene); a scenario file (real robot, preview) is
+    // resolved here, off the UI thread, and reloaded in this viewer only.
+    struct PoolSwitch {
+        std::vector<ScenarioPack> packs;
+        bool fromTopic = false;
+        std::string topicBase;                // <namespace>/simulator
+        std::string supervisorState, message; // supervisor: running | switching | stopped | error
+        bool messageError = false;
+        std::string target, targetLabel; // the pool id being switched to (empty: none)
+        Clock::time_point messageUntil{};
+        std::thread worker;
+        std::mutex mutex;
+        bool done = false;
+        std::string resolved, error;
+    } poolSwitch_;
     std::size_t loadedHash_ = 0;
     // panels
     panels::Registry registry_;
@@ -379,6 +429,21 @@ class App {
     // settings
     Look look_;
     ObserverSettings observer_;
+    // Map editing's own look: no water, even light without shadows or caustics (Sterile), so the floor reads plainly.
+    ObserverSettings mapObserver_ = [] {
+        ObserverSettings s;
+        s.water = false;
+        s.lighting = 3;
+        s.shadows = false;
+        return s;
+    }();
+    ObserverSettings &viewSettings() {
+        if (workspace_ != Workspace::Map)
+            return observer_;
+        mapObserver_.antialiasing = observer_.antialiasing; // a performance setting, shared
+        return mapObserver_;
+    }
+    void drawMapLighting();
     bool openDepth_ = false;
     bool showTf_ = false, tfNames_ = true, tfTreeOpen_ = false, detections_ = false, showMpc_ = false,
          showThrust_ = false, demoMode_ = false;
@@ -390,6 +455,20 @@ class App {
     int courseMode_ = 0;
     bool mappingGhost_ = false;
     char meshFilter_[64]{}; // Pool Viewer > Course > Meshes search
+    // Prior map editor (Dead Reckoning in 3D): the robot's riptide_mapping config.yaml laid out in the pool.
+    std::unique_ptr<PriorMapEditor> priorMap_;
+    std::optional<glm::vec3> priorMapPointer_; // the scene point under the pointer last frame
+    Workspace workspace_ = Workspace::Operate;
+    std::string operateIni_, mapIni_; // the hidden workspace's layout (ini text)
+    fs::path mapIniFile_;             // the Map workspace's layout between sessions
+    bool pendingMapLayout_ = false, planView_ = true, planFitted_ = false, closeConfirmed_ = false,
+         closePrompt_ = false;
+    glm::vec2 planCenter_{0};    // world x / y at the view's centre
+    float planHeight_ = 30;      // metres shown top to bottom
+    int planDragButton_ = -1;    // the button panning the 2D view
+    ImVec2 viewPos_{0, 0}, viewSize_{1, 1}; // the pool view's image rect this frame
+    bool mapPausedSim_ = false, followBeforeMap_ = false; // what entering the Map workspace changed
+    std::shared_ptr<panels::Simulation> simulation() const;
     bool courseFromMapping() const;
     // Simulator only (truth is the pose source): the localization estimate at its display time, drawn as a
     // translucent robot ghost; the control gizmo and Follow are anchored together on it or on the truth robot.
@@ -512,8 +591,19 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     persist_ = opt_.frames == 0 && !configHome.empty();
     if (!configHome.empty()) {
         sessionIni_ = configHome / "viewer_layout.ini";
+        mapIniFile_ = configHome / "map_layout.ini";
         layoutDir_ = configHome / "layouts";
+        if (persist_ && fs::exists(mapIniFile_)) {
+            std::ifstream in(mapIniFile_);
+            std::stringstream text;
+            text << in.rdbuf();
+            mapIni_ = text.str();
+        }
     }
+    // Host config `prior_map: {config: <file>}`: the config.yaml the editor opens first (--prior-map overrides).
+    priorMap_ = std::make_unique<PriorMapEditor>(
+        persist_ ? configHome / "prior_map" : fs::path(),
+        !opt_.priorMap.empty() ? opt_.priorMap : lookup(config_, {"prior_map", "config"}).as<std::string>(""));
     if (!opt_.layout.empty())
         requestLayout(opt_.layout);
     else if (persist_ && fs::exists(sessionIni_)) {
@@ -585,6 +675,28 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
                 ? opt_.scenarioTopic
                 : lookup(config_, {"scenario_topic"}).as<std::string>("/talos/simulator/scenario");
         ros_->watchScenario(topic, [this](const std::string &json) { pendingScenario_ = json; });
+        poolSwitch_.fromTopic = true;
+        poolSwitch_.topicBase = topic.substr(0, topic.rfind('/'));
+        ros_->watchSupervisor(poolSwitch_.topicBase + "/supervisor", [this](const std::string &json) {
+            try {
+                const auto status = YAML::Load(json); // JSON is YAML
+                auto &s = poolSwitch_;
+                s.supervisorState = status["state"].as<std::string>("");
+                const auto message = status["message"].as<std::string>("");
+                if (s.supervisorState == "error" || s.supervisorState == "stopped") {
+                    s.message = s.supervisorState == "error" ? "Pool not switched: " + message : "Simulator: " + message;
+                    s.messageError = true;
+                    s.messageUntil = Clock::now() + std::chrono::seconds(12);
+                    s.target.clear();
+                } else if (s.supervisorState == "running" && !message.empty()) {
+                    s.message = message; // e.g. the MPC's generated model is for the old pool's water
+                    s.messageError = true;
+                    s.messageUntil = Clock::now() + std::chrono::seconds(12);
+                }
+            } catch (const std::exception &error) {
+                std::cerr << "nereus-viewer: ignoring simulator supervisor status: " << error.what() << '\n';
+            }
+        });
     }
 }
 
@@ -598,6 +710,8 @@ void App::loadLogo() {
 }
 
 App::~App() {
+    if (poolSwitch_.worker.joinable())
+        poolSwitch_.worker.join();
     try {
         persistLayout(true); // before the panels (their window states) go
     } catch (const std::exception &error) {
@@ -787,6 +901,7 @@ void App::loadScenario(const std::string &json) {
     model_ = std::make_unique<SceneModel>(*scenario_, options, thrusters_, lights_);
     ros_->attach(*scenario_, config_, lights_, thrusters_, !demoMode_);
     loadMappingMarkers();
+    setupPriorMap();
     look_.appearance = scenario_->appearance;
     look_.equipment = lookup(config_, {"equipment_visible"}).as<bool>(true);
     cards_.assign(scenario_->cameras.size(), {});
@@ -1021,7 +1136,16 @@ void App::loadMappingMarkers() {
 
 VisualState App::buildState() {
     VisualState state;
-    state.body = body_;
+    // The Map workspace draws the robot at a robot-frame origin (its start pose), else where it is (the simulator
+    // is paused while the map is edited).
+    const bool mapping = workspace_ == Workspace::Map;
+    // level: position and heading only (a pitched or rolled robot says nothing about the map)
+    const auto level = [](const glm::mat4 &m) {
+        return glm::rotate(glm::translate(glm::mat4(1), glm::vec3(m[3])), std::atan2(m[0].y, m[0].x),
+                           glm::vec3(0, 0, 1));
+    };
+    const glm::mat4 body = mapping ? priorMap_->robotStart().value_or(level(body_)) : body_;
+    state.body = body;
     for (const auto &rotor : thrusters_.rotors)
         state.rotorSpin.push_back(rotor.transform());
     const double now = clockSeconds();
@@ -1029,22 +1153,26 @@ VisualState App::buildState() {
         state.lightColor.push_back(light.state.color(now));
     state.claw = demoMode_ ? std::array<float, 2>{0.f, 0.f} : ros_->claw;
     state.showEquipment = look_.equipment;
-    state.showWalls = observer_.walls;
-    state.showFloor = observer_.floor;
-    if (robotGhost_ && haveEstimate_)
+    state.showWalls = viewSettings().walls;
+    state.showFloor = viewSettings().floor;
+    if (robotGhost_ && haveEstimate_ && !mapping)
         state.ghostBody = estimateBody_;
+    // The prior map being edited, in place of the course when the editor hides it.
+    const bool priorMapOnly = priorMap_->hidesCourse();
+    priorMap_->addMarkers(state.markers);
     const auto payloads = lookup(config_, {"payloads", "loaded_namespaces"});
     if (demoMode_) {
         for (const auto &entry : payloads)
             for (const auto &mount : model_->payloadMounts(entry.second.as<std::string>()))
-                state.loadedPayloads.push_back(body_ * mount);
+                state.loadedPayloads.push_back(body * mount);
+        state.showCourse = !priorMapOnly;
         return state;
     }
     // Mapping course (RViz markers at the mapping frames): the course itself on a real robot, or a translucent
     // ghost of the mapping estimate over the simulator's course.
     const bool mappingCourse = courseFromMapping();
-    state.showCourse = !mappingCourse;
-    if (mappingCourse || (mappingGhost_ && ros_->truthActive()))
+    state.showCourse = !mappingCourse && !priorMapOnly;
+    if (!priorMapOnly && (mappingCourse || (mappingGhost_ && ros_->truthActive())))
         for (const auto &marker : mappingMarkers_) {
             glm::mat4 frame;
             if (!marker.visible || !ros_->latestInFixed(marker.frame, frame))
@@ -1057,13 +1185,13 @@ VisualState App::buildState() {
             state.markers.push_back(std::move(draw));
         }
     for (const auto &[key, record] : ros_->props) {
-        if (mappingCourse) // simulator props duplicate the mapped table items
+        if (mappingCourse || priorMapOnly) // simulator props duplicate the mapped table items
             break;
         if (record.mesh.empty())
             continue;
         MarkerDraw draw;
         draw.mesh = record.mesh;
-        draw.world = record.attached ? body_ * record.pose : record.pose;
+        draw.world = record.attached ? body * record.pose : record.pose;
         draw.scale = {float(record.marker.scale.x), float(record.marker.scale.y), float(record.marker.scale.z)};
         state.markers.push_back(std::move(draw));
     }
@@ -1073,7 +1201,7 @@ VisualState App::buildState() {
             // Loaded rounds follow this frame's robot pose like the launcher, not the sampled marker pose.
             const auto mounts = model_->payloadMounts(ns.as<std::string>());
             if (key.second >= 0 && std::size_t(key.second) < mounts.size()) {
-                state.loadedPayloads.push_back(body_ * mounts[std::size_t(key.second)]);
+                state.loadedPayloads.push_back(body * mounts[std::size_t(key.second)]);
                 continue;
             }
         }
@@ -1081,7 +1209,7 @@ VisualState App::buildState() {
             continue;
         MarkerDraw draw;
         draw.mesh = record.mesh;
-        draw.world = record.attached ? body_ * record.pose : record.pose;
+        draw.world = record.attached ? body * record.pose : record.pose;
         draw.scale = {float(record.marker.scale.x), float(record.marker.scale.y), float(record.marker.scale.z)};
         state.markers.push_back(std::move(draw));
     }
@@ -1100,7 +1228,7 @@ VisualState App::buildState() {
         draw.emissive = true;
         draw.radiance = radiance;
         draw.tint = green ? glm::vec4(.002f, 1.f, .004f, 1.f) : glm::vec4(1.f, .001f, .002f, 1.f);
-        draw.world = record.attached ? body_ * record.pose : record.pose;
+        draw.world = record.attached ? body * record.pose : record.pose;
         draw.scale = {float(record.marker.scale.x), float(record.marker.scale.y), float(record.marker.scale.z)};
         state.markers.push_back(std::move(draw));
     }
@@ -1110,6 +1238,10 @@ VisualState App::buildState() {
 // --------------------------------------------------------------------------------------------- input
 
 void App::handleViewInput(float dt, bool hovered, float viewportHeight) {
+    if (planActive()) {
+        handlePlanInput(hovered);
+        return;
+    }
     auto &io = ImGui::GetIO();
     GLFWwindow *glfw = window_->handle();
     if (mouseCaptured_ &&
@@ -1181,6 +1313,8 @@ void App::handleViewInput(float dt, bool hovered, float viewportHeight) {
 
 SensorView App::viewFor(float aspect, float dt, bool hovered, float viewportHeight, bool &) {
     handleViewInput(dt, hovered, viewportHeight);
+    if (planActive())
+        return planCamera(aspect);
     if (follow_)
         target_ = focusTarget(focusName_);
     if (mode_ >= 2 && scenario_ && std::size_t(mode_ - 2) < scenario_->cameras.size()) {
@@ -1201,6 +1335,27 @@ SensorView App::viewFor(float aspect, float dt, bool hovered, float viewportHeig
         at = target_;
     }
     return {eye, glm::lookAt(eye, at, up), glm::perspective(glm::radians(53.f), aspect, .05f, 100.f)};
+}
+
+std::optional<glm::vec3> App::depthPoint(const SensorView &view, const rendering::RenderedFrame &frame,
+                                        glm::vec2 cursor, glm::vec2 size) {
+    const auto uv = cursor / size;
+    if (uv.x < 0 || uv.x >= 1 || uv.y < 0 || uv.y >= 1 || !frame.depth_texture)
+        return std::nullopt;
+    GLint previous = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previous);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, readFbo_);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, frame.depth_texture, 0);
+    float depth = 1;
+    const auto texel = depthTexel(uv, frame.depth_width, frame.depth_height);
+    if (glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE)
+        glReadPixels(texel.x, texel.y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, GLuint(previous));
+    glm::vec3 point;
+    if (!host::depthPoint(view.projection * view.view, uv, depth, point))
+        return std::nullopt;
+    return point;
 }
 
 void App::focusAtCursor(const SensorView &view, const rendering::RenderedFrame &frame, ImVec2 origin, float width,
@@ -1234,20 +1389,11 @@ void App::focusAtCursor(const SensorView &view, const rendering::RenderedFrame &
     glm::vec3 point;
     if (!picker.result(point)) {
         const auto uv = cursor / size;
-        if (uv.x < 0 || uv.x >= 1 || uv.y < 0 || uv.y >= 1 || !frame.depth_texture)
+        if (uv.x < 0 || uv.x >= 1 || uv.y < 0 || uv.y >= 1)
             return;
-        GLint previous = 0;
-        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previous);
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, readFbo_);
-        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, frame.depth_texture, 0);
-        float depth = 1;
-        const auto texel = depthTexel(uv, frame.depth_width, frame.depth_height);
-        if (glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE)
-            glReadPixels(texel.x, texel.y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
-        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, GLuint(previous));
-        if (!depthPoint(view.projection * view.view, uv, depth, point) &&
-            !focusPlanePoint(view.projection * view.view, view.eye, target_, uv, point))
+        if (const auto drawn = depthPoint(view, frame, cursor, size))
+            point = *drawn;
+        else if (!focusPlanePoint(view.projection * view.view, view.eye, target_, uv, point))
             return;
     }
     const auto offset = view.eye - point;
@@ -1683,6 +1829,9 @@ void App::drawDisplaySettings() {
     pins::Checkbox("Water", &observer_.water);
     pins::Checkbox("Pool walls & deck", &observer_.walls);
     pins::Checkbox("Pool floor", &observer_.floor);
+    pins::Checkbox("Pool tiles", &observer_.tiles);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("The tile grout on the walls and floor (this view only); the lane lines stay.");
     if (!model_->pack().equipmentInstances().empty()) {
         pins::Checkbox("AprilTag board", &look_.equipment);
         if (ImGui::IsItemHovered())
@@ -1826,6 +1975,75 @@ void App::toolbarTf() {
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("TF frames: names, axis length and the frame tree");
     tfAnchor_ = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y};
+}
+
+// The prior map editor's pool: the scenario's pool and floor lines, and where the scenario has the map (the
+// world frame is the map: its origin is the calibration board's tag), which the editor starts from.
+void App::setupPriorMap() {
+    const auto &s = *scenario_;
+    PriorMapEditor::Pool pool;
+    pool.id = s.poolId;
+    pool.poolToWorld = s.poolToWorld;
+    pool.length = s.poolLength;
+    pool.width = s.poolWidth;
+    pool.waterLevel = s.waterLevel;
+    for (const auto &stripe : model_->pack().poolStripes())
+        if (stripe.side == rendering::PoolSide::Floor)
+            pool.lines.push_back({stripe.from.x(), stripe.from.y(), stripe.to.x(), stripe.to.y()});
+    const glm::mat4 &map = s.worldToPool;
+    auto &origin = pool.scenarioOrigin;
+    origin.x = map[3].x;
+    origin.y = map[3].y;
+    origin.z = map[3].z;
+    const double yaw = std::atan2(map[0].y, map[0].x) * 180 / M_PI;
+    const int quarter = (int(std::lround(yaw / 90)) % 4 + 4) % 4; // the wall the tag is on faces this way
+    origin.basePhi = quarter * 90;
+    origin.yawOffset = prior_map::wrapDegrees(yaw - origin.basePhi);
+    origin.wall = "WSEN"[quarter];
+    priorMap_->setPool(pool);
+    // Prop meshes: the RViz course markers (also in demo mode, when the packages resolve).
+    auto meshes = mappingMarkers_;
+    if (meshes.empty())
+        if (const auto cfg = lookup(config_, {"mapping_markers"}))
+            try {
+                const auto share = [](const std::string &package) {
+                    return fs::path(ament_index_cpp::get_package_share_directory(package));
+                };
+                fs::path file = cfg["config"].as<std::string>();
+                if (!file.is_absolute() && !fs::exists(file)) {
+                    const auto package = file.begin()->string();
+                    file = share(package) / file.lexically_relative(package);
+                }
+                meshes = host::loadMappingMarkers(file, share, cfg["meshes"].as<std::string>(""));
+            } catch (const std::exception &error) {
+                std::cerr << "nereus-viewer: prior map props drawn as boxes: " << error.what() << '\n';
+            }
+    for (auto &marker : meshes)
+        marker.visible = true; // the course's hidden list is about the live course, not the prior map
+    // What a click on a prop hits: its mesh's bounds through the marker pose, in the prop's frame.
+    std::map<std::string, PriorMapEditor::Extent> extents;
+    for (const auto &marker : meshes)
+        if (const auto mesh = model_->mesh(marker.path)) {
+            PriorMapEditor::Extent extent{glm::vec3(1e9f), glm::vec3(-1e9f)};
+            for (int corner = 0; corner < 8; ++corner) {
+                const glm::vec3 p(corner & 1 ? mesh->maximum.x() : mesh->minimum.x(),
+                                  corner & 2 ? mesh->maximum.y() : mesh->minimum.y(),
+                                  corner & 4 ? mesh->maximum.z() : mesh->minimum.z());
+                const glm::vec3 q(marker.local * glm::vec4(p, 1));
+                extent.low = glm::min(extent.low, q);
+                extent.high = glm::max(extent.high, q);
+            }
+            extents[marker.frame] = extent;
+        }
+    priorMap_->setExtents(std::move(extents));
+    priorMap_->setMeshes(std::move(meshes));
+}
+
+void App::drawMapWindows() {
+    focusIfRequested(kMapObjects);
+    priorMap_->drawObjectsWindow(kMapObjects, [this] { windowContextMenu("map_objects"); });
+    focusIfRequested(kMapInspector);
+    priorMap_->drawInspectorWindow(kMapInspector, [this] { windowContextMenu("map_inspector"); });
 }
 
 void App::drawTfWindow() {
@@ -2072,6 +2290,15 @@ void App::drawInterface(double time, float dt) {
         applyPreset(pendingPreset_);
         pendingPreset_.clear();
     }
+    if (pendingMapLayout_ && scenario_) {
+        applyMapLayout();
+        pendingMapLayout_ = false;
+    }
+    if (!opt_.workspace.empty() && scenario_ && layoutReady_ && pendingPreset_.empty()) {
+        if (opt_.workspace == "map")
+            setWorkspace(Workspace::Map);
+        opt_.workspace.clear();
+    }
     ImGuiDockNodeFlags dockFlags = ImGuiDockNodeFlags_NoCloseButton; // each tab has its own close box
     if (layoutLocked_)
         dockFlags |= ImGuiDockNodeFlags_NoUndocking | ImGuiDockNodeFlags_NoResize | ImGuiDockNodeFlags_NoDocking;
@@ -2080,7 +2307,7 @@ void App::drawInterface(double time, float dt) {
     if (scenario_ && runTracking_)
         runScore_.reset(runTracking_->state().score);
     drawPoolView(time, dt);
-    if (scenario_) {
+    if (scenario_ && workspace_ == Workspace::Operate) {
         drawCameraWindows();
         drawMapWindow();
         drawSceneSettingsWindow();
@@ -2090,7 +2317,9 @@ void App::drawInterface(double time, float dt) {
             composition_->drawPanels();
             composition_->drawWindows();
         }
-    }
+    } else if (scenario_)
+        drawMapWindows();
+    drawUnsavedMapPrompt();
     drawHelpWindow();
     pins::drawMenu();
     handleWindowEdges();
@@ -2305,6 +2534,18 @@ void App::drawViewMenu() {
         drawScaleMenu();
         return;
     }
+    ImGui::SeparatorText("Scene");
+    if (ImGui::BeginMenu("Pool")) {
+        drawPoolMenu();
+        ImGui::EndMenu();
+    }
+    if (workspace_ == Workspace::Map) { // the map tools are in the pool view's toolbar
+        if (ImGui::MenuItem("2D view", nullptr, planView_)) {
+            planView_ = !planView_;
+            if (planView_ && !planFitted_)
+                fitPlan();
+        }
+    } else {
     ImGui::SeparatorText("Camera");
     if (ImGui::MenuItem("Orbit", nullptr, mode_ == 0))
         setViewMode(0);
@@ -2326,6 +2567,7 @@ void App::drawViewMenu() {
     ImGui::MenuItem("Detections", nullptr, &detections_, !demoMode_);
     ImGui::MenuItem("MPC path", nullptr, &showMpc_, !demoMode_);
     ImGui::MenuItem("Thrust", nullptr, &showThrust_, !demoMode_ && !scenario_->thrusterMounts.empty());
+    }
     ImGui::Separator();
     if (ImGui::MenuItem("Maximize pool view", "Ctrl+Space", maximized_))
         toggleMaximized();
@@ -2357,24 +2599,44 @@ void App::drawWindowsMenu() {
         ImGui::TextDisabled("Waiting for the scenario");
         return;
     }
-    if (composition_ && !composition_->empty()) {
-        ImGui::SeparatorText("Panels");
-        composition_->drawPanelMenuItems();
+    // Every window in windowEntries(), by section: a ticked one closes, an unticked one opens on top.
+    const auto entries = windowEntries();
+    const std::pair<MenuSection, const char *> sections[] = {
+        {MenuSection::Panels, "Panels"}, {MenuSection::Cameras, "Cameras"}, {MenuSection::Tools, "Tools"}};
+    for (const auto &[section, title] : sections) {
+        bool heading = false;
+        for (const auto &entry : entries) {
+            if (entry.section != section)
+                continue;
+            if (!heading)
+                ImGui::SeparatorText(title);
+            heading = true;
+            ImGui::PushID(entry.key.c_str());
+            if (ImGui::MenuItem(entry.label.c_str(), nullptr, *entry.open)) {
+                if (*entry.open)
+                    *entry.open = false;
+                else
+                    showWindow(entry);
+            }
+            if (entry.tooltip && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", entry.tooltip);
+            ImGui::PopID();
+        }
+        // windows the panels open themselves (Simulation, Run tracking) follow the host's tools
+        if (section == MenuSection::Tools && composition_)
+            composition_->drawToolMenuItems();
     }
-    ImGui::SeparatorText("Cameras");
-    for (std::size_t i = 0; i < scenario_->cameras.size() && i < cards_.size(); ++i)
-        if (ImGui::MenuItem(scenario_->cameras[i].title.c_str(), nullptr, &cards_[i].open) && cards_[i].open)
-            focusOnce_.insert(cameraWindowName(scenario_->cameras[i])); // reopened: shown on top
-    ImGui::MenuItem("Course map", nullptr, &mapOpen_);
-    ImGui::SeparatorText("Tools");
-    ImGui::MenuItem("Scene settings", nullptr, &sceneOpen_);
-    ImGui::MenuItem("Display", nullptr, &displayOpen_);
-    ImGui::MenuItem("TF frames", nullptr, &tfOpen_);
-    if (composition_)
-        composition_->drawToolMenuItems();
 }
 
 void App::drawLayoutMenu() {
+    if (workspace_ == Workspace::Map) { // the Map workspace has one arrangement
+        if (ImGui::MenuItem("Reset map layout"))
+            pendingMapLayout_ = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Map objects on the left, the inspector on the right, the pool view between");
+        ImGui::MenuItem("Lock layout", nullptr, &layoutLocked_);
+        return;
+    }
     ImGui::SeparatorText("Built-in");
     for (const auto &preset : layoutPresets()) {
         if (ImGui::MenuItem(preset.label.c_str(), preset.shortcut.c_str()))
@@ -2434,8 +2696,13 @@ void App::drawLayoutMenu() {
 // and the pose-source pill.
 void App::drawCommandBar() {
     const float height = ui(52), padding = ui(9);
+    // Editing the map: the bar takes on the accent colour (half way, so Enable keeps its contrast).
+    const bool editingMap = scenario_ && workspace_ == Workspace::Map;
+    const auto &bar = palette().bar, &accent = palette().active;
+    const ImVec4 editBar(bar.x + (accent.x - bar.x) * .45f, bar.y + (accent.y - bar.y) * .45f,
+                         bar.z + (accent.z - bar.z) * .45f, 1);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, padding));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, palette().bar);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, editingMap ? editBar : bar);
     const bool open = ImGui::BeginViewportSideBar("##command_bar", ImGui::GetMainViewport(), ImGuiDir_Up, height,
                                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
                                                       ImGuiWindowFlags_NoScrollWithMouse);
@@ -2448,6 +2715,15 @@ void App::drawCommandBar() {
         std::transform(headerSubtitle.begin(), headerSubtitle.end(), headerSubtitle.begin(),
                        [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
         headerSubtitle = lookup(config_, {"branding", "subtitle"}).as<std::string>(headerSubtitle);
+        if (editingMap) {
+            headerSubtitle = "EDITING PRIOR MAP  \u00b7  " +
+                             (priorMap_->loaded() ? priorMap_->file().filename().string() : std::string("no file"));
+            if (priorMap_->dirty())
+                headerSubtitle += "  \u00b7  unsaved";
+            if (mapPausedSim_)
+                headerSubtitle += "  \u00b7  simulator paused";
+            ImGui::PushStyleColor(ImGuiCol_Text, palette().text);
+        }
         ImGui::PushFont(window_->title);
         ImGui::SetCursorPosY(padding + (inner - ImGui::GetFontSize()) * .5f);
         ImGui::TextUnformatted(headerTitle.c_str());
@@ -2458,16 +2734,26 @@ void App::drawCommandBar() {
         ImGui::SameLine();
         ImGui::SetCursorPosY(padding + (inner - ImGui::GetFontSize()) * .5f);
         ImGui::TextUnformatted(headerSubtitle.c_str());
+        if (editingMap)
+            ImGui::PopStyleColor();
         if (composition_) { // pinned controls: Enable / KILL and the robot's state
             ImGui::SameLine(0, ui(32));
             ImGui::SetCursorPosY(padding);
             composition_->drawPinned();
         }
         const float statusWidth = ImGui::CalcTextSize(status_.c_str()).x + 2 * ImGui::GetStyle().FramePadding.x;
-        if (composition_) { // header items (robot telemetry, recording) sit just left of the status pill
-            ImGui::SameLine();
+        const float spacing = ImGui::GetStyle().ItemSpacing.x, edit = editMapButtonWidth();
+        if (composition_) { // header items (robot telemetry, recording) sit just left of Edit map and the status
+            ImGui::SetCursorPosY(padding + (inner - ImGui::GetFrameHeight()) * .5f); // a fresh line (no SameLine)
+            composition_->drawHeader(W - 16 - statusWidth - spacing - (edit > 0 ? edit + spacing : 0));
+        }
+        if (edit > 0) {
+            ImGui::SameLine(W - 16 - statusWidth - spacing - edit);
             ImGui::SetCursorPosY(padding + (inner - ImGui::GetFrameHeight()) * .5f);
-            composition_->drawHeader(W - 16 - statusWidth - ImGui::GetStyle().ItemSpacing.x);
+            if (editingMap)
+                drawMapButtons();
+            else
+                drawEditMapButton();
         }
         ImGui::SameLine(W - 16 - statusWidth);
         ImGui::SetCursorPosY(padding + (inner - ImGui::GetFrameHeight()) * .5f);
@@ -2512,7 +2798,10 @@ void App::drawPoolView(double time, float dt) {
     ImGui::BeginChild("toolbar", {width, toolbarHeight_}, ImGuiChildFlags_AlwaysUseWindowPadding,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     int oldMode = mode_;
-    drawToolbar(width, oldMode);
+    if (workspace_ == Workspace::Map)
+        drawMapToolbar(width);
+    else
+        drawToolbar(width, oldMode);
     toolbarHeight_ =
         std::max(ImGui::GetFrameHeight() + ui(14), ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y + ui(7));
     ImGui::EndChild();
@@ -2540,9 +2829,35 @@ void App::drawPoolView(double time, float dt) {
     // sampled at one time for both poses, see RosSide::truthFromEstimate).
     if (!gizmoOnEstimate_ && haveEstimate_)
         panelView.displayFromCommand = body_ * glm::inverse(estimateBody_);
-    const bool dragging = composition_ && mode_ == 0 && composition_->input(panelView);
+    const bool operating = workspace_ == Workspace::Operate;
+    const bool dragging = operating && composition_ && mode_ == 0 && composition_->input(panelView);
+    viewPos_ = position;
+    viewSize_ = {width, viewHeight};
+    if (planActive() && !planFitted_)
+        fitPlan(); // the first 2D view shows the whole pool
+    // The prior map editor: its picks, handles and drags come before the camera's (last frame's view).
+    const bool editing = mode_ == 0 && priorMap_->active();
+    PriorMapEditor::View editorView{viewportView_.projection * viewportView_.view,
+                                    {position.x, position.y},
+                                    {width, viewHeight},
+                                    hovered && !dragging,
+                                    planActive(),
+                                    priorMapPointer_};
+    const bool editorInput = editing && !dragging && priorMap_->input(editorView);
+    if (editing)
+        priorMap_->shortcuts(hovered);
+    if (const auto look = priorMap_->takeFocus(); look && mode_ == 0) { // a prop double-clicked: look at it
+        if (planActive()) {
+            planCenter_ = glm::vec2(*look);
+            planHeight_ = std::min(planHeight_, 8.f);
+        } else {
+            target_ = *look;
+            distance_ = std::min(distance_, 6.f);
+            follow_ = false;
+        }
+    }
     bool unused = false;
-    SensorView view = viewFor(width / viewHeight, dt, hovered && !dragging, viewHeight, unused);
+    SensorView view = viewFor(width / viewHeight, dt, hovered && !dragging && !editorInput, viewHeight, unused);
     viewportView_ = view;
     // Keep sensor aspect ratios when a camera view is promoted to the large viewport.
     float iw = width, ih = viewHeight;
@@ -2573,9 +2888,11 @@ void App::drawPoolView(double time, float dt) {
     renderLocalCards(time, scene);
     if (!demoMode_)
         scene.points = ros_->pointSets(); // main view only (cards render without points)
+    if (!viewSettings().tiles && scene.water) // main view only: the cameras see the pool as it is
+        scene.water->tile_size = 0;
     const rendering::View renderView{toEigen(view.view), toEigen(view.projection),
                                      Eigen::Vector3f(view.eye.x, view.eye.y, view.eye.z)};
-    auto appearance = observer_.apply(look_.appearance);
+    auto appearance = viewSettings().apply(look_.appearance);
     // A window too large for the supersampled targets falls back to fewer samples.
     GLint maximumTexture = 0;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximumTexture);
@@ -2590,8 +2907,13 @@ void App::drawPoolView(double time, float dt) {
     }
     lastFrame_ = frame;
     haveFrame_ = true;
+    priorMapPointer_.reset();
+    if (editing && hovered) {
+        const auto mouse = io.MousePos;
+        priorMapPointer_ = depthPoint(view, frame, {mouse.x - position.x, mouse.y - position.y}, {width, viewHeight});
+    }
     if (mode_ == 0 && hovered && !dragging && !io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F))
-        focusAtCursor(view, frame, position, width, viewHeight);
+        planActive() ? fitPlan() : focusAtCursor(view, frame, position, width, viewHeight);
     const ImVec2 imagePos(position.x + (width - iw) / 2, position.y + (viewHeight - ih) / 2);
     ImGui::SetCursorScreenPos(imagePos);
     // A promoted sensor view shows the bridge's depth image instead while its card is on DEPTH.
@@ -2622,11 +2944,15 @@ void App::drawPoolView(double time, float dt) {
     }
     if (showThrust_ && !demoMode_)
         drawThrust(scenario_->thrusterMounts, ros_->thrust, body_, thrustScale_, vp, rect);
-    if (composition_ && mode_ == 0) {
+    if (operating && composition_ && mode_ == 0) {
         panelView.projection = view.projection;
         panelView.view = view.view;
         panelView.eye = view.eye;
         composition_->drawOverlays(panelView);
+    }
+    if (editing) {
+        editorView.viewProjection = vp;
+        priorMap_->drawOverlay(editorView, window_->small);
     }
     auto *d = ImGui::GetWindowDrawList();
     d->AddRect(position, {position.x + width, position.y + viewHeight}, IM_COL32(38, 62, 72, 255), 5, 0, 1);
@@ -2636,6 +2962,7 @@ void App::drawPoolView(double time, float dt) {
         window_->small, window_->small->FontSize, {position.x + ui(25), position.y + ui(22)}, color(white),
         (scenario_->poolId + " / " + fixed(scenario_->poolLength, 1) + " x " + fixed(scenario_->poolWidth, 2) + " m")
             .c_str());
+    drawPoolSwitchStatus(position);
     if (showProfile_ && !profiler_.recent().empty()) {
         if (time - profileCachedAt_ > .5) {
             profileCachedAt_ = time;
@@ -2669,7 +2996,7 @@ void App::drawPoolView(double time, float dt) {
         d->AddText(window_->small, window_->small->FontSize * 14 / 12,
                    {position.x + width - ui(298), position.y + ui(21)}, color(cyan), readout.c_str());
     }
-    if (labels_ && mode_ < 2 && presetFor(focusName_).labels) {
+    if (labels_ && mode_ < 2 && presetFor(focusName_).labels && !priorMap_->hidesCourse()) {
         for (const auto &key : focusNames_) {
             const auto found = scenario_->landmarks.find(key);
             if (found == scenario_->landmarks.end())
@@ -2690,8 +3017,9 @@ void App::drawPoolView(double time, float dt) {
         }
     }
     const char *controls =
-        mode_ == 1 ? "CLICK  mouse look    WASD  move    SPACE / SHIFT  up / down    CTRL  fast    ESC  release"
-                   : "LEFT DRAG  orbit   RIGHT / MIDDLE DRAG  pan   SCROLL  zoom   F  focus cursor";
+        planActive() ? "DRAG FLOOR / RIGHT / MIDDLE DRAG  pan   SCROLL  zoom   F  fit pool   DOUBLE-CLICK  centre a prop"
+        : mode_ == 1 ? "CLICK  mouse look    WASD  move    SPACE / SHIFT  up / down    CTRL  fast    ESC  release"
+                     : "LEFT DRAG  orbit   RIGHT / MIDDLE DRAG  pan   SCROLL  zoom   F  focus cursor";
     d->AddRectFilled({position.x, position.y + viewHeight - ui(30)}, {position.x + width, position.y + viewHeight},
                      IM_COL32(6, 18, 26, 205));
     d->AddText(window_->small, window_->small->FontSize, {position.x + ui(14), position.y + viewHeight - ui(21)},
@@ -2904,7 +3232,8 @@ void App::drawHelpWindow() {
                                "Esc release"},
                {"Gizmo", "drag an arrow to move, a ring to rotate; Esc during a drag restores the start"}});
         ImGui::SeparatorText("Shortcuts");
-        table("shortcuts", {{"Ctrl+Space", "maximize the pool view / restore the layout"},
+        table("shortcuts", {{"Ctrl+M", "edit the prior map / done"},
+                            {"Ctrl+Space", "maximize the pool view / restore the layout"},
                             {"Ctrl+Shift+1 / 2 / 3", "Standard / Wide view / Camera wall layout"},
                             {"Ctrl+[ / Ctrl+]", "snap the left / right panels shut, or bring them back"},
                             {"F1", "this window"},
@@ -2929,10 +3258,13 @@ void App::handleShortcuts() {
         return;
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Space, ImGuiInputFlags_RouteGlobal))
         toggleMaximized();
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_M, ImGuiInputFlags_RouteGlobal))
+        setWorkspace(workspace_ == Workspace::Map ? Workspace::Operate : Workspace::Map);
     const auto &presets = layoutPresets();
     for (std::size_t i = 0; i < presets.size() && i < 9; ++i)
         if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey(ImGuiKey_1 + int(i)),
-                            ImGuiInputFlags_RouteGlobal))
+                            ImGuiInputFlags_RouteGlobal) &&
+            workspace_ == Workspace::Operate)
             pendingPreset_ = presets[i].id;
     if (ImGui::Shortcut(ImGuiKey_F1, ImGuiInputFlags_RouteGlobal))
         helpOpen_ = !helpOpen_;
@@ -2946,22 +3278,28 @@ void App::handleShortcuts() {
 
 std::vector<App::WindowEntry> App::windowEntries() {
     std::vector<WindowEntry> entries;
+    if (workspace_ == Workspace::Map) {
+        entries.push_back({"map_objects", kMapObjects, "Map objects", &priorMap_->objectsOpen()});
+        entries.push_back({"map_inspector", kMapInspector, "Inspector", &priorMap_->inspectorOpen()});
+        entries.push_back({"help", kHelp, "Controls & shortcuts", &helpOpen_, MenuSection::None});
+        return entries;
+    }
     if (composition_) {
         const auto flags = composition_->visibility();
         const auto windows = composition_->panelWindows(); // same order
         for (std::size_t i = 0; i < flags.size() && i < windows.size(); ++i)
             entries.push_back({flags[i].first, windows[i].name, windows[i].name.substr(0, windows[i].name.find("###")),
-                               flags[i].second});
+                               flags[i].second, MenuSection::Panels});
     }
     if (scenario_)
         for (std::size_t i = 0; i < scenario_->cameras.size() && i < cards_.size(); ++i)
             entries.push_back({"camera." + scenario_->cameras[i].id, cameraWindowName(scenario_->cameras[i]),
-                               scenario_->cameras[i].title, &cards_[i].open});
-    entries.push_back({"map", kCourseMap, "Course map", &mapOpen_});
+                               scenario_->cameras[i].title, &cards_[i].open, MenuSection::Cameras});
+    entries.push_back({"map", kCourseMap, "Course map", &mapOpen_, MenuSection::Cameras});
     entries.push_back({"scene_settings", kSceneSettings, "Scene settings", &sceneOpen_});
     entries.push_back({"display", kDisplay, "Display", &displayOpen_});
     entries.push_back({"tf", kTfFrames, "TF frames", &tfOpen_});
-    entries.push_back({"help", kHelp, "Controls & shortcuts", &helpOpen_});
+    entries.push_back({"help", kHelp, "Controls & shortcuts", &helpOpen_, MenuSection::None});
     return entries;
 }
 
@@ -3220,6 +3558,12 @@ void App::persistLayout(bool force) {
     io.WantSaveIniSettings = false;
     std::error_code error;
     fs::create_directories(sessionIni_.parent_path(), error);
+    if (workspace_ == Workspace::Map) { // the session layout is Operate's; the Map one has its own file
+        std::ofstream(sessionIni_) << operateIni_;
+        if (!mapIniFile_.empty())
+            std::ofstream(mapIniFile_) << layoutSnapshot();
+        return;
+    }
     std::ofstream out(sessionIni_);
     out << layoutSnapshot();
 }
@@ -3364,7 +3708,14 @@ void App::saveCameraImages(const fs::path &screenshot) {
 int App::loop() {
     int frames = 0;
     auto previous = start_;
-    while (!window_->closing() && (demoMode_ || rclcpp::ok())) {
+    while (true) {
+        // Closing with unsaved prior map edits asks first (drawUnsavedMapPrompt).
+        if (window_->closing() && priorMap_->dirty() && !closeConfirmed_ && opt_.frames == 0) {
+            window_->cancelClose();
+            closePrompt_ = true;
+        }
+        if (window_->closing() || !(demoMode_ || rclcpp::ok()))
+            break;
         const auto frameStart = Clock::now();
         const double t = std::chrono::duration<double>(frameStart - start_).count();
         const float dt = float(std::min(std::chrono::duration<double>(frameStart - previous).count(), .1));
@@ -3373,6 +3724,7 @@ int App::loop() {
             PhaseTimer timer{profiler_, Phase::Spin, false};
             ros_->spin();
         }
+        updatePoolSwitch();
         if (!pendingScenario_.empty()) {
             const auto json = std::move(pendingScenario_);
             pendingScenario_.clear();
@@ -3470,5 +3822,408 @@ int App::loop() {
 int run(const Options &options, int argc, char **argv) {
     App app(options, argc, argv);
     return app.loop();
+}
+} // namespace nereus::ros_viewer::host
+
+namespace nereus::ros_viewer::host {
+// ------------------------------------------------------------------------------------------- pool switch
+
+void App::drawPoolMenu() {
+    auto &s = poolSwitch_;
+    if (ImGui::IsWindowAppearing() || s.packs.empty())
+        s.packs = scenarioPacks();
+    const bool supervised = !s.fromTopic || !s.supervisorState.empty();
+    const bool busy = !s.target.empty();
+    if (s.packs.empty())
+        ImGui::TextDisabled("No scenario packs in %s", (packContent() / "scenarios").c_str());
+    for (const auto &pack : s.packs) {
+        // two scenarios in one pool: tell them apart by their folder
+        const auto same = std::count_if(s.packs.begin(), s.packs.end(),
+                                        [&](const ScenarioPack &p) { return p.poolId == pack.poolId; });
+        const std::string label =
+            same > 1 ? pack.poolLabel + " (" + pack.folder.filename().string() + ")" : pack.poolLabel;
+        const bool current = scenario_ && pack.poolId == scenario_->poolId;
+        ImGui::PushID(pack.folder.c_str());
+        if (ImGui::MenuItem(label.c_str(), nullptr, current, supervised && !busy && !current))
+            switchPool(pack);
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s\n%s\n%s", pack.poolDescription.c_str(), pack.folder.c_str(),
+                              !s.fromTopic ? "Reloads this view in that pool (the robot is not affected)"
+                              : supervised ? "Restarts the simulator in that pool: the run starts over, the robot "
+                                             "stack keeps running"
+                                           : "Start the simulator with sim.launch.py to switch its pool");
+        ImGui::PopID();
+    }
+    if (busy)
+        ImGui::TextDisabled("Switching to %s ...", s.targetLabel.c_str());
+    else if (!supervised)
+        ImGui::TextDisabled("The simulator was not started by sim.launch.py:\nrestart it with pool:= to switch");
+}
+
+void App::switchPool(const ScenarioPack &pack) {
+    auto &s = poolSwitch_;
+    if (!s.target.empty() || s.worker.joinable())
+        return;
+    s.target = pack.poolId;
+    s.targetLabel = pack.poolLabel;
+    s.messageError = false;
+    s.messageUntil = {};
+    if (s.fromTopic) { // the supervisor restarts the simulator; its new scenario arrives on the topic
+        s.message = "Restarting the simulator in " + pack.poolLabel + " ...";
+        ros_->requestScenario(s.topicBase + "/load_scenario", pack.folder.string());
+        return;
+    }
+    s.message = "Loading " + pack.poolLabel + " ...";
+    s.done = false;
+    s.worker = std::thread([this, folder = pack.folder] {
+        std::string resolved, error;
+        try {
+            resolved = resolveScenarioPack(folder);
+        } catch (const std::exception &e) {
+            error = e.what();
+        }
+        std::lock_guard<std::mutex> lock(poolSwitch_.mutex);
+        poolSwitch_.resolved = std::move(resolved);
+        poolSwitch_.error = std::move(error);
+        poolSwitch_.done = true;
+    });
+}
+
+// Each frame: a locally resolved pack goes to the loader; a switch ends when the new pool is shown.
+void App::updatePoolSwitch() {
+    auto &s = poolSwitch_;
+    if (s.worker.joinable()) {
+        bool done;
+        {
+            std::lock_guard<std::mutex> lock(s.mutex);
+            done = s.done;
+        }
+        if (done) {
+            s.worker.join();
+            if (!s.error.empty()) {
+                s.message = "Pool not switched: " + s.error;
+                s.messageError = true;
+                s.messageUntil = Clock::now() + std::chrono::seconds(12);
+                s.target.clear();
+            } else
+                pendingScenario_ = std::move(s.resolved);
+            s.resolved.clear();
+            s.error.clear();
+        }
+    }
+    if (!s.target.empty() && scenario_ && scenario_->poolId == s.target) {
+        if (!s.messageError || Clock::now() >= s.messageUntil) {
+            s.message = "Pool: " + s.targetLabel;
+            s.messageError = false;
+            s.messageUntil = Clock::now() + std::chrono::seconds(4);
+        }
+        s.target.clear();
+    }
+}
+
+void App::drawPoolSwitchStatus(ImVec2 position) {
+    const auto &s = poolSwitch_;
+    if (s.message.empty() || (s.target.empty() && Clock::now() >= s.messageUntil))
+        return;
+    auto *d = ImGui::GetWindowDrawList();
+    const ImVec2 size = window_->small->CalcTextSizeA(window_->small->FontSize, 1e9f, 0, s.message.c_str());
+    const ImVec2 at(position.x + ui(14), position.y + ui(50));
+    d->AddRectFilled(at, {at.x + size.x + ui(16), at.y + size.y + ui(10)},
+                     ImGui::GetColorU32(s.messageError ? palette().dangerPressed : palette().active), ui(4));
+    d->AddText(window_->small, window_->small->FontSize, {at.x + ui(8), at.y + ui(5)},
+               ImGui::GetColorU32(s.messageError ? palette().dangerText : palette().activeText), s.message.c_str());
+}
+} // namespace nereus::ros_viewer::host
+
+namespace nereus::ros_viewer::host {
+// ------------------------------------------------------------------------------------------- workspaces
+
+// Map editing is a mode stepped into from Operate: "Edit map" in the command bar; while editing, the command bar
+// takes the accent colour, says so, and holds Save and Done. Each keeps its own window layout; Enable / KILL stay in the command
+// bar. The map editor: its two windows, the map tools and a 2D view.
+float App::editMapButtonWidth() const {
+    if (!scenario_)
+        return 0;
+    if (workspace_ == Workspace::Map)
+        return buttonWidth("Save") + buttonWidth("Done") + ImGui::GetStyle().ItemSpacing.x;
+    return buttonWidth(priorMap_->dirty() ? "Edit map*" : "Edit map");
+}
+
+void App::drawMapButtons() {
+    const float y = ImGui::GetCursorPosY();
+    ImGui::BeginDisabled(!priorMap_->loaded() || !priorMap_->dirty());
+    if (ImGui::Button("Save###bar_save"))
+        priorMap_->save();
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Write the prior map (Ctrl+S)");
+    ImGui::SameLine();
+    ImGui::SetCursorPosY(y);
+    if (ImGui::Button("Done###bar_done"))
+        setWorkspace(Workspace::Operate);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip(priorMap_->dirty() ? "Back to operating; unsaved edits stay here until you save or quit "
+                                               "(Ctrl+M)"
+                                             : "Back to operating the robot (Ctrl+M)");
+}
+
+void App::drawEditMapButton() {
+    if (ImGui::Button(priorMap_->dirty() ? "Edit map*###edit_map" : "Edit map###edit_map"))
+        setWorkspace(Workspace::Map);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip(priorMap_->dirty() ? "Edit the robot's prior map: it has unsaved changes  (Ctrl+M)"
+                                             : "Edit the robot's prior map (riptide_mapping config.yaml)  (Ctrl+M)");
+}
+
+void App::setWorkspace(Workspace next) {
+    if (next == workspace_ || !scenario_)
+        return;
+    const auto snapshot = layoutSnapshot(); // the layout from before when maximized
+    maximized_ = false;
+    resetSides();
+    if (next == Workspace::Map) {
+        operateIni_ = snapshot;
+        // The map is edited against a still scene: pause a running simulator, stop following the robot.
+        followBeforeMap_ = follow_;
+        follow_ = false;
+        mapPausedSim_ = false;
+        if (const auto sim = simulation()) {
+            const auto state = sim->state();
+            if (state.connected && !state.pending && state.rate > 0) {
+                sim->setPaused(true);
+                mapPausedSim_ = true;
+                poolSwitch_.message = "Simulator paused while the map is edited (Operate resumes it)";
+                poolSwitch_.messageError = false;
+                poolSwitch_.messageUntil = Clock::now() + std::chrono::seconds(5);
+            }
+        }
+        workspace_ = next;
+        if (mode_ != 0)
+            setViewMode(0);
+        if (!mapIni_.empty())
+            pendingIni_ = mapIni_;
+        else
+            pendingMapLayout_ = true;
+    } else {
+        mapIni_ = snapshot;
+        workspace_ = next;
+        pendingIni_ = operateIni_;
+        follow_ = followBeforeMap_;
+        if (mapPausedSim_)
+            if (const auto sim = simulation())
+                sim->setPaused(false);
+        mapPausedSim_ = false;
+        if (persist_ && !mapIniFile_.empty()) {
+            std::error_code error;
+            fs::create_directories(mapIniFile_.parent_path(), error);
+            std::ofstream(mapIniFile_) << mapIni_;
+        }
+    }
+    priorMap_->setActive(workspace_ == Workspace::Map);
+}
+
+std::shared_ptr<panels::Simulation> App::simulation() const {
+    if (!composition_)
+        return nullptr;
+    for (const auto &[name, provider] : composition_->providers())
+        if (provider && provider->kind() == panels::Kind::Simulation)
+            return std::dynamic_pointer_cast<panels::Simulation>(provider);
+    return nullptr;
+}
+
+// The Map workspace's arrangement: the object tree left, the inspector right, the pool view between.
+void App::applyMapLayout() {
+    LayoutPreset preset;
+    preset.id = "map";
+    preset.label = "Map";
+    preset.left = .36f; // the object table with its pose columns
+    preset.right = .25f;
+    priorMap_->objectsOpen() = priorMap_->inspectorOpen() = true;
+    resetSides();
+    maximized_ = false;
+    buildLayout(dockspace_, ImGui::GetMainViewport()->WorkSize, preset, kPoolView,
+                {{kMapObjects, Dock::Left, false, true}, {kMapInspector, Dock::Right, false, true}});
+    layoutReady_ = true;
+}
+
+// The pool view toolbar in the Map workspace: 3D / 2D, the map tools, the pool.
+void App::drawMapToolbar(float width) {
+    (void)width;
+    for (const bool plan : {false, true}) {
+        if (plan)
+            ImGui::SameLine(0, 0);
+        pushActiveColors(planView_ == plan);
+        if (ImGui::Button(plan ? "2D###plan" : "3D###perspective") && planView_ != plan) {
+            planView_ = plan;
+            if (plan && !planFitted_)
+                fitPlan();
+        }
+        popActiveColors();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(plan ? "Straight down at the pool: drag props across it, height stays put"
+                                   : "The 3D view: orbit, and move props in height too");
+    }
+    if (planView_) {
+        ImGui::SameLine();
+        if (ImGui::Button("Fit"))
+            fitPlan();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("The whole pool (F)");
+    }
+    sameLineIfFits(buttonWidth("Display"));
+    if (ImGui::Button("Display"))
+        ImGui::OpenPopup("map_display");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("What the pool view draws, and its lighting (map editing has its own)");
+    if (ImGui::BeginPopup("map_display")) {
+        ImGui::Checkbox("Water", &mapObserver_.water);
+        ImGui::Checkbox("Pool walls & deck", &mapObserver_.walls);
+        ImGui::Checkbox("Pool floor", &mapObserver_.floor);
+        ImGui::Checkbox("Pool tiles", &mapObserver_.tiles);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("The tile grout on the walls and floor; the lane lines stay.");
+        if (!model_->pack().equipmentInstances().empty())
+            ImGui::Checkbox("AprilTag board", &look_.equipment);
+        ImGui::Checkbox("Surface reflections", &mapObserver_.reflections);
+        drawMapLighting();
+        ImGui::EndPopup();
+    }
+    sameLineIfFits(buttonWidth("Place origin"));
+    priorMap_->drawViewTools();
+    if (poolSwitch_.packs.empty())
+        poolSwitch_.packs = scenarioPacks();
+    std::string current = scenario_->poolId;
+    for (const auto &pack : poolSwitch_.packs)
+        if (pack.poolId == scenario_->poolId)
+            current = pack.poolLabel;
+    const float poolWidth = std::min(ui(260), ImGui::CalcTextSize(current.c_str()).x + ui(40));
+    sameLineIfFits(poolWidth);
+    ImGui::SetNextItemWidth(poolWidth);
+    if (ImGui::BeginCombo("##pool", current.c_str(), ImGuiComboFlags_HeightLarge)) {
+        drawPoolMenu();
+        ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("The pool (View > Pool)");
+}
+
+// Map editing's lighting (its own; Operate's look is unchanged). Sterile by default: even light, no shadows.
+void App::drawMapLighting() {
+    auto &s = mapObserver_;
+    ImGui::SeparatorText("Lighting");
+    ImGui::SetNextItemWidth(ui(160));
+    ImGui::Combo("Lighting", &s.lighting, "Scene lighting\0Indoor\0Outdoor\0Sterile\0");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Sterile: even light with no shadows, caustics or glare (the default here)");
+    ImGui::BeginDisabled(s.lighting == 3);
+    ImGui::Checkbox("Shadows", &s.shadows);
+    ImGui::SetNextItemWidth(ui(160));
+    ImGui::SliderFloat("Brightness", &s.brightness, 0.f, 4.f, "%.2fx");
+    ImGui::EndDisabled();
+    ImGui::SetNextItemWidth(ui(160));
+    ImGui::SliderFloat("Exposure", &s.exposure, .4f, 2.f, "%.2fx");
+    ImGui::SetNextItemWidth(ui(160));
+    ImGui::SliderFloat("Ambient", &s.ambient, 0.f, 3.f, "%.2fx");
+    if (ImGui::Button("Reset lighting")) {
+        s.resetLighting();
+        s.lighting = 3;
+        s.shadows = false;
+    }
+}
+
+// Quitting with unsaved prior map edits asks first.
+void App::drawUnsavedMapPrompt() {
+    if (closePrompt_) {
+        closePrompt_ = false;
+        ImGui::OpenPopup("Unsaved prior map");
+    }
+    if (!ImGui::BeginPopupModal("Unsaved prior map", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+    ImGui::Text("The prior map has unsaved changes.");
+    if (ImGui::Button("Save and quit")) {
+        priorMap_->save();
+        if (!priorMap_->dirty()) {
+            closeConfirmed_ = true;
+            window_->requestClose();
+        }
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Quit without saving")) {
+        closeConfirmed_ = true;
+        window_->requestClose();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel"))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+// ------------------------------------------------------------------------------------------- the 2D view
+
+namespace {
+// The pool's axes in world x / y: screen right is the pool's +X, screen up its +Y.
+std::pair<glm::vec2, glm::vec2> planAxes(const Scenario &s) {
+    glm::vec2 x(s.poolToWorld[0]), y(s.poolToWorld[1]);
+    x = glm::length(x) > 1e-6f ? glm::normalize(x) : glm::vec2(1, 0);
+    y = glm::length(y) > 1e-6f ? glm::normalize(y) : glm::vec2(0, 1);
+    return {x, y};
+}
+} // namespace
+
+void App::fitPlan() {
+    if (!scenario_)
+        return;
+    const auto &s = *scenario_;
+    const auto [x, y] = planAxes(s);
+    glm::vec2 low(1e9f), high(-1e9f); // along the screen axes
+    for (const glm::vec2 corner : {glm::vec2(0, 0), glm::vec2(s.poolLength, 0), glm::vec2(0, s.poolWidth),
+                                   glm::vec2(s.poolLength, s.poolWidth)}) {
+        const glm::vec2 world(s.poolToWorld * glm::vec4(corner, 0, 1));
+        const glm::vec2 along(glm::dot(world, x), glm::dot(world, y));
+        low = glm::min(low, along);
+        high = glm::max(high, along);
+    }
+    const glm::vec2 middle = (low + high) * .5f;
+    planCenter_ = x * middle.x + y * middle.y;
+    const float aspect = viewSize_.x / std::max(1.f, viewSize_.y);
+    planHeight_ = std::max(high.y - low.y, (high.x - low.x) / aspect) * 1.08f;
+    planFitted_ = true;
+}
+
+// Drag on the floor (left, once the prop editor has passed on it), right or middle drag: pan. Scroll: zoom
+// about the pointer.
+void App::handlePlanInput(bool hovered) {
+    auto &io = ImGui::GetIO();
+    const auto [x, y] = planAxes(*scenario_);
+    const float metresPerPixel = planHeight_ / std::max(1.f, viewSize_.y);
+    if (planDragButton_ >= 0 && !ImGui::IsMouseDown(planDragButton_))
+        planDragButton_ = -1;
+    if (hovered && planDragButton_ < 0)
+        for (int button : {ImGuiMouseButton_Left, ImGuiMouseButton_Right, ImGuiMouseButton_Middle})
+            if (ImGui::IsMouseClicked(button))
+                planDragButton_ = button;
+    if (planDragButton_ >= 0 && (io.MouseDelta.x != 0 || io.MouseDelta.y != 0)) {
+        planCenter_ += (-x * io.MouseDelta.x + y * io.MouseDelta.y) * metresPerPixel;
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+    }
+    if (hovered && io.MouseWheel != 0) {
+        const glm::vec2 offset(io.MousePos.x - (viewPos_.x + viewSize_.x / 2),
+                               io.MousePos.y - (viewPos_.y + viewSize_.y / 2));
+        const glm::vec2 under = planCenter_ + (x * offset.x - y * offset.y) * metresPerPixel;
+        planHeight_ = std::clamp(planHeight_ * std::exp(-io.MouseWheel * .15f), 1.f, 300.f);
+        const float next = planHeight_ / std::max(1.f, viewSize_.y);
+        planCenter_ = under - (x * offset.x - y * offset.y) * next; // the point under the pointer stays put
+    }
+}
+
+SensorView App::planCamera(float aspect) const {
+    const auto [x, y] = planAxes(*scenario_);
+    const float above = scenario_->waterLevel + scenario_->deckHeight + 6; // over the deck and equipment
+    const glm::vec3 eye(planCenter_, above);
+    const float h = planHeight_ * .5f, w = h * aspect;
+    return {eye, glm::lookAt(eye, eye - glm::vec3(0, 0, 1), glm::vec3(y, 0)),
+            glm::ortho(-w, w, -h, h, .05f, 6 + scenario_->deckHeight + scenario_->poolDepth + 20)};
 }
 } // namespace nereus::ros_viewer::host

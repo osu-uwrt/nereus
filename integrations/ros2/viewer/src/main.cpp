@@ -21,8 +21,11 @@ void usage() {
            "  --view NAME            initial view: orbit, free, or a camera id\n"
            "  --inject-f X Y         test aid: hover window position (X,Y) and press F halfway through a capture run\n"
            "  --orbit YAW PITCH DIST initial orbit angles (radians) and distance (metres) after the focus\n"
-           "  --open NAME            open scene-settings, map, tf, display (pool-viewer), help or depth (camera "
-           "cards) at start (repeatable)\n"
+           "  --open NAME            open scene-settings, map, tf, display (pool-viewer), help or depth (camera cards)\n"
+           "                         at start (repeatable)\n"
+           "  --workspace NAME       start in operate (default) or map (the prior map editor; Ctrl+M switches)\n"
+           "  --prior-map FILE       the riptide_mapping config.yaml the prior map editor opens (default: host config\n"
+           "                         prior_map.config)\n"
            "  --layout NAME          start layout: standard, wide, cameras, a saved layout's name or an .ini file\n"
            "                         (default: the last session's layout, else the host config's `layout`)\n"
            "  --theme NAME           abyss (default), midnight, daylight, contrast, ocean, arctic, ember, sonar, "
@@ -99,6 +102,13 @@ int main(int argc, char **argv) {
             options.open.push_back(value());
         else if (arg == "--layout")
             options.layout = value();
+        else if (arg == "--prior-map")
+            options.priorMap = value();
+        else if (arg == "--workspace") {
+            options.workspace = value();
+            if (options.workspace != "operate" && options.workspace != "map")
+                throw std::runtime_error("--workspace takes operate or map");
+        }
         else if (arg == "--theme")
             options.theme = value();
         else if (arg == "--ui-scale")

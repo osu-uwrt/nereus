@@ -36,6 +36,7 @@ class Window {
     void toggleMaximized();
     bool maximized() const;
     void requestClose();
+    void cancelClose(); // a close the application refuses (asks first)
     // The window's icon (dock, task switcher) from PNG files of several sizes; missing files are skipped.
     void setIcon(const std::vector<std::filesystem::path> &pngs);
     ImFont *normal = nullptr, *small = nullptr, *title = nullptr, *number = nullptr;

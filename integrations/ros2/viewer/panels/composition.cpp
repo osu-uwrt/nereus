@@ -44,6 +44,27 @@ std::string expand(std::string value, const Context &ctx) {
     return value;
 }
 namespace {
+// Items laid out left to right from the cursor, each placed explicitly: a SameLine before an item that then draws
+// nothing would leave the line open and shift whatever the caller draws next onto it.
+template <typename Draw> void row(Draw &&draw, std::size_t count) {
+    const ImVec2 start = ImGui::GetCursorPos();
+    float x = start.x;
+    bool open = false; // the cursor was placed with no item after it
+    for (std::size_t i = 0; i < count; ++i) {
+        ImGui::SetCursorPos({x, start.y});
+        open = true;
+        const auto before = ImGui::GetCursorPos();
+        draw(i);
+        const auto after = ImGui::GetCursorPos();
+        if (after.x != before.x || after.y != before.y) { // drew something
+            x = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x + ImGui::GetScrollX() +
+                ImGui::GetStyle().ItemSpacing.x;
+            open = false;
+        }
+    }
+    if (open)
+        ImGui::Dummy({0, 0}); // close the placement (ImGui checks a SetCursorPos is followed by an item)
+}
 void validateSubstitutions(const YAML::Node &node, const Context &ctx) {
     if (node.IsScalar())
         expand(node.as<std::string>(), ctx);
@@ -316,20 +337,20 @@ void Composition::drawHeader(float right) {
     if (headerInstances.empty())
         return;
     const float after = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x + ImGui::GetStyle().ItemSpacing.x;
-    ImGui::SameLine(std::max(after, right - headerWidth));
+    // The caller sets the line's y (not SameLine: the items' own SameLine would then return to the line of the
+    // item before, e.g. text sitting lower than a button); this sets x only.
+    ImGui::SetCursorPosX(std::max(after, right - headerWidth));
     ImGui::BeginGroup();
-    bool drawn = false; // items may draw nothing (e.g. no recording running); only space out drawn ones
-    for (auto &item : headerInstances)
-        if (item.visible) {
-            if (drawn)
-                ImGui::SameLine();
-            const auto before = ImGui::GetCursorPos();
+    row( // items may draw nothing (e.g. no recording running); only drawn ones take space
+        [&](std::size_t i) {
+            auto &item = headerInstances[i];
+            if (!item.visible)
+                return;
             ImGui::PushID(item.id.c_str());
             item.panel->header();
             ImGui::PopID();
-            const auto cursor = ImGui::GetCursorPos();
-            drawn = drawn || cursor.x != before.x || cursor.y != before.y;
-        }
+        },
+        headerInstances.size());
     ImGui::EndGroup();
     headerWidth = ImGui::GetItemRectSize().x;
 }
@@ -388,20 +409,18 @@ YAML::Node defaultToolbar() {
                       "{type: focus}, {type: follow}, {type: labels}, {type: tf}, "
                       "{type: mpc_path}, {type: thrust}, {type: preview_task}]");
 }
+
 void Composition::drawPinned() {
-    bool drawn = false;
-    for (auto &item : panelInstances) {
-        if (drawn)
-            ImGui::SameLine();
-        const auto before = ImGui::GetCursorPos();
-        ImGui::PushID(item.id.c_str());
-        pins::beginScope("panel." + item.id, item.title);
-        item.panel->pinned();
-        pins::endScope();
-        ImGui::PopID();
-        const auto after = ImGui::GetCursorPos();
-        drawn = drawn || after.x != before.x || after.y != before.y;
-    }
+    row(
+        [&](std::size_t i) {
+            auto &item = panelInstances[i];
+            ImGui::PushID(item.id.c_str());
+            pins::beginScope("panel." + item.id, item.title);
+            item.panel->pinned();
+            pins::endScope();
+            ImGui::PopID();
+        },
+        panelInstances.size());
 }
 void Composition::drawPanels() {
     for (auto &item : panelInstances) {
