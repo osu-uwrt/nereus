@@ -11,7 +11,7 @@
 namespace nereus::sensors {
 // Where a sensor sits on the body: offset from the COM and sensor -> body rotation.
 struct Mount {
-    Eigen::Vector3d position_body = Eigen::Vector3d::Zero(); // From COM, metres.
+    Eigen::Vector3d position_body = Eigen::Vector3d::Zero(); // From COM, meters.
     Eigen::Quaterniond sensor_to_body = Eigen::Quaterniond::Identity();
 };
 
@@ -104,7 +104,7 @@ class Ahrs {
     Attitude attitude_;
 };
 
-// Fibre-optic gyro: angular rate projected onto one to three sensor-frame axes.
+// Fiber-optic gyro: angular rate projected onto one to three sensor-frame axes.
 class Fog {
   public:
     using Reading = FogReading;
@@ -122,7 +122,7 @@ class Fog {
 
 // Result of a bottom ray cast: distance along the ray and the bottom's world velocity.
 struct BottomHit {
-    double distance; // Along the unit ray, metres.
+    double distance; // Along the unit ray, meters.
     Eigen::Vector3d velocity_world = Eigen::Vector3d::Zero();
 };
 
@@ -144,7 +144,7 @@ class PoolBottom {
     double boundary_tolerance_{0};
 };
 
-// DVL configuration; returns unavailable outside [minimum_range, maximum_range] metres.
+// DVL configuration; returns unavailable outside [minimum_range, maximum_range] meters.
 struct DvlParameters {
     Mount mount;
     Eigen::Vector3d bottom_axis = -Eigen::Vector3d::UnitZ(); // Unit ray in sensor frame.
@@ -200,7 +200,7 @@ struct ScalarNoiseParameters {
 
 struct ReferenceAltitudeParameters {
     Mount mount;
-    std::optional<Eigen::Vector3d> target_position_body; // COM-local metres; absent uses mount.
+    std::optional<Eigen::Vector3d> target_position_body; // COM-local meters; absent uses mount.
     ScalarNoiseParameters noise;                         // m, m per acquisition, m/sqrt(s).
     std::optional<double> reported_variance;             // m^2, independent of generated noise.
 };

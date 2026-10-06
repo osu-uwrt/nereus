@@ -1,7 +1,7 @@
 # Synthetic datasets
 
-Nereus can render labelled training images straight from the course: no sim, no viewer, no ROS. Images come
-through the robot's own cameras (intrinsics, mount, resolution), are generated per task, and are labelled by a
+Nereus can render labeled training images straight from the course: no sim, no viewer, no ROS. Images come
+through the robot's own cameras (intrinsics, mount, resolution), are generated per task, and are labeled by a
 team's label pack, then exported as YOLO detect, segment or OBB datasets.
 
 ```
@@ -15,7 +15,7 @@ exporter      nereus-dataset export         records + label pack -> YOLO
 
 The label pack is applied **at export**. Renders are team-neutral (every visible part is recorded), so a new
 class, a renamed class or a dropped class is a re-export, not a re-render. The renderer only uses the label pack
-to reject views: it never generates an image with a labelled object farther away than the model's range, or a
+to reject views: it never generates an image with a labeled object farther away than the model's range, or a
 task image without its target in view.
 
 ## Parts (task pack)
@@ -44,7 +44,7 @@ visuals:                            # whole visuals or materials of a mesh
 - **Visual parts**: select visuals by `task` and `asset` (and optionally `prop`, `frame`), then either `part`
   (the whole visual) or `materials` (importer material name -> part; unlisted materials have no part).
   `split: connected` makes each connected piece of a mesh its own instance. `indicator: <region>` records that
-  region's indicator colour (`red` / `green`) on the instance, for labels that depend on it.
+  region's indicator color (`red` / `green`) on the instance, for labels that depend on it.
 - Part names are lower-case `[a-z0-9_]` and scoped by task.
 
 Part-map PNGs are built from the artwork by `tools/generate_part_masks.py` (re-run it after changing a seed or a
@@ -67,7 +67,7 @@ classes:                            # optional per-class export options
   circle: {shape: outer}            # fill holes in the instance mask (default: visible pixels)
 tasks:                              # per task: class <- part patterns (* ? [..] globs)
   torpedo: {fire: [icon_fire], circle: [ring]}
-  slalom:  {slalom: [pole_red]}     # pole_white is never labelled
+  slalom:  {slalom: [pole_red]}     # pole_white is never labeled
   bins:    {magnet: {parts: [magnet_cover], when: {indicator: red}}}   # only while its LEDs are red
 export:
   min_visible_px: 25                # smaller instances (at the output resolution) are dropped
@@ -75,13 +75,13 @@ export:
   min_fragment_px: 25               # smaller pieces are crumbs: removed, never counted as pieces
 ```
 
-- A model is a camera, a class list in id order and `max_range_m`: views with a labelled instance farther than
+- A model is a camera, a class list in id order and `max_range_m`: views with a labeled instance farther than
   that (median depth) are never generated.
 - A class mapped in `tasks` but missing from a model's `classes` is not exported for that model (the dfc model
-  has no `circle`, so the torpedo rings are unlabelled there).
+  has no `circle`, so the torpedo rings are unlabeled there).
 - A part may map to only one class per task (indicator-gated mappings aside).
 - One YOLO line is one instance, so an object visible only as separate pieces (a vinyl through the crate
-  lattice, a pole behind another pole) cannot be labelled well. With `fragments: reject` (default) the renderer
+  lattice, a pole behind another pole) cannot be labeled well. With `fragments: reject` (default) the renderer
   never generates such a view, and export skips any it finds (counted as "fragmented images skipped": 0 for
   data rendered with the same pack). `keep_largest` labels the largest piece; `merge` joins the pieces into one
   polygon. Pieces of 8-connected pixels under `min_fragment_px` are crumbs: removed from every format's mask
@@ -120,13 +120,13 @@ tasks:
   slalom:
     count: 400
     sampler: {type: approach, frame: [slalom_front, slalom_middle, slalom_back], both_sides: true, ...}
-background: {count: 280, sampler: {type: free, depth_m: [0.3, 1.8]}}   # images with nothing labelled
+background: {count: 280, sampler: {type: free, depth_m: [0.3, 1.8]}}   # images with nothing labeled
 randomize: {water: {scattering_scale: [0.8, 1.3]}}   # see Appearance and environments
 acceptance: {min_target_px: 150}                # optional renderer acceptance overrides
 ```
 
 A non-native resolution keeps the camera's field of view: intrinsics are scaled to cover the new size and the
-centre is cropped (never stretched).
+center is cropped (never stretched).
 
 ### Samplers
 
@@ -140,9 +140,9 @@ the task, or a list of frame ids (one is picked per attempt). `offset_m` moves t
 | `overhead` | down cameras | `altitude_m`, `radius_m` (horizontal offset disc), `yaw_deg` (default: any) |
 | `free` | backgrounds | `depth_m` below the surface; anywhere in the pool 0.5 m from the walls |
 
-Every attempt is checked before the colour image is rendered: camera under water and inside the pool, not
-pressed against geometry, no labelled instance beyond `max_range_m`, and for task samples at least one labelled
-instance of the task with `min_target_px` pixels (backgrounds: no labelled pixels). Rejected attempts are drawn
+Every attempt is checked before the color image is rendered: camera under water and inside the pool, not
+pressed against geometry, no labeled instance beyond `max_range_m`, and for task samples at least one labeled
+instance of the task with `min_target_px` pixels (backgrounds: no labeled pixels). Rejected attempts are drawn
 again up to `max_attempts`; a sample that never passes is skipped and logged.
 
 ### Appearance and environments
@@ -167,7 +167,7 @@ replace them where you really mean one.
 | `time_s` | `[0, 600]` | caustic phase |
 | `placement.task_yaw_deg`, `.task_offset_m` | `0`, `0` | rigid jitter of each task about its origin (±) |
 | `placement.groups` | `[]` | lists of task ids that share one jitter, e.g. `[[surface, table]]` (the octagon over the table) |
-| `indicators.latched_probability` | `0.2` | chance each indicator shows its latched colour |
+| `indicators.latched_probability` | `0.2` | chance each indicator shows its latched color |
 
 The top-level `water` / `lighting` / `image` / `time_s` are the base. **Environments** are named looks laid over
 it; each sample gets one:
@@ -276,7 +276,7 @@ nereus-dataset preview ~/datasets/ffc/render --count 24
 | `plan DATASET --out DIR` | validate everything and write `DIR/job.json` (renders nothing) |
 | `render DIR` | run `nereus-dataset-render DIR/job.json --shard i/N` for `--workers` N (default 2) in parallel, streaming their progress; fails if any shard fails |
 | `export DIR --format F` | records -> one YOLO dataset (default `DIR/<format>`); `--labels` / `--model` re-export with another label pack or model |
-| `preview DIR` | contact sheet of `--count` samples (default 16): class-coloured masks, outlines, boxes, names; `--environment ID` (globs) for one look at a time |
+| `preview DIR` | contact sheet of `--count` samples (default 16): class-colored masks, outlines, boxes, names; `--environment ID` (globs) for one look at a time |
 | `environments DATASET --out DIR` | the same views under every environment at its min / mid / max, one sheet per task (see [Tuning environments](#tuning-environments)) |
 | `check-classes LABELS --yolo-config PATH` | compare model class orders with a detector parameter file |
 
@@ -315,11 +315,11 @@ DIR/preview.jpg
 Export applies the label pack: instance -> class by its task's patterns and indicator state (a record from a
 camera other than the model's is an error); classes the model lacks are dropped; instances under
 `min_visible_px` are dropped; crumbs are removed and the `fragments` rule applied; `shape: outer` fills holes;
-images with a labelled instance beyond `max_range_m` are skipped and counted. The split is a stable hash of the sample name.
+images with a labeled instance beyond `max_range_m` are skipped and counted. The split is a stable hash of the sample name.
 Coordinates are normalized to [0, 1] with 6 decimals:
 
 - `yolo-bbox`: `cls cx cy w h` around the mask's pixels (pixel edges: a box from x = 3 to 7 covers pixels 3..6).
-- `yolo-seg`: `cls x1 y1 ...`, the outer contour simplified to 0.75 px. Polygon vertices are pixel centres in
+- `yolo-seg`: `cls x1 y1 ...`, the outer contour simplified to 0.75 px. Polygon vertices are pixel centers in
   pixel-index coordinates (pixel (x, y) is the point x / width, y / height), as Ultralytics' own mask converters
   write them and as `cv2.fillPoly` reads them back, so a polygon lies half a pixel inside the box. A piece only
   1 px wide, which would collapse to a line, is written as its pixel-edge rectangle, so seg labels the same
@@ -341,13 +341,13 @@ wrong class or a sampler that only sees the edge of a board is obvious there.
    classes in id order. Run `check-classes` against your detector's config if it has `<camera>_class_id_map`
    strings.
 3. Under `tasks`, map part names (see the course's `parts.yaml`) to your classes. Parts you do not list are
-   never labelled.
+   never labeled.
 4. Point a dataset spec's `labels:` at the folder, or re-export an existing render with
    `nereus-dataset export DIR --format yolo-seg --labels content/packs/labels/<team> --model <model>`.
 
 `nereus-dataset plan` checks the pack against the scenario's `parts.yaml`: every pattern must match a part of its
-task, a part may belong to one class, every class in `tasks` and `classes` must be in some model (a misspelt
-class would otherwise label nothing), and `when.indicator` colours must be ones the task's indicators show. A
+task, a part may belong to one class, every class in `tasks` and `classes` must be in some model (a misspelled
+class would otherwise label nothing), and `when.indicator` colors must be ones the task's indicators show. A
 model class that no task maps is a warning. `export --labels` runs the same checks against the rendered course.
 
 ## Adding a task

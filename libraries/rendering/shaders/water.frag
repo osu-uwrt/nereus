@@ -29,10 +29,10 @@ void main(){
   if(texture(sceneDepth,refracted).r<gl_FragCoord.z)refracted=uv;
   vec3 below=texture(sceneColor,refracted).rgb;
 
-  // Schlick Fresnel blend between the refracted scene and the mirrored reflection (or a flat sky colour).
+  // Schlick Fresnel blend between the refracted scene and the mirrored reflection (or a flat sky color).
   float fresnel=.02+.98*pow(1-abs(dot(n,v)),5);
   vec3 reflected=hasReflection==1?texture(reflectionColor,clamp(uv+offset*1.5,vec2(.001),vec2(.999))).rgb:(outdoor==1?vec3(.30,.48,.68):vec3(.13,.16,.18))*ambientLight;
-  // From below, look up through the surface: flip the normal and reflect the water colour.
+  // From below, look up through the surface: flip the normal and reflect the water color.
   if(eye.z<waterLevel){n=-n;fresnel=clamp(fresnel+.18,0.,.9);reflected=waterTint;}
   if(surfaceReflections==0 && eye.z>=waterLevel)fresnel=0.;
   vec3 color=mix(below,reflected,fresnel);

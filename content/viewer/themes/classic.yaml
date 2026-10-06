@@ -1,8 +1,8 @@
-# Qt's Windows style on this desktop (RViz and the other Qt tools): the "win 2000 grey" palette of QWindowsStyle,
+# Qt's Windows style on this desktop (RViz and the other Qt tools): the "win 2000 gray" palette of QWindowsStyle,
 # raised bevels (a light edge, the shadow 1 px below / right) and the Ubuntu font.
 id: classic
 label: Classic
-description: "Windows-style grey with bevelled controls and the Ubuntu font, like the desktop's Qt tools (RViz)"
+description: "Windows-style gray with bevelled controls and the Ubuntu font, like the desktop's Qt tools (RViz)"
 order: 11
 fonts: {family: Ubuntu, points: 11}
 shape: {window_rounding: 0, frame_rounding: 0, tab_rounding: 0, window_border: 1, frame_border: 1, scrollbar: 14, tab_border: 1, tab_overline: 0}

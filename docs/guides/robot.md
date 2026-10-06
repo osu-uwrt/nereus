@@ -19,7 +19,7 @@ assets:                         # every file the pack uses
 - {id: body_mesh, path: assets/body.glb}
 
 body: {...}                     # mass, inertia, hydrodynamics
-frames: {...}                   # rigid frame tree; names the physics body (centre of mass)
+frames: {...}                   # rigid frame tree; names the physics body (center of mass)
 collision_boxes: [...]
 thrusters: [...]
 safety: {...}
@@ -57,7 +57,7 @@ The same Fossen model is used by the MPC controller, so these numbers matter.
 ```yaml
 frames:
   root: origin                   # the datum you measure from (Talos: a screw on the camera cage, the CAD origin)
-  body: com                      # the physics body, i.e. the centre of mass; defaults to the root
+  body: com                      # the physics body, i.e. the center of mass; defaults to the root
   transforms:
   - {parent: origin, child: base_link, position_m: [-0.14, 0.03, -0.09], orientation_wxyz: [1, 0, 0, 0]}
   - {parent: origin, child: com, position_m: [-0.157, 0.04, -0.048], orientation_wxyz: [1, 0, 0, 0]}
@@ -69,7 +69,7 @@ frames:
 Name a frame for every sensor, mechanism, visual and camera optical frame. How these names appear in ROS TF is
 set by the bridge's `frame_names`.
 
-Root the tree at whatever you measure from and list the centre of mass as one more frame: when the COM moves,
+Root the tree at whatever you measure from and list the center of mass as one more frame: when the COM moves,
 only its transform changes. Resolving a scenario re-roots the tree at `body`, so the simulator always works in
 COM coordinates. A tree rooted directly at the COM (`root: com`, no `body`) works too.
 

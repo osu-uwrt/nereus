@@ -3,7 +3,7 @@
 
 Reads dimensions from the task pack itself (crate regions in bins.yaml, octagon region and sign
 frames in surface.yaml) and writes crate lattice/liner and octagon ring GLBs next to the pack
-assets. Coordinates are metres, +Z up (like the other pack GLBs). Run from the repository root:
+assets. Coordinates are meters, +Z up (like the other pack GLBs). Run from the repository root:
 
     python3 tools/generate_course_geometry.py            # write files
     python3 tools/generate_course_geometry.py --hashes   # also print sha256 lines for tasks.yaml
@@ -26,7 +26,7 @@ import yaml
 # Relative to the repository root, which the script must be run from.
 PACK = Path("content/packs/tasks/robosub_2026")
 
-# Material base colours (glTF baseColorFactor, RGBA).
+# Material base colors (glTF baseColorFactor, RGBA).
 NAVY = (0.025, 0.055, 0.13, 1.0)
 WHITE_LINER = (0.92, 0.94, 0.91, 1.0)
 PVC = (0.94, 0.95, 0.91, 1.0)
@@ -237,7 +237,7 @@ def octagon_ring(region: dict, frames: dict, ring: str) -> Mesh:
     ring_z = frames[ring]["position_m"][2]
     for name in region["facing"]["targets"]:
         x, y, z = frames[name]["position_m"]
-        # 12 inch sign, origin at its centre: the hanger runs from the ring to the sign's top edge.
+        # 12 inch sign, origin at its center: the hanger runs from the ring to the sign's top edge.
         mesh.tube((x, y, 0), (x, y, z + 0.1524 - ring_z), 0.002)
     return mesh
 

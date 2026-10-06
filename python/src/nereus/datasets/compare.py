@@ -28,7 +28,7 @@ from .render import render
 
 VARIANTS = ("min", "mid", "max")
 
-# Sheet layout (px) and colours (BGR)
+# Sheet layout (px) and colors (BGR)
 TILE_WIDTH = 640
 SETTINGS_WIDTH = 560
 RATIO = (110, 215, 255)  # BGR amber: multiples of the pool's calibrated values
@@ -413,7 +413,7 @@ def sheet(
         _put(header, view.heading, x + 4, 38, INK, 0.62)
     blocks.append(header)
 
-    # One row per environment variant; a thicker grey rule between environments
+    # One row per environment variant; a thicker gray rule between environments
     pools = pools or {}
     summary = []
     previous = None
@@ -450,9 +450,9 @@ def _cell_tile(cell: Cell, row: Row, classes: Any, labels: bool, height: int) ->
         return _blank(height, f"{row.environment}:{row.variant} rejected: {_reasons(cell.log)}")
     record = cell.record
     image = read_image(cell.folder, record)
-    labelled = label_record(record, read_ids(cell.folder, record), classes)
+    labeled = label_record(record, read_ids(cell.folder, record), classes)
     if labels:
-        tile = overlay(image, labelled, classes.names, TILE_WIDTH, alpha=LABEL_ALPHA, boxes=False)
+        tile = overlay(image, labeled, classes.names, TILE_WIDTH, alpha=LABEL_ALPHA, boxes=False)
     else:
         tile = np.asarray(
             cv2.resize(image, (TILE_WIDTH, height), interpolation=cv2.INTER_AREA), dtype=np.uint8
@@ -460,7 +460,7 @@ def _cell_tile(cell: Cell, row: Row, classes: Any, labels: bool, height: int) ->
     tile = np.ascontiguousarray(tile[:height])
     if tile.shape[0] < height:
         tile = np.concatenate([tile, np.zeros((height - tile.shape[0], TILE_WIDTH, 3), np.uint8)])
-    count = len(labelled.labels)
+    count = len(labeled.labels)
     _caption(tile, f"{row.environment}:{row.variant}   {count} label{'s' if count != 1 else ''}")
     return tile
 

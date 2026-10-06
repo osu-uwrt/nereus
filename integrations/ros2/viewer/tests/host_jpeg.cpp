@@ -39,7 +39,7 @@ std::vector<std::uint8_t> encode(int w, int h, const std::vector<std::uint8_t> &
 }
 } // namespace
 
-// Decoding keeps colours in place, DCT-scales down to (at least) the requested width, and rejects bad data.
+// Decoding keeps colors in place, DCT-scales down to (at least) the requested width, and rejects bad data.
 TEST(HostJpeg, DecodesColorsAndScalesToTheRequestedWidth) {
     const int w = 256, h = 128;
     std::vector<std::uint8_t> rgb(std::size_t(w) * std::size_t(h) * 3);

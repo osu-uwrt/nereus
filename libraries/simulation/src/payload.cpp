@@ -139,7 +139,7 @@ PayloadState PayloadDynamics::advance(const PayloadState &input, const PayloadEn
         state.tail<3>() = input.angular_velocity;
 
         // Immersion follows the mesh center at every stage; gravity acts at the COM, buoyancy and drag at their
-        // axial centres.
+        // axial centers.
         const auto derivative = [&](const IntegratedState &s) -> IntegratedState {
             const Eigen::Vector3d center = s.head<3>();
             const Eigen::Vector3d velocity = s.segment<3>(3);

@@ -47,7 +47,7 @@ SceneModel::SceneModel(const Scenario &scenario, const SceneModelOptions &option
     baseFromRoot_ = pack_->rootFromFrame(scenario.baseId).inverse();
     box_ = r::makeBoxMesh();
 
-    // Rotor and claw parts are recognised by asset id from viewer data.
+    // Rotor and claw parts are recognized by asset id from viewer data.
     std::set<std::string> leftAssets, rightAssets;
     for (const auto &id : lookup(options.config, {"claw", "left_assets"}))
         leftAssets.insert(id.as<std::string>());
@@ -148,7 +148,7 @@ r::Scene SceneModel::build(const VisualState &state) const {
     for (const auto &[asset, base] : extras_)
         add(dynamic, asset, state.body * base);
 
-    // Status lights: emissive boxes in this frame's colours (black when the state has none).
+    // Status lights: emissive boxes in this frame's colors (black when the state has none).
     for (std::size_t i = 0; i < lights_.lights.size(); ++i) {
         const auto &light = lights_.lights[i];
         r::Instance instance;

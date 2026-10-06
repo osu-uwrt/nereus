@@ -2,7 +2,7 @@
 
 The label pack is applied here: instance -> class by task part patterns and indicator state,
 classes the model lacks dropped, ``shape: outer`` holes filled, slivers under ``min_visible_px``
-dropped, and images with a labelled instance beyond the model's range skipped.
+dropped, and images with a labeled instance beyond the model's range skipped.
 """
 
 from __future__ import annotations
@@ -144,7 +144,7 @@ def _nearest(a: Points, b: Points) -> tuple[int, int]:
 def merge_multi_segment(segments: list[Points]) -> Points:
     """One polygon through every segment, Ultralytics ``merge_multi_segment`` style.
 
-    Neighbouring segments are joined at their closest points by a zero-width bridge walked out on
+    Neighboring segments are joined at their closest points by a zero-width bridge walked out on
     a forward pass and back on a return pass. Unlike Ultralytics, a middle segment keeps its
     orientation (their reversed middle segments index the flipped array with unflipped indices).
     """
@@ -207,8 +207,8 @@ def seg_line(mask: Mask, cls: int) -> str | None:
 
 def _ordered_corners(corners: Points) -> Points:
     """Clockwise on screen (y down) from the top-most, then left-most corner."""
-    centre = corners.mean(axis=0)
-    angles = np.arctan2(corners[:, 1] - centre[1], corners[:, 0] - centre[0])
+    center = corners.mean(axis=0)
+    angles = np.arctan2(corners[:, 1] - center[1], corners[:, 0] - center[0])
     corners = corners[np.argsort(angles, kind="stable")]
 
     # Pick the start on rounded values so float noise cannot change the first corner
@@ -225,9 +225,9 @@ def obb_line(mask: Mask, cls: int) -> str | None:
         return None
     # Contour points are pixel indices; use all four corners of each pixel so the rectangle
     # covers whole pixels, as the bbox does
-    centres = np.concatenate([np.asarray(c, dtype=np.float32).reshape(-1, 2) for c in contours])
+    centers = np.concatenate([np.asarray(c, dtype=np.float32).reshape(-1, 2) for c in contours])
     offsets = np.array([[0, 0], [1, 0], [0, 1], [1, 1]], dtype=np.float32)
-    points = (centres[:, None, :] + offsets[None, :, :]).reshape(-1, 2)
+    points = (centers[:, None, :] + offsets[None, :, :]).reshape(-1, 2)
     box = np.asarray(cv2.boxPoints(cv2.minAreaRect(points)), dtype=np.float64)
     height, width = mask.shape
     corners = _ordered_corners(box) / np.array([width, height], dtype=np.float64)
@@ -238,7 +238,7 @@ def obb_line(mask: Mask, cls: int) -> str | None:
 LINES = {"yolo-seg": seg_line, "yolo-bbox": bbox_line, "yolo-obb": obb_line}
 
 
-# ------------------------------------------------------------------ labelling one record
+# ------------------------------------------------------------------ labeling one record
 
 
 @dataclass
@@ -251,13 +251,13 @@ class Label:
 
 
 @dataclass
-class Labelled:
+class Labeled:
     """One record's labels after the label pack, or why the image is skipped."""
 
     labels: list[Label] = field(default_factory=list)
     dropped_small: int = 0
-    crumbs: int = 0  # pieces under min_fragment_px removed from labelled masks
-    far: list[dict[str, Any]] = field(default_factory=list)  # labelled instances beyond range
+    crumbs: int = 0  # pieces under min_fragment_px removed from labeled masks
+    far: list[dict[str, Any]] = field(default_factory=list)  # labeled instances beyond range
     fragmented: list[dict[str, Any]] = field(default_factory=list)  # with fragments: reject
 
     @property
@@ -279,7 +279,7 @@ def pieces(mask: Mask, min_px: int) -> tuple[list[Mask], int]:
     return [components == index for index in kept], int(count) - 1 - len(kept)
 
 
-def label_record(record: dict[str, Any], ids: NDArray[np.uint16], classes: ClassMap) -> Labelled:
+def label_record(record: dict[str, Any], ids: NDArray[np.uint16], classes: ClassMap) -> Labeled:
     """Apply the label-pack model to one record's instances (see the module docstring)."""
     sensor = record["camera"]["sensor"]
     if sensor != classes.camera:
@@ -288,7 +288,7 @@ def label_record(record: dict[str, Any], ids: NDArray[np.uint16], classes: Class
             f"is for camera '{classes.camera}'"
         )
 
-    result = Labelled()
+    result = Labeled()
     for instance in record["instances"]:
         cls = classes.classify(instance["task"], instance["part"], instance.get("indicator"))
         if cls is None:
@@ -413,7 +413,7 @@ class Summary:
         lines = [f"{self.format}: {written} images ({splits or 'none'}) -> {self.out}"]
         lines.append(f"  backgrounds (no labels): {self.backgrounds}")
         if self.skipped_far:
-            lines.append(f"  skipped, labelled instance beyond range: {len(self.skipped_far)}")
+            lines.append(f"  skipped, labeled instance beyond range: {len(self.skipped_far)}")
         if self.skipped_fragmented:
             # Renders made with the same label pack never contain these.
             lines.append(f"  fragmented images skipped: {len(self.skipped_fragmented)}")
@@ -469,23 +469,23 @@ def export(
 
     for record in found:
         name = record["name"]
-        labelled = label_record(record, read_ids(render, record), classes)
-        if labelled.far:
+        labeled = label_record(record, read_ids(render, record), classes)
+        if labeled.far:
             summary.skipped_far.append(name)
             continue
-        if labelled.fragmented:
+        if labeled.fragmented:
             summary.skipped_fragmented.append(name)
             continue
 
-        summary.dropped_small += labelled.dropped_small
-        summary.crumbs += labelled.crumbs
+        summary.dropped_small += labeled.dropped_small
+        summary.crumbs += labeled.crumbs
         environment = record.get("environment")
         if environment is not None:
             summary.environments[environment] = summary.environments.get(environment, 0) + 1
 
         # One label line per instance; an image with none is kept as a background
         lines = []
-        for label in labelled.labels:
+        for label in labeled.labels:
             line = line_of(label.mask, label.cls)
             if line is None:
                 summary.dropped_degenerate += 1

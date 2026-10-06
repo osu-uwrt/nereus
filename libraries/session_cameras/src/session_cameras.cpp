@@ -258,7 +258,7 @@ SessionCameras::SessionCameras(const session::ResolvedScenario &resolved, Option
         camera->right_eye =
             camera->right_frame.empty() ? camera->left_eye : scene_->frames().fromRoot(camera->right_frame);
 
-        // Per-sensor JPEG quality from the options (absent: colour stays raw).
+        // Per-sensor JPEG quality from the options (absent: color stays raw).
         const auto quality = options_.jpeg_quality.find(id);
         if (quality != options_.jpeg_quality.end())
             camera->jpeg_quality = quality->second;
@@ -538,7 +538,7 @@ Products SessionCameras::capture(Camera &c, const Job &job) {
         return view;
     };
 
-    // Which eyes and buffers to render: colour per eye, depth from the left eye only.
+    // Which eyes and buffers to render: color per eye, depth from the left eye only.
     const float time = static_cast<float>(static_cast<double>(job.native_ns) / 1e9);
     std::array<rendering::ImageCapture, 2> raw;
     const bool wantEye[2] = {job.rgb_left || job.depth_left, job.rgb_right};

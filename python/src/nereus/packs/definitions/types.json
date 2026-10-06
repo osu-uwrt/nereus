@@ -1315,7 +1315,7 @@
             "min_cosine"
           ],
           "additionalProperties": false,
-          "description": "Pass iff |hit - centre| + r / max(min_cosine, |axis . plane normal|) <= hole radius."
+          "description": "Pass iff |hit - center| + r / max(min_cosine, |axis . plane normal|) <= hole radius."
         }
       },
       "required": [
@@ -1531,7 +1531,7 @@
             "latched"
           ],
           "additionalProperties": false,
-          "description": "Light colours for rendering; the latch is exposed in the run snapshot."
+          "description": "Light colors for rendering; the latch is exposed in the run snapshot."
         }
       },
       "required": [
@@ -1551,7 +1551,7 @@
       "properties": {
         "frame": {
           "$ref": "common.schema.json#/$defs/name",
-          "description": "Task frame at the octagon centre (default: the task frame)."
+          "description": "Task frame at the octagon center (default: the task frame)."
         },
         "shape": {
           "enum": [
@@ -1625,7 +1625,7 @@
       "properties": {
         "frame": {
           "$ref": "common.schema.json#/$defs/name",
-          "description": "Task frame at the zone centre (default: the task frame)."
+          "description": "Task frame at the zone center (default: the task frame)."
         },
         "radius_m": {
           "type": "number",
@@ -1868,7 +1868,7 @@
         "contact_processing_threshold_m"
       ],
       "additionalProperties": false,
-      "description": "Free dynamic prop. The collision shape is the convex hull of the .obj vertices centred on their bounds (centre = bounds midpoint). frame is the task-local pose of the mesh origin at reset; mass in kg, volume (buoyancy) in m^3, expected_region the box region that scores as correct. Friction/damping coefficients dimensionless except damping in 1/s; margins in m. visual_asset is the optional pack asset id of the display mesh whose origin coincides with the collision asset origin.",
+      "description": "Free dynamic prop. The collision shape is the convex hull of the .obj vertices centered on their bounds (center = bounds midpoint). frame is the task-local pose of the mesh origin at reset; mass in kg, volume (buoyancy) in m^3, expected_region the box region that scores as correct. Friction/damping coefficients dimensionless except damping in 1/s; margins in m. visual_asset is the optional pack asset id of the display mesh whose origin coincides with the collision asset origin.",
       "x-category": "prop"
     },
     "contact_world": {

@@ -3,5 +3,5 @@ id: paper
 label: Paper
 description: "Warm light paper with a blue accent"
 order: 10
-# every surface derived from four colours: the background, body and secondary text, and the accent
+# every surface derived from four colors: the background, body and secondary text, and the accent
 derive: {background: "#f7f2e6", text: "#332e26", muted: "#807566", accent: "#2673bf", rounding: 6}

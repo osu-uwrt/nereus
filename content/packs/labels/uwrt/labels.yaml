@@ -19,10 +19,10 @@ models:
 # Class <- parts, per task (part entries may use * globs).
 tasks:
   # Gate and octagon signs: the emoji ("the compass emoji, including the hook"; buoy: "the outside borders of
-  # the buoy emoji", so its centre is included).
+  # the buoy emoji", so its center is included).
   gate:    {compass: [icon_compass], hammer_and_wrench: [icon_hammer_and_wrench], buoy: [icon_buoy], sos: [icon_sos]}
   surface: {compass: [icon_compass], hammer_and_wrench: [icon_hammer_and_wrench], buoy: [icon_buoy], sos: [icon_sos]}
-  # Slalom: "the red poles for slalom"; the white poles are never labelled.
+  # Slalom: "the red poles for slalom"; the white poles are never labeled.
   slalom:  {slalom: [pole_red]}
   # Torpedo board: circle = "each hole on the torpedo vinyl, make sure to include the red circle around the
   # hole" (the label pass gives the see-through hole the ring's part, so circle is ring + opening).

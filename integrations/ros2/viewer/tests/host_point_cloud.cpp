@@ -39,8 +39,8 @@ sensor_msgs::msg::PointCloud2 zedLayout() {
 }
 } // namespace
 
-// Output is 6 floats per point (x y z r g b, colour in 0..1).
-TEST(PointCloud, ReadsPackedColourAndSkipsInvalidPoints) {
+// Output is 6 floats per point (x y z r g b, color in 0..1).
+TEST(PointCloud, ReadsPackedColorAndSkipsInvalidPoints) {
     const auto points = convertPointCloud(zedLayout(), {0, 0, 1});
     ASSERT_TRUE(points);
     ASSERT_EQ(points->xyzrgb.size(), 3u * 6); // the NaN point is dropped
@@ -52,7 +52,7 @@ TEST(PointCloud, ReadsPackedColourAndSkipsInvalidPoints) {
     EXPECT_FLOAT_EQ(points->xyzrgb[6], -1);           // next valid point
 }
 
-TEST(PointCloud, UsesTheFallbackColourWithoutAnRgbField) {
+TEST(PointCloud, UsesTheFallbackColorWithoutAnRgbField) {
     auto cloud = zedLayout();
     cloud.fields.pop_back();
     const auto points = convertPointCloud(cloud, {.2f, .4f, .6f});

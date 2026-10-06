@@ -15,7 +15,7 @@ namespace nereus::ros_bridge {
 // Compiled native -> ROS map: one step per destination field (plus header.frame_id when stamped).
 class Writer {
   public:
-    // Applies every step to an initialised message of the compiled type.
+    // Applies every step to an initialized message of the compiled type.
     void apply(void *message, const Value &values) const;
     std::shared_ptr<Message> make(const std::shared_ptr<const MessageType> &type, const Value &values) const;
 

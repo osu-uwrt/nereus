@@ -1,4 +1,4 @@
-// Plant behaviour: analytic motion, placement and reset semantics, determinism, validation, sphere-pool and box
+// Plant behavior: analytic motion, placement and reset semantics, determinism, validation, sphere-pool and box
 // contacts, motion samples and actuator calibration.
 #include "nereus/simulation/plant.hpp"
 #include <gtest/gtest.h>

@@ -21,7 +21,7 @@ struct PayloadParameters {
     double radius{0.1};
     double drag_axial{0.0};
     double drag_lateral{0.0};
-    // Signed distances along local +X from the mesh center, in metres.
+    // Signed distances along local +X from the mesh center, in meters.
     double center_of_mass{0.0};
     double center_of_buoyancy{0.0};
     double center_of_drag{0.0};
@@ -31,7 +31,7 @@ struct PayloadParameters {
 
 // Payload pose and velocities in the world frame.
 struct PayloadState {
-    Eigen::Vector3d position{Eigen::Vector3d::Zero()};              // Mesh center, world metres.
+    Eigen::Vector3d position{Eigen::Vector3d::Zero()};              // Mesh center, world meters.
     Eigen::Vector3d velocity{Eigen::Vector3d::Zero()};              // COM velocity, world m/s.
     Eigen::Quaterniond orientation{Eigen::Quaterniond::Identity()}; // World from body.
     Eigen::Vector3d angular_velocity{Eigen::Vector3d::Zero()};      // World rad/s.
@@ -40,7 +40,7 @@ struct PayloadState {
 struct PayloadEnvironment {
     Eigen::Vector3d water_velocity{Eigen::Vector3d::Zero()}; // World m/s.
     double water_density{1000.0};                            // kg/m^3.
-    double water_level{0.0};                                 // World Z, metres; gravity is -Z, 9.80665 m/s^2.
+    double water_level{0.0};                                 // World Z, meters; gravity is -Z, 9.80665 m/s^2.
 };
 
 // Stateless, deterministic propagation. Owns a validated parameter copy; no clocks,

@@ -83,7 +83,7 @@ void applyNoise(const DepthNoise &p, std::vector<float> &values, int width, int 
             if (!p.enabled)
                 continue;
 
-            // A pixel is on an edge if any 4-neighbour is invalid or jumps by more than 5 cm + 3 %.
+            // A pixel is on an edge if any 4-neighbor is invalid or jumps by more than 5 cm + 3 %.
             bool edge = false;
             for (const cv::Point &offset : {cv::Point(-1, 0), cv::Point(1, 0), cv::Point(0, -1), cv::Point(0, 1)}) {
                 const int u = x + offset.x, v = y + offset.y;

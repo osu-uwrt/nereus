@@ -3,7 +3,7 @@
 #include "math.hpp"
 
 namespace nereus::ros_viewer::host {
-// Rectified pinhole intrinsics (pixels) and the GL clip planes (metres) used to render the sensor's view.
+// Rectified pinhole intrinsics (pixels) and the GL clip planes (meters) used to render the sensor's view.
 struct Intrinsics {
     int width = 1920, height = 1200;
     double fx = 0, fy = 0, cx = 0, cy = 0;
@@ -13,7 +13,7 @@ struct Intrinsics {
         glm::mat4 p(0);
         p[0][0] = float(2 * fx / width);
         p[1][1] = float(2 * fy / height);
-        // ROS pixel coordinates index pixel centres; GL viewport coordinates index edges.
+        // ROS pixel coordinates index pixel centers; GL viewport coordinates index edges.
         p[2][0] = float(1 - 2 * (cx + .5) / width);
         p[2][1] = float(2 * (cy + .5) / height - 1);
         p[2][2] = float(-(farPlane + nearPlane) / (farPlane - nearPlane));

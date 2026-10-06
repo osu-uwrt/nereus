@@ -61,15 +61,15 @@ class ClassMap:
             self.rules[task] = rules
 
     def classify(self, task: str | None, part: str, indicator: str | None) -> int | None:
-        """Class id of an instance in this model, or None if it is not labelled."""
+        """Class id of an instance in this model, or None if it is not labeled."""
         for rule in self.rules.get(task or "", []):
-            # Classes this model lacks are skipped, as in ``labelled``.
+            # Classes this model lacks are skipped, as in ``labeled``.
             if rule.name in self.names and rule.matches_part(part):
                 if rule.indicator in (None, indicator):
                     return self.names.index(rule.name)
         return None
 
-    def labelled(self, parts: dict[str, set[str]]) -> list[dict[str, str]]:
+    def labeled(self, parts: dict[str, set[str]]) -> list[dict[str, str]]:
         """(task, part) pairs mapped to a class of this model, any indicator state."""
         pairs = []
         for task, rules in self.rules.items():

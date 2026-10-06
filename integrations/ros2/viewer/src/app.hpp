@@ -43,7 +43,7 @@ struct Options {
 
     // Test aids, frame pacing and profiling.
     std::vector<float> injectF; // test aid: hover this window position and press F mid-run
-    std::vector<float> orbit;   // optional initial orbit: yaw pitch distance (radians, metres)
+    std::vector<float> orbit;   // optional initial orbit: yaw pitch distance (radians, meters)
     int frames = 0;             // render N frames, save the screenshot, exit
     double renderRate = 0;      // frame cap in Hz; 0 = 60 (vsync: uncapped, vsync paces; hidden runs use 30)
     // Swap interval 1 (ignored for --hidden). Off by default: under Wayland/XWayland the compositor throttles

@@ -3,5 +3,5 @@ id: ocean
 label: Ocean
 description: "Navy with a bright blue accent"
 order: 6
-# every surface derived from four colours: the background, body and secondary text, and the accent
+# every surface derived from four colors: the background, body and secondary text, and the accent
 derive: {background: "#090f1c", text: "#dbe8f7", muted: "#8099b8", accent: "#40b2ff", rounding: 8}

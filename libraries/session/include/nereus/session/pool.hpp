@@ -1,6 +1,6 @@
 #pragma once
 // What a resolved pool document describes, interpreted once: its floor (flat or profiled), its placed `box` and
-// `mesh` fixtures, and its static contact boxes. Geometry only: colours and finishes stay in the document for
+// `mesh` fixtures, and its static contact boxes. Geometry only: colors and finishes stay in the document for
 // the renderer's adapter (pack_scene). Every position is pool-local: origin at a floor-plan corner, +x along
 // the length, +y across, +z up, the water surface at `parameters.water_level_m`.
 #include <nereus/session/scenario.hpp>
@@ -14,7 +14,7 @@
 
 namespace nereus::session {
 
-// A `box` fixture, placed: centre (a box given only x, y rests on the floor at its centre, else its z is
+// A `box` fixture, placed: center (a box given only x, y rests on the floor at its center, else its z is
 // relative to the water surface), size, orientation (pool from box; rpy_deg about the box's x, y, z axes
 // applied yaw, pitch, roll).
 struct PoolFixtureBox {
@@ -34,9 +34,9 @@ struct PoolFixtureMesh {
 };
 
 // A static contact box. `floor` marks the boxes that are the pool's floor (where a dropped prop lands "on the
-// floor"): every box generated from a floor profile, and any other box whose top face (centre z + half its z
+// floor"): every box generated from a floor profile, and any other box whose top face (center z + half its z
 // size) lies within 1 mm of the flat floor at `depth_m` below the surface, which is how a flat pool's floor box
-// is recognised.
+// is recognized.
 struct PoolContactBox {
     std::string id;
     Eigen::Vector3d size = Eigen::Vector3d::Ones(), center = Eigen::Vector3d::Zero();

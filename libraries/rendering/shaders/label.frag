@@ -1,5 +1,5 @@
 #version 330 core
-// Label pass: writes id << 8 | part per fragment, with the same discards as the colour pass.
+// Label pass: writes id << 8 | part per fragment, with the same discards as the color pass.
 in vec2 texcoord;
 layout(location=0) out uint label;
 uniform sampler2D albedo;
@@ -16,7 +16,7 @@ void main(){
     ivec2 size=textureSize(partMap,0);
     value=texelFetch(partMap,clamp(ivec2(floor(fract(texcoord)*vec2(size))),ivec2(0),size-1),0).r;
   }
-  // UV cutouts discard as in scene.frag, except where a part map labels the hole of a labelled instance (a
+  // UV cutouts discard as in scene.frag, except where a part map labels the hole of a labeled instance (a
   // ring's value fills it). Id 0 only occludes: no part, and its holes stay open.
   bool hole=false;
   for(int i=0;i<holeCount;i++)hole=hole || distance(texcoord,holes[i].xy)<holes[i].z;

@@ -180,16 +180,16 @@ void drawPlannedPath(const std::vector<glm::mat4> &path, const glm::mat4 &vp, co
 }
 
 void drawThrust(const std::vector<ThrusterMount> &mounts, const std::vector<float> &forces, const glm::mat4 &body,
-                float metresPerNewton, const glm::mat4 &vp, const ScreenRect &rect) {
+                float metersPerNewton, const glm::mat4 &vp, const ScreenRect &rect) {
     auto *draw = ImGui::GetWindowDrawList();
     draw->PushClipRect(rect.position, {rect.position.x + rect.width, rect.position.y + rect.height}, true);
-    const ImU32 tint = IM_COL32(230, 70, 60, 235); // RViz's default force colour, brightened for the water
+    const ImU32 tint = IM_COL32(230, 70, 60, 235); // RViz's default force color, brightened for the water
     for (const auto &mount : mounts) {
         if (mount.index >= forces.size())
             continue;
 
         // Arrow in the world: from the mount along its axis, signed length from the force.
-        const float length = forces[mount.index] * mount.inputScale * metresPerNewton;
+        const float length = forces[mount.index] * mount.inputScale * metersPerNewton;
         if (std::abs(length) < 1e-3f)
             continue;
         const glm::vec4 at = body * glm::vec4(mount.position, 1), axis = body * glm::vec4(mount.axis, 0);

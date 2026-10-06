@@ -58,8 +58,8 @@ reference_frame: base_link
 
 # Rigid frame tree. Everything is measured from `origin`: the farthest-port screw on the front of the
 # camera cage, which is also the CAD model origin (riptide_descriptions talos.yaml uses the same datum).
-# `com` is the physics body; when the centre of mass moves, edit its transform. The `body` centres stay
-# relative to the centre of mass.
+# `com` is the physics body; when the center of mass moves, edit its transform. The `body` centers stay
+# relative to the center of mass.
 frames:
   root: origin
   body: com

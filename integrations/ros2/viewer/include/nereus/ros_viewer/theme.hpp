@@ -1,5 +1,5 @@
-// Viewer themes: the whole ImGui style plus the few colours the viewer and its panels draw themselves (accent,
-// "on" fills, KILL, robot state, bars). The 3D view and its overlays keep their own colours in every theme.
+// Viewer themes: the whole ImGui style plus the few colors the viewer and its panels draw themselves (accent,
+// "on" fills, KILL, robot state, bars). The 3D view and its overlays keep their own colors in every theme.
 #pragma once
 #include <cstdio>
 #include <cstring>
@@ -9,7 +9,7 @@
 #include <vector>
 
 namespace nereus::ros_viewer {
-// The colours the viewer draws itself, per theme (ImGui's own colours live in its style).
+// The colors the viewer draws itself, per theme (ImGui's own colors live in its style).
 struct Palette {
     ImVec4 text, muted;                                      // body text, secondary text
     ImVec4 accent;                                           // highlights: headings, OK status, selected tab line
@@ -42,7 +42,7 @@ bool applyTheme(const std::string &id);
 const std::string &currentTheme();
 const Palette &palette();
 
-// WCAG contrast ratio of two colours (1..21).
+// WCAG contrast ratio of two colors (1..21).
 float contrastRatio(ImVec4 a, ImVec4 b);
 
 // Interface scale (1 = the viewer's own 100 % sizes): the style's sizes and every fixed size written with ui().
@@ -80,13 +80,13 @@ bool ruledTheme();
 float chipRounding(float height);
 
 // Surfaces inside the theme. The board (menu and command bars) can carry its own palette: inside
-// beginSurface(Surface::Board) .. endSurface(), palette() and ImGui's text, button, frame and popup colours are
-// the board's; Surface::Sheet restores the panels' colours inside a board (a menu's dropdown). Nest freely.
+// beginSurface(Surface::Board) .. endSurface(), palette() and ImGui's text, button, frame and popup colors are
+// the board's; Surface::Sheet restores the panels' colors inside a board (a menu's dropdown). Nest freely.
 enum class Surface { Sheet, Board };
 void beginSurface(Surface);
 void endSurface();
-// Only a surface's popup colours (background, border): for a menu on the board whose dropdown is a sheet, pushed
-// before BeginMenu (which creates the dropdown) while the menu's label keeps the board's colours.
+// Only a surface's popup colors (background, border): for a menu on the board whose dropdown is a sheet, pushed
+// before BeginMenu (which creates the dropdown) while the menu's label keeps the board's colors.
 void pushPopupColors(Surface);
 void popPopupColors();
 
@@ -182,7 +182,7 @@ inline void progressBar(float fraction, const char *label = nullptr) {
     }
 }
 
-// A status chip: an outlined capsule with a status dot and the text in the status colour (in a bevelled theme, a
+// A status chip: an outlined capsule with a status dot and the text in the status color (in a bevelled theme, a
 // sunken status-bar panel, as Qt draws one). It reads as a label, not a button; returns hover for a tooltip.
 inline float statusChipWidth(const char *text) {
     return ImGui::CalcTextSize(text, nullptr, true).x + 2 * ImGui::GetStyle().FramePadding.x + ui(13);

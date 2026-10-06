@@ -43,7 +43,7 @@ pose:
   other_delay_s: 0.06
   # Simulator only (ignored on a real robot, where the estimate is the only pose): defaults of the Display
   # window's "Localization estimate" section. robot_ghost: translucent robot at the estimate (TF base_link);
-  # gizmo_anchor / follow_anchor: truth | estimate, the robot the control gizmo / Follow camera centre on.
+  # gizmo_anchor / follow_anchor: truth | estimate, the robot the control gizmo / Follow camera center on.
   robot_ghost: false
   gizmo_anchor: estimate
   follow_anchor: truth
@@ -59,7 +59,7 @@ detections:
   enabled: true
   placement: pose_source
   # The stack's detector sends DELETEALL before every frame's markers, so with true only the newest
-  # frame's detections show (RViz behaviour). false: ignore DELETEALL; observations live out their lifetime.
+  # frame's detections show (RViz behavior). false: ignore DELETEALL; observations live out their lifetime.
   honor_delete_all: true
 
 # Course from the mapping estimate, drawn like RViz: the stack's marker list (riptide_rviz MarkerPublisher config:
@@ -101,7 +101,7 @@ topics:
 # Thrust toggle (toolbar): one arrow per thruster along its axis, like RViz's thruster wrench displays.
 thrust_arrows:
   enabled: false            # on at start (CLI: --thrust)
-  metres_per_newton: 0.05   # arrow length; full thrust (28 N) is 1.4 m
+  meters_per_newton: 0.05   # arrow length; full thrust (28 N) is 1.4 m
 
 # Camera card names by robot-pack sensor id; sensors without an entry are titled by index and id.
 cameras:

@@ -1,23 +1,23 @@
-# Named pieces of the course artwork and props, for labelled renders (team-neutral: no classes here).
+# Named pieces of the course artwork and props, for labeled renders (team-neutral: no classes here).
 # Not referenced by tasks.yaml; the dataset tools find it next to the scenario's tasks pack.
 kind: parts
 id: robosub_2026_parts
 tasks: robosub_2026
-description: Named pieces of the RoboSub 2026 course artwork and props, for labelled renders.
+description: Named pieces of the RoboSub 2026 course artwork and props, for labeled renders.
 
 # Part maps: 8-bit grayscale PNGs, same size and UV layout as the texture; pixel value -> part.
 # Built by tools/generate_part_masks.py (re-run it after editing a seed or a texture; the test checks
 # the committed PNGs are current). Each part is its whole emoji silhouette, holes filled: a seed is a
 # pixel on the emoji (texture px, top-left origin). Optional keys: threshold (max channel distance
-# from the background colour, default 24/255; 40 cuts the soft glow some emojis carry, 4-6 keeps
+# from the background color, default 24/255; 40 cuts the soft glow some emojis carry, 4-6 keeps
 # near-white highlights that reach the edge), close_px (default 2), background ([r, g, b]) and fill:
 #   small  (default) fill holes under 15 % of the component area: letters, windows, the compass hook
 #          loop; larger enclosed background (the helmet strap loop) stays background
-#   all    fill every hole: rings (ring + hole disk) and the buoy (its white centre)
+#   all    fill every hole: rings (ring + hole disk) and the buoy (its white center)
 #   none   no fill
 textures:
 # Torpedo board. Rings: the four red rings, each covering ring + hole disk (the hole itself is a real
-# cutout). Values follow the panel holes in torpedo.yaml (centre px = (u, 1 - v) * 2304).
+# cutout). Values follow the panel holes in torpedo.yaml (center px = (u, 1 - v) * 2304).
 - texture: torpedo_texture
   mask: assets/torpedo/Task4_ver1_parts.png
   parts:
@@ -99,10 +99,10 @@ textures:
 # Whole-visual and per-material parts.
 visuals:
 # Slalom row (one visual per row frame). Assimp 5.2 material names (the COLLADA <material name>):
-# Material.001 = red (diffuse 1 0.005 0.005), the single centre pole: shaft plus top and bottom caps,
+# Material.001 = red (diffuse 1 0.005 0.005), the single center pole: shaft plus top and bottom caps,
 # three vertex-disjoint pieces, so no split: one row = one red pole instance. Material.002 = white,
 # the two side poles and the base frame.
 - {task: slalom, asset: slalom_mesh, materials: {Material.001: pole_red, Material.002: pole_white}}
-# Magnet light covers (rim + clear lid); the indicator colour (red until latched) rides on the instance.
+# Magnet light covers (rim + clear lid); the indicator color (red until latched) rides on the instance.
 - {task: bins, asset: magnet_cover_mesh, frame: magnet_target1, part: magnet_cover, indicator: magnet_target1}
 - {task: bins, asset: magnet_cover_mesh, frame: magnet_target2, part: magnet_cover, indicator: magnet_target2}

@@ -13,7 +13,7 @@ struct Texture {
     int width = 0, height = 0;
 };
 
-// Linear base colour to the sRGB the textures and the screen use.
+// Linear base color to the sRGB the textures and the screen use.
 float toSrgb(float c) {
     return std::pow(std::clamp(c, 0.f, 1.f), 1 / 2.2f);
 }
@@ -35,22 +35,22 @@ std::pair<glm::vec2, glm::vec2> topDownBounds(const std::vector<TopDownPart> &pa
     return {low, high};
 }
 
-TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, glm::vec2 high, float pixelsPerMetre,
+TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, glm::vec2 high, float pixelsPerMeter,
                          const ImageReader &readImage, int maximumSide) {
     TopDownImage image;
     const glm::vec2 size = high - low;
     if (size.x <= 0 || size.y <= 0)
         return image;
 
-    // Image size: pixelsPerMetre, reduced so the longer side fits maximumSide. `high` is rounded out to whole
+    // Image size: pixelsPerMeter, reduced so the longer side fits maximumSide. `high` is rounded out to whole
     // pixels.
-    const float scale = std::min(pixelsPerMetre, float(maximumSide) / std::max(size.x, size.y));
+    const float scale = std::min(pixelsPerMeter, float(maximumSide) / std::max(size.x, size.y));
     image.width = std::max(1, int(std::ceil(size.x * scale)));
     image.height = std::max(1, int(std::ceil(size.y * scale)));
     image.low = low;
     image.high = {low.x + float(image.width) / scale, low.y + float(image.height) / scale};
 
-    // Colour plus a height buffer (plane z, larger is higher) for the highest-surface-wins test.
+    // Color plus a height buffer (plane z, larger is higher) for the highest-surface-wins test.
     const std::size_t pixels = std::size_t(image.width) * std::size_t(image.height);
     image.rgba.assign(pixels * 4, 0);
     std::vector<float> depth(pixels, std::numeric_limits<float>::lowest());
@@ -71,12 +71,12 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
             const Texture *map =
                 submesh.material.diffuse_texture ? texture(*submesh.material.diffuse_texture) : nullptr;
             const auto &base = submesh.material.base_color;
-            // a diffuse texture replaces the base colour (as the renderer draws it)
+            // a diffuse texture replaces the base color (as the renderer draws it)
             const glm::vec3 flat = map ? glm::vec3(1) : glm::vec3(toSrgb(base.x()), toSrgb(base.y()), toSrgb(base.z()));
             if (!map && base.w() < .05f)
                 continue;
 
-            // Vertices in the plane (metres) and in image pixels (x right, y down, z kept for the height test).
+            // Vertices in the plane (meters) and in image pixels (x right, y down, z kept for the height test).
             std::vector<glm::vec3> placed(submesh.vertices.size()), plane(submesh.vertices.size());
             for (std::size_t i = 0; i < placed.size(); ++i) {
                 const auto &p = submesh.vertices[i].position;
@@ -84,7 +84,7 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
                 placed[i] = {(plane[i].x - low.x) * scale, (image.high.y - plane[i].y) * scale, plane[i].z}; // pixels
             }
 
-            // Rasterize each triangle over its pixel bounding box with barycentric weights at pixel centres.
+            // Rasterize each triangle over its pixel bounding box with barycentric weights at pixel centers.
             for (std::size_t t = 0; t + 2 < submesh.indices.size(); t += 3) {
                 const std::uint32_t ia = submesh.indices[t], ib = submesh.indices[t + 1], ic = submesh.indices[t + 2];
                 if (ia >= placed.size() || ib >= placed.size() || ic >= placed.size())
@@ -114,7 +114,7 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
                         const std::size_t at = std::size_t(y) * std::size_t(image.width) + std::size_t(x);
                         if (z <= depth[at])
                             continue;
-                        glm::vec3 colour = flat;
+                        glm::vec3 color = flat;
                         if (map) { // the texture through the UVs (v up, as the renderer flips its rows)
                             const float u = wa * ua.x() + wb * ub.x() + wc * uc.x(),
                                         v = wa * ua.y() + wb * ub.y() + wc * uc.y();
@@ -129,13 +129,13 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
                                 &map->rgba[(std::size_t(ty) * std::size_t(map->width) + std::size_t(tx)) * 4];
                             if (texel[3] < 128)
                                 continue;
-                            colour = glm::vec3(texel[0], texel[1], texel[2]) / 255.f;
+                            color = glm::vec3(texel[0], texel[1], texel[2]) / 255.f;
                         }
 
                         depth[at] = z;
-                        colour *= shade;
+                        color *= shade;
                         for (int k = 0; k < 3; ++k)
-                            image.rgba[at * 4 + k] = std::uint8_t(std::lround(std::clamp(colour[k], 0.f, 1.f) * 255));
+                            image.rgba[at * 4 + k] = std::uint8_t(std::lround(std::clamp(color[k], 0.f, 1.f) * 255));
                         image.rgba[at * 4 + 3] = 255;
                     }
             }
@@ -146,7 +146,7 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
 
 namespace {
 // A 1 px darker edge where a prop meets the floor (the outline that keeps small props crisp); thin features are
-// left their own colour, as darkening them would dim them whole.
+// left their own color, as darkening them would dim them whole.
 void darkenEdges(TopDownImage &image) {
     std::vector<std::uint8_t> edged = image.rgba;
     const auto opaque = [&](int x, int y) {
@@ -155,7 +155,7 @@ void darkenEdges(TopDownImage &image) {
     };
     for (int y = 0; y < image.height; ++y)
         for (int x = 0; x < image.width; ++x)
-            // the border of something with a body; a feature only a pixel thin (a pole drawn small) keeps its colour
+            // the border of something with a body; a feature only a pixel thin (a pole drawn small) keeps its color
             if (opaque(x, y) && (!opaque(x + 1, y) || !opaque(x - 1, y) || !opaque(x, y + 1) || !opaque(x, y - 1)) &&
                 (opaque(x + 1, y) || opaque(x - 1, y)) && (opaque(x, y + 1) || opaque(x, y - 1))) {
                 const std::size_t at = (std::size_t(y) * std::size_t(image.width) + std::size_t(x)) * 4;
@@ -165,7 +165,7 @@ void darkenEdges(TopDownImage &image) {
     image.rgba = std::move(edged);
 }
 
-// Half the size: opaque when any of the (up to) four pixels under it is, their opaque colours averaged.
+// Half the size: opaque when any of the (up to) four pixels under it is, their opaque colors averaged.
 TopDownImage halve(const TopDownImage &image) {
     TopDownImage half;
     half.width = std::max(1, image.width / 2);

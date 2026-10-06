@@ -81,17 +81,17 @@ class RobotRejectionTests(PackRejectionCase):
 
     def test_unknown_root_field(self) -> None:
         self.edit(
-            "robot/robot.yaml", "kind: robot\nid: synth\n", "kind: robot\nid: synth\ncolour: red\n"
+            "robot/robot.yaml", "kind: robot\nid: synth\n", "kind: robot\nid: synth\ncolor: red\n"
         )
-        self.assert_load_rejects("robot", "'colour' was unexpected")
+        self.assert_load_rejects("robot", "'color' was unexpected")
 
     def test_unknown_sensor_parameter_field(self) -> None:
         self.edit(
             "robot/robot.yaml",
             "    attitude: {angle_stddev_rad: 0.001}\n",
-            "    attitude: {angle_stddev_rad: 0.001}\n    colour: red\n",
+            "    attitude: {angle_stddev_rad: 0.001}\n    color: red\n",
         )
-        self.assert_load_rejects("robot", "'colour' was unexpected")
+        self.assert_load_rejects("robot", "'color' was unexpected")
 
     def test_unknown_sensor_type(self) -> None:
         self.edit("robot/robot.yaml", "type: ahrs", "type: sonar")
@@ -525,7 +525,7 @@ class PoolFixtureTests(PackRejectionCase):
         )
 
     def test_boxes_and_recess_load(self) -> None:
-        """Floor boxes (2D centre), a 3D-centred box, a tapered vent and a wall recess load."""
+        """Floor boxes (2D center), a 3D-centered box, a tapered vent and a wall recess load."""
         self.add_fixtures(
             "- {id: grate, type: box, center_m: [6, 2], size_m: [1.2, 0.6, 0.03], rpy_deg: [0, 0, 90], "
             "color_rgb: [0.8, 0.8, 0.8], contact: true}\n"
@@ -538,7 +538,7 @@ class PoolFixtureTests(PackRejectionCase):
         resolve_scenario(self.scenario)
 
     def test_box_outside_the_pool(self) -> None:
-        """A 2D centre must be on the floor; a 3D one inside the pool. One error reports both."""
+        """A 2D center must be on the floor; a 3D one inside the pool. One error reports both."""
         self.add_fixtures(
             "- {id: grate, type: box, center_m: [10.5, 2], size_m: [1, 1, 0.1]}\n"
             "- {id: rail, type: box, center_m: [14, 2, 0], size_m: [1, 1, 0.1]}\n"

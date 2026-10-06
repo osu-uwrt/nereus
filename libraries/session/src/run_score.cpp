@@ -23,7 +23,7 @@ Json buildRunSnapshot(const Json &task_pack, const Json &snapshot, Json extra, s
     }
 
     // Rows: the pack's declared score_rows in order (0 when not scored yet), then any other scored rows; when
-    // the pack declares none, every scored row labelled by its key.
+    // the pack declares none, every scored row labeled by its key.
     const Json &scores = snapshot.at("scores");
     Json declared = Json::array();
     if (task_pack.contains("score_rows") && task_pack.at("score_rows").is_array() &&

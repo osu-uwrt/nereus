@@ -8,7 +8,7 @@
 namespace nereus::ros_viewer::panels {
 namespace {
 
-// Handles: 0 the centre square (drag in the body XY plane), 1..3 the X/Y/Z arrows, 4..6 the roll/pitch/yaw rings.
+// Handles: 0 the center square (drag in the body XY plane), 1..3 the X/Y/Z arrows, 4..6 the roll/pitch/yaw rings.
 class PoseGizmo final : public Overlay {
     std::shared_ptr<Motion> control;
     int targetDrag = -1;               // handle being dragged, -1 when idle
@@ -22,13 +22,13 @@ class PoseGizmo final : public Overlay {
     glm::vec2 dragOrigin{0}, dragSize{1};
     glm::vec3 dragRpy{0}, dragPoint{0}, dragDirection{0}, dragNormal{0};
     glm::vec2 dragMouse{0}, dragTangent{0};
-    float dragAxis = 0, dragAngle = 0, sizeMetres, hitPixels; // options size_metres, hit_pixels
+    float dragAxis = 0, dragAngle = 0, sizeMeters, hitPixels; // options size_meters, hit_pixels
     glm::vec3 dragRadial{0};
     bool dragInPlane = false, dragRadialValid = false;
 
   public:
     explicit PoseGizmo(const Binding &b)
-        : control(std::dynamic_pointer_cast<Motion>(b.provider)), sizeMetres(b.options["size_metres"].as<float>(.3f)),
+        : control(std::dynamic_pointer_cast<Motion>(b.provider)), sizeMeters(b.options["size_meters"].as<float>(.3f)),
           hitPixels(b.options["hit_pixels"].as<float>(20)) {}
 
     void cancelInteraction() override {
@@ -78,9 +78,9 @@ class PoseGizmo final : public Overlay {
         // the start of the gesture so drift between the two frames cannot move the target mid-drag.
         const auto send = [&](const Pose &display) { control->drag(glm::inverse(dragDisplay) * display); };
 
-        // Geometry in display space: the commanded position, its body axes and one colour per handle.
+        // Geometry in display space: the commanded position, its body axes and one color per handle.
         const glm::vec3 p(commanded[3]);
-        const float length = sizeMetres;
+        const float length = sizeMeters;
         const glm::vec3 axes[] = {glm::normalize(glm::vec3(commanded[0])), glm::normalize(glm::vec3(commanded[1])),
                                   glm::normalize(glm::vec3(commanded[2]))};
         const ImU32 colors[] = {IM_COL32(90, 235, 230, 255), IM_COL32(235, 75, 75, 255), IM_COL32(90, 215, 110, 255),
@@ -133,7 +133,7 @@ class PoseGizmo final : public Overlay {
             }
         }
 
-        // Hit test: the nearest segment within 0.6 x hit_pixels, then the centre square (10 px) on top.
+        // Hit test: the nearest segment within 0.6 x hit_pixels, then the center square (10 px) on top.
         auto &io = ImGui::GetIO();
         const glm::vec2 mouse(io.MousePos.x, io.MousePos.y);
         int hit = -1;
@@ -165,7 +165,7 @@ class PoseGizmo final : public Overlay {
         if (!hovered)
             hit = -1;
 
-        // Draw pass: rings (fainter on the far side), arrows, the centre square, and a tooltip for the hot handle.
+        // Draw pass: rings (fainter on the far side), arrows, the center square, and a tooltip for the hot handle.
         if (draw) {
             auto *list = ImGui::GetWindowDrawList();
             list->PushClipRect(origin, {origin.x + width, origin.y + height}, true);
@@ -230,7 +230,7 @@ class PoseGizmo final : public Overlay {
                                   nereus::ros_viewer::planeHit(ray, p, dragNormal, point);
                     if (dragInPlane) {
                         dragRadial = point - p;
-                        valid = glm::length(dragRadial) > sizeMetres * .1f;
+                        valid = glm::length(dragRadial) > sizeMeters * .1f;
                         if (valid)
                             dragRadial = glm::normalize(dragRadial);
                         dragRadialValid = valid;
@@ -283,7 +283,7 @@ class PoseGizmo final : public Overlay {
                     bool changed = false;
                     if (dragInPlane) {
                         if (nereus::ros_viewer::planeHit(ray, glm::vec3(dragStart[3]), dragNormal, point) &&
-                            glm::length(point - glm::vec3(dragStart[3])) > sizeMetres * .1f) {
+                            glm::length(point - glm::vec3(dragStart[3])) > sizeMeters * .1f) {
                             const auto radial = glm::normalize(point - glm::vec3(dragStart[3]));
                             if (dragRadialValid && moved) {
                                 // Accumulate signed steps so crossing +/-pi never
@@ -310,7 +310,7 @@ class PoseGizmo final : public Overlay {
                     }
                 } else if (targetDrag == 0 &&
                            nereus::ros_viewer::planeHit(ray, glm::vec3(dragStart[3]), dragNormal, point)) {
-                    // Centre: translate in the plane through the start position normal to the body z axis.
+                    // Center: translate in the plane through the start position normal to the body z axis.
                     next[3] += glm::vec4(point - dragPoint, 0);
                     if (glm::length(glm::vec2(io.MouseDelta.x, io.MouseDelta.y)) > 0)
                         send(next);
@@ -329,13 +329,13 @@ class PoseGizmo final : public Overlay {
 
 } // namespace
 
-// Registers the "pose_gizmo" overlay (a Motion provider); options: size_metres (<= 10), hit_pixels (<= 40).
+// Registers the "pose_gizmo" overlay (a Motion provider); options: size_meters (<= 10), hit_pixels (<= 40).
 void registerPoseGizmo(Registry &r) {
     r.overlays.emplace("pose_gizmo",
                        ViewFactory<Overlay>{Kind::Motion,
                                             [](const YAML::Node &n) {
-                                                keys(n, {"size_metres", "hit_pixels"}, "pose_gizmo");
-                                                positive(n, "size_metres", .3, 10);
+                                                keys(n, {"size_meters", "hit_pixels"}, "pose_gizmo");
+                                                positive(n, "size_meters", .3, 10);
                                                 positive(n, "hit_pixels", 20, 40);
                                             },
                                             [](const Binding &b) { return std::make_unique<PoseGizmo>(b); }});

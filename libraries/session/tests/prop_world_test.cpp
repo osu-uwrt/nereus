@@ -16,7 +16,7 @@ using Matrix4 = Eigen::Matrix4d;
 namespace {
 // The recordings came from PyBullet's bundled Bullet, a different revision from the system
 // libbullet (3.05, double build), and the contact scenes are chaotic at contact onset; the observed agreement is
-// printed by the test. Poses: metres / radians of rotation angle. Event times: ticks.
+// printed by the test. Poses: meters / radians of rotation angle. Event times: ticks.
 constexpr double kPositionToleranceM = 2e-2;
 constexpr double kRotationToleranceRad = 0.15;
 constexpr int kEventToleranceTicks = 10;

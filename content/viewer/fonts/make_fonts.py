@@ -60,7 +60,7 @@ def rename(font: TTFont) -> None:
 
 
 def main() -> None:
-    """Downloads each face, applies the tabular digits and the rename, and saves it with the licence."""
+    """Downloads each face, applies the tabular digits and the rename, and saves it with the license."""
     for name, path in FACES.items():
         data = urllib.request.urlopen(SOURCE.format(path), timeout=60).read()
         font = TTFont(io.BytesIO(data))
@@ -69,7 +69,7 @@ def main() -> None:
         font.save(HERE / name)
         print("wrote", name)
 
-    # The OFL requires the licence to travel with the modified fonts.
+    # The OFL requires the license to travel with the modified fonts.
     license = urllib.request.urlopen(SOURCE.format("barlow/OFL.txt"), timeout=60).read()
     (HERE / "OFL.txt").write_bytes(license)
 

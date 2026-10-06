@@ -5,7 +5,7 @@ layout(location=2) in vec2 uv;
 uniform mat4 model, view, projection;
 out vec2 texcoord;
 
-// Same position arithmetic as scene.vert (no `invariant`): label depth equals colour depth on the drivers tested.
+// Same position arithmetic as scene.vert (no `invariant`): label depth equals color depth on the drivers tested.
 void main(){
   vec4 p=model*vec4(position,1);
   texcoord=uv;

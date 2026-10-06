@@ -315,9 +315,9 @@ Job parseJob(const Json &d) {
         job.visuals.push_back(std::move(part));
     }
 
-    // (task, part) pairs that count for acceptance; other parts are still labelled in the id map.
-    for (const auto &item : d.value("labelled", Json::array()))
-        job.labelled.emplace(item.at("task").get<std::string>(), item.at("part").get<std::string>());
+    // (task, part) pairs that count for acceptance; other parts are still labeled in the id map.
+    for (const auto &item : d.value("labeled", Json::array()))
+        job.labeled.emplace(item.at("task").get<std::string>(), item.at("part").get<std::string>());
 
     // Acceptance thresholds; omitted keys keep the Acceptance defaults.
     const auto acceptance = d.value("acceptance", Json::object());
@@ -327,7 +327,7 @@ Job parseJob(const Json &d) {
     a.near_m = acceptance.value("near_m", a.near_m);
     a.max_near_fraction = acceptance.value("max_near_fraction", a.max_near_fraction);
     a.max_attempts = acceptance.value("max_attempts", a.max_attempts);
-    a.background_max_labelled_px = acceptance.value("background_max_labelled_px", a.background_max_labelled_px);
+    a.background_max_labeled_px = acceptance.value("background_max_labeled_px", a.background_max_labeled_px);
     const auto fragments = acceptance.value("fragments", std::string("reject"));
     if (fragments != "reject" && fragments != "allow")
         fail("acceptance.fragments", "reject or allow");

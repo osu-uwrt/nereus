@@ -21,7 +21,7 @@ class MarineDynamics {
     // Linear and quadratic damping acting at `center` (body frame, offset from the COM).
     void configureDamping(const Matrix6d &linear, const Vector6d &quadratic,
                           const Eigen::Vector3d &center = Eigen::Vector3d::Zero());
-    // Buoyancy of an ellipsoid with semi-axes buoyancy_radii centred at cob (body frame); the immersed
+    // Buoyancy of an ellipsoid with semi-axes buoyancy_radii centered at cob (body frame); the immersed
     // fraction of it scales the displaced volume.
     void configureHydrostatics(double density, double volume, const Eigen::Vector3d &cob,
                                const Eigen::Vector3d &buoyancy_radii, double gravity = 9.80665,
@@ -35,7 +35,7 @@ class MarineDynamics {
     Vector6d dampingWrench(const Vector6d &relative_velocity) const;
     // Weight plus buoyancy as a body-axes wrench at the COM.
     Vector6d restoringWrench(const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation) const;
-    // Immersed volume fraction of the buoyancy ellipsoid; optionally its wet centre (body frame, from COM).
+    // Immersed volume fraction of the buoyancy ellipsoid; optionally its wet center (body frame, from COM).
     double submergedFraction(const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation,
                              Eigen::Vector3d *wet_center = nullptr) const;
     // State derivative for a body-frame propulsion wrench at the COM, in water moving at world-frame

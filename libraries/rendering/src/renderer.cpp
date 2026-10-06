@@ -573,7 +573,7 @@ struct Frame {
     }
 };
 
-// Label pass target: R32UI ids + 24-bit depth, separate from the colour frame so a label pass never
+// Label pass target: R32UI ids + 24-bit depth, separate from the color frame so a label pass never
 // disturbs draw()'s images or captures.
 struct LabelTarget {
     GLuint fbo = 0, ids = 0, depth = 0;
@@ -894,7 +894,7 @@ struct Renderer::Resources {
     void sampleDepth();
 };
 
-// Renders the sun's depth map: a 66 m square orthographic view centred on the lighting centre. Indoors the
+// Renders the sun's depth map: a 66 m square orthographic view centered on the lighting center. Indoors the
 // light comes from a fixed, nearly overhead direction. The map is cleared even when shadows are off.
 void Renderer::Resources::shadows(const Look &look) {
     auto sun = look.outdoor ? look.sunDirection() : glm::normalize(glm::vec3(-.2f, -.1f, 1));
@@ -1062,7 +1062,7 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
         drawScene(reflected, look, time, true);
     }
 
-    // Opaque pass (sensor depth comes from here), then copy colour and depth into the composite target.
+    // Opaque pass (sensor depth comes from here), then copy color and depth into the composite target.
     glBindFramebuffer(GL_FRAMEBUFFER, f.opaque.fbo);
     glViewport(0, 0, f.opaque.width, f.opaque.height);
     glClearColor(look.outdoor ? .30f : .13f, look.outdoor ? .48f : .16f, look.outdoor ? .68f : .18f, 1);
@@ -1073,7 +1073,7 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
     glBlitFramebuffer(0, 0, f.opaque.width, f.opaque.height, 0, 0, f.opaque.width, f.opaque.height,
                       GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 
-    // Water surface over the composite: samples the opaque colour/depth for refraction, writes no depth.
+    // Water surface over the composite: samples the opaque color/depth for refraction, writes no depth.
     glBindFramebuffer(GL_FRAMEBUFFER, f.composite.fbo);
     if (surfaceVisible) {
         glUseProgram(waterProgram);
@@ -1197,7 +1197,7 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-// Output-sized depth from a supersampled frame: per pixel the one opaque-pass sample nearest its centre,
+// Output-sized depth from a supersampled frame: per pixel the one opaque-pass sample nearest its center,
 // copied exactly (never an average, which would invent depths between an edge's two surfaces).
 void Renderer::Resources::sampleDepth() {
     if (!depthSampleProgram)
@@ -1446,7 +1446,7 @@ Capture Renderer::capture() const {
     glPixelStorei(GL_PACK_SKIP_ROWS, 0);
     glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
 
-    // Scene-sized float colour and depth of both scene passes, then the 8-bit output.
+    // Scene-sized float color and depth of both scene passes, then the 8-bit output.
     const auto read = [&](const Target &target, std::vector<float> &color, std::vector<float> &depth) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, target.fbo);
         glReadBuffer(GL_COLOR_ATTACHMENT0);
@@ -1576,7 +1576,7 @@ LabelCapture Renderer::drawLabels(const Scene &scene, const std::vector<Instance
     integer(p, "albedo", 0);
     integer(p, "partMap", 1);
     const auto viewProjection = projection * viewMatrix;
-    // Same order and Clear rule as drawScene: opaque submeshes, then Clear ones (labelled covers only).
+    // Same order and Clear rule as drawScene: opaque submeshes, then Clear ones (labeled covers only).
     for (int clear = 0; clear < 2; ++clear)
         for (std::size_t i = 0; i < objects.size(); ++i) {
             const auto &o = objects[i];

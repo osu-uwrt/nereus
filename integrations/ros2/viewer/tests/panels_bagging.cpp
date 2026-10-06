@@ -42,7 +42,7 @@ bool waitFor(const std::function<bool()> &done, double seconds) {
 }
 
 // ros2 bag record stand-in: writes its arguments into the bag, appends data until SIGINT, then closes the bag after
-// close_delay seconds by writing metadata.yaml. Files beside it change its behaviour: die (fail at once with the
+// close_delay seconds by writing metadata.yaml. Files beside it change its behavior: die (fail at once with the
 // file's text), exit_after (exit on its own after that many ticks), close_delay.
 constexpr const char *fakeRos2 = R"SH(#!/bin/sh
 d=$(cd "$(dirname "$0")" && pwd)

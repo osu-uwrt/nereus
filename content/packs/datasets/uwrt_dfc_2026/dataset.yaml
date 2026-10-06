@@ -1,4 +1,4 @@
-# UWRT down-camera (dfc) training set: bin vinyls and the table, labelled per the UWRT label pack.
+# UWRT down-camera (dfc) training set: bin vinyls and the table, labeled per the UWRT label pack.
 # Altitudes are bounded by the RoboSub pool (talos_uwrt, 2.13 m deep) with the camera at least 0.1 m
 # under the surface: the bins stand on the floor (vinyl floors 1.56-1.83 m deep) and the table top is
 # 1.54 m deep, so ~1.4 m is the highest overhead view of either.
@@ -22,15 +22,15 @@ split: {train: 0.8, val: 0.2, test: 0.0}
 tasks:
   bins:
     count: 500
-    # Above one of the four crates (vinyl floor frames); neighbours often in view too.
+    # Above one of the four crates (vinyl floor frames); neighbors often in view too.
     sampler: {type: overhead, frame: [bin_vinyl1, bin_vinyl2, bin_vinyl3, bin_vinyl4], altitude_m: [0.6, 1.45],
               radius_m: 0.35, roll_deg: 4, pitch_deg: 4}
   table:
     count: 600
-    # Table top (0.64 m square) with the baskets 0.4 m either side of its centre.
+    # Table top (0.64 m square) with the baskets 0.4 m either side of its center.
     sampler: {type: overhead, frame: task, altitude_m: [0.5, 1.4], radius_m: 0.45, roll_deg: 4, pitch_deg: 4}
 
-# ~12 % of the images: pool views with no labelled object (team training guide: 10-15 % background).
+# ~12 % of the images: pool views with no labeled object (team training guide: 10-15 % background).
 background: {count: 150, sampler: {type: free, depth_m: [0.3, 1.8], roll_deg: 4, pitch_deg: 4}}
 
 # Appearance. Water is relative to the pool pack's calibrated optics (robosub_2026: scattering 0.458), so

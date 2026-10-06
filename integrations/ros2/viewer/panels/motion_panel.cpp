@@ -60,7 +60,7 @@ class MotionPanel final : public Panel {
     std::function<bool()> keyboardDriving;
     std::function<void(bool)> setKeyboardDriving;
 
-    // The editable target: position in metres, roll/pitch/yaw in degrees.
+    // The editable target: position in meters, roll/pitch/yaw in degrees.
     glm::vec3 position{0}, degrees{0};
     bool initialized = false, dirty = false, hasDive; // dirty: target edited and not yet sent
     Mode selected = Mode::Position;                   // the mode the next Command uses
@@ -112,7 +112,7 @@ class MotionPanel final : public Panel {
         ImGui::PopStyleVar();
     }
 
-    // "Robot: enabled" etc., coloured by the robot's reported kill state.
+    // "Robot: enabled" etc., colored by the robot's reported kill state.
     const char *stateText(const MotionState &s, ImVec4 &tint) const {
         const auto &p = palette();
         tint = !motion ? p.muted : s.observedKilled.value_or(true) ? p.robotKilled : p.robotEnabled;
@@ -131,7 +131,7 @@ class MotionPanel final : public Panel {
         const auto s = motion ? motion->state() : MotionState{};
         const float height = std::max(ui(34), ImGui::GetFrameHeight());
         enableKillButton({ui(132), height});
-        // The robot's state beside it, centred on the button (drawn directly: a Text after a tall button takes
+        // The robot's state beside it, centered on the button (drawn directly: a Text after a tall button takes
         // the line's text baseline instead).
         const float top = ImGui::GetItemRectMin().y; // the button's, not its line's (it may continue a line)
         ImGui::SameLine();
@@ -168,7 +168,7 @@ class MotionPanel final : public Panel {
         // Commands need a connected, enabled, fresh robot that nothing else holds.
         const bool unavailable = !motion || !s.enabled || !s.fresh || s.pending || s.blocked || s.competing;
         ImGui::BeginDisabled(unavailable);
-        // the controller's mode as a switch (Feedforward greyed when the controller has none)
+        // the controller's mode as a switch (Feedforward grayed when the controller has none)
         int mode = s.mode == Mode::Feedforward ? 1 : 0;
         if (pins::Switch("Mode##control_mode", &mode, {"Position", "Feedforward"}, ImGui::GetContentRegionAvail().x,
                          s.supportsFeedforward ? 0u : 2u)) {
@@ -230,7 +230,7 @@ class MotionPanel final : public Panel {
                                                                                     ImGui::CalcTextSize(shown).x));
                 ImGui::TextDisabled("%s", shown);
                 if (first && ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s: positions in metres, angles in degrees",
+                    ImGui::SetTooltip("%s: positions in meters, angles in degrees",
                                       s.frame.empty() ? "Frame not reported" : ("Frame " + s.frame).c_str());
                 else if (ImGui::IsItemHovered() && std::string(full) == "Error")
                     ImGui::SetTooltip("Commanded minus actual / angles wrapped to [-180, 180] degrees");
@@ -241,7 +241,7 @@ class MotionPanel final : public Panel {
                 ImGui::PopFont();
             ruleUnderHeaders();
 
-            // One row per axis: X, Y, Z in metres, then roll, pitch, yaw in degrees.
+            // One row per axis: X, Y, Z in meters, then roll, pitch, yaw in degrees.
             const auto actualAngles = glm::degrees(glm::eulerAngles(glm::quat_cast(s.actual)));
             const auto sentAngles = glm::degrees(glm::eulerAngles(glm::quat_cast(s.commanded)));
             const char *names[] = {"X", "Y", "Z", "Roll", "Pitch", "Yaw"};

@@ -304,7 +304,7 @@ class SessionCameraSink final : public CameraSink {
                                                        : sc::Output::DepthLeft};
     }
 
-    // Coloured cloud from the left depth and RGB of one capture, decimated by `stride`, organized
+    // Colored cloud from the left depth and RGB of one capture, decimated by `stride`, organized
     // (height x width grid, NaN where depth is invalid) in the stream's (optical) frame.
     void compileCloud(CameraStream &item, const Json &stream, const std::string &where, const std::string &frame_id,
                       int every, const Json &sensor) {

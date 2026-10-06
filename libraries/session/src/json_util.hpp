@@ -41,7 +41,7 @@ inline Eigen::Vector3d vec3(const Json &value, const std::string &what) {
     return vec(value, 3, what);
 }
 
-// From [w, x, y, z]; not normalised here.
+// From [w, x, y, z]; not normalized here.
 inline Eigen::Quaterniond quat(const Json &value, const std::string &what) {
     const Eigen::VectorXd q = vec(value, 4, what);
     return Eigen::Quaterniond(q[0], q[1], q[2], q[3]);

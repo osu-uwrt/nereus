@@ -20,9 +20,9 @@ session, rules or pack formats. Format C++ with the repo's `.clang-format`; the 
 - **Viewer layout and topics**: `content/viewer/*.yaml`.
 - **Libraries** (`libraries/`) stay free of ROS; ROS lives in `integrations/ros2/`.
 
-Tests check behaviour, not structure. The reference fixtures in `libraries/session/tests/fixtures/`,
+Tests check behavior, not structure. The reference fixtures in `libraries/session/tests/fixtures/`,
 `extensions/rules/robosub_2026/tests/` and `tests/fixtures/` are recordings of known-good runs. When you change
-behaviour on purpose, update the affected expected values and say why in the commit.
+behavior on purpose, update the affected expected values and say why in the commit.
 
 The C++ tests run on frozen resolved scenarios (`libraries/session/tests/fixtures/*_resolved.json.in`), not on
 the live packs, so retuning the robot (mass, inertia, buoyancy, frames) or moving the course never breaks them.

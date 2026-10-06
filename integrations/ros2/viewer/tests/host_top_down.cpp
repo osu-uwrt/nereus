@@ -5,7 +5,7 @@
 using namespace nereus::ros_viewer::host;
 
 namespace {
-// An axis-aligned box mesh (12 triangles) from `low` to `high`, coloured `rgb`.
+// An axis-aligned box mesh (12 triangles) from `low` to `high`, colored `rgb`.
 std::shared_ptr<nereus::rendering::MeshAsset> box(Eigen::Vector3f low, Eigen::Vector3f high, Eigen::Vector3f rgb) {
     auto mesh = std::make_shared<nereus::rendering::MeshAsset>();
     nereus::rendering::Submesh part;
@@ -29,8 +29,8 @@ const std::uint8_t *pixel(const TopDownImage &image, int x, int y) {
 }
 } // namespace
 
-// A 4 x 4 m area at 10 px/m: the box covers its footprint in its own colour, everything else is transparent.
-TEST(TopDown, ProjectsTheFootprintWithItsColourAndARim) {
+// A 4 x 4 m area at 10 px/m: the box covers its footprint in its own color, everything else is transparent.
+TEST(TopDown, ProjectsTheFootprintWithItsColorAndARim) {
     const auto red = box({1, 1, 0}, {2, 3, 1}, {1, 0, 0});
     const auto image = bakeTopDown({{red, glm::mat4(1)}}, {0, 0}, {4, 4}, 10);
     ASSERT_EQ(image.width, 40);

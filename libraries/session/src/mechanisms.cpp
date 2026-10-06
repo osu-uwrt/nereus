@@ -46,7 +46,7 @@ const Json &at(const Json &object, const char *key) {
     return object.at(key);
 }
 
-// One claw's jaw state. `q`, `target` and `initial` are per-jaw openings in metres measured from the closed
+// One claw's jaw state. `q`, `target` and `initial` are per-jaw openings in meters measured from the closed
 // position (gap = minimum + 2 q), so q runs from 0 (closed) to travel() (fully open).
 struct Claw {
     double minimum, maximum, speed, tolerance, initial, q, target;
@@ -309,7 +309,7 @@ CommandResult Mechanisms::fire(const std::string &id, const Pose &world_from_ref
     const double speed = std::sqrt(2 * p.at("launch").at("spring_energy_j").get<double>() / inertia);
 
     // Vehicle velocity carried to the slot (rigid-body transport), plus the launch speed along the slot axis
-    // and the spin's contribution at the projectile's centre of mass, which sits `com` metres along that axis.
+    // and the spin's contribution at the projectile's center of mass, which sits `com` meters along that axis.
     const Eigen::Vector3d world_omega = rotate(world.rotation, angular_velocity_reference);
     Eigen::Vector3d world_velocity =
         rotate(world.rotation, linear_velocity_reference + angular_velocity_reference.cross(mount.translation));

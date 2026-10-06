@@ -187,7 +187,7 @@ overlays:
     title: Pose gizmo  # the arrows and rings in the pool view that command the robot's pose
     provider: motion
     options:
-      size_metres: 0.3
+      size_meters: 0.3
       hit_pixels: 20
 # Pool view toolbar, in order. Types: host items (view, focus, follow, labels, tf, detections, mpc_path, thrust,
 # scene_settings ("Scene" window), pool_viewer ("Display" window), panels_menu (a Windows popup, as the menu bar's),

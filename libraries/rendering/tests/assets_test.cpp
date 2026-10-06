@@ -70,7 +70,7 @@ TEST(MeshAssets, NestedTransformsUseAuthoredAxesAndInverseTransposeNormals) {
                  std::runtime_error);
 }
 
-// Compares every Talos submesh against legacy_mesh_assets.csv: counts, material colour, bounds, mean
+// Compares every Talos submesh against legacy_mesh_assets.csv: counts, material color, bounds, mean
 // position/normal/uv, and an FNV-1a hash of the index buffer.
 TEST(MeshAssets, EveryOriginalSubmeshKeepsOrderTopologyMaterialsAndVertexStatistics) {
     std::ifstream reference(std::filesystem::path(NEREUS_ASSET_FIXTURES) / "legacy_mesh_assets.csv");

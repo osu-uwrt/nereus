@@ -10,7 +10,7 @@
 namespace nereus::ros_viewer::panels {
 namespace {
 
-// Wrapped text in the disabled-text colour; nothing for an empty string.
+// Wrapped text in the disabled-text color; nothing for an empty string.
 void muted(const std::string &text) {
     if (text.empty())
         return;

@@ -33,7 +33,7 @@ struct BodyParameters {
     Vector6 quadratic_damping = Vector6::Zero();
     // Point (body frame, from COM) where damping acts.
     Eigen::Vector3d damping_center = Eigen::Vector3d::Zero();
-    // Displaced volume (m^3) and the ellipsoid (centre, semi-axes in m) whose immersed fraction scales buoyancy.
+    // Displaced volume (m^3) and the ellipsoid (center, semi-axes in m) whose immersed fraction scales buoyancy.
     double displaced_volume = 0.01;
     Eigen::Vector3d buoyancy_center = Eigen::Vector3d::Zero();
     Eigen::Vector3d buoyancy_radii{0.2, 0.2, 0.2};
@@ -58,7 +58,7 @@ struct Thruster {
     double forward_scale = 1, reverse_scale = 1;
     double efficiency = 1; // [0,1], applied after command scaling and saturation.
 
-    // If present, scale thrust by the immersed fraction of this disk (metres).
+    // If present, scale thrust by the immersed fraction of this disk (meters).
     // Absence leaves actuator force unmodulated for other propulsion models.
     std::optional<double> propeller_radius = std::nullopt;
 };

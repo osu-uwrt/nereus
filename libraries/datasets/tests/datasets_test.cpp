@@ -69,9 +69,9 @@ Json minimalJob() {
       "parts": {"textures": [], "visuals": [
         {"task": "slalom", "asset": "pole", "prop": null, "frame": null, "part": null,
          "materials": {"Red": "pole_red", "White": "pole_white"}, "split": "connected", "indicator": null}]},
-      "labelled": [{"task": "slalom", "part": "pole_red"}],
+      "labeled": [{"task": "slalom", "part": "pole_red"}],
       "acceptance": {"max_range_m": 5.0, "min_target_px": 150, "near_m": 0.2, "max_near_fraction": 0.02,
-                     "max_attempts": 50, "background_max_labelled_px": 0},
+                     "max_attempts": 50, "background_max_labeled_px": 0},
       "samples": [
         {"task": "torpedo", "count": 3, "sampler": {"type": "approach", "range_m": [1, 2], "bearing_deg": 30}},
         {"task": null, "count": 2, "sampler": {"type": "free", "depth_m": [0.5, 1.5]}}],
@@ -128,7 +128,7 @@ TEST(DatasetJob, ParsesBlocksNamesAndParts) {
     ASSERT_EQ(job.visuals.size(), 1u);
     EXPECT_TRUE(job.visuals[0].split);
     EXPECT_EQ(job.visuals[0].materials.at("Red"), "pole_red");
-    EXPECT_TRUE(job.labelled.count({"slalom", "pole_red"}));
+    EXPECT_TRUE(job.labeled.count({"slalom", "pole_red"}));
     // A pre-§10 job: the top-level water/lighting/image/time_s become the one environment.
     ASSERT_EQ(job.randomize.environments.size(), 1u);
     EXPECT_FALSE(job.randomize.environments[0].exposure.has_value());
@@ -316,7 +316,7 @@ TEST(DatasetEnvironment, WaterIsRelativeToThePoolUnlessAbsolute) {
     EXPECT_FLOAT_EQ(absolute.appearance.direct_light, 2.f);
 }
 
-TEST(DatasetIntrinsics, ScalingKeepsFieldOfViewAndCropsCentre) {
+TEST(DatasetIntrinsics, ScalingKeepsFieldOfViewAndCropsCenter) {
     nereus::cameras::Intrinsics native;
     native.width = 1920, native.height = 1200, native.fx = 1864, native.fy = 1864, native.cx = 955.8, native.cy = 584.8;
     const auto half = ds::scaleIntrinsics(native, 960, 600);
@@ -615,7 +615,7 @@ std::string slurp(const std::filesystem::path &path) {
     return text.str();
 }
 
-// A two-sample torpedo job on the resolved Talos fixture, labelling the torpedo board's part map.
+// A two-sample torpedo job on the resolved Talos fixture, labeling the torpedo board's part map.
 Json talosJob(const std::filesystem::path &out, int supersample = 1) {
     const std::string tasks = std::string(NEREUS_SOURCE_DIR) + "/content/packs/tasks/robosub_2026/assets/torpedo/";
     Json job = {
@@ -645,7 +645,7 @@ Json talosJob(const std::filesystem::path &out, int supersample = 1) {
                {"7", "ring"},
                {"8", "ring"}}}}}},
           {"visuals", Json::array()}}},
-        {"labelled", {{{"task", "torpedo"}, {"part", "icon_fire"}}, {{"task", "torpedo"}, {"part", "ring"}}}},
+        {"labeled", {{{"task", "torpedo"}, {"part", "icon_fire"}}, {{"task", "torpedo"}, {"part", "ring"}}}},
         {"acceptance", {{"max_range_m", 5.0}, {"min_target_px", 20}, {"max_attempts", 50}}},
         {"samples",
          {{{"task", "torpedo"},
@@ -825,7 +825,7 @@ TEST(DatasetEndToEnd, AcceptanceScaleDoesNotChangeOutput) {
         job["parts"]["visuals"] = {{{"task", "slalom"},
                                     {"asset", "slalom_mesh"},
                                     {"materials", {{"Material.001", "pole_red"}, {"Material.002", "pole_white"}}}}};
-        job["labelled"].push_back({{"task", "slalom"}, {"part", "pole_red"}});
+        job["labeled"].push_back({{"task", "slalom"}, {"part", "pole_red"}});
         return job;
     };
 

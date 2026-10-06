@@ -6299,7 +6299,7 @@
   "items": [
    {
     "id": "calibration_board",
-    "description": "2 ft x 3 ft, 3 mm dibond sign with tag36h11 id 0; the datum line is 18 in above the tag centre.",
+    "description": "2 ft x 3 ft, 3 mm dibond sign with tag36h11 id 0; the datum line is 18 in above the tag center.",
     "asset": "calibration_board",
     "frames": [
      {

@@ -99,7 +99,7 @@
           "type": "integer",
           "minimum": 1
         },
-        "background_max_labelled_px": {
+        "background_max_labeled_px": {
           "type": "integer",
           "minimum": 0
         }
@@ -147,7 +147,7 @@
         },
         "crop": {
           "const": "center",
-          "description": "Aspect mismatch: scale to cover, crop the centre (never stretch)."
+          "description": "Aspect mismatch: scale to cover, crop the center (never stretch)."
         },
         "format": {
           "enum": [

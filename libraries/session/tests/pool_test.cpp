@@ -76,7 +76,7 @@ TEST(PoolFloor, FixtureBoxesRestOnTheFloorAndCanCollide) {
     EXPECT_DOUBLE_EQ(model.surface_z, 0.5);
     const auto &boxes = model.boxes;
     ASSERT_EQ(boxes.size(), 2u);
-    // On the sloped floor: its bottom at the floor under its centre (z relative to the pool frame).
+    // On the sloped floor: its bottom at the floor under its center (z relative to the pool frame).
     const double floor = 0.5 - model.floor.depthAt({15, 2});
     EXPECT_NEAR(boxes[0].center.z() - boxes[0].size.z() / 2, floor, 1e-12);
     EXPECT_TRUE(boxes[0].on_floor);

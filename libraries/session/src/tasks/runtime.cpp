@@ -572,7 +572,7 @@ Json TaskRuntime::feed(const Events &events, const Json &context) const {
     return items;
 }
 
-// One entry per proximity target: its face pose, latch state and indicator colours.
+// One entry per proximity target: its face pose, latch state and indicator colors.
 Json TaskRuntime::indicators() const {
     Json out = Json::array();
     for (const auto &t : impl_->targets) {
@@ -590,7 +590,7 @@ Json TaskRuntime::indicators() const {
     return out;
 }
 
-// Normalise externally produced events (a missing or non-string region becomes "") and evaluate them.
+// Normalize externally produced events (a missing or non-string region becomes "") and evaluate them.
 Events TaskRuntime::record(std::int64_t time_ns, const Events &events) {
     Impl &m = *impl_;
     m.checkTime(time_ns);
@@ -706,7 +706,7 @@ Events TaskRuntime::releaseProjectile(std::int64_t time_ns, int id, const std::s
     return result;
 }
 
-// Judge the segment a projectile's centre swept this step against the panels, crates, pool floor and walls.
+// Judge the segment a projectile's center swept this step against the panels, crates, pool floor and walls.
 // Panels and crates may stop or deflect it; the corrected position/velocity are returned only when they changed.
 ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const Eigen::Vector3d &start_center,
                                            const Eigen::Vector3d &end_center, const Eigen::Vector3d &axis_in,

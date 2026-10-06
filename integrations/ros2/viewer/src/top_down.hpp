@@ -1,5 +1,5 @@
 // Top-down images of meshes for the course map: each mesh projected straight down (the highest surface wins),
-// coloured by its material (diffuse texture through its UVs, else the base colour) and shaded so tops read
+// colored by its material (diffuse texture through its UVs, else the base color) and shaded so tops read
 // lighter than slopes. Baked once on the CPU when a scene loads; the course map draws them as plain images.
 #pragma once
 #include "nereus/rendering/assets.hpp"
@@ -11,29 +11,29 @@
 #include <vector>
 
 namespace nereus::ros_viewer::host {
-// One mesh to bake and its placement in the image plane (metres).
+// One mesh to bake and its placement in the image plane (meters).
 struct TopDownPart {
     std::shared_ptr<const rendering::MeshAsset> mesh;
     glm::mat4 planeFromAsset{1}; // into the image's plane: x right, y up, z towards the viewer
 };
 
-// A baked image and the plane rectangle (metres) it covers.
+// A baked image and the plane rectangle (meters) it covers.
 struct TopDownImage {
     std::vector<std::uint8_t> rgba; // straight alpha; row 0 is the top (largest y)
     int width = 0, height = 0;
     glm::vec2 low{0}, high{0}; // the plane rectangle the image covers
 };
 
-// Reads a diffuse texture (PNG) as top-down RGBA rows; false when it cannot (the part takes its base colour).
+// Reads a diffuse texture (PNG) as top-down RGBA rows; false when it cannot (the part takes its base color).
 using ImageReader =
     std::function<bool(const std::filesystem::path &, int &width, int &height, std::vector<unsigned char> &rgba)>;
 
-// The parts' top-down image over [low, high] at `pixelsPerMetre` (capped at `maximumSide` pixels a side).
-TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, glm::vec2 high, float pixelsPerMetre,
+// The parts' top-down image over [low, high] at `pixelsPerMeter` (capped at `maximumSide` pixels a side).
+TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, glm::vec2 high, float pixelsPerMeter,
                          const ImageReader &readImage = {}, int maximumSide = 4096);
 
 // The image and its smaller sizes for the GPU (a mip chain, each level half the last), made so thin props survive
-// being drawn small: a pixel is opaque when any pixel under it is, its colour the average of those that are (an
+// being drawn small: a pixel is opaque when any pixel under it is, its color the average of those that are (an
 // ordinary mip chain averages a pole into a faint smear). Each level then gets its own 1 px dark edge, so props
 // keep a crisp outline at every zoom. Level 0 is the full-size image.
 std::vector<TopDownImage> topDownLevels(TopDownImage image);

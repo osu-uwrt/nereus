@@ -20,7 +20,7 @@ inline float buttonWidth(const char *label) {
 }
 
 // The theme's fill for an active state (selected mode, toggle on): one place so every "on" looks the same.
-// Pushes four colours; pop them with popActiveColors().
+// Pushes four colors; pop them with popActiveColors().
 inline void pushActiveColors(bool active) {
     const auto &p = palette();
     const auto &colors = ImGui::GetStyle().Colors;

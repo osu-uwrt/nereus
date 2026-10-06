@@ -1,10 +1,10 @@
 # Torpedo board.
-# Task frame: board centre, +X out of the printed face toward the approach side, +Z up.
+# Task frame: board center, +X out of the printed face toward the approach side, +Z up.
 kind: task
 id: torpedo
 description: Perforated torpedo board with two fire and two blood openings.
 
-frames: []   # hole centres are panel data (holes below)
+frames: []   # hole centers are panel data (holes below)
 
 props:
 - id: board
@@ -24,7 +24,7 @@ regions:
   parameters:
     plane: {axis: x, offset_m: 0.0}      # crossing detected in either direction
     half_size_m: 0.3048                   # |y|,|z| <= half_size; outside => no event
-    # Centre (y, z) = (uv - 0.5) * 2 * half_size; radius = radius_uv * 2 * half_size.
+    # Center (y, z) = (uv - 0.5) * 2 * half_size; radius = radius_uv * 2 * half_size.
     # u -> +Y (right when viewed from +X), v -> +Z. Inner ring edges of Task4_ver1_Fixed.png.
     holes:
     # class and size are read by the scoring rules
@@ -32,7 +32,7 @@ regions:
     - {id: fire_small, class: fire, size: small, uv: [0.51378955, 0.81221886], radius_uv: 0.08365}
     - {id: blood_large, class: blood, size: large, uv: [0.85499477, 0.14589262], radius_uv: 0.10469}
     - {id: blood_small, class: blood, size: small, uv: [0.50045453, 0.18734768], radius_uv: 0.08365}
-    # Pass iff |hit - centre| + r / max(0.1, |axis . local X|) <= radius; otherwise blocked.
+    # Pass iff |hit - center| + r / max(0.1, |axis . local X|) <= radius; otherwise blocked.
     projectile_clearance: {rule: radius_over_axis_cosine, min_cosine: 0.1}
 
 events:

@@ -1,6 +1,6 @@
 #pragma once
 // The planner's job document (format nereus.dataset_job.v1, written by `nereus-dataset plan`): what to render,
-// from which scenarios, through which camera, which parts are labelled, how views are accepted and how each
+// from which scenarios, through which camera, which parts are labeled, how views are accepted and how each
 // sample's appearance is randomized. Parsing validates the fields the renderer reads; paths stay absolute.
 #include <nereus/session/scenario.hpp>
 #include <nereus/spatial/frames.hpp>
@@ -26,7 +26,7 @@ struct Range {
     double lo = 0, hi = 0;
 };
 
-// How robot poses are drawn for a sample block (geometry in sampling.cpp). Angles in degrees, lengths in metres.
+// How robot poses are drawn for a sample block (geometry in sampling.cpp). Angles in degrees, lengths in meters.
 struct Sampler {
     std::string type;                        // approach | overhead | free | fixed
     std::vector<std::string> frames{"task"}; // one picked uniformly per attempt
@@ -76,8 +76,8 @@ struct VisualPart {
 // Label-pass acceptance thresholds for a drawn view (§3.2). Pixel counts are at the output resolution.
 struct Acceptance {
     double max_range_m = 5, near_m = .2, max_near_fraction = .02;
-    std::int64_t min_target_px = 150, max_attempts = 200, background_max_labelled_px = 0;
-    // §10.1: reject views where a labelled instance (>= min_visible_px) has >= 2 8-connected components of
+    std::int64_t min_target_px = 150, max_attempts = 200, background_max_labeled_px = 0;
+    // §10.1: reject views where a labeled instance (>= min_visible_px) has >= 2 8-connected components of
     // >= min_fragment_px each ("allow" keeps them).
     bool reject_fragments = true;
     std::int64_t min_fragment_px = 25, min_visible_px = 25;
@@ -118,7 +118,7 @@ struct Job {
     CameraSpec camera;
     std::vector<TexturePart> textures;
     std::vector<VisualPart> visuals;
-    std::set<std::pair<std::string, std::string>> labelled; // (task, part)
+    std::set<std::pair<std::string, std::string>> labeled; // (task, part)
     Acceptance acceptance;
     std::vector<SampleBlock> samples;
     Randomize randomize;

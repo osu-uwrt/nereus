@@ -66,7 +66,7 @@ note warns that an MPC model generated for the first pool is stale.
 Every panel, camera, the course map and the tool windows (Scene settings, Display, TF frames, Simulation, the
 run scorecard) is a window you can place:
 
-- **Move** a window by dragging its tab. Drop it on another window's centre arrow to add it as a tab there, on an
+- **Move** a window by dragging its tab. Drop it on another window's center arrow to add it as a tab there, on an
   edge arrow to split that space, or anywhere else to float it. Drag the borders between windows to resize.
 - **Close** a window with the x on its tab; reopen it from **Windows**. Closed windows give their space to the
   others and come back where they were.
@@ -128,7 +128,7 @@ so they add up while the robot travels; the first row reads back the move and wh
 
 | Typed | Does |
 |---|---|
-| `forward 0.5`, `back`, `left`, `right`, `up`, `down` | metres along the heading (level with the water; up is +z) |
+| `forward 0.5`, `back`, `left`, `right`, `up`, `down` | meters along the heading (level with the water; up is +z) |
 | `turn 30`, `turn right 45` | yaw by degrees, left positive |
 | `x 2`, `y 1`, `z -1.5`, `roll 0`, `pitch 0`, `yaw 90` | that axis to the value |
 | `go 2 1 -1.5 90` (or `go x y z`, `go x y z roll pitch yaw`) | the whole pose |
@@ -152,21 +152,21 @@ enabled); **Stop** stops the running one, **Refresh the tree list** asks again.
 View → *Theme* ▸ **Heat sheet** (the default) and **Timing board** are one world in a day and a night variant,
 taken from a swim meet's results sheets and the pool's timing board:
 
-- **Sheets**: panels are white sheets on a rule-grey ground by day, charcoal by night, with square corners. Section
+- **Sheets**: panels are white sheets on a rule-gray ground by day, charcoal by night, with square corners. Section
   and column heads carry a heavy ink rule; table rows are ruled with hairlines.
 - **Figures**: every number is set in Barlow TF, Barlow with tabular figures (`content/viewer/fonts`, SIL OFL; rebuilt
   by `make_fonts.py`), so columns line up.
 - **The board**: the menu and command bars are ink by day and black by night, with white type. The run clock and
   score sit on it as large figures, lit amber while a run is on. In map editing, a lane-blue rule runs along its foot.
-- **Colour jobs**: lane blue is selection and "on". Amber lights the running clock. Touch red is KILL. Enable is go
-  green (in every theme), never the blue of a lit toggle; its label says Enable or KILL, so colour is never the only
+- **Color jobs**: lane blue is selection and "on". Amber lights the running clock. Touch red is KILL. Enable is go
+  green (in every theme), never the blue of a lit toggle; its label says Enable or KILL, so color is never the only
   cue.
 - **Switches**: a choice between two (RGB / Depth, Truth / ROS, Position / Feedforward, 3D / 2D, AprilTag / Robot
   frame) is one joined control whose thumb slides to the chosen side. Pinned to the toolbar, it shows as a dropdown.
 
 The other themes: **Abyss** (dark teal), **Midnight** (neutral dark with a blue accent), **Daylight** (light), **High
 contrast** (black, white and yellow), **Ocean** (navy and blue), **Arctic** (slate and frost blue), **Ember** (charcoal
-and orange), **Sonar** (green on black), **Paper** (warm light) and **Classic** (Qt's Windows-style grey with bevels
+and orange), **Sonar** (green on black), **Paper** (warm light) and **Classic** (Qt's Windows-style gray with bevels
 and the Ubuntu font, like RViz on this desktop).
 
 The choice is remembered (`~/.config/nereus/viewer.yaml`); `--theme NAME` or the host config's `theme:` set it too.
@@ -174,13 +174,13 @@ The choice is remembered (`~/.config/nereus/viewer.yaml`); `--theme NAME` or the
 Each theme is one YAML file in `content/viewer/themes/`; add a file to add a theme (no code). A file gives `id`,
 `label`, `description`, `order` (the menu's order, lowest first, the first is the default) and optional `fonts`
 (`family` and `points` for a desktop font, or `regular` / `strong` / `figures` files in `content/viewer/fonts`). Its
-colours either come from four with `derive: {background, text, muted, accent, rounding}` (every surface is derived)
+colors either come from four with `derive: {background, text, muted, accent, rounding}` (every surface is derived)
 or are listed in `surfaces` (window, frame, button, tab, ...) and `palette` (text, muted, accent, active, danger,
 warn, error, robot states, bar, enable, ...), as `"#rrggbb"` or `"#rrggbbaa"`. `shape` and `spacing` set corners,
 borders, padding and the tabs' look (`tab_rounding`, `tab_border`, `tab_bar_border`, `tab_overline`); a
 `border_shadow` surface makes the theme bevelled (Qt-style raised buttons, sunken status panels, toggle switches as
 pressed buttons); `style: {ruled: true}` rules the heads; a `board` block gives the menu and command bars their
-own colours. Unknown keys are refused, and the viewer reports a file it cannot use and carries on. Whatever a file
+own colors. Unknown keys are refused, and the viewer reports a file it cannot use and carries on. Whatever a file
 says, the viewer holds every theme's text to the legibility floor below. The
 3D scene looks the same in every theme. Its overlays (labels, the controls strip) and the course map follow the
 theme. The course map draws each prop's top-down footprint (true size and heading) under the task dots. Camera
@@ -205,12 +205,12 @@ time. `--layout NAME` starts with a built-in layout (`standard`, `wide`, `camera
 
 The header chips show the FOG temperature (`gyro/status`) and the hottest CPU core (the computer monitor's
 `Core Temperature` in `/diagnostics_agg`): cyan is fine, amber a warning (FOG 55 °C, CPU 70 °C), red an error (FOG
-75 °C, CPU 85 °C, or a fault the FOG driver or the computer monitor reports). Grey means no data: never received,
+75 °C, CPU 85 °C, or a fault the FOG driver or the computer monitor reports). Gray means no data: never received,
 or nothing for 2 s (FOG) / 10 s (CPU), when the last value stays shown. Hover a chip for the details.
 
 `PORT` and `STBD` are each battery's state of charge (`state/battery`), as in the RViz overlay: amber below 50 %,
-red below 20 %, grey after 10 s without a reading. Hover for the pack voltage, current, time to discharge and
-cell. In sim none of these publishers run, so all four chips stay grey.
+red below 20 %, gray after 10 s without a reading. Hover for the pack voltage, current, time to discharge and
+cell. In sim none of these publishers run, so all four chips stay gray.
 
 ## Driving the robot (Motion)
 
@@ -321,7 +321,7 @@ The toolbar's **Display** button (or Windows → Display) opens it; it stays ope
   untick one to hide it (course and ghost alike); `mapping_markers.hidden` in the host config sets which start
   hidden.
 - **Localization estimate** (sim only): *Robot ghost* draws the EKF estimate as a translucent robot. *Control
-  gizmo* and *Follow* each centre on the estimate or the true robot. Commands always go to the controller in its
+  gizmo* and *Follow* each center on the estimate or the true robot. Commands always go to the controller in its
   estimate frame.
 - **Lighting**: the observer's lighting, independent of what the cameras see.
 
@@ -332,7 +332,7 @@ windows: dock them if you use them often.
 ## Editing the prior map (Dead Reckoning in 3D)
 
 **Edit map** in the command bar (`Ctrl+M`) edits riptide_mapping's `config/config.yaml` in the pool, as the Dead
-Reckoning tool does. While editing, the command bar turns the accent colour and reads *EDITING PRIOR MAP ·
+Reckoning tool does. While editing, the command bar turns the accent color and reads *EDITING PRIOR MAP ·
 config.yaml* (with *unsaved* when there are changes), with **Save** and **Done** at its right end; Enable / KILL stay
 where they are. Editing has its own window layout: **Map objects** on the left (the file, Open / Reload / Save, Undo
 / Redo, *+ Add* and the object table: the tree with lock / hide and, toggled by **x y z**, each prop's x / y / z / yaw
@@ -351,12 +351,12 @@ and the lighting (preset, shadows, exposure, ambient). It starts
 with the water off and Sterile lighting (even light, no shadows or caustics) so the floor and its lines read plainly.
 
 - **2D** (the default) looks straight down at the pool (the same render, without perspective), drawn as a chart in
-  the theme's colours: a flat floor with quiet lane lines, each prop outlined in its own colour (the colour of its
+  the theme's colors: a flat floor with quiet lane lines, each prop outlined in its own color (the color of its
   dot in the table) with a notch toward +X, props without a mesh as badges with a heading triangle, a scale bar and
-  the labelled map origin (*Plan colours* in Display turns the chart colours off). For quick moves across a flat
+  the labeled map origin (*Plan colors* in Display turns the chart colors off). For quick moves across a flat
   floor: drag a prop to move it in x / y (its height stays), the yellow ring turns it. Drag the floor
   (or right / middle drag) to pan, scroll to zoom about the pointer, `F` or *Fit* for the whole pool, double-click a
-  prop (or its row in the tree) to centre on it.
+  prop (or its row in the tree) to center on it.
 - **3D** orbits; the selected prop has red / green / blue arrows for the map's X / Y and height, and the ring.
 
 A click picks what is under the pointer: a prop's mesh (its bounds), its label or its origin dot.

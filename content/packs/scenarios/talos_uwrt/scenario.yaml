@@ -42,7 +42,7 @@ contacts:
   restitution: 0.1
   friction: 0.4
 
-# Start state of the centre of mass (body-axis velocities). Kill/arm defaults come from
+# Start state of the center of mass (body-axis velocities). Kill/arm defaults come from
 # robot.safety.
 initial:
   frame: com

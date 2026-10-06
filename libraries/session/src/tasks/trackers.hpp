@@ -26,7 +26,7 @@ struct Fact {
     Json data;
 };
 
-// Validation helpers (throw std::invalid_argument, the analogue of the Python ValueError).
+// Validation helpers (throw std::invalid_argument, the analog of the Python ValueError).
 double number(const Json &value, const std::string &field, bool positive = false);
 Vec3 vec3(const Json &value, const std::string &name);
 Vec3 finite(const Vec3 &value, const std::string &name);

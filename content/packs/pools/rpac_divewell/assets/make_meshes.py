@@ -1,14 +1,14 @@
-"""Build the RPAC dive well's fixture meshes (OBJ, metres, Z up, water surface at z = 0).
+"""Build the RPAC dive well's fixture meshes (OBJ, meters, Z up, water surface at z = 0).
 
 Run from anywhere: python3 make_meshes.py. Writes next to this file:
 - tower_stairs.obj: the staircase in the well between the tower pillars (a landing, treads and three
-  handrails). Origin at the well's centre on the wall face; the pool is +y, the well runs back to y = -WELL_DEPTH, and
+  handrails). Origin at the well's center on the wall face; the pool is +y, the well runs back to y = -WELL_DEPTH, and
   -x is the deep-end side.
 - ladder.obj: a wall ladder (two grab rails over the edge, toe holds on the wall). Origin on the wall face at
-  the ladder's centre; the pool is +y, the deck -y.
-- raised_grates.obj: a row of three raised square drain grates along x. Origin on the floor at the row's centre.
-- wall_vent.obj: a slatted square vent on a wall. Origin at its centre on the wall face; it faces +y.
-- floor_vent.obj: a flush slotted square vent. Origin at its centre on the floor; it faces +z.
+  the ladder's center; the pool is +y, the deck -y.
+- raised_grates.obj: a row of three raised square drain grates along x. Origin on the floor at the row's center.
+- wall_vent.obj: a slatted square vent on a wall. Origin at its center on the wall face; it faces +y.
+- floor_vent.obj: a flush slotted square vent. Origin at its center on the floor; it faces +z.
 """
 
 import math
@@ -20,7 +20,7 @@ WELL_DEPTH = (
     2.4  # tower stair well, back from the wall face (pool.yaml's recess depth_m must match)
 )
 
-# Diffuse colour (RGB 0..1) of each material, written to the .mtl files.
+# Diffuse color (RGB 0..1) of each material, written to the .mtl files.
 COLORS = {
     "steel": (0.75, 0.77, 0.78),
     "tread": (0.78, 0.84, 0.84),
@@ -110,7 +110,7 @@ class Mesh:
         self, material: str, path, radius: float = 0.022, bend: float = 0.12, sides: int = 10
     ) -> None:
         """A round rail along a polyline, its corners rounded with `bend` radius."""
-        # Centreline: replace each interior corner with a Bezier arc that starts `cut` before it.
+        # Centerline: replace each interior corner with a Bezier arc that starts `cut` before it.
         points = [path[0]]
         for a, b, c in zip(path, path[1:], path[2:]):
             u = _unit(_sub(a, b))
@@ -128,7 +128,7 @@ class Mesh:
                 )
         points.append(path[-1])
 
-        # Sweep a ring of `sides` vertices along the centreline, keeping the ring frame twist-free.
+        # Sweep a ring of `sides` vertices along the centerline, keeping the ring frame twist-free.
         rings = []
         normal = None
         for i, p in enumerate(points):
@@ -204,7 +204,7 @@ def tower_stairs() -> Mesh:
     """A landing at deck level against the back of the well, then pool-stair treads stepping down toward the pool
     (0.3 m runs, 0.19 m risers, about 32 degrees, matching the handrail slope in the platform photo) to the well
     floor at z = -1.22, each with a dark nosing. Three identical handrails, the outer two close to
-    the well's sides and the middle one off centre toward the shallow end (platform photo), run down the flight
+    the well's sides and the middle one off center toward the shallow end (platform photo), run down the flight
     0.9 m above the nosings from a hooped top on the landing, with a post to a tread partway down, and drop to the
     well floor at the front."""
     m = Mesh()

@@ -81,7 +81,7 @@ std::shared_ptr<const ServiceType> ServiceType::get(const std::string &name) {
     return type;
 }
 
-// Allocates and default-initialises the message (16-byte aligned).
+// Allocates and default-initializes the message (16-byte aligned).
 Message::Message(std::shared_ptr<const MessageType> type) : type_(std::move(type)) {
     const auto *members = type_->members();
     data_ = ::operator new(members->size_of_, std::align_val_t{16});

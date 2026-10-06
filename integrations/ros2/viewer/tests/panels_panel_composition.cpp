@@ -204,7 +204,7 @@ ownership:
     cfg["panels"][0]["dock"] = "middle"; // unknown dock area
     fails(cfg);
     cfg = YAML::Load(text);
-    cfg["overlays"][0]["options"]["size_metres"] = -5;
+    cfg["overlays"][0]["options"]["size_meters"] = -5;
     fails(cfg);
     cfg = YAML::Load(text);
     cfg["typo"] = true;
@@ -388,7 +388,7 @@ ownership:
         return c;
     };
     fails(withToolbar("[{type: nope}]"));                      // unknown type
-    fails(withToolbar("[{type: view, colour: red}]"));         // unknown key
+    fails(withToolbar("[{type: view, color: red}]"));          // unknown key
     fails(withToolbar("[{type: view, options: {typo: 1}}]"));  // unknown option
     fails(withToolbar("[{type: view, provider: motion}]"));    // host item takes no provider
     fails(withToolbar("[{type: motion}]"));                    // provider-backed needs a provider

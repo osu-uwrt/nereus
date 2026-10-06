@@ -1,5 +1,5 @@
 // MarineDynamics and ThrusterDynamics unit tests: Coriolis properties, added mass and current terms, damping,
-// buoyancy, energy behaviour, and actuator delay, lag, limits and watchdog.
+// buoyancy, energy behavior, and actuator delay, lag, limits and watchdog.
 #include <gtest/gtest.h>
 
 #include "detail/marine_dynamics.hpp"

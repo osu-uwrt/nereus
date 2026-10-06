@@ -88,7 +88,7 @@ def write_render(root: Path, model: str = "ffc", folder: str = "render") -> Path
     (render / "job" / "export.json").write_text(json.dumps(settings))
 
     samples: dict[str, tuple[str | None, Any, list[dict[str, Any]]]] = {}
-    # Torpedo: a ring with a hole, a fire emoji split by an unlabelled pole, a truncated blood
+    # Torpedo: a ring with a hole, a fire emoji split by an unlabeled pole, a truncated blood
     # emoji at the bottom-right border and a 2x2 sliver under min_visible_px.
     ids = np.zeros((HEIGHT, WIDTH), np.uint16)
     ids[2:12, 2:12] = 1
@@ -108,7 +108,7 @@ def write_render(root: Path, model: str = "ffc", folder: str = "render") -> Path
             _instance(9, "slalom", "pole_white"),
         ],
     )
-    # Bins: the magnet cover is labelled while red, not while green; a table pill (not an ffc class).
+    # Bins: the magnet cover is labeled while red, not while green; a table pill (not an ffc class).
     ids = np.zeros((HEIGHT, WIDTH), np.uint16)
     ids[0:10, 0:10] = 1
     ids[0:10, 20:30] = 2
@@ -122,11 +122,11 @@ def write_render(root: Path, model: str = "ffc", folder: str = "render") -> Path
             _instance(3, "table", "icon_pill"),
         ],
     )
-    # Background: only an unlabelled part in view.
+    # Background: only an unlabeled part in view.
     ids = np.zeros((HEIGHT, WIDTH), np.uint16)
     ids[0:20, 10:12] = 1
     samples["background_000002"] = (None, ids, [_instance(1, "slalom", "pole_white")])
-    # A labelled instance beyond the ffc range (5 m): the image is skipped.
+    # A labeled instance beyond the ffc range (5 m): the image is skipped.
     ids = np.zeros((HEIGHT, WIDTH), np.uint16)
     ids[5:15, 5:15] = 1
     far = {"min": 5.5, "median": 6.0, "max": 6.5}
@@ -151,7 +151,7 @@ def write_sample(
     ids: Any,
     instances: list[dict[str, Any]],
 ) -> None:
-    """Write one sample: a flat grey image, its id mask and its record (environment by k)."""
+    """Write one sample: a flat gray image, its id mask and its record (environment by k)."""
     image = np.full((HEIGHT, WIDTH, 3), 90, np.uint8)
     cv2.imwrite(str(render / "images" / f"{name}.png"), image)
     cv2.imwrite(str(render / "ids" / f"{name}.png"), ids)
@@ -252,7 +252,7 @@ class GeometryTests(unittest.TestCase):
         self.assertLine(bbox_line(line, 0), [0, 0.1375, 0.35, 0.025, 0.5])
 
     def test_rotated_obb(self) -> None:
-        """A 40x20 box rotated 30 deg: right centre and sides, starting at the top corner."""
+        """A 40x20 box rotated 30 deg: right center and sides, starting at the top corner."""
         mask = np.zeros((100, 100), np.uint8)
         corners = cv2.boxPoints(((50, 50), (40, 20), 30)).astype(np.int32)
         cv2.fillPoly(mask, [corners], 1)
@@ -341,7 +341,7 @@ class ExportTests(unittest.TestCase):
         """Classes come from the chosen model; a lopsided class count raises a WARNING."""
         out = self.root / "dfc"
         summary = export(write_render(self.root, "dfc", "render_dfc"), "yolo-bbox", out)
-        # dfc has pill and fire: the pill is labelled, the torpedo fire too (range 3 m > 1.2 m).
+        # dfc has pill and fire: the pill is labeled, the torpedo fire too (range 3 m > 1.2 m).
         self.assertEqual(_labels(out, "bins_000001")[0][0], 0)
         self.assertEqual(summary.counts, [1, 1])
         self.assertEqual(summary.unbalanced(), [])
@@ -437,10 +437,10 @@ class ExportTests(unittest.TestCase):
         sheet = cv2.imread(str(self.render / "preview.jpg"))
         self.assertEqual(sheet.shape[1], 3 * 480 + 4 * 4)
 
-    def test_preview_colours_labelled_pixels(self) -> None:
+    def test_preview_colors_labeled_pixels(self) -> None:
         sheet = preview(self.render, self.root / "sheet.png", count=4, tile_width=WIDTH * 10)
         image = cv2.imread(str(sheet)).astype(int)
-        # The red magnet cover: its class colour blended 45 % over grey 90.
+        # The red magnet cover: its class color blended 45 % over gray 90.
         blended = np.array(PALETTE[3]) * ALPHA + 90 * (1 - ALPHA)
         close = np.abs(image - blended).max(axis=2) <= 2
         self.assertGreater(int(close.sum()), 100 * 100 // 2)

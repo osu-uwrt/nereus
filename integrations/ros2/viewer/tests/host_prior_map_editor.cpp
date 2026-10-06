@@ -193,9 +193,9 @@ TEST_F(EditorTest, PlanViewDragFollowsThePointerInARotatedPool) {
         return glm::vec3(toWorld * glm::vec4(float(gate.x + dx), float(gate.y + dy), float(gate.z), 1));
     };
 
-    // An orthographic plan view centred on the gate, with screen-up along the pool's +Y.
-    const glm::vec3 centre = world(0, 0);
-    const glm::vec3 eye(centre.x, centre.y, 10);
+    // An orthographic plan view centered on the gate, with screen-up along the pool's +Y.
+    const glm::vec3 center = world(0, 0);
+    const glm::vec3 eye(center.x, center.y, 10);
     const glm::vec2 poolY(pool.poolToWorld[1]);
     view.viewProjection = glm::ortho(-4.f * 800 / 600, 4.f * 800 / 600, -4.f, 4.f, .05f, 40.f) *
                           glm::lookAt(eye, eye - glm::vec3(0, 0, 1), glm::vec3(poolY, 0));
@@ -261,7 +261,7 @@ TEST_F(EditorTest, AnOriginArrowMovesARobotFrameOriginAlongItsAxis) {
     view.viewProjection = glm::ortho(-8.f * 800 / 600, 8.f * 800 / 600, -8.f, 8.f, .05f, 40.f) *
                           glm::lookAt(eye, eye - glm::vec3(0, 0, 1), {0, 1, 0});
     view.plan = true;
-    // grab the X arrow a metre out (clear of the robot) and pull diagonally: only x follows
+    // grab the X arrow a meter out (clear of the robot) and pull diagonally: only x follows
     const auto at = pixel(11, 5, 0), to = pixel(12.5, 6, 0);
     frame(at, false);
     frame(at, true);

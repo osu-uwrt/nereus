@@ -62,7 +62,7 @@ struct PlacedDetection {
     Kind kind = Kind::Truth;
 };
 
-// One scenario camera's preview card: decoded RGB and colourised depth for the GUI, and its subscriptions.
+// One scenario camera's preview card: decoded RGB and colorized depth for the GUI, and its subscriptions.
 struct CameraFeed {
     const SensorCamera *camera = nullptr;
     std::vector<std::uint8_t> rgb, depth; // decoded previews (RGB8)
@@ -94,7 +94,7 @@ struct PointCloudLayer {
     std::string id, title, topic;
     float size = 3;
     bool enabled = false;
-    Eigen::Vector3f fallback{.9f, .9f, .9f}; // colour for clouds without an rgb field
+    Eigen::Vector3f fallback{.9f, .9f, .9f}; // color for clouds without an rgb field
 
     // The newest message and where it was placed (world: cloud frame to fixed frame).
     std::shared_ptr<const rendering::PointData> data;

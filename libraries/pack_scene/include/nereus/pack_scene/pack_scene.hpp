@@ -151,7 +151,7 @@ class PackScene {
                                  const Matrix4d &world_from_asset) const;
 
     // Static scene, robot visuals at world_from_root (with overrides), then the dynamic instances.
-    // `latched` maps indicator region ids to their latch state (missing regions stay at the initial colour).
+    // `latched` maps indicator region ids to their latch state (missing regions stay at the initial color).
     rendering::Scene compose(const Matrix4d &world_from_root, const std::vector<rendering::Instance> &dynamic = {},
                              const std::vector<RobotOverride> &overrides = {},
                              const std::map<std::string, bool> &latched = {}) const;

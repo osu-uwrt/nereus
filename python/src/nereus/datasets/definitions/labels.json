@@ -71,7 +71,7 @@
             "keep_largest",
             "merge"
           ],
-          "description": "A labelled instance visible as 2+ pieces of min_fragment_px or more: reject (never generate or export the view; default), keep_largest, or merge (one polygon joined at the closest points)."
+          "description": "A labeled instance visible as 2+ pieces of min_fragment_px or more: reject (never generate or export the view; default), keep_largest, or merge (one polygon joined at the closest points)."
         },
         "min_fragment_px": {
           "type": "integer",
@@ -104,7 +104,7 @@
         "max_range_m": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Views with a labelled instance farther than this (median depth) are never generated."
+          "description": "Views with a labeled instance farther than this (median depth) are never generated."
         },
         "classes": {
           "type": "array",
@@ -164,7 +164,7 @@
               "properties": {
                 "indicator": {
                   "$ref": "common.json#/$defs/name",
-                  "description": "Only instances whose indicator shows this colour name."
+                  "description": "Only instances whose indicator shows this color name."
                 }
               },
               "additionalProperties": false

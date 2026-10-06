@@ -79,7 +79,7 @@ alongside it, and `sphere_pool` contacts (use `box_scene`).
 ### Lane lines and finish
 
 Painted lines are data, not part of the renderer: a pool without `markings` has a plain tiled floor. Everything
-is in the pool frame, in metres. Floor stripes go `from`/`to` `[x, y]`; wall stripes go `from`/`to`
+is in the pool frame, in meters. Floor stripes go `from`/`to` `[x, y]`; wall stripes go `from`/`to`
 `[coordinate along the wall, z relative to the water surface]` on wall `x_min`, `x_max`, `y_min` or `y_max`.
 The same stripes appear in the viewer, the simulated cameras and the course map.
 
@@ -88,7 +88,7 @@ markings:
   color_rgb: [0.093, 0.14, 0.16]   # defaults for every stripe below
   width_m: 0.254
   lane_grid:                       # optional: evenly spaced lines
-    along_x: {count: 8, spacing_m: 2.7432}               # parallel to +x, centred across the width
+    along_x: {count: 8, spacing_m: 2.7432}               # parallel to +x, centered across the width
     along_y: {count: 17, spacing_m: 2.7432, first_m: 3}  # parallel to +y, first line at x = 3
     inset_m: 2.0                   # stop short of the end walls
     ends: t                        # a bar across both ends (t_length_m, default 1 m)
@@ -118,7 +118,7 @@ cuts an opening into a wall, between two corners given as `[coordinate along the
 one reaching the deck opens through the deck as well (a stair well). Recesses are drawn only (contacts treat the
 wall as solid).
 
-A `mesh` places one of the pool's `assets` (OBJ or COLLADA, metres, Z up) the same way: on the floor at `[x, y]`
+A `mesh` places one of the pool's `assets` (OBJ or COLLADA, meters, Z up) the same way: on the floor at `[x, y]`
 or at `[x, y, z]`, turned by `rpy_deg`. Detailed fittings (stairs, rails, grates) are best as meshes; a small
 generator script next to them keeps their dimensions editable (see the RPAC dive well's `assets/make_meshes.py`).
 A box can also slope its sides in to a smaller `top_size_m`.

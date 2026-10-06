@@ -6,13 +6,13 @@
 
 namespace nereus::ros_viewer::panels {
 namespace {
-// Header / toolbar form: one readout per reading ("FOG 41.2°C": dot, label, value), coloured by level, details on
+// Header / toolbar form: one readout per reading ("FOG 41.2°C": dot, label, value), colored by level, details on
 // hover.
 // Sidebar form: the same readings with their details.
 class TelemetryPanel final : public Panel {
     std::shared_ptr<Telemetry> telemetry;
 
-    // the value in the level's colour when it needs attention, plain when fine, muted when stale
+    // the value in the level's color when it needs attention, plain when fine, muted when stale
     static ImVec4 valueInk(Level level) {
         return level == Level::Warn || level == Level::Error ? levelColor(level)
                : level == Level::Ok                          ? palette().text

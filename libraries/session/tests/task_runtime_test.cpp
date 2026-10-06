@@ -224,7 +224,7 @@ RulesRegistry scripted(std::function<std::unique_ptr<Rules>()> factory) {
     return {{"robosub_2026", factory}};
 }
 
-// Pose x_local metres along the gate task's local x axis (fixed y and z offsets), in world coordinates.
+// Pose x_local meters along the gate task's local x axis (fixed y and z offsets), in world coordinates.
 nereus::spatial::Pose gatePose(double x_local) {
     // Gate task frame at the placement in the Talos scenario.
     const Json &placement = scenario().scenario["task_placements"][0];

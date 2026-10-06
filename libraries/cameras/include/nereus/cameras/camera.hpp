@@ -8,13 +8,13 @@
 
 namespace nereus::cameras {
 
-// Rectified pinhole camera: +X right, +Y down, +Z forward; pixel centres are integers.
+// Rectified pinhole camera: +X right, +Y down, +Z forward; pixel centers are integers.
 struct Intrinsics {
     // Image size in pixels and focal length / principal point in pixels.
     int width = 1920, height = 1200;
     double fx = 1700, fy = 1700, cx = 959.5, cy = 599.5;
 
-    // OpenGL clipping planes in metres along the optical axis.
+    // OpenGL clipping planes in meters along the optical axis.
     double near_plane = .05, far_plane = 100;
 
     // Throws std::invalid_argument on non-finite/non-positive values or sizes above 4096.
@@ -31,10 +31,10 @@ Eigen::Matrix4f opticalView(const spatial::Pose &world_from_optical);
 struct DepthNoise {
     bool enabled = true;
 
-    // Gaussian sigma in metres: base_sigma + range_sigma * depth^exponent, plus a constant bias.
+    // Gaussian sigma in meters: base_sigma + range_sigma * depth^exponent, plus a constant bias.
     double base_sigma = .002, range_sigma = .0015, exponent = 2;
 
-    // Valid depth window in metres; anything outside becomes NaN.
+    // Valid depth window in meters; anything outside becomes NaN.
     double min_range = .15, max_range = 8, bias = 0;
 
     // Per-pixel dropout probabilities: constant, growing with (depth / max_range)^2, and at depth edges.
@@ -51,7 +51,7 @@ struct DepthNoise {
 struct Frame {
     int width = 0, height = 0;
 
-    // Owned, top-down tightly packed RGB8 and optical-axis depth in metres (NaN invalid).
+    // Owned, top-down tightly packed RGB8 and optical-axis depth in meters (NaN invalid).
     // Empty arrays mean the product was not requested, not a valid all-zero image.
     std::vector<std::uint8_t> rgb, jpeg;
     std::vector<float> depth;

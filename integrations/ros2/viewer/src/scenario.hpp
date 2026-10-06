@@ -17,7 +17,7 @@ namespace nereus::ros_viewer::host {
 struct SensorCamera {
     std::string id, mountFrame, opticalFrame, rosOpticalFrame, title, model;
     Intrinsics k;
-    double periodS = 1. / 15, minRange = .15, maxRange = 4; // seconds per frame; depth range in metres
+    double periodS = 1. / 15, minRange = .15, maxRange = 4; // seconds per frame; depth range in meters
     std::string rgbTopic, depthTopic, infoTopic;            // absolute; empty when the bridge does not publish them
     glm::mat4 mountInBase{1}, opticalInBase{1};
 };
@@ -41,7 +41,7 @@ struct Mechanism {
     glm::vec3 tip{0}; // magnet
 };
 
-// Holes cut through a task prop's faces: face offsets along local x, the region half size (metres) and the
+// Holes cut through a task prop's faces: face offsets along local x, the region half size (meters) and the
 // holes in that region's uv coordinates.
 struct CutoutSpec {
     std::vector<float> facesX;
@@ -77,7 +77,7 @@ struct Scenario {
     YAML::Node document, bridge, ui; // the whole document, its bridge section, merged ui settings
     FrameGraph frames;               // robot pack frame tree
 
-    // Pool geometry (metres) and placement in the world.
+    // Pool geometry (meters) and placement in the world.
     glm::mat4 poolToWorld{1}, worldToPool{1};
     float poolLength = 50, poolWidth = 22.86f, poolDepth = 2.1336f, deckHeight = .305f, waterLevel = 0;
     std::string poolId, tasksId;

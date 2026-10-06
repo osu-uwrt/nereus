@@ -1,4 +1,4 @@
-// "uwrt.autonomy" provider: lists, starts and stops riptide_autonomy behaviour trees through the ExecuteTree
+// "uwrt.autonomy" provider: lists, starts and stops riptide_autonomy behavior trees through the ExecuteTree
 // action, and shows the running tree's node stack.
 #include "ros_runtime.hpp"
 #include <action_msgs/msg/goal_status_array.hpp>

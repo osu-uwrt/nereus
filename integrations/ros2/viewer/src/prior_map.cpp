@@ -504,7 +504,7 @@ Object *find(std::vector<Object> &objects, const std::string &name) {
 std::map<std::string, Pose> mapPoses(const std::vector<Object> &objects) {
     std::map<std::string, Pose> memo;
 
-    // Memoised recursive walk up the parent chain; `visiting` breaks cycles by treating the pose as map-relative.
+    // Memoized recursive walk up the parent chain; `visiting` breaks cycles by treating the pose as map-relative.
     std::function<Pose(const std::string &, std::set<std::string> &)> pose = [&](const std::string &name,
                                                                                  std::set<std::string> &visiting) {
         if (const auto found = memo.find(name); found != memo.end())

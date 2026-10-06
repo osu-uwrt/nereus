@@ -55,7 +55,7 @@ ACCEPTANCE_DEFAULTS: dict[str, Any] = {
     "near_m": 0.2,
     "max_near_fraction": 0.02,
     "max_attempts": 200,
-    "background_max_labelled_px": 0,
+    "background_max_labeled_px": 0,
 }
 # Randomization kept at the top of the job; water / lighting / image / time_s live in environments.
 RANDOMIZE_DEFAULTS: dict[str, Any] = {
@@ -357,7 +357,7 @@ def plan(dataset_path: Path, out: Path, overrides: Overrides | None = None) -> P
             "robot_visuals": data.get("robot_visuals", True),
         },
         "parts": _job_parts(parts, place),
-        "labelled": classes.labelled(parts_by_task(parts, place)),
+        "labeled": classes.labeled(parts_by_task(parts, place)),
         "acceptance": {
             "max_range_m": classes.max_range_m,
             **merged(ACCEPTANCE_DEFAULTS, data.get("acceptance", {})),

@@ -10,8 +10,8 @@ namespace spatial = nereus::spatial;
 namespace {
 
 // Inverse of the processor's linearization: metric depth -> OpenGL [0, 1] depth-buffer value.
-float bufferDepth(double metres, const Intrinsics &k) {
-    return static_cast<float>((k.far_plane + k.near_plane - 2 * k.near_plane * k.far_plane / metres) /
+float bufferDepth(double meters, const Intrinsics &k) {
+    return static_cast<float>((k.far_plane + k.near_plane - 2 * k.near_plane * k.far_plane / meters) /
                                   (k.far_plane - k.near_plane) * .5 +
                               .5);
 }
@@ -28,7 +28,7 @@ Intrinsics small(int width = 64, int height = 48) {
     return k;
 }
 
-// Projects a world point through the GL matrices and returns its pixel coordinates (integer centres).
+// Projects a world point through the GL matrices and returns its pixel coordinates (integer centers).
 Eigen::Vector2d pixel(const Intrinsics &k, const spatial::Pose &pose, Eigen::Vector3d world) {
     const Eigen::Vector4f point(world.x(), world.y(), world.z(), 1);
     const Eigen::Vector4f clip = k.projection() * opticalView(pose) * point;
@@ -47,7 +47,7 @@ void same(const std::vector<float> &a, const std::vector<float> &b) {
 
 } // namespace
 
-TEST(CameraGeometry, PixelCentresMatchPinholeWithArbitraryPrincipalPointAndPose) {
+TEST(CameraGeometry, PixelCentersMatchPinholeWithArbitraryPrincipalPointAndPose) {
     const auto k = small();
     spatial::Pose pose;
     pose.translation = {3, -2, -1};

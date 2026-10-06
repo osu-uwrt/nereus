@@ -27,7 +27,7 @@ struct VisualState {
     std::optional<glm::mat4> ghostBody;  // simulator: the localization estimate, drawn as a translucent robot
     std::vector<glm::mat4> rotorSpin;    // parallel to ThrusterVisuals::rotors
     std::vector<glm::vec3> lightColor;   // parallel to StatusLights::lights
-    std::array<float, 2> claw{0.f, 0.f}; // jaw travel (metres): left, right
+    std::array<float, 2> claw{0.f, 0.f}; // jaw travel (meters): left, right
     std::vector<MarkerDraw> markers;
     std::map<std::string, bool> indicatorLatched; // task indicator region -> latched (magnet target LEDs)
     std::vector<glm::mat4> loadedPayloads;        // world poses (body already applied), unit length scaled

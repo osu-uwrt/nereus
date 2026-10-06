@@ -10,7 +10,7 @@
 
 namespace nereus::ros_viewer::host {
 // Reads float32 x/y/z and, when present, a packed float32/uint32 `rgb` or `rgba` field (bytes B, G, R as the
-// ZED driver, PCL and the simulator bridge publish). Without a colour field every point gets `fallback`.
+// ZED driver, PCL and the simulator bridge publish). Without a color field every point gets `fallback`.
 // Non-finite points are skipped; at most `maxPoints` are kept (uniform decimation). Returns null for layouts
 // it cannot read (big-endian, missing or non-float32 coordinates, inconsistent sizes).
 inline std::shared_ptr<rendering::PointData> convertPointCloud(const sensor_msgs::msg::PointCloud2 &msg,

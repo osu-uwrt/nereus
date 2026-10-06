@@ -1,4 +1,4 @@
-// Robot status lights (LEDs) drawn as emissive boxes: configuration, per-light colour state and blinking.
+// Robot status lights (LEDs) drawn as emissive boxes: configuration, per-light color state and blinking.
 // Geometry and input topic come from a viewer YAML document (content/viewer/*_status_lights.yaml),
 // never from code. Emitter poses are given in a named robot-pack frame.
 #pragma once
@@ -14,7 +14,7 @@ namespace nereus::ros_viewer::host {
 // Transport-independent display state. ROS message translation stays in the node.
 enum class LightMode { Solid, SlowFlash, FastFlash, Breath, Flash };
 
-// One light's colour over time: a steady colour with a blink mode, plus a short one-off Flash pulse on top.
+// One light's color over time: a steady color with a blink mode, plus a short one-off Flash pulse on top.
 // Times are ROS-clock seconds.
 struct LightState {
     glm::vec3 steady{0}, pulse{0};
@@ -33,7 +33,7 @@ struct LightState {
         }
     }
 
-    // Colour to draw at `now`: the pulse while it lasts, else the steady colour scaled by the mode's blink.
+    // Color to draw at `now`: the pulse while it lasts, else the steady color scaled by the mode's blink.
     glm::vec3 color(double now) const {
         if (now >= pulseStart && now < pulseEnd)
             return pulse;
@@ -57,7 +57,7 @@ struct LightState {
     }
 };
 
-// One emitter: a box of `size` metres at `mount`, answering commands whose target mask overlaps `targets`.
+// One emitter: a box of `size` meters at `mount`, answering commands whose target mask overlaps `targets`.
 struct StatusLight {
     std::string id, frame;
     uint32_t targets = UINT32_MAX; // bit mask matched against the command's targets

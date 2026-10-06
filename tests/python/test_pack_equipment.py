@@ -250,7 +250,7 @@ class UwrtEquipmentTests(unittest.TestCase):
     def test_rpac_map_origin_is_on_the_board_and_the_course_is_unchanged(self) -> None:
         rpac = resolve_scenario(TALOS / "scenarios" / "talos_uwrt_rpac")
         robosub = resolve_scenario(TALOS / "scenarios" / "talos_uwrt")
-        # Map origin at the tag face, 3 mm out from the deep-end wall, centred on lap line 3; level and upright.
+        # Map origin at the tag face, 3 mm out from the deep-end wall, centered on lap line 3; level and upright.
         close(
             self,
             rpac.scenario["pool_placement"],

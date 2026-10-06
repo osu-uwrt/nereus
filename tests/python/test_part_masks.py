@@ -28,11 +28,11 @@ def load(path: Path) -> Any:
 
 
 def png_header(path: Path) -> tuple[int, int, int, int]:
-    """(width, height, bit depth, colour type) from the IHDR chunk."""
+    """(width, height, bit depth, color type) from the IHDR chunk."""
     data = path.read_bytes()[:26]
     assert data[:8] == b"\x89PNG\r\n\x1a\n" and data[12:16] == b"IHDR", path
-    width, height, depth, colour = struct.unpack(">IIBB", data[16:26])
-    return width, height, depth, colour
+    width, height, depth, color = struct.unpack(">IIBB", data[16:26])
+    return width, height, depth, color
 
 
 def task_files() -> dict[str, Any]:
@@ -63,7 +63,7 @@ class PartMasksTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_textures_resolve(self) -> None:
-        """Each texture entry names a PNG asset whose mask is 8-bit grey at the same size."""
+        """Each texture entry names a PNG asset whose mask is 8-bit gray at the same size."""
         parts = load(PACK / "parts.yaml")
         tasks = load(PACK / "tasks.yaml")
         assets = {a["id"]: a["path"] for a in tasks["assets"]}

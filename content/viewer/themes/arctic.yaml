@@ -3,5 +3,5 @@ id: arctic
 label: Arctic
 description: "Cool slate with a frost-blue accent"
 order: 7
-# every surface derived from four colours: the background, body and secondary text, and the accent
+# every surface derived from four colors: the background, body and secondary text, and the accent
 derive: {background: "#2e3340", text: "#e6ebf2", muted: "#99a6ba", accent: "#87bfd1", rounding: 6}

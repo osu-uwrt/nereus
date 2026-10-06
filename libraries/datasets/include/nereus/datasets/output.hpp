@@ -23,7 +23,7 @@ inline void writeAtomic(const std::filesystem::path &path, const std::string &da
 // A regular file with at least one byte (the resume check's notion of "already written").
 bool nonEmptyFile(const std::filesystem::path &);
 
-// Nonlinear [0, 1] depth -> optical-axis metres (+inf at the far plane / background).
+// Nonlinear [0, 1] depth -> optical-axis meters (+inf at the far plane / background).
 float linearDepth(float nonlinear, float near, float far);
 
 // One label key (id << 8 | part, part != 0) as seen in a label capture. Pixel coordinates are top-down.

@@ -3,11 +3,11 @@
 
 Each `textures[]` entry names a texture (a tasks-pack asset id) and a mask path; each part gives a
 value and a seed pixel inside its emoji. Per part: foreground = opaque pixels (alpha >= 128) whose
-max channel distance from the texture's background colour exceeds `threshold`, closed with a disk
+max channel distance from the texture's background color exceeds `threshold`, closed with a disk
 of `close_px` so one emoji is one component; the component holding `seed_px`, its holes filled per
 `fill`, is painted with `value`. `fill`: `small` (default; holes under 15 % of the component area,
 so open loops like a helmet strap stay background), `all` (rings: the hole disk too) or `none`.
-The background colour is the dominant opaque colour of the texture's border band (`background:
+The background color is the dominant opaque color of the texture's border band (`background:
 [r, g, b]` overrides it). Run from anywhere:
 
     python3 tools/generate_part_masks.py            # write the masks
@@ -34,9 +34,9 @@ from scipy import ndimage  # type: ignore[import-untyped, unused-ignore]
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PARTS = ROOT / "content/packs/tasks/robosub_2026/parts.yaml"
-DEFAULT_THRESHOLD = 24  # 8-bit units; light-grey art (wrench, hammer head) is ~40 from white
+DEFAULT_THRESHOLD = 24  # 8-bit units; light-gray art (wrench, hammer head) is ~40 from white
 DEFAULT_CLOSE_PX = 2
-BORDER_FRACTION = 0.1  # outer band sampled for the background colour
+BORDER_FRACTION = 0.1  # outer band sampled for the background color
 SMALL_HOLE_FRACTION = 0.15  # fill: small fills holes below this fraction of the component area
 FILLS = ("small", "all", "none")
 PART_NAME = re.compile(r"[a-z0-9_]+")
@@ -47,7 +47,7 @@ Mask = npt.NDArray[np.bool_]
 
 @dataclass(frozen=True)
 class Part:
-    """One labelled part: its mask value, name, seed pixel and segmentation settings."""
+    """One labeled part: its mask value, name, seed pixel and segmentation settings."""
 
     value: int
     name: str
@@ -133,8 +133,8 @@ def read_parts(parts_yaml: Path) -> list[TextureParts]:
     return result
 
 
-def background_colour(rgba: npt.NDArray[np.int32]) -> npt.NDArray[np.float64]:
-    """Dominant opaque colour of the outer band (frame lines are thin; transparency is skipped)."""
+def background_color(rgba: npt.NDArray[np.int32]) -> npt.NDArray[np.float64]:
+    """Dominant opaque color of the outer band (frame lines are thin; transparency is skipped)."""
     height, width = rgba.shape[:2]
     band = max(4, int(BORDER_FRACTION * min(height, width)))
     inside = np.ones((height, width), dtype=bool)
@@ -143,7 +143,7 @@ def background_colour(rgba: npt.NDArray[np.int32]) -> npt.NDArray[np.float64]:
     if len(pixels) == 0:
         raise ValueError("no opaque pixels in the border band; set background explicitly")
 
-    # Bucket colours into 16 levels per channel, then take the median of the fullest bucket.
+    # Bucket colors into 16 levels per channel, then take the median of the fullest bucket.
     bins = pixels // 16
     keys = (bins[:, 0] * 16 + bins[:, 1]) * 16 + bins[:, 2]
     mode = np.bincount(keys).argmax()
@@ -160,7 +160,7 @@ def disk(radius: int) -> Mask:
 
 def part_mask(rgba: npt.NDArray[np.int32], background: npt.NDArray[np.float64], part: Part) -> Mask:
     """The pixels of one part: the closed foreground component under its seed, holes per `fill`."""
-    # Foreground: opaque and far enough from the background colour, closed into whole emoji.
+    # Foreground: opaque and far enough from the background color, closed into whole emoji.
     distance = np.abs(rgba[..., :3] - background).max(axis=-1)
     foreground = (rgba[..., 3] >= 128) & (distance > part.threshold)
     if part.close_px > 0:
@@ -193,13 +193,13 @@ def part_mask(rgba: npt.NDArray[np.int32], background: npt.NDArray[np.float64], 
 
 
 def build_mask(entry: TextureParts) -> npt.NDArray[np.uint8]:
-    """Paint every part of a texture into one 8-bit mask (0 = unlabelled), rejecting overlaps."""
+    """Paint every part of a texture into one 8-bit mask (0 = unlabeled), rejecting overlaps."""
     with Image.open(entry.texture) as image:
         rgba = np.asarray(image.convert("RGBA")).astype(np.int32)
     if entry.background is not None:
         background = np.asarray(entry.background, dtype=np.float64)
     else:
-        background = background_colour(rgba)
+        background = background_color(rgba)
 
     # Check every seed first, so an out-of-range seed is reported before segmentation.
     out = np.zeros(rgba.shape[:2], dtype=np.uint8)
@@ -229,7 +229,7 @@ def build_mask(entry: TextureParts) -> npt.NDArray[np.uint8]:
 
 
 def read_mask(path: Path) -> npt.NDArray[np.uint8] | None:
-    """The committed mask as an array, or None if it is missing or not 8-bit greyscale."""
+    """The committed mask as an array, or None if it is missing or not 8-bit grayscale."""
     if not path.is_file():
         return None
     with Image.open(path) as image:

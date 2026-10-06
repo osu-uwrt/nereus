@@ -22,7 +22,7 @@ void usage() {
            "  --focus NAME           initial focus (Course, Vehicle, a landmark, ...)\n"
            "  --view NAME            initial view: orbit, free, or a camera id\n"
            "  --inject-f X Y         test aid: hover window position (X,Y) and press F halfway through a capture run\n"
-           "  --orbit YAW PITCH DIST initial orbit angles (radians) and distance (metres) after the focus\n"
+           "  --orbit YAW PITCH DIST initial orbit angles (radians) and distance (meters) after the focus\n"
            "  --open NAME            open scene-settings, map, tf, display (pool-viewer), help or depth (camera cards)\n"
            "                         at start (repeatable)\n"
            "  --workspace NAME       start in operate (default) or map (the prior map editor; Ctrl+M switches)\n"

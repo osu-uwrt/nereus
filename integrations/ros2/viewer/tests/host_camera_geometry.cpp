@@ -7,7 +7,7 @@
 using namespace nereus::ros_viewer::host;
 
 // The GL projection built from pinhole intrinsics lands points on the same pixels as the pinhole model, depth
-// decodes back to axial metres, and invalid intrinsics are rejected.
+// decodes back to axial meters, and invalid intrinsics are rejected.
 TEST(HostCameraGeometry, ProjectionRegistrationAndAxialDepth) {
     Intrinsics k;
     k.width = 960;
@@ -24,9 +24,9 @@ TEST(HostCameraGeometry, ProjectionRegistrationAndAxialDepth) {
     const auto ndc = glm::vec3(clip) / clip.w;
     EXPECT_NEAR((ndc.x + 1) * k.width / 2 - .5, k.fx * optical.x / optical.z + k.cx, .001);
     EXPECT_NEAR((1 - ndc.y) * k.height / 2 - .5, k.fy * optical.y / optical.z + k.cy, .001);
-    EXPECT_NEAR(linearDepth(ndc.z * .5f + .5f), optical.z, .0001); // axial metres, not ray length
+    EXPECT_NEAR(linearDepth(ndc.z * .5f + .5f), optical.z, .0001); // axial meters, not ray length
 
-    // Depth-buffer values linearise back to the on-axis distance across the near/far range.
+    // Depth-buffer values linearize back to the on-axis distance across the near/far range.
     for (float z : {.1f, 1.f, 4.f, 20.f}) {
         const auto c = k.projection() * glm::vec4(0, 0, -z, 1);
         EXPECT_NEAR(linearDepth((c.z / c.w + 1) / 2), z, .003);

@@ -45,7 +45,7 @@ double yawOf(const glm::mat4 &m) {
     return std::atan2(m[0].y, m[0].x) * 180 / kPi;
 }
 
-// A stable colour per name (the fallback box of a prop without a mesh).
+// A stable color per name (the fallback box of a prop without a mesh).
 glm::vec4 colorFor(const std::string &name) {
     unsigned h = 0;
     for (const char c : name)
@@ -71,9 +71,9 @@ bool project(const glm::mat4 &vp, const glm::vec2 &origin, const glm::vec2 &size
     return std::abs(clip.x) <= clip.w * 1.2f && std::abs(clip.y) <= clip.w * 1.2f;
 }
 
-// Screen pixels per metre at `center`: the longest of the projected unit axes (from straight above the height
+// Screen pixels per meter at `center`: the longest of the projected unit axes (from straight above the height
 // axis projects to nothing).
-float pixelsPerMetre(const glm::mat4 &vp, const glm::vec2 &origin, const glm::vec2 &size, const glm::vec3 &center) {
+float pixelsPerMeter(const glm::mat4 &vp, const glm::vec2 &origin, const glm::vec2 &size, const glm::vec3 &center) {
     ImVec2 c;
     if (!project(vp, origin, size, center, c))
         return 1;
@@ -94,12 +94,12 @@ std::string sanitized(const fs::path &path) {
     return out;
 }
 
-// A label chip: the prop's colour swatch, then its name.
+// A label chip: the prop's color swatch, then its name.
 float labelWidth(ImVec2 text) {
     return text.x + ui(22);
 }
 
-// Where a prop's label box starts: centred under it in 2D (as Dead Reckoning), up and to the right in 3D.
+// Where a prop's label box starts: centered under it in 2D (as Dead Reckoning), up and to the right in 3D.
 ImVec2 labelCorner(ImVec2 at, ImVec2 text, bool plan) {
     return plan ? ImVec2(at.x - labelWidth(text) * .5f, at.y + ui(11)) : ImVec2(at.x + ui(8), at.y - ui(22));
 }
@@ -117,7 +117,7 @@ void arrow(ImDrawList *d, ImVec2 from, ImVec2 tip, ImU32 color, float width) {
                          {base.x - side.x * ui(6), base.y - side.y * ui(6)}, color);
 }
 
-// An ImGui colour from a glm RGBA, its alpha scaled.
+// An ImGui color from a glm RGBA, its alpha scaled.
 ImU32 colorU32(const glm::vec4 &c, float alpha = 1) {
     return ImGui::GetColorU32(ImVec4(c.x, c.y, c.z, c.w * alpha));
 }
@@ -135,7 +135,7 @@ bool iconToggle(const char *id, bool &on, Icon icon, ImVec4 onColor) {
     if (hovered)
         d->AddRectFilled(at, {at.x + s, at.y + s}, ImGui::GetColorU32(ImGuiCol_FrameBgHovered), ui(3));
 
-    // Ink: the on colour, else muted (brighter when hovered).
+    // Ink: the on color, else muted (brighter when hovered).
     const ImVec4 off = palette().muted;
     const ImU32 ink = ImGui::GetColorU32(on ? onColor : ImVec4(off.x, off.y, off.z, hovered ? 1.f : .75f));
     const ImVec2 c(at.x + s * .5f, at.y + s * .5f);
@@ -427,7 +427,7 @@ void PriorMapEditor::originMoved() {
 }
 
 float PriorMapEditor::handleLength(const View &view, const glm::vec3 &center) const {
-    return ui(90) / pixelsPerMetre(view.viewProjection, view.origin, view.size, center);
+    return ui(90) / pixelsPerMeter(view.viewProjection, view.origin, view.size, center);
 }
 
 bool PriorMapEditor::onRobotOrigin(const View &view, const glm::vec2 &mouse) const {
@@ -476,12 +476,12 @@ int PriorMapEditor::onOriginArrow(const View &view, const glm::vec2 &mouse) cons
     ImVec2 po;
     if (!project(view.viewProjection, view.origin, view.size, o, po))
         return -1;
-    const float metres = view.plan ? ui(64) / pixelsPerMetre(view.viewProjection, view.origin, view.size, o) : .7f;
+    const float meters = view.plan ? ui(64) / pixelsPerMeter(view.viewProjection, view.origin, view.size, o) : .7f;
     int best = -1;
     float nearest = ui(8);
     for (int axis = 0; axis < 2; ++axis) {
         ImVec2 tip;
-        if (!project(view.viewProjection, view.origin, view.size, o + glm::normalize(glm::vec3(map[axis])) * metres,
+        if (!project(view.viewProjection, view.origin, view.size, o + glm::normalize(glm::vec3(map[axis])) * meters,
                      tip))
             continue;
         float fraction = 0;
@@ -494,7 +494,7 @@ int PriorMapEditor::onOriginArrow(const View &view, const glm::vec2 &mouse) cons
     return best;
 }
 
-// A nudge in the pool frame (dx, dy, dz in metres, dyaw in degrees), the subtree riding along.
+// A nudge in the pool frame (dx, dy, dz in meters, dyaw in degrees), the subtree riding along.
 void PriorMapEditor::moveSelected(double dx, double dy, double dz, double dyaw) {
     auto *o = pm::find(doc_.objects, selected_);
     if (!o || o->locked)
@@ -559,7 +559,7 @@ void PriorMapEditor::addMarkers(std::vector<MarkerDraw> &markers) const {
             draw.world = world * mesh->second.local;
         } else if (onMesh(o) || plan_) {
             continue; // part of a meshed assembly, or 2D: drawn as a dot / badge by the overlay
-        } else {      // no mesh: a coloured box at the pose
+        } else {      // no mesh: a colored box at the pose
             draw.world = world;
             draw.scale = kBox;
             draw.tint = colorFor(o.name);
@@ -837,7 +837,7 @@ bool PriorMapEditor::input(const View &view) {
         const glm::vec3 center(start[3]);
         ImVec2 c;
         if (project(view.viewProjection, view.origin, view.size, center, c)) {
-            const float length = ui(90) / pixelsPerMetre(view.viewProjection, view.origin, view.size, center);
+            const float length = ui(90) / pixelsPerMeter(view.viewProjection, view.origin, view.size, center);
             Handle hit = Handle::None;
             float best = ui(10);
             const glm::vec3 axes[] = {
@@ -985,10 +985,10 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
     if (proj(o, po)) {
         const ImU32 colors[] = {IM_COL32(240, 96, 100, 255), IM_COL32(84, 208, 144, 255), IM_COL32(80, 145, 255, 255)};
         // 3D: axes 0.7 m long; 2D: X and Y as arrows a fixed 64 px long (the map frame reads at any zoom)
-        const float metres = view.plan ? ui(64) / pixelsPerMetre(view.viewProjection, view.origin, view.size, o) : .7f;
+        const float meters = view.plan ? ui(64) / pixelsPerMeter(view.viewProjection, view.origin, view.size, o) : .7f;
         for (int i = 0; i < (view.plan ? 2 : 3); ++i) {
             ImVec2 tip;
-            if (proj(o + glm::normalize(glm::vec3(map[i])) * metres, tip)) {
+            if (proj(o + glm::normalize(glm::vec3(map[i])) * meters, tip)) {
                 const bool dragged = (i == 0 && drag_ == Handle::OriginX) || (i == 1 && drag_ == Handle::OriginY);
                 arrow(d, po, tip, colors[i], (view.plan ? ui(3.5f) : ui(3)) * (dragged ? 1.6f : 1.f));
             }
@@ -1036,7 +1036,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
 
     const auto poses = pm::mapPoses(doc_.objects);
 
-    // 2D: each meshed prop's footprint (its mesh bounds from above) outlined in its colour, with a notch on the +X
+    // 2D: each meshed prop's footprint (its mesh bounds from above) outlined in its color, with a notch on the +X
     // side for its heading.
     if (view.plan)
         for (const auto &obj : doc_.objects) {
@@ -1091,7 +1091,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
             }
         }
 
-    // Markers in each prop's colour: a frame on a meshed assembly is a small dot; in 2D a stand-alone prop without a
+    // Markers in each prop's color: a frame on a meshed assembly is a small dot; in 2D a stand-alone prop without a
     // mesh is a badge with a triangle along its heading (3D draws it as a box). A meshed prop is its mesh.
     for (const auto &obj : doc_.objects) {
         if (obj.hidden)
@@ -1179,7 +1179,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
         taken.push_back({min, max});
         labelBoxes_.push_back({obj->name, min, max});
 
-        // the theme's window colour and text (a light chart gets light chips) edged in the prop's colour; locked
+        // the theme's window color and text (a light chart gets light chips) edged in the prop's color; locked
         // props quieter
         const ImVec4 chip = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
         const auto color = colorFor(obj->name);
@@ -1202,7 +1202,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
         const glm::vec3 center(worldOf(poses.at(selected_))[3]);
         ImVec2 c;
         if (proj(center, c)) {
-            const float length = ui(90) / pixelsPerMetre(view.viewProjection, view.origin, view.size, center);
+            const float length = ui(90) / pixelsPerMeter(view.viewProjection, view.origin, view.size, center);
             const auto alpha = sel->locked ? 90 : 255;
             const glm::vec3 axes[] = {glm::normalize(glm::vec3(map[0])), glm::normalize(glm::vec3(map[1])), {0, 0, 1}};
             const ImU32 colors[] = {IM_COL32(235, 75, 75, alpha), IM_COL32(90, 215, 110, alpha),
@@ -1261,7 +1261,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
                                  : nullptr)
         : sel ? "Drag the prop or its handles  /  arrows nudge, Q E turn, PgUp PgDn height  /  Esc deselects"
               : nullptr;
-    // Only when it says something the controls strip does not: a mode or a selection. Bottom centre, above the strip.
+    // Only when it says something the controls strip does not: a mode or a selection. Bottom center, above the strip.
     if (hint) {
         const ImVec2 size = small->CalcTextSizeA(small->FontSize, 1e9f, 0, hint);
         const ImVec2 box(view.origin.x + (view.size.x - size.x) / 2 - ui(8),
@@ -1501,8 +1501,8 @@ void PriorMapEditor::drawFileBar() {
         ImGui::SameLine();
         if (ImGui::Button("+ Add")) {
             record();
-            const auto centre = pm::poolToMap({pool_.length / 2, pool_.width / 2, origin_.z - 1, 0}, origin_);
-            selected_ = pm::add(doc_.objects, pm::kMap, centre);
+            const auto center = pm::poolToMap({pool_.length / 2, pool_.width / 2, origin_.z - 1, 0}, origin_);
+            selected_ = pm::add(doc_.objects, pm::kMap, center);
             std::snprintf(renameField_, sizeof(renameField_), "%s", selected_.c_str());
             changed();
         }
@@ -1599,7 +1599,7 @@ void PriorMapEditor::drawObjects() {
 
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        // the checkboxes make the row a frame tall: centre the name in it, and highlight the whole row
+        // the checkboxes make the row a frame tall: center the name in it, and highlight the whole row
         ImGui::AlignTextToFramePadding();
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAllColumns |
                                    ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_DefaultOpen;
@@ -1609,7 +1609,7 @@ void PriorMapEditor::drawObjects() {
             flags |= ImGuiTreeNodeFlags_Selected;
         if (o.hidden || o.locked)
             ImGui::PushStyleColor(ImGuiCol_Text, palette().muted);
-        // the prop's colour (its badge / dot in the view) as a dot before the name
+        // the prop's color (its badge / dot in the view) as a dot before the name
         // (the label starts after room for the dot, in whole spaces of this font)
         const std::string room(std::size_t(std::ceil(ui(17) / std::max(1.f, ImGui::CalcTextSize(" ").x))), ' ');
         const bool opened = ImGui::TreeNodeEx(o.name.c_str(), flags, "%s%s", room.c_str(), o.name.c_str());

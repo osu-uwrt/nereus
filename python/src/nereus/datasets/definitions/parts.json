@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "task pack parts",
-  "description": "parts.yaml next to a tasks pack's tasks.yaml: named, team-neutral pieces of the course artwork and props for labelled renders. Never read by the simulator.",
+  "description": "parts.yaml next to a tasks pack's tasks.yaml: named, team-neutral pieces of the course artwork and props for labeled renders. Never read by the simulator.",
   "type": "object",
   "properties": {
     "kind": {
@@ -163,7 +163,7 @@
         },
         "indicator": {
           "$ref": "common.json#/$defs/name",
-          "description": "Task region whose indicator colour name is recorded on the instance."
+          "description": "Task region whose indicator color name is recorded on the instance."
         }
       },
       "required": [

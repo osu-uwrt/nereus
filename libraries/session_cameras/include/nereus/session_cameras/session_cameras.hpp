@@ -55,9 +55,9 @@ struct Options {
     std::filesystem::path shader_directory;  // default: $NEREUS_SHADER_DIR, then the source-tree shaders
     std::vector<std::string> sensor_ids;     // empty: every enabled stereo_camera
     bool always = false;                     // render every pack output regardless of demand
-    std::map<std::string, int> jpeg_quality; // sensor id -> JPEG quality for colour outputs (absent: none)
+    std::map<std::string, int> jpeg_quality; // sensor id -> JPEG quality for color outputs (absent: none)
     bool sensor_noise = true;                // overridden by the scenario's sensor_noise when present
-    int supersample = 1;                     // colour/depth anti-aliasing (rendering::Appearance::supersample), 1..4
+    int supersample = 1;                     // color/depth anti-aliasing (rendering::Appearance::supersample), 1..4
 };
 
 // One capture of one camera. snapshot_time_ns is the session clock of the request, ros_stamp_ns the stamp

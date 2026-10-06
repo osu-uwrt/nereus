@@ -1,4 +1,4 @@
-// Autonomy panel: pick a behaviour tree from the robot's list, start/stop it, and show the running tree's
+// Autonomy panel: pick a behavior tree from the robot's list, start/stop it, and show the running tree's
 // execution stack as reported by the bound Autonomy provider.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
@@ -24,7 +24,7 @@ class AutonomyPanel final : public Panel {
     void draw() override {
         const auto s = mission ? mission->state() : MissionState{};
         if (!mission)
-            emptyState("Connected, this lists the robot's behaviour trees to start and shows the running tree's "
+            emptyState("Connected, this lists the robot's behavior trees to start and shows the running tree's "
                        "execution stack.");
         else if (!s.message.empty())
             ImGui::TextWrapped("%s", s.message.c_str());
@@ -80,7 +80,7 @@ class AutonomyPanel final : public Panel {
             mission->stop();
         ImGui::EndDisabled();
 
-        // Execution stack: numbered entries, the innermost (last) one highlighted in the accent colour.
+        // Execution stack: numbered entries, the innermost (last) one highlighted in the accent color.
         if (!s.activeTree.empty())
             ImGui::TextWrapped("Tree: %s", std::filesystem::path(s.activeTree).filename().c_str());
         sectionTitle(s.stackStale ? "Execution stack (stale)" : s.busy ? "Execution stack" : "Last execution stack");

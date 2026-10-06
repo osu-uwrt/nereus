@@ -165,7 +165,7 @@ class BridgeCore {
     // ---- inbound (`message` is a deserialized message of the stream's type)
     std::vector<Publication> receive(const std::string &stream, const void *message);
     session::CommandResult runCommand(const std::string &text);
-    // Serves one request; `response` is an initialised response message.
+    // Serves one request; `response` is an initialized response message.
     void call(const std::string &service, const void *request, void *response);
     std::optional<Alignment> pendingAlignment();
     bool hasAlignment() const {

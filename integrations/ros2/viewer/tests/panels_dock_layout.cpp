@@ -257,7 +257,7 @@ int main() {
     assert(saved.find("camera.gone=1") != std::string::npos && saved.find("map=0") != std::string::npos);
     assert(states.saved("camera.gone") && !states.saved("nothing"));
 
-    // Saved layout files: names are sanitised into file stems, listed alphabetically (only *.ini), and kept
+    // Saved layout files: names are sanitized into file stems, listed alphabetically (only *.ini), and kept
     // under $XDG_CONFIG_HOME/nereus.
     assert(layoutFileStem("  Pool day / 2 ") == "Pool day  2");
     assert(layoutFileStem("../..") == "" && layoutFileStem("a_b-c") == "a_b-c");

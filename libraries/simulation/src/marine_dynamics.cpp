@@ -95,12 +95,12 @@ Vector6d MarineDynamics::acceleration(const Vector6d &v, const Vector6d &vr, con
 }
 
 Vector6d MarineDynamics::dampingWrench(const Vector6d &v) const {
-    // H maps the COM velocity to the damping centre's velocity.
+    // H maps the COM velocity to the damping center's velocity.
     Matrix6d H = Matrix6d::Identity();
     H.topRightCorner<3, 3>() = -skew(damping_center_);
     const Vector6d local = H * v;
     // Map point velocity AND force back to COM. This preserves dissipativity even
-    // during simultaneous translation and rotation about an offset drag centre.
+    // during simultaneous translation and rotation about an offset drag center.
     return -H.transpose() *
            (linear_damping_ * local + (quadratic_damping_.array() * local.array().abs() * local.array()).matrix());
 }
@@ -108,14 +108,14 @@ Vector6d MarineDynamics::dampingWrench(const Vector6d &v) const {
 double MarineDynamics::submergedFraction(const Eigen::Vector3d &p, const Eigen::Quaterniond &orientation,
                                          Eigen::Vector3d *center) const {
     const auto q = orientation.normalized();
-    // Vertical half-extent of the ellipsoid, and the depth of its centre below the surface in units of it.
+    // Vertical half-extent of the ellipsoid, and the depth of its center below the surface in units of it.
     const Eigen::Vector3d vertical = q.conjugate() * Eigen::Vector3d::UnitZ();
     const double height = (radii_.array() * vertical.array()).matrix().norm();
     const double c = std::clamp((water_level_ - (p + q * cob_).z()) / height, -1., 1.);
     // Immersed volume fraction of a unit sphere at that normalized depth.
     const double fraction = (2. + 3. * c - c * c * c) / 4.;
 
-    // Wet centre: centroid of the immersed part, offset from cob along the body-frame vertical.
+    // Wet center: centroid of the immersed part, offset from cob along the body-frame vertical.
     if (center) {
         *center = cob_;
         if (fraction > 1e-10 && fraction < 1.) {
@@ -132,7 +132,7 @@ Vector6d MarineDynamics::restoringWrench(const Eigen::Vector3d &p, const Eigen::
     const double buoyancy = density_ * gravity_ * volume_ * submergedFraction(p, q, &center);
     const Eigen::Vector3d force = q.conjugate() * Eigen::Vector3d(0, 0, buoyancy);
 
-    // Weight acts at the COM (no torque); buoyancy acts at the wet centre.
+    // Weight acts at the COM (no torque); buoyancy acts at the wet center.
     Vector6d tau;
     tau.head<3>() = q.conjugate() * Eigen::Vector3d(0, 0, buoyancy - vehicle_mass_ * gravity_);
     tau.tail<3>() = center.cross(force);

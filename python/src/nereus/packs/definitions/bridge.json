@@ -544,7 +544,7 @@
         },
         "point_cloud": {
           "type": "object",
-          "description": "Camera point_cloud output: coloured cloud from the left depth and RGB of one capture, every stride-th pixel (organized grid, NaN where depth is invalid).",
+          "description": "Camera point_cloud output: colored cloud from the left depth and RGB of one capture, every stride-th pixel (organized grid, NaN where depth is invalid).",
           "properties": {
             "stride": {
               "type": "integer",

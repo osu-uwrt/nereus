@@ -66,7 +66,7 @@ struct ServiceType {
     static std::shared_ptr<const ServiceType> get(const std::string &name);
 };
 
-// Initialised message memory owned by this object.
+// Initialized message memory owned by this object.
 class Message {
   public:
     explicit Message(std::shared_ptr<const MessageType> type);

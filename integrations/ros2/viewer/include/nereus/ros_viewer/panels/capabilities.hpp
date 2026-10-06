@@ -57,7 +57,7 @@ struct Motion : Provider {
     virtual void block(bool active) = 0;
 };
 
-// --- Autonomy: behaviour-tree missions ---
+// --- Autonomy: behavior-tree missions ---
 
 // `trees`: the missions that can be started; `stack`: the running tree's node stack.
 struct MissionState {

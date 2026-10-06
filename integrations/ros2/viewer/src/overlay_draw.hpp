@@ -25,12 +25,12 @@ void drawMpcPath(const std::vector<glm::mat4> &, const glm::mat4 &viewProjection
 // A whole follow_path plan: thin blue line with heading ticks, ring at the end.
 void drawPlannedPath(const std::vector<glm::mat4> &, const glm::mat4 &viewProjection, const ScreenRect &);
 
-// Thruster forces as arrows from each thruster along its axis, `metresPerNewton` long per newton (negative forces
+// Thruster forces as arrows from each thruster along its axis, `metersPerNewton` long per newton (negative forces
 // point backwards), like RViz's wrench displays. `forces` is in bridge order; `body` is the drawn robot.
 void drawThrust(const std::vector<ThrusterMount> &, const std::vector<float> &forces, const glm::mat4 &body,
-                float metresPerNewton, const glm::mat4 &viewProjection, const ScreenRect &);
+                float metersPerNewton, const glm::mat4 &viewProjection, const ScreenRect &);
 
-// What drawTfAxes draws: the snapshot's frames as RGB axes (metres long), optional names, and a caption.
+// What drawTfAxes draws: the snapshot's frames as RGB axes (meters long), optional names, and a caption.
 // `font` must be set (it is dereferenced).
 struct TfOverlay {
     const TfSnapshot *snapshot = nullptr;

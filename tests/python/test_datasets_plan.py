@@ -86,7 +86,7 @@ class PlanTests(unittest.TestCase):
         self.directory.cleanup()
 
     def test_job_from_a_fixture_spec(self) -> None:
-        """The written job.json: camera defaults, sample blocks, labelled parts and acceptance."""
+        """The written job.json: camera defaults, sample blocks, labeled parts and acceptance."""
         result = plan(self.root / "spec", self.out)
         job = result.job
         self.assertEqual(json.loads((self.out / "job.json").read_text()), job)
@@ -114,7 +114,7 @@ class PlanTests(unittest.TestCase):
 
         # Globs expand to parts; pill is not an ffc class; the magnet counts in any indicator state.
         self.assertEqual(
-            job["labelled"],
+            job["labeled"],
             [
                 {"task": "torpedo", "part": "icon_fire"},
                 {"task": "torpedo", "part": "ring"},
@@ -175,7 +175,7 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(torpedo["values"]["1"], "icon_fire")
         self.assertIsNone(torpedo["task"])
 
-        # Visual parts: the slalom pole mesh is labelled per material.
+        # Visual parts: the slalom pole mesh is labeled per material.
         slalom = next(item for item in job["parts"]["visuals"] if item["task"] == "slalom")
         self.assertEqual(slalom["split"], "none")
         self.assertEqual(slalom["materials"]["Material.001"], "pole_red")
@@ -368,15 +368,15 @@ class RealSpecTests(unittest.TestCase):
             self.assertNotIn("scattering", item["water"], item["id"])
         self.assertEqual(job["acceptance"]["fragments"], "reject")
 
-        # Background block last; pole_white and the pill (dfc only) are unlabelled.
+        # Background block last; pole_white and the pill (dfc only) are unlabeled.
         tasks = [block["task"] for block in job["samples"]]
         self.assertEqual(tasks[-1], None)
         self.assertIn("torpedo", tasks)
-        labelled = {(item["task"], item["part"]) for item in job["labelled"]}
-        self.assertIn(("torpedo", "ring"), labelled)
-        self.assertIn(("bins", "magnet_cover"), labelled)
-        self.assertNotIn(("slalom", "pole_white"), labelled)
-        self.assertNotIn(("table", "icon_pill"), labelled)
+        labeled = {(item["task"], item["part"]) for item in job["labeled"]}
+        self.assertIn(("torpedo", "ring"), labeled)
+        self.assertIn(("bins", "magnet_cover"), labeled)
+        self.assertNotIn(("slalom", "pole_white"), labeled)
+        self.assertNotIn(("table", "icon_pill"), labeled)
 
         small = self._plan(FFC, tasks=["torpedo"], count=4, resolution="960x600")
         self.assertEqual([(b["task"], b["count"]) for b in small["samples"]], [("torpedo", 4)])
@@ -386,10 +386,10 @@ class RealSpecTests(unittest.TestCase):
         job = self._plan(DFC)
         self.assertEqual(job["camera"]["sensor"], "dfc")
         self.assertEqual(job["acceptance"]["max_range_m"], 3.0)
-        labelled = {(item["task"], item["part"]) for item in job["labelled"]}
-        self.assertIn(("table", "icon_pill"), labelled)
-        self.assertIn(("bins", "icon_fire"), labelled)
-        self.assertNotIn(("bins", "magnet_cover"), labelled)
+        labeled = {(item["task"], item["part"]) for item in job["labeled"]}
+        self.assertIn(("table", "icon_pill"), labeled)
+        self.assertIn(("bins", "icon_fire"), labeled)
+        self.assertNotIn(("bins", "magnet_cover"), labeled)
         overhead = [b["sampler"] for b in job["samples"] if b["sampler"]["type"] == "overhead"]
         self.assertTrue(overhead)
 

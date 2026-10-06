@@ -1,4 +1,4 @@
-// OpenGL 3.3 renderer for a Scene: colour/depth frames for viewers and sensors, readbacks, and a
+// OpenGL 3.3 renderer for a Scene: color/depth frames for viewers and sensors, readbacks, and a
 // per-pixel instance id / part label pass.
 #pragma once
 #include "nereus/rendering/scene.hpp"
@@ -29,7 +29,7 @@ struct Capture {
 // before the water surface is composited). Rows start at the bottom; omitted outputs are
 // empty vectors. Both are width x height. With Appearance::supersample n > 1 the depth is one
 // scene sample per n x n block, never an average across an edge: the sample at block offset
-// (n/2, n/2) (integer division), whose centre is the pixel centre for odd n and 1/(2n) pixel right of and
+// (n/2, n/2) (integer division), whose center is the pixel center for odd n and 1/(2n) pixel right of and
 // above it for even n.
 struct ImageCapture {
     int width = 0, height = 0;
@@ -37,15 +37,15 @@ struct ImageCapture {
     std::vector<float> depth;
 };
 
-// Label pass: per scene instance an id (24 bits; 0 = occludes only, never labelled), per submesh a fixed part
+// Label pass: per scene instance an id (24 bits; 0 = occludes only, never labeled), per submesh a fixed part
 // value or an 8-bit part map sampled nearest at the submesh UVs (same row convention as diffuse textures:
 // uv (0, 0) is the bottom-left of the PNG, wrap repeats). Pixel = id << 8 | part (part 0 = the instance with
 // no part there). Water surface and Marking instances are not drawn; Clear submeshes (material Clear, or
-// untextured Asset with base alpha < .999) are drawn only when their instance id is nonzero (a labelled clear
-// cover). Diffuse texels with alpha < .4 and UV cutouts discard as in colour, except that a cutout fragment on
+// untextured Asset with base alpha < .999) are drawn only when their instance id is nonzero (a labeled clear
+// cover). Diffuse texels with alpha < .4 and UV cutouts discard as in color, except that a cutout fragment on
 // a part-mapped submesh of a nonzero id is kept where the map is nonzero (a ring's value fills its hole); id 0
 // writes 0 everywhere. Depth-tested; depth is nonlinear [0,1] like ImageCapture, from the same vertex
-// arithmetic as the colour pass (equal where both draw the same fragments on the drivers tested). Rows start
+// arithmetic as the color pass (equal where both draw the same fragments on the drivers tested). Rows start
 // at the bottom.
 struct SubmeshLabel {
     std::uint8_t part = 0;

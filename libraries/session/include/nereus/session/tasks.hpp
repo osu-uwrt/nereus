@@ -79,7 +79,7 @@ class TaskRuntime {
     // Events produced by another physical owner (prop world) at this time.
     Events record(std::int64_t time_ns, const Events &events);
 
-    // Payloads: announce a release (tip = leading end, world), then judge each step's swept centre segment.
+    // Payloads: announce a release (tip = leading end, world), then judge each step's swept center segment.
     Events releaseProjectile(std::int64_t time_ns, int id, const std::string &mechanism_type,
                              const Eigen::Vector3d &tip_world, double radius_m, double length_m);
     ProjectileStep stepProjectile(std::int64_t time_ns, int id, const Eigen::Vector3d &start_center,

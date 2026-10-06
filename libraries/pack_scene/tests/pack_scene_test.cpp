@@ -188,7 +188,7 @@ TEST(PackScene, RoboSubLaneGridExpandsToStripesOnFloorAndEndWalls) {
         (stripe.side == r::PoolSide::Floor ? floor : walls)++;
     EXPECT_EQ(floor, (8u + 17u) * 3); // each line plus a T bar at both ends
     EXPECT_EQ(walls, (8u + 17u) * 2); // each line continues up both end walls
-    // First along_x line: centred across the 22.86 m width, stopping 2 m short of the 50 m walls.
+    // First along_x line: centered across the 22.86 m width, stopping 2 m short of the 50 m walls.
     EXPECT_NEAR(stripes[0].from.x(), 2, 1e-5);
     EXPECT_NEAR(stripes[0].to.x(), 48, 1e-5);
     EXPECT_NEAR(stripes[0].from.y(), (22.86 - 7 * 2.7432) / 2, 1e-5);
@@ -239,7 +239,7 @@ TEST(PackScene, IrregularLinesKeepTheirPlacementAndStyleOverrides) {
     })");
     const auto stripes = ps::poolStripes(pool);
     ASSERT_EQ(stripes.size(), 2u + 2u + 1u + 3u);
-    // Grid lines start at first_m, not centred.
+    // Grid lines start at first_m, not centered.
     EXPECT_FLOAT_EQ(stripes[0].from.x(), 4);
     EXPECT_FLOAT_EQ(stripes[1].from.x(), 7);
     EXPECT_FLOAT_EQ(stripes[0].to.y(), 12);
@@ -305,7 +305,7 @@ TEST(PackScene, ProfiledFloorDrapesStripesAndMeetsTheWalls) {
         EXPECT_GT(v.normal.z(), .85); // this test floor peaks near 27 degrees
     }
 
-    // Sample points inside every triangle (centroid and three off-centre points).
+    // Sample points inside every triangle (centroid and three off-center points).
     double worst = 0;
     for (std::size_t t = 0; t + 2 < floorMesh.indices.size(); t += 3)
         for (const Eigen::Vector3f &weights :
@@ -444,7 +444,7 @@ TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
     EXPECT_EQ(layout.walls.back(), scene.instances.size() - 1);
     EXPECT_TRUE(inside(scene.instances.back()));
 
-    // The grate is a sloped-sided box: its top face is the smaller one, its sides their own colour.
+    // The grate is a sloped-sided box: its top face is the smaller one, its sides their own color.
     const auto &grateMesh = *scene.instances[layout.floor.back()].mesh;
     ASSERT_EQ(grateMesh.submeshes.size(), 2u);
     for (const auto &v : grateMesh.submeshes[0].vertices) {

@@ -29,12 +29,12 @@ double seconds(const builtin_interfaces::msg::Duration &d) {
 }
 
 // Turbo-like ramp: near = warm, far = cool, invalid = dark.
-void colorize(float metres, float lo, float hi, std::uint8_t *out) {
-    if (!std::isfinite(metres) || metres <= 0) {
+void colorize(float meters, float lo, float hi, std::uint8_t *out) {
+    if (!std::isfinite(meters) || meters <= 0) {
         out[0] = out[1] = out[2] = 8;
         return;
     }
-    const float t = std::clamp((metres - lo) / std::max(1e-3f, hi - lo), 0.f, 1.f);
+    const float t = std::clamp((meters - lo) / std::max(1e-3f, hi - lo), 0.f, 1.f);
     static const float stops[5][3] = {{255, 214, 84}, {96, 214, 110}, {48, 200, 210}, {60, 100, 220}, {60, 40, 110}};
     const float x = t * 4;
     const int i = std::min(3, int(x));
@@ -254,7 +254,7 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
                                          "Ignoring invalid realized thruster forces for propeller animation");
             }));
 
-    // Status lights: an LED command (UWRT builds) or a plain colour.
+    // Status lights: an LED command (UWRT builds) or a plain color.
     if (lights.input == "riptide_msgs2/msg/LedCommand") {
 #ifdef NEREUS_VIEWER_UWRT
         subscriptions_.push_back(node_->create_subscription<riptide_msgs2::msg::LedCommand>(
@@ -349,7 +349,7 @@ void RosSide::subscribeCamera(CameraFeed &feed) {
             });
     }
 
-    // Depth: 32FC1 metres, subsampled and colourised in the callback (on the render thread).
+    // Depth: 32FC1 meters, subsampled and colorized in the callback (on the render thread).
     if (!feed.camera->depthTopic.empty() && feed.wantDepth && camerasWanted_ && !feed.depthSub)
         feed.depthSub = node_->create_subscription<sensor_msgs::msg::Image>(
             feed.camera->depthTopic, qos, [&feed](const sensor_msgs::msg::Image::ConstSharedPtr &msg) {
@@ -361,12 +361,12 @@ void RosSide::subscribeCamera(CameraFeed &feed) {
                 feed.depth.resize(std::size_t(w) * std::size_t(h) * 3);
                 for (int y = 0; y < h; ++y)
                     for (int x = 0; x < w; ++x) {
-                        float metres;
-                        std::memcpy(&metres,
+                        float meters;
+                        std::memcpy(&meters,
                                     msg->data.data() + std::size_t(y * stride) * msg->step +
                                         std::size_t(x * stride) * sizeof(float),
                                     sizeof(float));
-                        colorize(metres, float(feed.camera->minRange), float(feed.camera->maxRange),
+                        colorize(meters, float(feed.camera->minRange), float(feed.camera->maxRange),
                                  feed.depth.data() + (std::size_t(y) * std::size_t(w) + std::size_t(x)) * 3);
                     }
                 feed.depthWidth = w;

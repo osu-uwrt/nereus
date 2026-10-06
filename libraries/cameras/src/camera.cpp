@@ -22,7 +22,7 @@ void Intrinsics::validate() const {
 
 Eigen::Matrix4f Intrinsics::projection() const {
     validate();
-    // Original camera.hpp projection, including the half-pixel edge/centre correction.
+    // Original camera.hpp projection, including the half-pixel edge/center correction.
     Eigen::Matrix4f result = Eigen::Matrix4f::Zero();
     result(0, 0) = 2 * fx / width;
     result(1, 1) = 2 * fy / height;
@@ -74,7 +74,7 @@ Frame Processor::process(const Intrinsics &calibration, const DepthNoise &noise,
     result.depth.resize(depth.size());
     auto candidate = random_; // Failed processing must not consume the camera's random state.
 
-    // Flip GL's bottom-up rows to top-down and convert depth-buffer values to metres.
+    // Flip GL's bottom-up rows to top-down and convert depth-buffer values to meters.
     for (int y = 0; y < result.height; ++y) {
         const auto source = static_cast<std::size_t>(result.height - 1 - y) * result.width;
         const auto target = static_cast<std::size_t>(y) * result.width;

@@ -1,6 +1,6 @@
 // Controls pinned to the pool view toolbar: right-click a button, checkbox or dropdown in a panel and "Pin to
 // toolbar". ImGui widgets cannot move, so each pinnable widget records itself as it is drawn (label, enabled,
-// value, colours) and the toolbar draws a copy from that record; clicking the copy queues the action, which the
+// value, colors) and the toolbar draws a copy from that record; clicking the copy queues the action, which the
 // original widget performs the next time its panel draws. A panel with pins that is closed or hidden behind a
 // tab is drawn off screen so its pinned controls keep working.
 #pragma once
@@ -31,7 +31,7 @@ bool Checkbox(const char *label, bool *value);
 bool Combo(const char *label, int *current, const char *itemsSeparatedByZeros);
 // A switch between a few choices ("RGB" / "Depth"): the choices joined in one track, the chosen one under a thumb
 // that slides to it. `width` 0: each choice as wide as its label, else the track's width shared evenly; a choice
-// whose bit is set in `disabled` is shown greyed and cannot be chosen. Pinned, its toolbar copy is a dropdown of the
+// whose bit is set in `disabled` is shown grayed and cannot be chosen. Pinned, its toolbar copy is a dropdown of the
 // same choices; `label`'s text (before "##") names it there.
 bool Switch(const char *label, int *current, std::initializer_list<const char *> choices, float width = 0,
             unsigned disabled = 0);

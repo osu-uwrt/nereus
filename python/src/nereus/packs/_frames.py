@@ -1,8 +1,8 @@
 """Robot geometry expressed in the physics body frame, as the runtime consumes it.
 
 A robot pack may be measured from any datum: its frame tree is rooted wherever is convenient, the
-centre of mass is one more frame (``frames.body``), and thrusters, collision boxes and the altitude
-target may name the frame they sit in. Resolution rewrites those into the body frame, so a moved centre of mass is
+center of mass is one more frame (``frames.body``), and thrusters, collision boxes and the altitude
+target may name the frame they sit in. Resolution rewrites those into the body frame, so a moved center of mass is
 one edited transform. Plain float arithmetic only: identical inputs give identical manifests on every
 platform, and values that are already exact (identity mounts, unit quaternions) keep their digits.
 """
@@ -40,7 +40,7 @@ def _multiply(a: Vector, b: Vector) -> Vector:
 
 
 def _unit(vector: Vector) -> Vector:
-    """Normalised, unless the norm is already 1 to rounding (authored digits are kept)."""
+    """Normalized, unless the norm is already 1 to rounding (authored digits are kept)."""
     norm = math.sqrt(sum(value * value for value in vector))
     return vector if abs(norm - 1.0) < 1e-15 else [value / norm for value in vector]
 

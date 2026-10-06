@@ -80,7 +80,7 @@ bool isPinned(const std::string &key) {
     return std::find(p.begin(), p.end(), key) != p.end();
 }
 
-// Refreshes a widget's record just before it draws: kind, label, disabled state and current button colours.
+// Refreshes a widget's record just before it draws: kind, label, disabled state and current button colors.
 Record &record(const std::string &key, Kind kind, const char *label) {
     auto &b = board();
     auto &r = b.records[key];
@@ -325,7 +325,7 @@ bool Switch(const char *label, int *current, std::initializer_list<const char *>
         const char *text = items[std::size_t(i)];
         const ImVec2 size = ImGui::CalcTextSize(text, nullptr, true);
         const float w = widths[std::size_t(i)];
-        // a label the thumb covers (more than half) takes the "on" text colour
+        // a label the thumb covers (more than half) takes the "on" text color
         const float covered =
             std::max(0.f, std::min(at.x + x + w, at.x + *thumbX + *thumbW) - std::max(at.x + x, at.x + *thumbX));
         const ImVec4 ink = ((disabled >> i) & 1u) ? p.muted : covered > w * .5f ? p.activeText : p.text;

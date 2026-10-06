@@ -46,7 +46,7 @@ float floorDepth(const PoolGeometry &p, float x, float y) {
 
 // Up normal of a profiled floor from its depth slopes (z = -depth).
 Eigen::Vector3f floorNormal(const PoolGeometry &p, float x, float y) {
-    constexpr float h = .05f; // Central-difference step, metres.
+    constexpr float h = .05f; // Central-difference step, meters.
     const float dx = (floorDepth(p, x + h, y) - floorDepth(p, x - h, y)) / (2 * h);
     const float dy = (floorDepth(p, x, y + h) - floorDepth(p, x, y - h)) / (2 * h);
     return Eigen::Vector3f(dx, dy, 1).normalized();
@@ -65,8 +65,8 @@ std::pair<std::vector<float>, std::vector<float>> floorGrid(const PoolGeometry &
     return {xs, ys};
 }
 
-// A box whose top face (top_l x top_w) is smaller than its base (l x w): four sides sloping in, centred on
-// the origin, z from -h/2 to h/2. Top and sides are separate submeshes so they can differ in colour.
+// A box whose top face (top_l x top_w) is smaller than its base (l x w): four sides sloping in, centered on
+// the origin, z from -h/2 to h/2. Top and sides are separate submeshes so they can differ in color.
 std::shared_ptr<const MeshAsset> frustumMesh(const Eigen::Vector3f &base, const Eigen::Vector2f &top,
                                              const Eigen::Vector3f &top_color, const Eigen::Vector3f &side_color) {
     const float bl = base.x() / 2, bw = base.y() / 2, tl = top.x() / 2, tw = top.y() / 2, h = base.z() / 2;
@@ -169,7 +169,7 @@ std::shared_ptr<const MeshAsset> floorMesh(const PoolGeometry &p) {
     return result;
 }
 
-// Decal quads for one pool side, one submesh per colour, in pool-local coordinates relative to the water
+// Decal quads for one pool side, one submesh per color, in pool-local coordinates relative to the water
 // surface. Each quad extends kPad past its stripe so the Marking shader can fade the edge. Over a profiled
 // floor (`profiled`), floor quads are split along their length and each vertex sits on the floor below it.
 std::shared_ptr<const MeshAsset> stripeMesh(const std::vector<PoolStripe> &stripes, bool floor, float length,
@@ -210,7 +210,7 @@ std::shared_ptr<const MeshAsset> stripeMesh(const std::vector<PoolStripe> &strip
             throw std::invalid_argument("unknown pool side");
         };
 
-        // Stripes of one colour share a submesh.
+        // Stripes of one color share a submesh.
         auto found = std::find_if(result->submeshes.begin(), result->submeshes.end(), [&](const Submesh &part) {
             return part.material.base_color.head<3>() == stripe.color;
         });
@@ -304,12 +304,11 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
     // Validate the finish, markings, floor profiles, boxes and recesses before building anything.
     if (!unitColor(p.tile_color) || !unitColor(p.waterline_color) || !std::isfinite(p.tile_size) || p.tile_size < 0 ||
         !p.waterline_band.allFinite())
-        throw std::invalid_argument("pool finish requires unit colours, a non-negative tile size and a finite band");
+        throw std::invalid_argument("pool finish requires unit colors, a non-negative tile size and a finite band");
     for (const auto &stripe : p.markings)
         if (!stripe.from.allFinite() || !stripe.to.allFinite() || (stripe.to - stripe.from).norm() <= 0 ||
             !std::isfinite(stripe.width) || stripe.width <= 0 || !unitColor(stripe.color))
-            throw std::invalid_argument(
-                "pool stripes require distinct finite ends, a positive width and a unit colour");
+            throw std::invalid_argument("pool stripes require distinct finite ends, a positive width and a unit color");
     for (const auto &profile : p.floor_profiles) {
         const auto &line = profile.polyline;
         const float extent = profile.along_x ? p.dimensions.x() : p.dimensions.y();
@@ -331,7 +330,7 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
             !(b.rotation.transpose() * b.rotation).isApprox(Eigen::Matrix3f::Identity(), 1e-4f) ||
             b.rotation.determinant() < 0 || !unitColor(b.color))
             throw std::invalid_argument(
-                "pool boxes require a finite centre, a rotation, a positive size and a unit colour");
+                "pool boxes require a finite center, a rotation, a positive size and a unit color");
     for (const auto &r : p.recesses)
         if (r.side == PoolSide::Floor || !r.from.allFinite() || !r.to.allFinite() || r.from.x() == r.to.x() ||
             r.from.y() == r.to.y() || !std::isfinite(r.depth) || r.depth <= 0)
@@ -608,7 +607,7 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
     water.local_to_world = p.local_to_world;
     scene.water = std::move(water);
 
-    // The shadow map is centred on the middle of the pool surface.
+    // The shadow map is centered on the middle of the pool surface.
     scene.lighting_center = (p.local_to_world * Eigen::Vector4f(length / 2, width / 2, p.water_level, 1)).head<3>();
     return scene;
 }

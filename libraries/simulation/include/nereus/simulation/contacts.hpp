@@ -8,7 +8,7 @@
 namespace nereus::simulation {
 // Geometry is data, independent of robots, pools, tasks and rendering.
 // Body proxy poses are COM-local; static proxy poses use simulation-world coordinates.
-// One box proxy: full edge lengths (m), centre and orientation.
+// One box proxy: full edge lengths (m), center and orientation.
 struct BoxProxy {
     std::string id;
     Eigen::Vector3d size{Eigen::Vector3d::Ones()};
@@ -16,7 +16,7 @@ struct BoxProxy {
     Eigen::Quaterniond orientation{Eigen::Quaterniond::Identity()};
 };
 
-// Disabled: no contacts. SpherePool: a COM-centred sphere against a flat pool's walls and floor. BoxScene: the
+// Disabled: no contacts. SpherePool: a COM-centered sphere against a flat pool's walls and floor. BoxScene: the
 // robot's box proxies against static world boxes.
 enum class ContactModel { Disabled, SpherePool, BoxScene };
 

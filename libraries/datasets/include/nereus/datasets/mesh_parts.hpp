@@ -13,14 +13,14 @@
 
 namespace nereus::datasets {
 // Triangles of a submesh grouped into connected pieces: triangles sharing a vertex position (welded at
-// `tolerance` metres) belong to one piece. Pieces are ordered by their first triangle; each lists triangle
+// `tolerance` meters) belong to one piece. Pieces are ordered by their first triangle; each lists triangle
 // indices (into indices / 3) in increasing order.
 std::vector<std::vector<std::size_t>> connectedPieces(const rendering::Submesh &, double tolerance = 1e-6);
 
 // The submesh restricted to some triangles, with its vertices compacted (first-use order) and material kept.
 rendering::Submesh subset(const rendering::Submesh &, const std::vector<std::size_t> &triangles);
 
-// One labelled thing in an instance: a part-map value or a fixed part value.
+// One labeled thing in an instance: a part-map value or a fixed part value.
 struct PartInstance {
     std::uint8_t value = 0;
     std::string part;

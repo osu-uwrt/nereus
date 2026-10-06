@@ -1,4 +1,4 @@
-// Generator: builds each scenario's labelled scene once, then renders samples (environment draw, placement
+// Generator: builds each scenario's labeled scene once, then renders samples (environment draw, placement
 // jitter, pose attempts judged on label passes, RGB, id map, record).
 #include <nereus/datasets/environment.hpp>
 #include <nereus/datasets/generator.hpp>
@@ -160,7 +160,7 @@ Generator::Scenario &Generator::scenario(std::size_t index) {
                                 std::max(1, int(std::lround(height * options_.acceptance_scale))));
     s->root_from_optical = s->pack->frames().fromRoot(sensor->at("frame").get<std::string>());
 
-    // Tasks: placements, frames, indicator colour names.
+    // Tasks: placements, frames, indicator color names.
     std::map<std::string, session::Json> placements;
     for (const auto &item : s->resolved.scenario.at("task_placements"))
         placements[item.at("task").get<std::string>()] = item;
@@ -468,7 +468,7 @@ Json Generator::render(std::int64_t k) {
     if (scene.instances.size() != s.entries.size())
         throw std::logic_error("composed scene does not match the generator's instance table");
 
-    // Static instances: swap in the (possibly split) labelled mesh and move task visuals with their task.
+    // Static instances: swap in the (possibly split) labeled mesh and move task visuals with their task.
     for (std::size_t i = 0; i < s.static_count; ++i) {
         auto &instance = scene.instances[i];
         instance.mesh = s.entries[i].parts.mesh;
@@ -497,26 +497,26 @@ Json Generator::render(std::int64_t k) {
         if (stats.counted_pixels > 0 &&
             double(stats.near_pixels) > acc.max_near_fraction * double(stats.counted_pixels))
             return "near_geometry";
-        std::int64_t labelledPixels = 0, target = 0;
+        std::int64_t labeledPixels = 0, target = 0;
         for (const auto &[key, item] : stats.keys) {
             const auto found = s.keys.find(key);
             if (found == s.keys.end())
                 continue;
             const auto &entry = s.entries[found->second.first];
             const auto &part = entry.parts.parts[found->second.second];
-            if (!job_.labelled.count({entry.origin.task, part.part}))
+            if (!job_.labeled.count({entry.origin.task, part.part}))
                 continue;
             if (item.medianDepth() > acc.max_range_m)
                 return "label_too_far";
-            labelledPixels += item.pixels;
+            labeledPixels += item.pixels;
             if (block.task && entry.origin.task == *block.task)
                 target = std::max(target, item.pixels);
         }
         if (block.task && target < acc.min_target_px)
             return "no_target";
-        if (!block.task && labelledPixels > acc.background_max_labelled_px)
-            return "labelled_in_background";
-        // Components for the record; the fragment rule (§10.1) last, on labelled instances only.
+        if (!block.task && labeledPixels > acc.background_max_labeled_px)
+            return "labeled_in_background";
+        // Components for the record; the fragment rule (§10.1) last, on labeled instances only.
         measureComponents(capture, stats);
         if (acc.reject_fragments)
             for (const auto &[key, item] : stats.keys) {
@@ -524,7 +524,7 @@ Json Generator::render(std::int64_t k) {
                 if (found == s.keys.end())
                     continue;
                 const auto &entry = s.entries[found->second.first];
-                if (job_.labelled.count({entry.origin.task, entry.parts.parts[found->second.second].part}) &&
+                if (job_.labeled.count({entry.origin.task, entry.parts.parts[found->second.second].part}) &&
                     item.fragmented(acc.min_visible_px, acc.min_fragment_px))
                     return "fragmented";
             }
@@ -547,7 +547,7 @@ Json Generator::render(std::int64_t k) {
                 continue;
             const auto &entry = s.entries[found->second.first];
             if (entry.origin.task == *block.task &&
-                job_.labelled.count({entry.origin.task, entry.parts.parts[found->second.second].part}) &&
+                job_.labeled.count({entry.origin.task, entry.parts.parts[found->second.second].part}) &&
                 double(count) >= .5 * double(acc.min_target_px) * areaScale)
                 return true;
         }

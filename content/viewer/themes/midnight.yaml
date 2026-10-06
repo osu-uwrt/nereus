@@ -1,7 +1,7 @@
 # Neutral graphite with a blue accent, square-ish corners.
 id: midnight
 label: Midnight
-description: "Neutral dark grey with a blue accent"
+description: "Neutral dark gray with a blue accent"
 order: 3
 shape: {window_rounding: 4, frame_rounding: 3, tab_rounding: 3, window_border: 1, frame_border: 0, scrollbar: 14}
 spacing: {window_padding: [14, 12], frame_padding: [10, 7], item_spacing: [10, 9], cell_padding: [4, 2]}

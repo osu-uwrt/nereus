@@ -44,7 +44,7 @@ constexpr double kGraspNormalAlignment = 0.6;
 // Smallest change in the commanded jaw position that counts as an open/close command.
 constexpr double kDirectionEpsilonM = 1e-9;
 
-// Homogeneous transform from a position and a (normalised here) wxyz quaternion.
+// Homogeneous transform from a position and a (normalized here) wxyz quaternion.
 
 Matrix4 matrixFrom(const Vec3 &position, double w, double x, double y, double z) {
     const double n = std::sqrt(w * w + x * x + y * y + z * z);
@@ -359,7 +359,7 @@ struct PropWorld::Impl {
         bool fixed{true};
     };
 
-    // A rigid_body prop. The Bullet body sits at the mesh's bounding-box centre; `center` is that offset in the
+    // A rigid_body prop. The Bullet body sits at the mesh's bounding-box center; `center` is that offset in the
     // mesh frame and `half` the box half extents.
     struct Prop {
         std::string id;
@@ -750,7 +750,7 @@ void PropWorld::Impl::build() {
         }
     }
 
-    // Rigid props: a convex hull of the collision mesh, centred on its bounding box.
+    // Rigid props: a convex hull of the collision mesh, centered on its bounding box.
     for (const auto &prop : rigid) {
         const Json &c = prop.at("parameters");
         const auto asset = c.at("collision_asset").get<std::string>();
@@ -898,14 +898,14 @@ std::vector<Contact> PropWorld::Impl::closestPoints(int a, int b) const {
     return collector.points;
 }
 
-// Mesh-origin pose of a prop (the Bullet body is at the bounding-box centre).
+// Mesh-origin pose of a prop (the Bullet body is at the bounding-box center).
 Matrix4 PropWorld::Impl::propPose(const Prop &prop) const {
     Matrix4 t = basePose(prop.body);
     t.block<3, 1>(0, 3) -= t.block<3, 3>(0, 0) * prop.center;
     return t;
 }
 
-// The basket a (free) prop is in: its bounds fit inside the basket footprint, its centre is within the z
+// The basket a (free) prop is in: its bounds fit inside the basket footprint, its center is within the z
 // range, and it touches the basket's support mesh or rests on a prop that is itself in the basket.
 // `resting` holds the props already on the stack walk, to stop cycles.
 std::optional<std::string> PropWorld::Impl::destination(std::size_t key, std::vector<std::size_t> resting) const {

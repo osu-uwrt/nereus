@@ -1,4 +1,4 @@
-# nereus_datasets: headless labelled-dataset rendering from a planner job (nereus.dataset_job.v1): per-task robot
+# nereus_datasets: headless labeled-dataset rendering from a planner job (nereus.dataset_job.v1): per-task robot
 # pose sampling, label-pass acceptance, randomized RGB through the robot pack's camera model, 16-bit id maps and
 # per-sample records. No ROS, no physics, no window. The executable is nereus-dataset-render.
 find_package(OpenCV 4 REQUIRED COMPONENTS core imgproc imgcodecs)

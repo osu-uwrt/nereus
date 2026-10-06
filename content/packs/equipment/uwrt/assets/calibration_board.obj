@@ -1,5 +1,5 @@
-# UWRT calibration board: 2 ft x 3 ft dibond sign, 3 mm thick (aluminium skins on a black polyethylene core).
-# Origin at the centre of the back (mounting) face; the printed face is at +X 0.003, upright (+Z), with
+# UWRT calibration board: 2 ft x 3 ft dibond sign, 3 mm thick (aluminum skins on a black polyethylene core).
+# Origin at the center of the back (mounting) face; the printed face is at +X 0.003, upright (+Z), with
 # +Y to the right as seen from the front. Normals face outward.
 mtllib calibration_board.mtl
 v 0.003 -0.3048 -0.4572

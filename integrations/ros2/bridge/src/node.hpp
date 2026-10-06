@@ -18,7 +18,7 @@ namespace nereus::ros_bridge {
 // Owns the rclcpp node and its ROS entities; see the file comment for the threading model.
 class BridgeNode {
   public:
-    // Creates every ROS entity of the bridge pack (the ROS context must be initialised).
+    // Creates every ROS entity of the bridge pack (the ROS context must be initialized).
     BridgeNode(BridgeCore &core, CameraSink *cameras = nullptr);
     ~BridgeNode();
 

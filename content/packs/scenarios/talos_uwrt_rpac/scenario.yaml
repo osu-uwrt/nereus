@@ -17,7 +17,7 @@ sensor_noise: true
 # World = the robot's `map` frame: ENU, +Z up. Pools and tasks are upright (yaw about world +Z only).
 world_frame: map
 
-# Laid out as at the pool: the calibration board hangs on the deep-end wall, centred on lap line 3, with its datum
+# Laid out as at the pool: the calibration board hangs on the deep-end wall, centered on lap line 3, with its datum
 # line at the waterline; the map is where the UWRT stack puts it from the tag (riptide_hardware apriltag.launch.py:
 # estimated_origin_frame 0.4572 m along tag +y, yaw 0, pitch -90, roll -90); the course is in map coordinates.
 # Moving the board moves the map and the course with it, as on the robot.
@@ -40,7 +40,7 @@ contacts:
   restitution: 0.1
   friction: 0.4
 
-# Start state of the centre of mass (body-axis velocities). Kill/arm defaults come from
+# Start state of the center of mass (body-axis velocities). Kill/arm defaults come from
 # robot.safety.
 initial:
   frame: com

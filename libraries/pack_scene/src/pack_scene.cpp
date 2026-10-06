@@ -19,7 +19,7 @@ namespace {
 namespace r = nereus::rendering;
 using session::Json;
 
-constexpr double kPanelToleranceM = 5e-4; // declared panel faces are sub-millimetre data
+constexpr double kPanelToleranceM = 5e-4; // declared panel faces are sub-millimeter data
 
 Eigen::Vector3d vector3(const Json &value) {
     return {value.at(0).get<double>(), value.at(1).get<double>(), value.at(2).get<double>()};
@@ -65,7 +65,7 @@ StripeStyle styled(const Json &item, StripeStyle style) {
     return style;
 }
 
-// The stripe, then a bar across each T end (centred on the end, same width and colour).
+// The stripe, then a bar across each T end (centered on the end, same width and color).
 void addStripe(std::vector<r::PoolStripe> &out, r::PoolSide side, Eigen::Vector2f from, Eigen::Vector2f to,
                const StripeStyle &style) {
     out.push_back({side, from, to, style.width, style.color});
@@ -134,7 +134,7 @@ std::vector<r::PoolStripe> poolStripes(const Json &pool, const simulation::PoolF
     const auto &p = pool.at("parameters");
     const float length = p.at("length_m").get<float>(), width = p.at("width_m").get<float>();
     const StripeStyle base = styled(markings, {});
-    // Floor depth where a wall meets the floor, `at` metres along the wall.
+    // Floor depth where a wall meets the floor, `at` meters along the wall.
     const auto wallDepth = [&](r::PoolSide side, float at) {
         const Eigen::Vector2d xy = side == r::PoolSide::XMin   ? Eigen::Vector2d(0, at)
                                    : side == r::PoolSide::XMax ? Eigen::Vector2d(length, at)
@@ -359,7 +359,7 @@ void PackScene::buildPool() {
             box.size = placed.size.cast<float>();
             box.rotation = placed.orientation.toRotationMatrix().cast<float>();
             box.on_floor = placed.on_floor;
-            // Without a colour a box takes the pool's tile finish.
+            // Without a color a box takes the pool's tile finish.
             if (fixture.contains("color_rgb"))
                 box.color = rgb(fixture.at("color_rgb"));
             else
@@ -389,7 +389,7 @@ void PackScene::buildPool() {
 
     // Mesh fixtures from the pool's own assets (stairs, rails, grates), after the generated pool geometry.
     for (const auto &fixture : model.meshes) {
-        // Fixture centres are pool-model coordinates (surface at model.surface_z); the generated pool is
+        // Fixture centers are pool-model coordinates (surface at model.surface_z); the generated pool is
         // surface-relative, so shift by the surface, then up to the placed water level.
         Matrix4d pool_from_mesh = Matrix4d::Identity();
         pool_from_mesh.topLeftCorner<3, 3>() = fixture.orientation.toRotationMatrix();
@@ -526,7 +526,7 @@ void PackScene::buildTasks() {
                     item.casts_shadow = false;
                 }
                 if (visual.contains("indicator")) {
-                    // The tint follows the region's indicator: initial colour at reset, latched colour once latched.
+                    // The tint follows the region's indicator: initial color at reset, latched color once latched.
                     const auto &indicator = visual.at("indicator");
                     const auto &names =
                         regions.at(indicator.at("region").get<std::string>()).at("parameters").at("indicator");

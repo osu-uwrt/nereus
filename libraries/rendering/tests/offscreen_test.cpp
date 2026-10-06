@@ -1,4 +1,4 @@
-// Tests for the headless EGL OffscreenRenderer: colour/depth captures, EGL context hygiene and threading, and
+// Tests for the headless EGL OffscreenRenderer: color/depth captures, EGL context hygiene and threading, and
 // the label pass (ids + depth) used for dataset export. Label ids are (instance id << 8) | part value.
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -283,16 +283,16 @@ class Labels : public ::testing::Test {
 // A per-submesh part-map PNG is sampled with the same UVs as the diffuse texture, texel for texel.
 TEST_F(Labels, PartMapLinesUpTexelForTexelWithTheDiffuseTexture) {
     // 2x2 texture and part map, file rows top first: red 1 | green 2 / blue 3 | white 4.
-    const std::vector<std::uint8_t> colours = {255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255};
+    const std::vector<std::uint8_t> colors = {255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255};
     const std::vector<std::uint8_t> parts = {1, 2, 3, 4};
-    writePng(directory / "diffuse.png", 2, 2, 3, colours);
+    writePng(directory / "diffuse.png", 2, 2, 3, colors);
     writePng(directory / "parts.png", 2, 2, 1, parts);
     r::Scene scene;
     scene.instances.push_back(item(quad(0, 1, directory / "diffuse.png")));
-    r::InstanceLabel labelled = label(9);
-    labelled.submeshes.push_back({0, directory / "parts.png"});
+    r::InstanceLabel labeled = label(9);
+    labeled.submeshes.push_back({0, directory / "parts.png"});
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
-    const auto ids = host.captureLabels(scene, {labelled}, front(), 64, 64);
+    const auto ids = host.captureLabels(scene, {labeled}, front(), 64, 64);
     const auto image = host.capture(scene, front(), appearance(), 0, 64, 64);
     ASSERT_EQ(ids.ids.size(), 64u * 64);
     // Looking at the quad's front from +X: uv v up the image (file top row at the image top) and u to the
@@ -303,18 +303,18 @@ TEST_F(Labels, PartMapLinesUpTexelForTexelWithTheDiffuseTexture) {
     EXPECT_EQ(at(ids, 22, 22), 9u << 8 | 4);
     EXPECT_EQ(at(ids, 0, 0), 0u) << "background";
     // Every pixel well inside one texel (linear filtering blends across seams and the repeat-wrapped edges):
-    // its part is the file texel whose colour the colour pass shows there. Reference colours come from the
-    // colour pass at texel centres, named by their colour alone (red, green, blue or white).
+    // its part is the file texel whose color the color pass shows there. Reference colors come from the
+    // color pass at texel centers, named by their color alone (red, green, blue or white).
     const auto pixel = [&](int column, int row) {
         const auto *rgb = &image.rgb[3 * (std::size_t(row) * 64 + column)];
         return Eigen::Vector3f(rgb[0], rgb[1], rgb[2]);
     };
     std::map<std::uint32_t, Eigen::Vector3f> references;
     for (const auto &[column, row] : {std::pair{42, 42}, {22, 42}, {42, 22}, {22, 22}}) {
-        const Eigen::Vector3f colour = pixel(column, row);
+        const Eigen::Vector3f color = pixel(column, row);
         Eigen::Index channel = 0;
-        colour.maxCoeff(&channel);
-        references[colour.minCoeff() > 128 ? 4u : std::uint32_t(channel) + 1] = colour;
+        color.maxCoeff(&channel);
+        references[color.minCoeff() > 128 ? 4u : std::uint32_t(channel) + 1] = color;
     }
     ASSERT_EQ(references.size(), 4u);
     std::set<std::uint32_t> seen;
@@ -332,9 +332,9 @@ TEST_F(Labels, PartMapLinesUpTexelForTexelWithTheDiffuseTexture) {
             ASSERT_EQ(value >> 8, 9u);
             std::uint32_t texel = 0;
             float best = INFINITY;
-            for (const auto &[part, colour] : references)
-                if ((pixel(column, row) - colour).norm() < best) {
-                    best = (pixel(column, row) - colour).norm();
+            for (const auto &[part, color] : references)
+                if ((pixel(column, row) - color).norm() < best) {
+                    best = (pixel(column, row) - color).norm();
                     texel = part;
                 }
             ASSERT_EQ(value & 0xff, texel) << "pixel " << column << ", " << row;
@@ -344,31 +344,31 @@ TEST_F(Labels, PartMapLinesUpTexelForTexelWithTheDiffuseTexture) {
     EXPECT_EQ(seen, (std::set<std::uint32_t>{1, 2, 3, 4}));
     EXPECT_GT(checked, 200);
     // A fixed part value applies to the whole submesh; empty submeshes = part 0.
-    labelled.submeshes = {{7, std::nullopt}};
-    EXPECT_EQ(at(host.captureLabels(scene, {labelled}, front(), 64, 64), 32, 32), 9u << 8 | 7);
+    labeled.submeshes = {{7, std::nullopt}};
+    EXPECT_EQ(at(host.captureLabels(scene, {labeled}, front(), 64, 64), 32, 32), 9u << 8 | 7);
     EXPECT_EQ(at(host.captureLabels(scene, {label(9)}, front(), 64, 64), 32, 32), 9u << 8);
 }
 
-// id 0 marks an occluder that hides labelled geometry; clear or invisible covers occlude only if labelled.
-TEST_F(Labels, UnlabelledOccluderHidesALabelledQuadButClearOnlyWhenLabelled) {
+// id 0 marks an occluder that hides labeled geometry; clear or invisible covers occlude only if labeled.
+TEST_F(Labels, UnlabeledOccluderHidesALabeledQuadButClearOnlyWhenLabeled) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     r::Scene scene;
     scene.instances.push_back(item(quad()));
-    scene.instances.push_back(item(quad(.3f, .4f))); // small quad in front of the centre
+    scene.instances.push_back(item(quad(.3f, .4f))); // small quad in front of the center
     const auto occluded = host.captureLabels(scene, {label(5), label(0)}, front(), 64, 64);
     EXPECT_EQ(at(occluded, 32, 32), 0u) << "id 0 occludes";
     EXPECT_LT(depthAt(occluded, 32, 32), 1.f);
     EXPECT_EQ(at(occluded, 20, 32), 5u << 8);
     EXPECT_EQ(at(host.captureLabels(scene, {label(5), label(6)}, front(), 64, 64), 32, 32), 6u << 8);
-    // Clear cover (material Clear, or an Asset submesh with alpha < .999): see-through unless labelled.
+    // Clear cover (material Clear, or an Asset submesh with alpha < .999): see-through unless labeled.
     for (const bool material : {true, false}) {
         scene.instances[1] =
             material ? item(quad(.3f, .4f), r::SurfaceMaterial::Clear) : item(quad(.3f, .4f, {}, {}, .5f));
         const auto clear = host.captureLabels(scene, {label(5), label(0)}, front(), 64, 64);
-        EXPECT_EQ(at(clear, 32, 32), 5u << 8) << "unlabelled clear cover does not occlude";
+        EXPECT_EQ(at(clear, 32, 32), 5u << 8) << "unlabeled clear cover does not occlude";
         EXPECT_EQ(depthAt(clear, 32, 32), depthAt(clear, 20, 32)) << "depth of the quad behind";
         EXPECT_EQ(at(host.captureLabels(scene, {label(5), label(6)}, front(), 64, 64), 32, 32), 6u << 8)
-            << "a labelled clear cover is drawn";
+            << "a labeled clear cover is drawn";
     }
     // Invisible instances are skipped.
     scene.instances[1] = item(quad(.3f, .4f));
@@ -376,8 +376,8 @@ TEST_F(Labels, UnlabelledOccluderHidesALabelledQuadButClearOnlyWhenLabelled) {
     EXPECT_EQ(at(host.captureLabels(scene, {label(5), label(6)}, front(), 64, 64), 32, 32), 5u << 8);
 }
 
-// Shader cutouts and low-alpha texels discard fragments in the label pass, as in the colour pass.
-TEST_F(Labels, CutoutsAndTransparentTexelsDiscardLikeTheColourPass) {
+// Shader cutouts and low-alpha texels discard fragments in the label pass, as in the color pass.
+TEST_F(Labels, CutoutsAndTransparentTexelsDiscardLikeTheColorPass) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     r::Scene scene;
     scene.instances.push_back(item(quad(0, 1, {}, {{{.5f, .5f}, .2f}})));
@@ -395,14 +395,14 @@ TEST_F(Labels, CutoutsAndTransparentTexelsDiscardLikeTheColourPass) {
 
 TEST_F(Labels, PartMapValuesFillCutoutsAndZeroKeepsThemOpen) {
     // Part map: file column 0 (uv u < .5, the image's right half here) is 5, column 1 is 0. A hole at the
-    // centre keeps the fragments labelled 5 (a ring's value fills its hole) and discards the rest.
+    // center keeps the fragments labeled 5 (a ring's value fills its hole) and discards the rest.
     writePng(directory / "halves.png", 2, 2, 1, {5, 0, 5, 0});
     r::Scene scene;
     scene.instances.push_back(item(quad(0, 1, {}, {{{.5f, .5f}, .2f}})));
-    auto labelled = label(3);
-    labelled.submeshes = {{0, directory / "halves.png"}};
+    auto labeled = label(3);
+    labeled.submeshes = {{0, directory / "halves.png"}};
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
-    const auto ids = host.captureLabels(scene, {labelled}, front(), 64, 64);
+    const auto ids = host.captureLabels(scene, {labeled}, front(), 64, 64);
     EXPECT_EQ(at(ids, 36, 32), 3u << 8 | 5) << "hole fragment with a part value is kept";
     EXPECT_LT(depthAt(ids, 36, 32), 1.f);
     EXPECT_EQ(at(ids, 28, 32), 0u) << "hole fragment with part 0 is discarded";
@@ -410,14 +410,14 @@ TEST_F(Labels, PartMapValuesFillCutoutsAndZeroKeepsThemOpen) {
     EXPECT_EQ(at(ids, 36, 46), 3u << 8 | 5);
     EXPECT_EQ(at(ids, 28, 46), 3u << 8) << "outside the hole part 0 is the instance without a part";
     // A fixed part value is not a part map: the hole stays open.
-    labelled.submeshes = {{5, std::nullopt}};
-    EXPECT_EQ(at(host.captureLabels(scene, {labelled}, front(), 64, 64), 36, 32), 0u);
-    // The colour pass keeps the whole hole see-through.
+    labeled.submeshes = {{5, std::nullopt}};
+    EXPECT_EQ(at(host.captureLabels(scene, {labeled}, front(), 64, 64), 36, 32), 0u);
+    // The color pass keeps the whole hole see-through.
     EXPECT_EQ(host.capture(scene, front(), appearance(), 0, 64, 64).depth[32 * 64 + 36], 1.f);
     // Id 0 only occludes: its part map neither fills the hole nor reaches the output.
-    labelled = label(0);
-    labelled.submeshes = {{0, directory / "halves.png"}};
-    const auto occluder = host.captureLabels(scene, {labelled}, front(), 64, 64);
+    labeled = label(0);
+    labeled.submeshes = {{0, directory / "halves.png"}};
+    const auto occluder = host.captureLabels(scene, {labeled}, front(), 64, 64);
     EXPECT_EQ(at(occluder, 36, 32), 0u);
     EXPECT_EQ(depthAt(occluder, 36, 32), 1.f) << "hole stays see-through";
     EXPECT_EQ(at(occluder, 36, 46), 0u);
@@ -429,17 +429,17 @@ TEST_F(Labels, PartMapsOfOffscreenSubmeshesAreStillLoaded) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     r::Scene scene;
     scene.instances.push_back(item(quad(5))); // behind the camera
-    auto labelled = label(1);
-    labelled.submeshes = {{0, directory / "missing.png"}};
-    EXPECT_THROW(host.captureLabels(scene, {labelled}, front(), 16, 16), std::invalid_argument);
+    auto labeled = label(1);
+    labeled.submeshes = {{0, directory / "missing.png"}};
+    EXPECT_THROW(host.captureLabels(scene, {labeled}, front(), 16, 16), std::invalid_argument);
     writePng(directory / "parts.png", 1, 1, 1, {4});
-    labelled.submeshes = {{0, directory / "parts.png"}};
-    const auto ids = host.captureLabels(scene, {labelled}, front(), 16, 16);
+    labeled.submeshes = {{0, directory / "parts.png"}};
+    const auto ids = host.captureLabels(scene, {labeled}, front(), 16, 16);
     EXPECT_EQ(std::set<std::uint32_t>(ids.ids.begin(), ids.ids.end()), std::set<std::uint32_t>{0});
 }
 
-// Label depth equals colour depth; the water surface and Marking stripes never get label ids.
-TEST_F(Labels, DepthMatchesTheColourPassAndWaterAndMarkingsAreNotDrawn) {
+// Label depth equals color depth; the water surface and Marking stripes never get label ids.
+TEST_F(Labels, DepthMatchesTheColorPassAndWaterAndMarkingsAreNotDrawn) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     auto scene = ::scene();                        // box 3 m away
     scene.instances.push_back(item(quad(0, .6f))); // tilted quad in front of the box
@@ -454,7 +454,7 @@ TEST_F(Labels, DepthMatchesTheColourPassAndWaterAndMarkingsAreNotDrawn) {
     EXPECT_EQ(labels.depth, image.depth);
     std::set<std::uint32_t> ids(labels.ids.begin(), labels.ids.end());
     EXPECT_EQ(ids, (std::set<std::uint32_t>{0, 1u << 8, 2u << 8}));
-    // A pool scene (water surface + Marking stripes): every instance labelled, no stripe id appears.
+    // A pool scene (water surface + Marking stripes): every instance labeled, no stripe id appears.
     r::PoolGeometry geometry;
     geometry.dimensions = {4, 4, 2};
     geometry.markings.push_back({r::PoolSide::Floor, {1, 2}, {3, 2}, .3f, {0, 0, 0}});
@@ -478,15 +478,15 @@ TEST_F(Labels, DepthMatchesTheColourPassAndWaterAndMarkingsAreNotDrawn) {
         ASSERT_EQ(markings.count(value), 0u);
 }
 
-// Label captures don't change later colour captures; invalid labels and sizes throw.
+// Label captures don't change later color captures; invalid labels and sizes throw.
 TEST_F(Labels, LabelPassesDoNotDisturbCapturesAndInvalidInputIsRejected) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     const auto expected = capture(host);
     std::vector<std::uint8_t> parts = {1, 2, 3, 4};
     writePng(directory / "parts.png", 2, 2, 1, parts);
-    auto labelled = label(1);
-    labelled.submeshes = {{2, directory / "parts.png"}};
-    EXPECT_FALSE(host.captureLabels(scene(), {labelled}, view(), 40, 24).ids.empty());
+    auto labeled = label(1);
+    labeled.submeshes = {{2, directory / "parts.png"}};
+    EXPECT_FALSE(host.captureLabels(scene(), {labeled}, view(), 40, 24).ids.empty());
     const auto after = capture(host);
     EXPECT_EQ(after.rgb, expected.rgb);
     EXPECT_EQ(after.depth, expected.depth);
@@ -500,6 +500,6 @@ TEST_F(Labels, LabelPassesDoNotDisturbCapturesAndInvalidInputIsRejected) {
     missing.submeshes = {{0, directory / "missing.png"}};
     EXPECT_THROW(host.captureLabels(scene(), {missing}, view(), 32, 32), std::invalid_argument);
     EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
-    EXPECT_EQ(host.captureLabels(scene(), {labelled}, view(), 32, 32).ids[16 * 32 + 16] >> 8, 1u);
+    EXPECT_EQ(host.captureLabels(scene(), {labeled}, view(), 32, 32).ids[16 * 32 + 16] >> 8, 1u);
     EXPECT_EQ(capture(host).rgb, expected.rgb);
 }

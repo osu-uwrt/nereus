@@ -407,7 +407,7 @@ def _floor_profile(
 
 
 def _floor_depth(parameters: dict[str, Any], wall: str, along: float) -> float:
-    """Depth where a wall meets the floor, `along` metres along the wall: the shallowest profile there.
+    """Depth where a wall meets the floor, `along` meters along the wall: the shallowest profile there.
     A profile's curve between two control points never leaves their depth range, so the deeper of them
     bounds it."""
     profiles = _floor_profiles(parameters)
@@ -438,7 +438,7 @@ def _pool_markings(
     length, width = parameters["length_m"], parameters["width_m"]
     deck = parameters["deck_height_m"]
 
-    # Lane grid: line families along x and y (centred unless first_m is given) and T targets
+    # Lane grid: line families along x and y (centered unless first_m is given) and T targets
     grid = markings.get("lane_grid")
     if grid is not None:
         inset = grid.get("inset_m", 0.0)

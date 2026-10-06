@@ -319,7 +319,7 @@ PortalTracker::Advance PortalTracker::advance(std::int64_t time_ns, const Observ
         attempt.reset();
     }
 
-    // Close to the gate centre: start an attempt if none is open.
+    // Close to the gate center: start an attempt if none is open.
     const bool near = (current.local_position - Vec3(offset_, 0, 0)).norm() <= radius_;
     if (near && !attempt) {
         attempt = Attempt{next_id, Vec3::Zero(), {}};
@@ -447,7 +447,7 @@ PerforatedPanel::PerforatedPanel(const Json &parameters, const Pose &world_from_
     min_cosine_ = number(clearance.at("min_cosine"), "min_cosine");
     if (half_ <= 0 || !(0 < min_cosine_ && min_cosine_ <= 1))
         invalid("invalid panel geometry");
-    // Holes: uv in [0, 1] across the panel -> panel-centred y, z in metres.
+    // Holes: uv in [0, 1] across the panel -> panel-centered y, z in meters.
     for (const auto &hole : parameters.at("holes")) {
         const Json &uv = hole.at("uv");
         if (!uv.is_array() || uv.size() != 2)

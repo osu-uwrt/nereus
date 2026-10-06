@@ -1,6 +1,6 @@
 #version 330 core
 // Main scene shader: materials, sun lighting with shadows, caustics and underwater attenuation.
-// Writes linear HDR colour; post.frag tone-maps it.
+// Writes linear HDR color; post.frag tone-maps it.
 in vec3 world,norm,poolPosition,poolNormal;
 in vec2 texcoord;
 in vec4 lightPosition;
@@ -33,7 +33,7 @@ uniform vec3 holes[4];
 // Cheap per-cell pseudo-random value in [0, 1).
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 
-// Grout lines: ~0 within `thickness` of a grid line every `spacing` metres, 1 on the tile face.
+// Grout lines: ~0 within `thickness` of a grid line every `spacing` meters, 1 on the tile face.
 float grid(vec2 p,float spacing,float thickness){
   vec2 footprint=max(fwidth(p),vec2(.00001));
   vec2 d=abs(fract(p/spacing-.5)-.5)*spacing;
@@ -78,7 +78,7 @@ void main(){
   vec4 sampled=hasTexture==1?texture(albedo,texcoord):vec4(1);
   if(sampled.a<.4 || coverage<.004)discard;
 
-  // Base colour and per-material surface finish (in pool coordinates for the pool materials).
+  // Base color and per-material surface finish (in pool coordinates for the pool materials).
   vec3 base=sampled.rgb*tint.rgb;
   vec3 n=normalize(norm);if(!gl_FrontFacing)n=-n;
   vec3 pn=normalize(poolNormal);
@@ -97,7 +97,7 @@ void main(){
     base*=mix(.8,1.,grid(tile,.6,.004));
   }
   if(material==4){
-    // Liner: faint 4 mm-period stripes, faded out when a pixel spans several millimetres.
+    // Liner: faint 4 mm-period stripes, faded out when a pixel spans several millimeters.
     float p=abs(n.x)>.5?world.y:world.x;
     float fade=1.-smoothstep(.001,.006,fwidth(p));
     base*=1.-.035*fade*(.5+.5*cos(p*1570.796));
@@ -118,7 +118,7 @@ void main(){
     float c=caustic(world.xy+world.z*n.xy*.5);
     lighting+=base*c*caustics*directLight*exp(worldZ*.14)*(.3+.7*max(n.z,0.))*(.35+.65*vis);
     // Approximate incoming surface light with a vertical path through the water.
-    // Use physical depth in metres; viewing-distance controls apply below.
+    // Use physical depth in meters; viewing-distance controls apply below.
     lighting*=exp(-waterAbsorption*(-worldZ));
   }
   // Emissive materials generate their own light and only lose it on the way to the camera.
@@ -131,7 +131,7 @@ void main(){
   else if(eyeZ>=0 && worldZ<0)wet=d*(-worldZ)/max(.001,eye.z-world.z);
   else if(eyeZ<0 && worldZ>=0)wet=d*(-eyeZ)/max(.001,world.z-eye.z);
 
-  // Beer-Lambert attenuation along that path, filled in by the water's scattered colour.
+  // Beer-Lambert attenuation along that path, filled in by the water's scattered color.
   float opticalDistance=pow(max(0.,wet-waterClearDistance)*waterDistanceScale,waterDistancePower);
   float transmission=exp(-opticalDistance*waterScattering);
   vec3 attenuation=exp(-opticalDistance*waterAbsorption)*transmission;

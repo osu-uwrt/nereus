@@ -124,14 +124,14 @@ LabelStats analyzeLabels(const rendering::LabelCapture &capture, float near_plan
     const auto pixels = static_cast<std::size_t>(w) * static_cast<std::size_t>(h);
     if (capture.ids.size() != pixels || capture.depth.size() != pixels || (exclude && exclude->size() != pixels))
         throw std::invalid_argument("label capture buffers do not match its size");
-    // Nonlinear depth of near_m: compare in nonlinear space (monotonic) and convert only labelled pixels.
+    // Nonlinear depth of near_m: compare in nonlinear space (monotonic) and convert only labeled pixels.
     const float nearZ = ((far_plane + near_plane) - 2 * near_plane * far_plane / near_m) / (far_plane - near_plane);
     const float nearThreshold = (nearZ + 1) / 2;
 
-    // One pass over the bottom-up capture: near counts on every non-excluded pixel, key stats on labelled ones.
+    // One pass over the bottom-up capture: near counts on every non-excluded pixel, key stats on labeled ones.
     LabelStats stats;
     std::uint32_t lastKey = 0;
-    KeyStats *last = nullptr; // cached map entry: neighbouring pixels usually share a key
+    KeyStats *last = nullptr; // cached map entry: neighboring pixels usually share a key
     for (int row = 0; row < h; ++row) {
         const int y = h - 1 - row; // top-down
         for (int x = 0; x < w; ++x) {
@@ -144,7 +144,7 @@ LabelStats analyzeLabels(const rendering::LabelCapture &capture, float near_plan
             }
             const auto key = capture.ids[i];
             if ((key & 0xffu) == 0)
-                continue; // part 0: unlabelled
+                continue; // part 0: unlabeled
             if (!last || key != lastKey) {
                 last = &stats.keys[key];
                 lastKey = key;

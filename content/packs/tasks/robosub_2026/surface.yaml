@@ -1,5 +1,5 @@
 # Surface inside the octagon.
-# Task frame: octagon centre, +Z up. The scenario places it above the table.
+# Task frame: octagon center, +Z up. The scenario places it above the table.
 kind: task
 id: surface
 description: Octagon surfacing, facing-image dwell and the basket-count turn judge.
@@ -9,7 +9,7 @@ frames:   # the four signs
 - {id: hammer_and_wrench, position_m: [0.0, -1.38, 0.0], orientation_wxyz: [0.7071067811865476, 0.0, 0.0, 0.7071067811865475]}
 - {id: buoy, position_m: [-1.38, 0.0, 0.0], orientation_wxyz: [1, 0, 0, 0]}
 - {id: sos, position_m: [1.38, 0.0, 0.0], orientation_wxyz: [0, 0, 0, 1]}
-# Table origin in this frame: the centre of the basket-count turn zone.
+# Table origin in this frame: the center of the basket-count turn zone.
 # The octagon ring lies on the water surface.
 - {id: octagon_ring, position_m: [0.0, 0.0, 0.3048], orientation_wxyz: [1, 0, 0, 0]}
 - {id: table_origin, position_m: [0.010891616316147913, -0.10408552483425264, -1.2352], orientation_wxyz: [0.3882125471904098, 0.0, 0.0, 0.9215698661544516]}

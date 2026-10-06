@@ -183,7 +183,7 @@
         },
         "body": {
           "$ref": "#/$defs/name",
-          "description": "Frame of the physics body (the centre of mass); defaults to the root."
+          "description": "Frame of the physics body (the center of mass); defaults to the root."
         },
         "transforms": {
           "type": "array",

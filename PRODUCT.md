@@ -86,7 +86,7 @@ unmodified against either.
 ## Accessibility & Inclusion
 
 High contrast that survives outdoor glare; clean scaling at 200 % and above; safety controls distinguishable by
-more than colour alone.
+more than color alone.
 
 ## Audience Scope
 

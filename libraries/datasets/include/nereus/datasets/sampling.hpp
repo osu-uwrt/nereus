@@ -65,7 +65,7 @@ struct PoolFrame {
     double floorZ(const Eigen::Vector2d &pool_xy) const {
         return surface_z - floor.depthAt(pool_xy);
     }
-    // §3.2 check 1 for a camera optical centre: empty when acceptable, else the rejection reason
+    // §3.2 check 1 for a camera optical center: empty when acceptable, else the rejection reason
     // ("above_surface" | "outside_pool" | "near_floor").
     std::optional<std::string> checkCamera(const Eigen::Vector3d &world, double surface_margin = .1,
                                            double wall_margin = .3, double floor_margin = .2) const;
@@ -86,7 +86,7 @@ struct PoseDraw {
 PoseDraw samplePose(const Sampler &, Stream &, const std::map<std::string, Pose> &world_from_frames, const PoolFrame &,
                     const Pose &root_from_optical);
 
-// Intrinsics for an output of (width, height) keeping the field of view: s = max(w'/w, h'/h), centre crop.
+// Intrinsics for an output of (width, height) keeping the field of view: s = max(w'/w, h'/h), center crop.
 cameras::Intrinsics scaleIntrinsics(const cameras::Intrinsics &native, int width, int height);
 
 // {"position_m": [x, y, z], "orientation_wxyz": [w, x, y, z]} as written to records.

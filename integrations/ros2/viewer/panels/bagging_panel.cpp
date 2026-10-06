@@ -31,7 +31,7 @@ std::string location(const BagTargetState &t, const std::string &path) {
     return t.host.empty() ? path : t.host + ":" + path;
 }
 
-// Wrapped text in the theme's muted colour.
+// Wrapped text in the theme's muted color.
 void muted(const std::string &text) {
     ImGui::PushStyleColor(ImGuiCol_Text, palette().muted);
     ImGui::TextWrapped("%s", text.c_str());

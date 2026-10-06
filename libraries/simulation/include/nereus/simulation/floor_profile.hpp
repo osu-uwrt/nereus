@@ -106,7 +106,7 @@ struct FloorBox {
 };
 
 // Contact boxes for the floor: one per polyline segment, spanning the pool across the axis, top face
-// on the segment, `thickness` deep, overlapping each neighbour by `overlap` so seams stay closed.
+// on the segment, `thickness` deep, overlapping each neighbor by `overlap` so seams stay closed.
 std::vector<FloorBox> floorBoxes(const FloorProfile &profile, double span, double surface_z, double thickness = 1.0,
                                  double overlap = 0.01);
 // Every profile's boxes; each spans the pool across its profile's axis (`length` x `width` pool).

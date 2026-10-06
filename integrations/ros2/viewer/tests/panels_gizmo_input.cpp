@@ -93,7 +93,7 @@ glm::vec3 dragAxis(Registry &registry, int axis, bool cameraMoves, const glm::ma
 }
 
 // Turns the gizmo's `axis` ring two full turns in `direction` (+1 / -1), checking every step against the
-// expected rotation, then the centre dead zone and Escape.
+// expected rotation, then the center dead zone and Escape.
 void rotateRing(Registry &registry, int axis, float direction, bool cameraMoves) {
     auto motion = std::make_shared<MotionProbe>();
     motion->s.enabled = motion->s.fresh = motion->s.hasCommand = true;

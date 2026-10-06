@@ -26,7 +26,7 @@ class ResolverChain final : public simulation::ContactResolver {
     std::vector<std::shared_ptr<simulation::ContactResolver>> resolvers_;
 };
 
-// Payload dynamics parameters from a robot-pack projectile; the centre offsets and angular damping default to 0.
+// Payload dynamics parameters from a robot-pack projectile; the center offsets and angular damping default to 0.
 simulation::PayloadParameters payloadParameters(const Json &projectile) {
     simulation::PayloadParameters p;
     const std::string model = projectile.at("model").get<std::string>();

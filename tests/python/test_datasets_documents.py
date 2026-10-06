@@ -103,7 +103,7 @@ class SchemaTests(unittest.TestCase):
         )
 
         labels = _labels()
-        labels["tasks"]["bins"] = {"magnet": {"parts": ["cover"], "when": {"colour": "red"}}}
+        labels["tasks"]["bins"] = {"magnet": {"parts": ["cover"], "when": {"color": "red"}}}
         self.assertTrue(check_data("labels", labels))
         labels["tasks"]["bins"] = {"magnet": {"parts": ["cover"], "when": {"indicator": "red"}}}
         labels["classes"] = {"circle": {"shape": "outer"}}
@@ -330,7 +330,7 @@ class CrossCheckTests(unittest.TestCase):
 
 class ClassMapTests(unittest.TestCase):
     def test_classify(self) -> None:
-        """classify() gives the model's class index or None; labelled() lists matched parts."""
+        """classify() gives the model's class index or None; labeled() lists matched parts."""
         labels = _labels()
         labels["tasks"]["bins"] = {
             "fire": ["icon_*"],
@@ -344,7 +344,7 @@ class ClassMapTests(unittest.TestCase):
 
         parts = {"bins": {"icon_fire", "magnet_cover"}, "torpedo": {"ring", "icon_blood"}}
         self.assertEqual(
-            classes.labelled(parts),
+            classes.labeled(parts),
             [{"task": "torpedo", "part": "ring"}, {"task": "bins", "part": "icon_fire"}],
         )
 
@@ -359,7 +359,7 @@ class ClassMapTests(unittest.TestCase):
         classes = ClassMap(labels, "ffc")  # no magnet: the red cover falls through to fire
         self.assertEqual(classes.classify("bins", "magnet_cover", "red"), 0)
         self.assertEqual(
-            classes.labelled({"bins": {"magnet_cover"}}), [{"task": "bins", "part": "magnet_cover"}]
+            classes.labeled({"bins": {"magnet_cover"}}), [{"task": "bins", "part": "magnet_cover"}]
         )
 
 

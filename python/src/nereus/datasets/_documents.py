@@ -289,7 +289,7 @@ class Course:
     folder: Path
     assets: dict[str, Path]  # tasks-pack asset id -> absolute path
     frames: dict[str, set[str]]  # task id -> frame ids (including "task")
-    regions: dict[str, dict[str, set[str]]]  # task id -> region id -> indicator colour names
+    regions: dict[str, dict[str, set[str]]]  # task id -> region id -> indicator color names
     texture_tasks: dict[str, set[str]] = field(default_factory=dict)  # texture id -> task ids
     task_assets: dict[str, set[str]] = field(default_factory=dict)  # task id -> asset ids
 
@@ -309,7 +309,7 @@ def course(resolved: ResolvedScenario) -> Course:
     texture_tasks: dict[str, set[str]] = {}
     task_assets: dict[str, set[str]] = {}
 
-    # Per task: frame ids, indicator colours per region, and the assets its props draw.
+    # Per task: frame ids, indicator colors per region, and the assets its props draw.
     # A texture is "used" by a task when a prop draws the .png directly or through a .dae.
     for task in resolved.task_definitions:
         name = task["id"]
@@ -317,8 +317,8 @@ def course(resolved: ResolvedScenario) -> Course:
         regions[name] = {}
         for region in task.get("regions", []):
             indicator = region.get("parameters", {}).get("indicator") or {}
-            colours = {value for value in indicator.values() if isinstance(value, str)}
-            regions[name][region["id"]] = colours
+            colors = {value for value in indicator.values() if isinstance(value, str)}
+            regions[name][region["id"]] = colors
         used = {value for _, value in _references(task.get("props", [])) if value in assets}
         task_assets[name] = used
         for asset in used:
@@ -402,14 +402,14 @@ def parts_by_task(parts: Document, place: Course) -> dict[str, set[str]]:
     return result
 
 
-def indicator_colours(parts: Document, place: Course) -> dict[str, set[str]]:
-    """Task id -> colour names the indicator regions its parts carry can show."""
+def indicator_colors(parts: Document, place: Course) -> dict[str, set[str]]:
+    """Task id -> color names the indicator regions its parts carry can show."""
     result: dict[str, set[str]] = {}
     for item in parts.data.get("visuals", []):
         region = item.get("indicator")
         if region is not None:
-            colours = place.regions.get(item["task"], {}).get(region, set())
-            result.setdefault(item["task"], set()).update(colours)
+            colors = place.regions.get(item["task"], {}).get(region, set())
+            result.setdefault(item["task"], set()).update(colors)
     return result
 
 
@@ -423,7 +423,7 @@ def _model_classes(data: dict[str, Any]) -> set[str]:
     return {name for model in data["models"].values() for name in model["classes"]}
 
 
-def unmodelled_classes(data: dict[str, Any]) -> list[str]:
+def unmodeled_classes(data: dict[str, Any]) -> list[str]:
     """Classes mapped or configured but in no model: a typo would silently label nothing."""
     known = _model_classes(data)
     problems = []
@@ -449,16 +449,16 @@ def label_warnings(labels: Document) -> list[str]:
 
 
 def check_labels(labels: Document, parts: Document, place: Course) -> list[str]:
-    """Label pack against a tasks pack: pack id, task ids, part patterns, indicator colours."""
+    """Label pack against a tasks pack: pack id, task ids, part patterns, indicator colors."""
     data = labels.data
     problems: list[str] = []
     if data["tasks_pack"] != place.tasks_id:
         problems.append(
             f"/tasks_pack: '{data['tasks_pack']}' but the scenario selects '{place.tasks_id}'"
         )
-    problems += unmodelled_classes(data)
+    problems += unmodeled_classes(data)
     available = parts_by_task(parts, place)
-    colours = indicator_colours(parts, place)
+    colors = indicator_colors(parts, place)
     for task, classes in data["tasks"].items():
         if task not in place.frames:
             problems.append(f"/tasks/{task}: no task '{task}' in tasks pack '{place.tasks_id}'")
@@ -480,12 +480,12 @@ def check_labels(labels: Document, parts: Document, place: Course) -> list[str]:
                     if other != name:
                         problems.append(f"{where}: part '{part}' is already class '{other}'")
 
-            # A conditional class must name an indicator colour the task's parts can show
+            # A conditional class must name an indicator color the task's parts can show
             when = mapping.get("when", {}) if isinstance(mapping, dict) else {}
-            colour = when.get("indicator")
-            if colour is not None and colour not in colours.get(task, set()):
-                shown = ", ".join(sorted(colours.get(task, set()))) or "none"
-                problems.append(f"{where}/when/indicator: '{colour}' never shown (task: {shown})")
+            color = when.get("indicator")
+            if color is not None and color not in colors.get(task, set()):
+                shown = ", ".join(sorted(colors.get(task, set()))) or "none"
+                problems.append(f"{where}/when/indicator: '{color}' never shown (task: {shown})")
     return [f"{labels.path}:{problem}" for problem in problems]
 
 

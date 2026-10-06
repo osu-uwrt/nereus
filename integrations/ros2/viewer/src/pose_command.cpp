@@ -103,7 +103,7 @@ ParsedMove parseMove(const std::string &text, const PoseTarget &from) {
 
         if (along(word)) {
             if (!next(value)) {
-                parsed.error = word + " needs a distance in metres, e.g. " + word + " 0.5";
+                parsed.error = word + " needs a distance in meters, e.g. " + word + " 0.5";
                 return parsed;
             }
             const bool backward = word == "back" || word == "backward" || word == "backwards";
@@ -128,7 +128,7 @@ ParsedMove parseMove(const std::string &text, const PoseTarget &from) {
         } else if (absolute(word)) {
             const bool angle = word == "roll" || word == "pitch" || word == "yaw" || word == "heading";
             if (!next(value)) {
-                parsed.error = word + (angle ? " needs degrees, e.g. " : " needs metres, e.g. ") + word +
+                parsed.error = word + (angle ? " needs degrees, e.g. " : " needs meters, e.g. ") + word +
                                (angle         ? " 90"
                                 : word == "z" ? " -1.5"
                                               : " 2");

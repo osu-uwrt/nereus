@@ -1,4 +1,4 @@
-// Viewer themes: YAML theme loading, derivation of a full ImGui style from a few colours, the WCAG legibility
+// Viewer themes: YAML theme loading, derivation of a full ImGui style from a few colors, the WCAG legibility
 // pass, and the shared section / table / surface helpers that draw in the active theme.
 #include "nereus/ros_viewer/theme.hpp"
 #include <imgui_internal.h>
@@ -17,7 +17,7 @@
 
 namespace nereus::ros_viewer {
 namespace {
-// The colours a theme chooses; everything else in ImGuiStyle derives from them.
+// The colors a theme chooses; everything else in ImGuiStyle derives from them.
 struct Spec {
     ImVec4 window, child, popup, frame, frameHovered, frameActive, button, buttonHovered, buttonPressed, border, header,
         headerHovered, headerPressed, title, titleActive, tab, tabHovered, tabSelected, tabDimmed, tabDimmedSelected,
@@ -32,7 +32,7 @@ struct Spec {
     // a frame round each tab, the tab bar's rule, the line on the shown tab
     float tabBorder = 0, tabBarBorder = 1, tabOverlineSize = 2;
     ImVec4 tabOverline{0, 0, 0, 0}; // the shown tab's top line; transparent: the accent
-    // The board (menu and command bars) in its own colours; without one it is drawn in the panels' colours.
+    // The board (menu and command bars) in its own colors; without one it is drawn in the panels' colors.
     bool hasBoard = false;
     Palette board;
     ImVec4 boardButton, boardButtonHovered, boardButtonPressed, boardFrame, boardPopup, boardBorder;
@@ -50,7 +50,7 @@ ImVec4 alpha(ImVec4 c, float a) {
 // Interface scale and the applied theme's spec factory, kept so a scale change can re-apply it.
 float scale = 1;
 std::function<Spec()> currentSpec;
-Spec active; // the applied theme (after the legibility pass): the surfaces' colours
+Spec active; // the applied theme (after the legibility pass): the surfaces' colors
 
 // Builds the ImGui style from a theme spec at the current scale and makes it the live style and palette.
 void apply(const Spec &t) {
@@ -80,7 +80,7 @@ void apply(const Spec &t) {
     s.TabCloseButtonMinWidthSelected = 0;       // a tab's close box shows while the tab is hovered
     s.TabCloseButtonMinWidthUnselected = 0;
 
-    // Colours: text and surfaces from the spec, interactive accents from the palette.
+    // Colors: text and surfaces from the spec, interactive accents from the palette.
     const auto &p = t.palette;
     auto *c = s.Colors;
     c[ImGuiCol_Text] = p.text;
@@ -129,7 +129,7 @@ void apply(const Spec &t) {
     c[ImGuiCol_PlotLinesHovered] = p.activeHovered;
     c[ImGuiCol_PlotHistogram] = p.accent;
     c[ImGuiCol_PlotHistogramHovered] = p.activeHovered;
-    // a quiet step off the panel, not the selection colour (a header is not a selected row)
+    // a quiet step off the panel, not the selection color (a header is not a selected row)
     c[ImGuiCol_TableHeaderBg] = t.ruled ? ImVec4(0, 0, 0, 0)
                                         : ImVec4(t.window.x * .9f + p.text.x * .1f, t.window.y * .9f + p.text.y * .1f,
                                                  t.window.z * .9f + p.text.z * .1f, 1);
@@ -161,7 +161,7 @@ float luminance(ImVec4 c) {
     return .2126f * c.x + .7152f * c.y + .0722f * c.z;
 }
 
-// A whole theme from four colours: the background, body and secondary text, and the accent. Surfaces step from
+// A whole theme from four colors: the background, body and secondary text, and the accent. Surfaces step from
 // the background toward the text; hovered / pressed states and "on" fills lean toward the accent.
 Spec derived(ImVec4 bg, ImVec4 text, ImVec4 muted, ImVec4 accent, float rounding) {
     const bool light = luminance(bg) > .5f;
@@ -214,7 +214,7 @@ Spec derived(ImVec4 bg, ImVec4 text, ImVec4 muted, ImVec4 accent, float rounding
     return t;
 }
 
-// 0xRRGGBB to an opaque colour.
+// 0xRRGGBB to an opaque color.
 ImVec4 hex(unsigned rgb) {
     return {float((rgb >> 16) & 255) / 255.f, float((rgb >> 8) & 255) / 255.f, float(rgb & 255) / 255.f, 1};
 }
@@ -242,11 +242,11 @@ std::vector<Theme> &themeList() {
 } // namespace
 
 namespace {
-// A colour as "#rrggbb" or "#rrggbbaa".
-ImVec4 colour(const YAML::Node &node, const std::string &where) {
+// A color as "#rrggbb" or "#rrggbbaa".
+ImVec4 color(const YAML::Node &node, const std::string &where) {
     const auto text = node.as<std::string>("");
     const auto bad = [&] {
-        return std::runtime_error(where + ": \"" + text + "\" is not a #rrggbb or #rrggbbaa colour");
+        return std::runtime_error(where + ": \"" + text + "\" is not a #rrggbb or #rrggbbaa color");
     };
     const auto digit = [&](char c) -> int {
         if (c >= '0' && c <= '9')
@@ -274,11 +274,11 @@ void only(const YAML::Node &node, std::initializer_list<const char *> allowed, c
     }
 }
 
-// YAML key -> colour member tables for the theme file's surfaces, palette and board sections.
-using SpecColour = ImVec4 Spec::*;
-using PaletteColour = ImVec4 Palette::*;
-const std::vector<std::pair<const char *, SpecColour>> &surfaceKeys() {
-    static const std::vector<std::pair<const char *, SpecColour>> keys{
+// YAML key -> color member tables for the theme file's surfaces, palette and board sections.
+using SpecColor = ImVec4 Spec::*;
+using PaletteColor = ImVec4 Palette::*;
+const std::vector<std::pair<const char *, SpecColor>> &surfaceKeys() {
+    static const std::vector<std::pair<const char *, SpecColor>> keys{
         {"window", &Spec::window},
         {"child", &Spec::child},
         {"popup", &Spec::popup},
@@ -306,8 +306,8 @@ const std::vector<std::pair<const char *, SpecColour>> &surfaceKeys() {
     return keys;
 }
 
-const std::vector<std::pair<const char *, PaletteColour>> &paletteKeys() {
-    static const std::vector<std::pair<const char *, PaletteColour>> keys{{"text", &Palette::text},
+const std::vector<std::pair<const char *, PaletteColor>> &paletteKeys() {
+    static const std::vector<std::pair<const char *, PaletteColor>> keys{{"text", &Palette::text},
                                                                           {"muted", &Palette::muted},
                                                                           {"accent", &Palette::accent},
                                                                           {"active", &Palette::active},
@@ -333,9 +333,9 @@ const std::vector<std::pair<const char *, PaletteColour>> &paletteKeys() {
     return keys;
 }
 
-// Board-only colours; a board section may also override any palette key.
-const std::vector<std::pair<const char *, SpecColour>> &boardKeys() {
-    static const std::vector<std::pair<const char *, SpecColour>> keys{{"button", &Spec::boardButton},
+// Board-only colors; a board section may also override any palette key.
+const std::vector<std::pair<const char *, SpecColor>> &boardKeys() {
+    static const std::vector<std::pair<const char *, SpecColor>> keys{{"button", &Spec::boardButton},
                                                                        {"button_hovered", &Spec::boardButtonHovered},
                                                                        {"button_pressed", &Spec::boardButtonPressed},
                                                                        {"frame", &Spec::boardFrame},
@@ -344,22 +344,22 @@ const std::vector<std::pair<const char *, SpecColour>> &boardKeys() {
     return keys;
 }
 
-// Reads a map of key: colour into `target`, rejecting keys missing from `keys`.
+// Reads a map of key: color into `target`, rejecting keys missing from `keys`.
 template <typename Target, typename Keys>
-void readColours(const YAML::Node &node, const Keys &keys, Target &target, const std::string &where) {
+void readColors(const YAML::Node &node, const Keys &keys, Target &target, const std::string &where) {
     if (!node.IsMap())
         throw std::runtime_error(where + " must be a map");
     for (const auto &item : node) {
         const auto key = item.first.as<std::string>();
         const auto found = std::find_if(keys.begin(), keys.end(), [&](const auto &k) { return key == k.first; });
         if (found == keys.end())
-            throw std::runtime_error(where + ": unknown colour '" + key + "'");
-        target.*(found->second) = colour(item.second, where + "." + key);
+            throw std::runtime_error(where + ": unknown color '" + key + "'");
+        target.*(found->second) = color(item.second, where + "." + key);
     }
 }
 
-// One theme file: its name and fonts, then its colours and sizes (derived from four colours, or given as surfaces
-// and palette, with any explicit values on top), and optionally the board's own colours.
+// One theme file: its name and fonts, then its colors and sizes (derived from four colors, or given as surfaces
+// and palette, with any explicit values on top), and optionally the board's own colors.
 Entry parseTheme(const YAML::Node &doc, const std::string &file) {
     only(doc,
          {"id", "label", "description", "order", "fonts", "derive", "shape", "spacing", "style", "surfaces", "palette",
@@ -383,17 +383,17 @@ Entry parseTheme(const YAML::Node &doc, const std::string &file) {
         theme.fontFigures = fonts["figures"].as<std::string>("");
     }
 
-    // Base colours: derived from four, or (with no derive block) the defaults that surfaces / palette fill in.
+    // Base colors: derived from four, or (with no derive block) the defaults that surfaces / palette fill in.
     Spec t;
     if (const auto d = doc["derive"]) {
         only(d, {"background", "text", "muted", "accent", "rounding"}, file + " derive");
-        t = derived(colour(d["background"], file + " derive.background"), colour(d["text"], file + " derive.text"),
-                    colour(d["muted"], file + " derive.muted"), colour(d["accent"], file + " derive.accent"),
+        t = derived(color(d["background"], file + " derive.background"), color(d["text"], file + " derive.text"),
+                    color(d["muted"], file + " derive.muted"), color(d["accent"], file + " derive.accent"),
                     d["rounding"].as<float>(6));
     } else if (!doc["surfaces"] || !doc["palette"])
         throw std::runtime_error(file + ": needs derive, or surfaces and palette");
 
-    // Optional overrides on top: shape, spacing, style flags, then explicit colours.
+    // Optional overrides on top: shape, spacing, style flags, then explicit colors.
     if (const auto shape = doc["shape"]) {
         only(shape,
              {"window_rounding", "frame_rounding", "tab_rounding", "window_border", "frame_border", "scrollbar",
@@ -426,10 +426,10 @@ Entry parseTheme(const YAML::Node &doc, const std::string &file) {
         t.squareChips = style["square_chips"].as<bool>(t.squareChips);
     }
     if (const auto surfaces = doc["surfaces"])
-        readColours(surfaces, surfaceKeys(), t, file + " surfaces");
+        readColors(surfaces, surfaceKeys(), t, file + " surfaces");
     if (const auto palette = doc["palette"])
-        readColours(palette, paletteKeys(), t.palette, file + " palette");
-    if (const auto board = doc["board"]) { // the board's own colours: the panels' palette with these changes
+        readColors(palette, paletteKeys(), t.palette, file + " palette");
+    if (const auto board = doc["board"]) { // the board's own colors: the panels' palette with these changes
         if (!board.IsMap())
             throw std::runtime_error(file + " board must be a map");
         t.hasBoard = true;
@@ -447,11 +447,11 @@ Entry parseTheme(const YAML::Node &doc, const std::string &file) {
             const auto shade =
                 std::find_if(paletteKeys().begin(), paletteKeys().end(), [&](const auto &k) { return key == k.first; });
             if (extra != boardKeys().end())
-                t.*(extra->second) = colour(item.second, file + " board." + key);
+                t.*(extra->second) = color(item.second, file + " board." + key);
             else if (shade != paletteKeys().end())
-                t.board.*(shade->second) = colour(item.second, file + " board." + key);
+                t.board.*(shade->second) = color(item.second, file + " board." + key);
             else
-                throw std::runtime_error(file + " board: unknown colour '" + key + "'");
+                throw std::runtime_error(file + " board: unknown color '" + key + "'");
         }
     }
     entry.spec = [t] { return t; };
@@ -511,8 +511,8 @@ const std::vector<Theme> &themes() {
 }
 
 // Legibility floor for every theme (the pool deck is in daylight): WCAG contrast of 4.5:1 for secondary, status and
-// accent text on every surface it is drawn on, and for the labels of filled "on" controls. A colour that falls short
-// moves toward black or white (keeping its hue) until it passes; KILL's colours are the theme's own.
+// accent text on every surface it is drawn on, and for the labels of filled "on" controls. A color that falls short
+// moves toward black or white (keeping its hue) until it passes; KILL's colors are the theme's own.
 namespace {
 // sRGB channel to linear light (the WCAG relative-luminance transfer).
 float channel(float c) {
@@ -567,7 +567,7 @@ ImVec4 readable(ImVec4 fg, const std::vector<ImVec4> &surfaces, bool onPill, flo
     });
 }
 
-// A filled control's colour, darkened or lightened (away from its label) until the label reads.
+// A filled control's color, darkened or lightened (away from its label) until the label reads.
 ImVec4 fillFor(ImVec4 fill, ImVec4 label, float target = 4.5f) {
     const ImVec4 toward = relativeLuminance(label) > .5f ? ImVec4(0, 0, 0, fill.w) : ImVec4(1, 1, 1, fill.w);
     return pushUntil(fill, toward, target, [&](ImVec4 c) { return contrast(c, label); });
@@ -600,7 +600,7 @@ Spec legible(Spec t) {
         surfaces.push_back(p.bar);
         grounds.push_back(p.bar);
     }
-    // 5:1 rather than 4.5: small anti-aliased text measures below its colour pair
+    // 5:1 rather than 4.5: small anti-aliased text measures below its color pair
     p.muted = readable(p.muted, surfaces, false, 5.5f);
     p.accent = readable(p.accent, grounds, false, 5);
     for (auto *status : {&p.warn, &p.error, &p.robotEnabled, &p.robotKilled})
@@ -615,7 +615,7 @@ Spec legible(Spec t) {
     p.activeHovered = fillFor(p.activeHovered, p.activeText, 5);
     p.activePressed = fillFor(p.activePressed, p.activeText, 5);
 
-    // Enable is green in every theme (go beside KILL's stop red; the labels tell them apart without colour): the
+    // Enable is green in every theme (go beside KILL's stop red; the labels tell them apart without color): the
     // theme's own green, or its "robot enabled" green deepened under white text
     if (p.enable.w <= 0) {
         p.enableText = {1, 1, 1, 1};
@@ -625,13 +625,13 @@ Spec legible(Spec t) {
     }
     p.enable = fillFor(p.enable, p.enableText, 5);
 
-    // The figure lamp: the theme's own, or its warning colour as a lamp (a pale amber on a light theme)
+    // The figure lamp: the theme's own, or its warning color as a lamp (a pale amber on a light theme)
     if (p.change.w <= 0)
         p.change = relativeLuminance(t.window) > .18f ? mix(p.warn, ImVec4(1, 1, 1, 1), .55f) : p.warn;
     if (p.changeText.w <= 0)
         p.changeText = relativeLuminance(p.change) > .18f ? ImVec4(.05f, .05f, .06f, 1) : ImVec4(1, 1, 1, 1);
 
-    // The board: its own palette held to the same floor against the board, or the panels' colours.
+    // The board: its own palette held to the same floor against the board, or the panels' colors.
     if (t.hasBoard) {
         auto &b = t.board;
         const std::vector<ImVec4> boardSurfaces{b.bar, t.boardButton, t.boardFrame, t.boardPopup};
@@ -681,7 +681,7 @@ bool applyTheme(const std::string &id) {
     return false;
 }
 
-// Before any applyTheme(): the default theme's colours, without touching the ImGui style.
+// Before any applyTheme(): the default theme's colors, without touching the ImGui style.
 static void ensureDefault() {
     if (currentId.empty()) {
         active = legible(entries().front().spec());
@@ -780,13 +780,13 @@ float chipRounding(float height) {
     return active.squareChips ? ImGui::GetStyle().FrameRounding : height * .5f;
 }
 
-// Palettes saved by beginSurface; kSurfaceColors must match the number of colours it pushes.
+// Palettes saved by beginSurface; kSurfaceColors must match the number of colors it pushes.
 namespace {
 std::vector<Palette> surfaceStack;
 constexpr int kSurfaceColors = 14;
 } // namespace
 
-// Switches palette() and the ImGui colours to the board's or the panels' (pushes kSurfaceColors colours).
+// Switches palette() and the ImGui colors to the board's or the panels' (pushes kSurfaceColors colors).
 void beginSurface(Surface surface) {
     surfaceStack.push_back(current);
     const bool board = surface == Surface::Board;
@@ -822,7 +822,7 @@ void popPopupColors() {
     ImGui::PopStyleColor(2);
 }
 
-// Restores the colours and palette from before the matching beginSurface.
+// Restores the colors and palette from before the matching beginSurface.
 void endSurface() {
     if (surfaceStack.empty())
         return;

@@ -10,8 +10,8 @@ namespace nereus::ros_viewer::host {
 inline glm::vec3 orbitPan(const glm::mat4 &view, const glm::mat4 &projection, float distance, float height,
                           glm::vec2 delta) {
     const auto camera = glm::inverse(view);
-    const float metresPerPixel = 2.f * distance / (height * projection[1][1]);
-    return (-glm::vec3(camera[0]) * delta.x + glm::vec3(camera[1]) * delta.y) * metresPerPixel;
+    const float metersPerPixel = 2.f * distance / (height * projection[1][1]);
+    return (-glm::vec3(camera[0]) * delta.x + glm::vec3(camera[1]) * delta.y) * metersPerPixel;
 }
 
 // World point for a viewport uv (y top-down) and window depth in [0, 1); false outside the viewport, on the
@@ -27,7 +27,7 @@ inline bool depthPoint(const glm::mat4 &viewProjection, glm::vec2 uv, float dept
 }
 
 // Texel under the cursor (uv in [0, 1), rows top-down) of a width x height depth texture, OpenGL rows bottom-up.
-// The texture's own size: a supersampled frame's depth is larger than its colour image.
+// The texture's own size: a supersampled frame's depth is larger than its color image.
 inline glm::ivec2 depthTexel(glm::vec2 uv, int width, int height) {
     return {std::clamp(int(uv.x * float(width)), 0, width - 1),
             std::clamp(height - 1 - int(uv.y * float(height)), 0, height - 1)};
@@ -88,7 +88,7 @@ class OverlayFocusPicker {
         }
     }
 
-    // A rectangle in the pose's XY plane: selects its centre when the cursor is inside it (beats any segment).
+    // A rectangle in the pose's XY plane: selects its center when the cursor is inside it (beats any segment).
     void quad(const glm::mat4 &pose, glm::vec2 halfSize) {
         glm::vec2 p[4];
         const glm::vec2 corner[] = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};

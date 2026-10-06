@@ -1,5 +1,5 @@
 // The robot's prior map (riptide_mapping config.yaml, the Dead Reckoning tool's file): task props in a parent /
-// child frame tree, each pose relative to its parent (x, y, z in metres, yaw in degrees about +Z). Loading,
+// child frame tree, each pose relative to its parent (x, y, z in meters, yaw in degrees about +Z). Loading,
 // editing and a comment-preserving save; the map origin (an AprilTag on a pool wall, or a free robot-frame pose)
 // relating the map to the pool. No GL or ImGui: the editor window draws on top of this.
 #pragma once

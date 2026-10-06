@@ -1,5 +1,5 @@
 # Start gate with the role halves.
-# Task frame: origin at the gate centre line, +X toward the approach (start) side, +Z up.
+# Task frame: origin at the gate center line, +X toward the approach (start) side, +Z up.
 kind: task
 id: gate
 description: Start gate with role halves; forward pass and reverse (return-home) pass.

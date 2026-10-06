@@ -33,7 +33,7 @@ are approximate (files grew with the new comments); search for the named functio
   writes seeds outside `mutex_` while `describe()` reads them.
 - `integrations/ros2/bridge/src/core.cpp`: `kill_stops_thrusters_` is parsed but never used.
 - `integrations/ros2/viewer/panels/theme.cpp` `mix()`: always returns alpha 1, so adjusted
-  translucent colours come out opaque.
+  translucent colors come out opaque.
 
 ## ROS 2 bridge — tests
 - `integrations/ros2/bridge/tests/core_test.cpp` (~636): `Placement.MalformedRequestIsRejectedWithoutPlacing` is misnamed — it tests the SetBool "arm" service mapping CommandResult to success/message; nothing about malformed placement requests.
@@ -55,7 +55,7 @@ are approximate (files grew with the new comments); search for the named functio
 - Note: three existing comments in `prior_map_editor.{hpp,cpp}` sat above the wrong declaration and were moved (wording unchanged): `takeFocus()`, `robotStart()`, `labelCorner`.
 
 ## Viewer — panels (run, simulation, telemetry, theme, ROS/UWRT providers)
-- `integrations/ros2/viewer/panels/theme.cpp` `mix()`: always returns alpha 1, so `pushUntil` / `readable` / `fillFor` drop the alpha passed in `toward` — translucent colours they adjust come out opaque.
+- `integrations/ros2/viewer/panels/theme.cpp` `mix()`: always returns alpha 1, so `pushUntil` / `readable` / `fillFor` drop the alpha passed in `toward` — translucent colors they adjust come out opaque.
 - `theme.cpp` (~603): comment says "5:1 rather than 4.5" but the next line uses 5.5 for `muted` (partly stale comment).
 - `panels/run_panel.cpp` (~251): `ImGui::TableNextRow(0, 30)` uses a raw 30 px row height instead of `ui(30)`; ignores interface scale.
 - `panels/uwrt_electrical.cpp` (~397, ~405): on goal-response timeout, mag cal and tare are marked not running but no cancel is sent; a late acceptance leaves a goal running while the UI shows idle (mag cal even flips to "Calibrating"). Autonomy does cancel in the same case.
@@ -67,7 +67,7 @@ are approximate (files grew with the new comments); search for the named functio
 - `python/src/nereus/packs/_semantics.py` (~660): the `# ---- bridge` section header sits above `equipment()`, not `bridge()`; there's no equipment header.
 - `_semantics.py` `task()` regions loop: a `box` region's `frame` is checked twice (via `named` and again via `_known(...)`), so an unknown box frame yields two identical "unknown frame" problems.
 - `_semantics.py` `bridge_binding`: `data.get("frame_names", {})` read twice (harmless redundancy).
-- `python/src/nereus/datasets/compare.py` `settings_panel`: `not value or label in ("water", "image") or (label == "lighting")` — redundant parenthesised clause (behaviour looks intended).
+- `python/src/nereus/datasets/compare.py` `settings_panel`: `not value or label in ("water", "image") or (label == "lighting")` — redundant parenthesized clause (behavior looks intended).
 - `datasets/_documents.py` vs `packs/_definitions.py`: `_load`, `_schema`, `schema_problems` are near-duplicates.
 
 ## ROS 2 bridge — sources
@@ -134,7 +134,7 @@ are approximate (files grew with the new comments); search for the named functio
 - `libraries/session/src/mechanisms.cpp` (~239): `water_density < 0` check followed by `water_density <= 0` — first is redundant except for its message.
 - `mechanisms.cpp` `Impl::kill(killed)` applies kill/arm state rather than killing; `snapshot() const` mutates through `impl_` (existing comment notes this).
 - `libraries/session/src/prop_world.cpp`: `pool_from_world = yawMatrix(pool_placement)` is actually world-from-pool (maps pool boxes into the world) — inverted name.
-- `libraries/session/src/tasks/trackers.cpp` `PerforatedPanel`: `world_from_task_` from validated/renormalised `ownedPose`, but `task_from_world_` from the raw `world_from_task` (minor; `intersect` renormalises).
+- `libraries/session/src/tasks/trackers.cpp` `PerforatedPanel`: `world_from_task_` from validated/renormalized `ownedPose`, but `task_from_world_` from the raw `world_from_task` (minor; `intersect` renormalizes).
 - `libraries/session/src/tasks/runtime.cpp` (~145): `score_rules` vs `scoring` easy to confuse (comment added).
 
 ## Python tests + tools

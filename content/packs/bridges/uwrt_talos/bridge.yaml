@@ -352,7 +352,7 @@ streams:
   frame_id: talos/ffc_left_camera_optical_frame
   rate_hz: 15
   qos: {history: keep_last, depth: 1, reliability: reliable, durability: volatile}
-  image: {encoding: 32FC1}   # metres, NaN where invalid
+  image: {encoding: 32FC1}   # meters, NaN where invalid
   fields: {header.stamp: {from: sample.time}}
 - id: ffc_point_cloud
   direction: publish

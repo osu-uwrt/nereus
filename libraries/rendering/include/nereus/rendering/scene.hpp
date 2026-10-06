@@ -14,13 +14,13 @@ namespace nereus::rendering {
 // it so the edge can be anti-aliased). It is drawn in instance order without writing depth, so it must follow
 // the surface it lies on and precede anything that may sit in front of that surface.
 enum class SurfaceMaterial {
-    Asset = 0,    // Mesh colours/textures; translucent untextured submeshes are drawn as Clear.
+    Asset = 0,    // Mesh colors/textures; translucent untextured submeshes are drawn as Clear.
     Tiles = 1,    // Pool tiles: grout grid and the waterline band (WaterSurface finish).
     Deck = 2,     // Pool deck: coarse slab grid.
     Lamp = 3,     // Self-lit at a fixed brightness.
     Liner = 4,    // Fine-striped liner finish.
     Clear = 5,    // Translucent cover, blended after everything opaque.
-    Emissive = 6, // Self-lit at Instance::radiance times its colour.
+    Emissive = 6, // Self-lit at Instance::radiance times its color.
     Marking = 7
 };
 
@@ -28,7 +28,7 @@ enum class SurfaceMaterial {
 struct Instance {
     std::shared_ptr<const MeshAsset> mesh;
     Eigen::Matrix4f transform = Eigen::Matrix4f::Identity(); // Asset -> world, affine.
-    Eigen::Vector4f tint = Eigen::Vector4f::Ones();          // Multiplies submesh colours; >= 0, alpha <= 1.
+    Eigen::Vector4f tint = Eigen::Vector4f::Ones();          // Multiplies submesh colors; >= 0, alpha <= 1.
     SurfaceMaterial material = SurfaceMaterial::Asset;
     float radiance = 60; // Emissive brightness multiplier.
     bool visible = true, casts_shadow = true;
@@ -37,10 +37,10 @@ struct Instance {
 // The pool water: a horizontal surface mesh plus the pool frame and finish its shaders need.
 struct WaterSurface {
     Instance surface;                                   // Must lie on z = level and have one submesh.
-    Eigen::Vector3f dimensions = {50, 22.86f, 2.1336f}; // Pool length, width, depth in metres.
+    Eigen::Vector3f dimensions = {50, 22.86f, 2.1336f}; // Pool length, width, depth in meters.
 
     // Tiles material finish: grout pitch (0 = plain) and the wall band around the waterline, as
-    // [bottom, top] metres relative to the water surface (an empty band draws nothing).
+    // [bottom, top] meters relative to the water surface (an empty band draws nothing).
     float tile_size = .1524f;
     Eigen::Vector2f waterline_band = {-.13f, .04f};
     Eigen::Vector3f waterline_color = {.065f, .20f, .27f};
@@ -49,11 +49,11 @@ struct WaterSurface {
     Eigen::Matrix4f local_to_world = Eigen::Matrix4f::Identity(); // XY translation and yaw only.
 };
 
-// Coloured points (e.g. a point cloud), drawn unlit and depth-tested after the water surface in
+// Colored points (e.g. a point cloud), drawn unlit and depth-tested after the water surface in
 // observer views only (never in Appearance::preview draws). Each distinct PointData is uploaded once and
 // kept on the GPU while a scene references it, so share one object across frames until it changes.
 struct PointData {
-    std::vector<float> xyzrgb; // per point: x, y, z in the set's local frame (metres), r, g, b in [0, 1]
+    std::vector<float> xyzrgb; // per point: x, y, z in the set's local frame (meters), r, g, b in [0, 1]
 };
 
 struct PointSet {
@@ -67,7 +67,7 @@ struct Scene {
     std::vector<Instance> instances;
     std::vector<PointSet> points;
     std::optional<WaterSurface> water;
-    Eigen::Vector3f lighting_center = Eigen::Vector3f::Zero(); // World point the shadow map is centred on.
+    Eigen::Vector3f lighting_center = Eigen::Vector3f::Zero(); // World point the shadow map is centered on.
 };
 
 // OpenGL camera: world-to-eye view, eye-to-clip projection, and the eye position in world coordinates.
@@ -77,7 +77,7 @@ struct View {
     Eigen::Vector3f eye = Eigen::Vector3f::Zero();
 };
 
-// Underwater light transport: tint is the in-scattered colour; absorption (per channel) and scattering are
+// Underwater light transport: tint is the in-scattered color; absorption (per channel) and scattering are
 // per unit of optical path, ((underwater path length - clear_distance) * distance_scale) ^ distance_power.
 struct WaterOptics {
     Eigen::Vector3f tint = {.025f, .22f, .29f}, absorption = {.095f, .035f, .025f};
@@ -114,7 +114,7 @@ struct Appearance {
 enum class PoolSide { Floor, XMin, XMax, YMin, YMax };
 
 // A painted stripe (lane line, T bar, wall target). On the floor, from/to are pool-local (x, y); on a wall
-// they are (coordinate along the wall, z relative to the water surface). Metres.
+// they are (coordinate along the wall, z relative to the water surface). Meters.
 struct PoolStripe {
     PoolSide side = PoolSide::Floor;
     Eigen::Vector2f from = Eigen::Vector2f::Zero(), to = Eigen::Vector2f::Zero();
@@ -136,13 +136,13 @@ struct PoolBox {
     Eigen::Matrix3f rotation = Eigen::Matrix3f::Identity();
     // A smaller top face (length, width) slopes the four sides in (a raised grate); unset, a plain box.
     std::optional<Eigen::Vector2f> top;
-    std::optional<Eigen::Vector3f> side_color; // sloped sides' colour; unset, `color`
+    std::optional<Eigen::Vector3f> side_color; // sloped sides' color; unset, `color`
     Eigen::Vector3f color = {.68f, .85f, .87f};
-    bool tiled = false;    // the pool's tile finish (tile_color) instead of a plain colour
+    bool tiled = false;    // the pool's tile finish (tile_color) instead of a plain color
     bool on_floor = false; // grouped with the floor (otherwise with the walls)
 };
 
-// An opening `depth` metres into a wall. from/to are opposite corners as (coordinate along the wall, z relative
+// An opening `depth` meters into a wall. from/to are opposite corners as (coordinate along the wall, z relative
 // to the water surface); the recess is lined with the pool's tiles. One reaching the deck opens through the
 // deck and coping as well (a stair well).
 struct PoolRecess {
@@ -159,7 +159,7 @@ struct PoolLayout {
 // Procedural pool description. Pool-local frame: origin at a floor-plan corner, x along the length,
 // y along the width, z up with 0 at the water surface.
 struct PoolGeometry {
-    Eigen::Vector3f dimensions = {50, 22.86f, 2.1336f};           // Length, width, deepest depth (metres).
+    Eigen::Vector3f dimensions = {50, 22.86f, 2.1336f};           // Length, width, deepest depth (meters).
     float water_level = 0, deck_height = .305288888f;             // World z of the water; deck height above it.
     Eigen::Matrix4f local_to_world = Eigen::Matrix4f::Identity(); // Horizontal rigid frame (XY + yaw).
 

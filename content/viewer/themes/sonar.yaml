@@ -3,5 +3,5 @@ id: sonar
 label: Sonar
 description: "Green phosphor on black"
 order: 9
-# every surface derived from four colours: the background, body and secondary text, and the accent
+# every surface derived from four colors: the background, body and secondary text, and the accent
 derive: {background: "#030905", text: "#a8ffb8", muted: "#599e6b", accent: "#33ff73", rounding: 2}

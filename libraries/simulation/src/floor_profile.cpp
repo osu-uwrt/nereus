@@ -34,7 +34,7 @@ std::vector<double> tangents(const std::vector<Eigen::Vector2d> &p) {
         return m;
     }
 
-    // Interior points: weighted harmonic mean where neighbouring slopes share a sign, else zero.
+    // Interior points: weighted harmonic mean where neighboring slopes share a sign, else zero.
     for (std::size_t k = 1; k + 1 < n; ++k) {
         if (d[k - 1] * d[k] <= 0)
             continue;
@@ -56,7 +56,7 @@ std::vector<double> tangents(const std::vector<Eigen::Vector2d> &p) {
     return m;
 }
 
-// Drop vertices that lie within `tolerance` (in depth) of the chord between their kept neighbours. Vertices
+// Drop vertices that lie within `tolerance` (in depth) of the chord between their kept neighbors. Vertices
 // flagged in `keep` (the control points) only go when the chord passes exactly through them.
 std::vector<Eigen::Vector2d> merged(const std::vector<Eigen::Vector2d> &samples, const std::vector<bool> &keep,
                                     double tolerance) {
@@ -249,7 +249,7 @@ std::vector<FloorBox> floorBoxes(const FloorProfile &profile, double span, doubl
                 overlap >= 0,
             "floor boxes need a positive span and thickness");
     const bool alongX = profile.axis() == FloorProfile::Axis::X;
-    // Pool-local point at position s along the axis, centred across the span, `depth` below the surface.
+    // Pool-local point at position s along the axis, centered across the span, `depth` below the surface.
     const auto lift = [&](double s, double depth) {
         return alongX ? Eigen::Vector3d(s, span / 2, surface_z - depth)
                       : Eigen::Vector3d(span / 2, s, surface_z - depth);

@@ -153,7 +153,7 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
                 }
             }
 
-            // Material: diffuse colour with alpha = min(colour alpha, opacity), name and diffuse texture.
+            // Material: diffuse color with alpha = min(color alpha, opacity), name and diffuse texture.
             if (input->mMaterialIndex >= scene->mNumMaterials)
                 fail("invalid material index");
             const auto *material = scene->mMaterials[input->mMaterialIndex];

@@ -31,7 +31,7 @@ struct PayloadRelease {
     std::string mechanism_id, mechanism_type, slot_id;
     int slot_index{0}; // 0-based, in firing order
     std::int64_t time_ns{0};
-    Eigen::Vector3d position_world;       // visible mesh centre, NOT centre of mass
+    Eigen::Vector3d position_world;       // visible mesh center, NOT center of mass
     Eigen::Quaterniond orientation_world; // world from payload body
     Eigen::Vector3d velocity_com_world;
     Eigen::Vector3d angular_velocity_world;

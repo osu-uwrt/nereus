@@ -11,7 +11,7 @@ bool equal(glm::vec3 a, glm::vec3 b) {
 } // namespace
 
 // command(rgb, mode, target mask, ROS time): Talos's lights only answer their own target bit, each mode has its
-// RViz-matching period, and a Flash pulse briefly overrides the steady colour.
+// RViz-matching period, and a Flash pulse briefly overrides the steady color.
 TEST(HostStatusLights, ModesTargetsAndPulses) {
     StatusLights absent;
     ASSERT_TRUE(absent.lights.empty() && absent.input.empty() && absent.topic.empty());
@@ -54,7 +54,7 @@ TEST(HostStatusLights, ModesTargetsAndPulses) {
     ASSERT_TRUE(equal(color(10.2), {0, 0, 1}));
     ASSERT_TRUE(equal(color(0), {0, 0, 1})); // reset clock cannot extend old pulses
 
-    // Non-finite colours are ignored; out-of-range channels are clamped to [0, 1].
+    // Non-finite colors are ignored; out-of-range channels are clamped to [0, 1].
     lights.command({std::numeric_limits<float>::quiet_NaN(), 0, 0}, LightMode::Solid, 3, 11);
     ASSERT_TRUE(equal(color(11), {0, 0, 1}));
     lights.command({-1, 2, .5f}, LightMode::Solid, UINT32_MAX, 11);

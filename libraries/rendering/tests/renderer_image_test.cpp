@@ -263,16 +263,16 @@ TEST_F(RendererImage, TextureRowsAreFlippedLikeTheOriginalAndReadBackBottomUp) {
     EXPECT_GT(bottom[2], bottom[0]);
 }
 
-// A UV cutout punches a hole through colour and depth (and the shadow pass) without shader changes.
+// A UV cutout punches a hole through color and depth (and the shadow pass) without shader changes.
 TEST_F(RendererImage, UvCutoutsRemoveColorAndDepthUsingTheUnchangedShaders) {
     renderer->draw(scene(quad({}, {{{.5f, .5f}, .2f}})), view(), plain(), 0, 64, 64);
     const auto cut = renderer->captureImage(false, true);
-    EXPECT_EQ(cut.depth[index(cut, 32, 32)], 1.f) << "hole centre must show background depth";
+    EXPECT_EQ(cut.depth[index(cut, 32, 32)], 1.f) << "hole center must show background depth";
     EXPECT_LT(cut.depth[index(cut, 32, 46)], 1.f) << "solid panel outside the hole";
     renderer->draw(scene(quad()), view(), plain(), 0, 64, 64);
     const auto solid = renderer->captureImage(false, true);
     EXPECT_LT(solid.depth[index(solid, 32, 32)], 1.f);
-    // Shadow pass also honours cutouts; it must render without GL errors.
+    // Shadow pass also honors cutouts; it must render without GL errors.
     auto shadowed = plain();
     shadowed.shadows = true;
     EXPECT_NO_THROW(renderer->draw(scene(quad({}, {{{.5f, .5f}, .2f}})), view(), shadowed, 0, 32, 32));
@@ -280,7 +280,7 @@ TEST_F(RendererImage, UvCutoutsRemoveColorAndDepthUsingTheUnchangedShaders) {
 
 // Lane stripes come from PoolGeometry.markings, so a pool without markings has a plain floor.
 TEST_F(RendererImage, PoolStripesArePaintedFromDataNotTheShader) {
-    // 4 m square pool, 2 m deep; the camera is 1 m under water looking down at the floor centre.
+    // 4 m square pool, 2 m deep; the camera is 1 m under water looking down at the floor center.
     r::PoolGeometry pool;
     pool.dimensions = {4, 4, 2};
     const auto floorAt = [&](int column, int row) {
@@ -291,9 +291,9 @@ TEST_F(RendererImage, PoolStripesArePaintedFromDataNotTheShader) {
     };
     const int bare = floorAt(32, 32);
     EXPECT_NEAR(bare, floorAt(10, 32), 30) << "no markings: the floor is plain tile everywhere";
-    // A 0.3 m stripe along x through the centre: an image column (image right is world -Y).
+    // A 0.3 m stripe along x through the center: an image column (image right is world -Y).
     pool.markings.push_back({r::PoolSide::Floor, {1, 2}, {3, 2}, .3f, {0, 0, 0}});
-    EXPECT_LT(floorAt(32, 32), bare / 2) << "stripe centre is dark";
+    EXPECT_LT(floorAt(32, 32), bare / 2) << "stripe center is dark";
     EXPECT_NEAR(floorAt(10, 32), bare, 30) << "0.47 m off the stripe the floor is unchanged";
     // A white card lying 1 mm above the floor over the stripe (like the calibration board on a wall line)
     // covers the stripe even though the decal sits 2 mm off the floor.
@@ -398,10 +398,10 @@ TEST_F(RendererImage, ImportedTaskAssetWithTextureRenders) {
     renderer->draw(scene(mesh), view(2.5f), plain(), 0, 96, 60);
     const auto image = renderer->captureImage();
     EXPECT_EQ(image.rgb.size(), 96u * 60 * 3);
-    EXPECT_LT(image.depth[index(image, 48, 30)], 1.f) << "board must occupy the image centre";
+    EXPECT_LT(image.depth[index(image, 48, 30)], 1.f) << "board must occupy the image center";
 }
 
-// drawLabels() uses its own target: it neither requires nor disturbs the colour frame or later draws.
+// drawLabels() uses its own target: it neither requires nor disturbs the color frame or later draws.
 TEST_F(RendererImage, LabelPassBetweenDrawsLeavesFramesAndCapturesUnchanged) {
     std::vector<std::uint8_t> pixels = {255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255};
     const auto file = directory / "quadrants.png";
@@ -421,7 +421,7 @@ TEST_F(RendererImage, LabelPassBetweenDrawsLeavesFramesAndCapturesUnchanged) {
     fresh.draw(both, view(1.2f, 48.f / 40), shadowed, 2, 48, 40);
     const auto image = fresh.captureImage();
     const auto full = fresh.capture();
-    // Different size and scene subset: the label target is separate from the colour frame.
+    // Different size and scene subset: the label target is separate from the color frame.
     const auto labels = fresh.drawLabels(scene(quad()), {{7, {{3, std::nullopt}}}}, view(), 17, 9);
     EXPECT_EQ(labels.ids.size(), 17u * 9);
     EXPECT_EQ(labels.ids[4 * 17 + 8], 7u << 8 | 3);
@@ -540,7 +540,7 @@ TEST_F(RendererImage, SupersamplingKeepsSmoothShadingWithinOneLevel) {
     EXPECT_LE(largest, 1);
 }
 
-TEST_F(RendererImage, SupersampledDepthIsOneSampleNearestThePixelCentre) {
+TEST_F(RendererImage, SupersampledDepthIsOneSampleNearestThePixelCenter) {
     // The copy writes the sampled depth back to a 24-bit buffer; drivers may round that by one step (llvmpipe
     // does). Averaging across an edge would be off by thousands of steps.
     constexpr float step = 1.f / 16777215;
@@ -567,7 +567,7 @@ TEST_F(RendererImage, SupersampledDepthIsOneSampleNearestThePixelCentre) {
                     << n << ": " << x << "," << y;
     }
     // A sloped plane's window depth is affine in the pixel position, so at 2x the sample a quarter pixel right
-    // of and above each centre reads the 1x depth interpolated a quarter of the way to the next pixels.
+    // of and above each center reads the 1x depth interpolated a quarter of the way to the next pixels.
     auto turned = scene(quad());
     turned.instances[0].transform.topLeftCorner<3, 3>() =
         Eigen::AngleAxisf(50 * float(M_PI) / 180, Eigen::Vector3f::UnitZ()).toRotationMatrix();
@@ -580,14 +580,14 @@ TEST_F(RendererImage, SupersampledDepthIsOneSampleNearestThePixelCentre) {
         const float dx = flat.depth[index(flat, x + 1, y)] - d, dy = flat.depth[index(flat, x, y + 1)] - d;
         ASSERT_LT(d, 1.f);
         ASSERT_GT(std::abs(dx), 1e-5f) << "the plane must be sloped";
-        // Within 5% of a pixel's depth step (rasterizer snapping); the centre itself is 25% away.
+        // Within 5% of a pixel's depth step (rasterizer snapping); the center itself is 25% away.
         EXPECT_NEAR(fine.depth[index(fine, x, y)], d + .25f * (dx + dy), .05f * (std::abs(dx) + std::abs(dy)))
             << x << "," << y;
     }
 }
 
 // Supersample must be 1..4 and fit the maximum texture size; preview frames also render at n x size.
-TEST_F(RendererImage, SupersampleIsValidatedAndPreviewsHonourIt) {
+TEST_F(RendererImage, SupersampleIsValidatedAndPreviewsHonorIt) {
     GLint maximum = 0;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximum);
     for (const int n : {0, 5, -1}) {

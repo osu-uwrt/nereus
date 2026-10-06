@@ -7,7 +7,7 @@
 
 namespace nereus::spatial {
 
-// Maps child coordinates into parent coordinates. SI metres, unit quaternion.
+// Maps child coordinates into parent coordinates. SI meters, unit quaternion.
 struct Pose {
     Eigen::Vector3d translation{Eigen::Vector3d::Zero()};
     Eigen::Quaterniond rotation{Eigen::Quaterniond::Identity()};

@@ -72,7 +72,7 @@ struct PanelCutouts {
     std::vector<float> faces_x;
     float half_size = 0;
     std::vector<UvCutout> cutouts; // Panel UV; the renderer accepts at most four.
-    float tolerance = 5e-4f;       // Metres, for face distance and panel extent.
+    float tolerance = 5e-4f;       // Meters, for face distance and panel extent.
 };
 
 struct PerforatedMesh {

@@ -10,7 +10,7 @@ mass/volume/COB/drag and a 0.1 s lagged-force thruster model. This writes, from 
     mpc.yaml              riptide_mpc mpc.yaml with estimator.dvl_latency = 0: the simulator stamps every reading
                           when it is taken (latency_s only delays delivery), like the fixed Nortek driver
 
-Both sides use the same MarineDynamics (inertia about the COM in body axes, COB/damping centre relative to
+Both sides use the same MarineDynamics (inertia about the COM in body axes, COB/damping center relative to
 the COM), so the body parameters copy over unchanged.
 
     python3 mpc_sim_model.py <run>.resolved.json <out_dir> <descriptions robot.yaml> <mpc.yaml>

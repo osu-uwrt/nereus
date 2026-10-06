@@ -184,7 +184,7 @@ class PriorMapEditor {
     bool onOriginRing(const View &, const glm::vec2 &mouse) const;
     // The map axis (0 x, 1 y) whose origin arrow is under the pointer, or -1 (robot-frame origins drag by them).
     int onOriginArrow(const View &, const glm::vec2 &mouse) const;
-    float handleLength(const View &, const glm::vec3 &center) const; // metres for ~90 px on screen
+    float handleLength(const View &, const glm::vec3 &center) const; // meters for ~90 px on screen
 
     // window parts
     void drawFileBar();

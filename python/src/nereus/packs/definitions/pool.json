@@ -187,7 +187,7 @@
         },
         "first_m": {
           "type": "number",
-          "description": "Position of the first line; omitted, the family is centred."
+          "description": "Position of the first line; omitted, the family is centered."
         }
       },
       "required": [
@@ -403,11 +403,11 @@
         },
         "color_rgb": {
           "$ref": "#/$defs/rgb",
-          "description": "Plain colour; omitted, the box takes the pool's tile finish."
+          "description": "Plain color; omitted, the box takes the pool's tile finish."
         },
         "side_color_rgb": {
           "$ref": "#/$defs/rgb",
-          "description": "Colour of the sloped sides; omitted, color_rgb."
+          "description": "Color of the sloped sides; omitted, color_rgb."
         },
         "contact": {
           "type": "boolean",
@@ -475,7 +475,7 @@
         },
         "asset": {
           "$ref": "common.schema.json#/$defs/name",
-          "description": "Id of a mesh in the pool's assets (metres, Z up)."
+          "description": "Id of a mesh in the pool's assets (meters, Z up)."
         },
         "center_m": {
           "type": "array",

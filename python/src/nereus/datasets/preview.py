@@ -1,4 +1,4 @@
-"""Contact sheets for reviewing labels: class-coloured mask overlays, outlines, boxes and names."""
+"""Contact sheets for reviewing labels: class-colored mask overlays, outlines, boxes and names."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from numpy.typing import NDArray
 
 from nereus.packs import PackError
 
-from .export import Labelled, class_map, cv2_module, label_record, read_ids, records
+from .export import Labeled, class_map, cv2_module, label_record, read_ids, records
 
 # BGR, well separated; class id picks one (cycled). Blues and cyans last: pool water is blue.
 # fmt: off
@@ -23,14 +23,14 @@ PALETTE = [
     (128, 0, 0), (200, 130, 0), (240, 240, 70), (128, 128, 0), (255, 190, 220),
 ]
 # fmt: on
-# Opacity of the class colour painted over each mask
+# Opacity of the class color painted over each mask
 ALPHA = 0.45
 
 Image = NDArray[np.uint8]
 
 
-def colour(cls: int) -> tuple[int, int, int]:
-    """BGR colour of a class id."""
+def color(cls: int) -> tuple[int, int, int]:
+    """BGR color of a class id."""
     return PALETTE[cls % len(PALETTE)]
 
 
@@ -59,7 +59,7 @@ def _text(image: Image, text: str, origin: tuple[int, int], fill: tuple[int, int
 
 
 def _legend(names: list[str], width: int) -> Image:
-    """Class ids and names in their colours, wrapped to ``width``."""
+    """Class ids and names in their colors, wrapped to ``width``."""
     cv2 = cv2_module()
     # Greedy line wrap: start a new row when the next entry would pass ``width``
     rows: list[list[tuple[int, str]]] = [[]]
@@ -77,7 +77,7 @@ def _legend(names: list[str], width: int) -> Image:
     for row, items in enumerate(rows):
         x = 4
         for cls, text in items:
-            x += _text(legend, text, (x, 22 * row + 18), colour(cls)) + 8
+            x += _text(legend, text, (x, 22 * row + 18), color(cls)) + 8
     return legend
 
 
@@ -93,34 +93,34 @@ def read_image(render: Path, record: dict[str, Any]) -> Image:
 
 def overlay(
     image: Image,
-    labelled: Labelled,
+    labeled: Labeled,
     names: list[str],
     width: int,
     *,
     alpha: float = ALPHA,
     boxes: bool = True,
 ) -> Image:
-    """Class-coloured masks blended at full resolution, scaled to ``width``, outlines and names."""
+    """Class-colored masks blended at full resolution, scaled to ``width``, outlines and names."""
     cv2 = cv2_module()
 
     # Paint and blend at full resolution, then downscale to the tile width
     painted = image.copy()
-    for label in labelled.labels:
-        painted[label.mask] = colour(label.cls)
+    for label in labeled.labels:
+        painted[label.mask] = color(label.cls)
     blended = np.asarray(cv2.addWeighted(painted, alpha, image, 1 - alpha, 0), dtype=np.uint8)
     scale = width / image.shape[1]
     height = max(1, round(image.shape[0] * scale))
     small = np.asarray(cv2.resize(blended, (width, height), interpolation=cv2.INTER_AREA))
 
     # Per label: outline of the downscaled mask, box from the full-resolution extent, name
-    for label in labelled.labels:
+    for label in labeled.labels:
         mask = np.asarray(
             cv2.resize(
                 label.mask.astype(np.uint8), (width, height), interpolation=cv2.INTER_NEAREST
             )
         )
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        cv2.drawContours(small, contours, -1, colour(label.cls), 1, cv2.LINE_AA)
+        cv2.drawContours(small, contours, -1, color(label.cls), 1, cv2.LINE_AA)
         rows, columns = np.nonzero(label.mask)
         x0, y0 = int(columns.min() * scale), int(rows.min() * scale)
         x1, y1 = (
@@ -128,28 +128,28 @@ def overlay(
             int(math.ceil((rows.max() + 1) * scale)),
         )
         if boxes:
-            cv2.rectangle(small, (x0, y0), (x1 - 1, y1 - 1), colour(label.cls), 1)
-        _text(small, names[label.cls], (x0, y0 - 2), colour(label.cls))
+            cv2.rectangle(small, (x0, y0), (x1 - 1, y1 - 1), color(label.cls), 1)
+        _text(small, names[label.cls], (x0, y0 - 2), color(label.cls))
     return small
 
 
 def tile(render: Path, record: dict[str, Any], classes: Any, width: int) -> Image:
     """One sample: overlay at full resolution, scaled to ``width``, then boxes and names."""
-    labelled = label_record(record, read_ids(render, record), classes)
-    small = overlay(read_image(render, record), labelled, classes.names, width)
+    labeled = label_record(record, read_ids(render, record), classes)
+    small = overlay(read_image(render, record), labeled, classes.names, width)
     height = small.shape[0]
 
     # Caption: label count and what the export dropped or would skip (red when skipped)
-    caption = f"{record['name']}  {len(labelled.labels)} labels"
-    if labelled.dropped_small:
-        caption += f", {labelled.dropped_small} < min px"
-    if labelled.crumbs:
-        caption += f", {labelled.crumbs} crumbs"
-    if labelled.far:
-        caption += f"  SKIPPED: {len(labelled.far)} beyond {classes.max_range_m:g} m"
-    if labelled.fragmented:
-        caption += f"  SKIPPED: {len(labelled.fragmented)} fragmented"
-    _text(small, caption, (0, height - 2), (0, 0, 200) if labelled.skipped else (40, 40, 40))
+    caption = f"{record['name']}  {len(labeled.labels)} labels"
+    if labeled.dropped_small:
+        caption += f", {labeled.dropped_small} < min px"
+    if labeled.crumbs:
+        caption += f", {labeled.crumbs} crumbs"
+    if labeled.far:
+        caption += f"  SKIPPED: {len(labeled.far)} beyond {classes.max_range_m:g} m"
+    if labeled.fragmented:
+        caption += f"  SKIPPED: {len(labeled.fragmented)} fragmented"
+    _text(small, caption, (0, height - 2), (0, 0, 200) if labeled.skipped else (40, 40, 40))
     if record.get("environment") is not None:
         _text(small, str(record["environment"]), (0, 16), (60, 60, 60))
     return small

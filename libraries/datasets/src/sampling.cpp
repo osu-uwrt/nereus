@@ -22,7 +22,7 @@ double floorWorldZ(const PoolFrame &pool, const Eigen::Vector3d &world) {
     return pool.toWorld({local.x(), local.y(), pool.floorZ(local.head<2>())}).z();
 }
 
-// Root position that puts the optical centre at `camera` for a robot attitude.
+// Root position that puts the optical center at `camera` for a robot attitude.
 Pose rootFor(const Eigen::Vector3d &camera, const Eigen::Quaterniond &attitude, const Pose &root_from_optical) {
     Pose root;
     root.rotation = attitude.normalized();
@@ -192,7 +192,7 @@ PoseDraw samplePose(const Sampler &s, Stream &rng, const std::map<std::string, P
 }
 
 // Scale so the output is covered, then crop the overflow equally from both sides. The +-0.5 terms scale about
-// pixel corners rather than pixel centres.
+// pixel corners rather than pixel centers.
 cameras::Intrinsics scaleIntrinsics(const cameras::Intrinsics &native, int width, int height) {
     const double s = std::max(double(width) / native.width, double(height) / native.height);
     cameras::Intrinsics k = native;
