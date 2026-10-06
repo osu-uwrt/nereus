@@ -38,12 +38,13 @@ int main(int argc, char **argv) {
         assert(contrastRatio(sheet.muted, c[ImGuiCol_WindowBg]) >= 5);
         assert(contrastRatio(sheet.accent, c[ImGuiCol_WindowBg]) >= 5);
         assert(contrastRatio(sheet.changeText, sheet.change) >= 7); // a lit figure (the running clock) reads
-        assert(c[ImGuiCol_TableHeaderBg].w == 0);                    // ruled heads, no header fill
+        assert(c[ImGuiCol_TableHeaderBg].w == 0);                   // ruled heads, no header fill
         // the board: light type on the dark bar, its own colours inside the surface, the sheet's after
         beginSurface(Surface::Board);
         const Palette board = palette();
         assert(contrastRatio(board.text, board.bar) >= 12 && contrastRatio(board.muted, board.bar) >= 5);
-        assert(contrastRatio(board.robotEnabled, board.bar) >= 5 && contrastRatio(board.dangerText, board.danger) >= 4.5f);
+        assert(contrastRatio(board.robotEnabled, board.bar) >= 5 &&
+               contrastRatio(board.dangerText, board.danger) >= 4.5f);
         assert(contrastRatio(ImGui::GetStyleColorVec4(ImGuiCol_Text), board.bar) >= 12);
         beginSurface(Surface::Sheet); // a dropdown on the board
         assert(contrastRatio(palette().text, c[ImGuiCol_WindowBg]) >= 12);

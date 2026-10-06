@@ -3,6 +3,7 @@ mark's two parts as white masks for the viewer's title bar.
 
 Regenerate: uv run --with cairosvg python content/viewer/icons/make_icons.py docs/images content/viewer/icons
 """
+
 import math
 import sys
 from pathlib import Path
@@ -21,11 +22,18 @@ def arc(cx, cy, r, a0, a1):
 
 def mark(small=False):
     """The trident rising out of sonar pings on the deep-water tile. small: fewer, heavier lines for 16-48 px."""
-    rings = ((92, .95), (150, .6)) if small else ((92, .95), (150, .6), (208, .3))
+    rings = ((92, 0.95), (150, 0.6)) if small else ((92, 0.95), (150, 0.6), (208, 0.3))
     ping_width, shaft = (22, 30) if small else (14, 22)
-    pings = "\n".join(f'  <path d="{arc(256, 404, r, 28, 152)}" fill="none" stroke="{CYAN}" '
-                      f'stroke-width="{ping_width}" stroke-linecap="round" opacity="{o}"/>' for r, o in rings)
-    border = "" if small else '  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="#2a5b66" stroke-width="3"/>\n'
+    pings = "\n".join(
+        f'  <path d="{arc(256, 404, r, 28, 152)}" fill="none" stroke="{CYAN}" '
+        f'stroke-width="{ping_width}" stroke-linecap="round" opacity="{o}"/>'
+        for r, o in rings
+    )
+    border = (
+        ""
+        if small
+        else '  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="#2a5b66" stroke-width="3"/>\n'
+    )
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <title>Nereus</title>
   <defs>
@@ -51,8 +59,11 @@ def mark(small=False):
 def glyph(part):
     """The bare mark (no tile) in white, for the title bar to tint: part "trident" or "sonar" (the pings)."""
     if part == "sonar":
-        body = "\n".join(f'  <path d="{arc(256, 404, r, 28, 152)}" fill="none" stroke="#fff" stroke-width="22" '
-                         f'stroke-linecap="round" opacity="{o}"/>' for r, o in ((92, .95), (150, .6), (208, .3)))
+        body = "\n".join(
+            f'  <path d="{arc(256, 404, r, 28, 152)}" fill="none" stroke="#fff" stroke-width="22" '
+            f'stroke-linecap="round" opacity="{o}"/>'
+            for r, o in ((92, 0.95), (150, 0.6), (208, 0.3))
+        )
     else:
         body = """  <g fill="none" stroke="#fff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
     <path d="M256 404 L256 128"/>
@@ -76,9 +87,11 @@ ICONS.mkdir(parents=True, exist_ok=True)
 (DOCS / "logo-small.svg").write_text(mark(small=True))
 for size in (16, 24, 32, 48, 64, 128, 256, 512):
     svg = mark(small=size <= 48)
-    (ICONS / f"nereus-{size}.png").write_bytes(cairosvg.svg2png(bytestring=svg.encode(), output_width=size,
-                                                                output_height=size))
-for part in ("trident", "sonar"): # white masks the viewer tints (its title bar)
-    (ICONS / f"nereus-{part}-128.png").write_bytes(cairosvg.svg2png(bytestring=glyph(part).encode(), output_width=128,
-                                                                    output_height=128))
+    (ICONS / f"nereus-{size}.png").write_bytes(
+        cairosvg.svg2png(bytestring=svg.encode(), output_width=size, output_height=size)
+    )
+for part in ("trident", "sonar"):  # white masks the viewer tints (its title bar)
+    (ICONS / f"nereus-{part}-128.png").write_bytes(
+        cairosvg.svg2png(bytestring=glyph(part).encode(), output_width=128, output_height=128)
+    )
 print(sorted(p.name for p in ICONS.iterdir()))

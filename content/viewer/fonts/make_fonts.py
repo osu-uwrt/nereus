@@ -5,6 +5,7 @@ the default digits, so columns of numbers line up (the viewer's text renderer ca
     python3 make_fonts.py            # downloads Barlow from google/fonts and writes BarlowTF-*.ttf here
 
 The family is renamed "Barlow TF" so the modified fonts are never mistaken for the originals."""
+
 import io
 import re
 import pathlib
@@ -46,7 +47,8 @@ def rename(font: TTFont) -> None:
             text = record.toUnicode()
             text = re.sub(r"\bBarlow(?! TF)(?=\b| |SemiCondensed|-)", "Barlow TF", text)
             record.string = text.replace("Barlow TFSemiCondensed", "BarlowTFSemiCondensed").replace(
-                "Barlow TF-", "BarlowTF-")
+                "Barlow TF-", "BarlowTF-"
+            )
 
 
 def main() -> None:

@@ -25,16 +25,16 @@ class PriorMapEditor {
         std::string id; // the pool pack (the origin is kept per pool)
         glm::mat4 poolToWorld{1};
         float length = 50, width = 22.86f, waterLevel = 0; // waterLevel: world z of the surface
-        std::vector<prior_map::Line> lines; // floor lines, pool coordinates
-        prior_map::Origin scenarioOrigin;   // where the scenario has the map
+        std::vector<prior_map::Line> lines;                // floor lines, pool coordinates
+        prior_map::Origin scenarioOrigin;                  // where the scenario has the map
     };
     // The pool view this frame.
     struct View {
         glm::mat4 viewProjection{1};
         glm::vec2 origin{0}, size{1};
-        bool hovered = false;                  // the pointer is on the view, nothing in the way
-        bool plan = false;                     // the 2D top-down view: moves in x / y only (no height handle)
-        std::optional<glm::vec3> pointer;      // the scene point under the pointer (last frame's depth), if any
+        bool hovered = false;             // the pointer is on the view, nothing in the way
+        bool plan = false;                // the 2D top-down view: moves in x / y only (no height handle)
+        std::optional<glm::vec3> pointer; // the scene point under the pointer (last frame's depth), if any
     };
     PriorMapEditor(std::filesystem::path stateDirectory, std::filesystem::path defaultConfig);
 
@@ -156,7 +156,7 @@ class PriorMapEditor {
     enum class Look { Mesh, OnAssembly, Bare };
     Look lookOf(const prior_map::Object &) const;
     std::optional<Extent> extentOf(const prior_map::Object &) const; // none: a frame on a meshed assembly
-    bool onRobotOrigin(const View &, const glm::vec2 &mouse) const; // robot-frame origin under the pointer
+    bool onRobotOrigin(const View &, const glm::vec2 &mouse) const;  // robot-frame origin under the pointer
     bool onOriginRing(const View &, const glm::vec2 &mouse) const;
     // The map axis (0 x, 1 y) whose origin arrow is under the pointer, or -1 (robot-frame origins drag by them).
     int onOriginArrow(const View &, const glm::vec2 &mouse) const;
@@ -186,17 +186,17 @@ class PriorMapEditor {
          poolLock_ = false, dirty_ = false;
     bool placing_ = false;
     std::map<std::string, prior_map::Origin> origins_; // by pool id: where the map is in each pool
-    void useOrigin();                                   // origin_ for pool_ (its saved one, else the scenario's)
-    void rememberOrigin(); // origins_ for the pool, and for its kind (AprilTag / robot) to switch back to
-    bool plan_ = false;    // the pool view is the 2D top-down one
-    int labels_ = 1;           // 0 none, 1 roots, 2 all
-    bool poseColumns_ = true;  // the object table's x / y / z / yaw columns (relative to the parent, as stored)
+    void useOrigin();                                  // origin_ for pool_ (its saved one, else the scenario's)
+    void rememberOrigin();    // origins_ for the pool, and for its kind (AprilTag / robot) to switch back to
+    bool plan_ = false;       // the pool view is the 2D top-down one
+    int labels_ = 1;          // 0 none, 1 roots, 2 all
+    bool poseColumns_ = true; // the object table's x / y / z / yaw columns (relative to the parent, as stored)
     // gesture
     Handle drag_ = Handle::None;
     bool pressed_ = false;
     glm::vec2 pressMouse_{0};
     glm::vec3 grab_{0};
-    prior_map::Pose startMap_; // the selected object's map pose at the gesture start
+    prior_map::Pose startMap_;                    // the selected object's map pose at the gesture start
     prior_map::Origin startOrigin_;               // the origin at an origin gesture's start
     std::vector<prior_map::Object> startObjects_; // and the props (pinned to the pool, they move back)
     bool originSelected_ = false;                 // the robot-frame origin is selected (its ring is shown)

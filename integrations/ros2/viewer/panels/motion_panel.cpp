@@ -168,10 +168,10 @@ class MotionPanel final : public Panel {
         const bool oneRow = !hasDive || ImGui::CalcTextSize("CurrentCommandDive in place").x + 6 * 4 +
                                                 2 * ImGui::GetStyle().ItemSpacing.x <=
                                             ImGui::GetContentRegionAvail().x;
-        const float actions = buttonRow * (oneRow ? 1 : 2) + ImGui::GetTextLineHeightWithSpacing() +
-                              2 * ImGui::GetStyle().ItemSpacing.y;
-        const float tableHeight = std::min(7 * rowHeight + ui(4),
-                                           std::max(3 * rowHeight, ImGui::GetContentRegionAvail().y - actions));
+        const float actions =
+            buttonRow * (oneRow ? 1 : 2) + ImGui::GetTextLineHeightWithSpacing() + 2 * ImGui::GetStyle().ItemSpacing.y;
+        const float tableHeight =
+            std::min(7 * rowHeight + ui(4), std::max(3 * rowHeight, ImGui::GetContentRegionAvail().y - actions));
         // a ruled theme rules each row (a results sheet); the others stripe them
         const ImGuiTableFlags rows = ruledTheme() ? ImGuiTableFlags_BordersInnerH : ImGuiTableFlags_RowBg;
         if (ImGui::BeginTable("pose", 5, ImGuiTableFlags_SizingStretchProp | rows | ImGuiTableFlags_ScrollY,
@@ -183,8 +183,8 @@ class MotionPanel final : public Panel {
             ImGui::TableSetupColumn("Target", ImGuiTableColumnFlags_WidthFixed, ui(66));
             ImGui::TableNextRow();
             ImGui::TableSetupScrollFreeze(0, 1);
-            // a heading too wide for its column (a narrow panel, a large interface scale) shortens; the tooltip names it
-            // the first head names the frame and units (the frame's name, else the units alone)
+            // a heading too wide for its column (a narrow panel, a large interface scale) shortens; the tooltip names
+            // it the first head names the frame and units (the frame's name, else the units alone)
             const std::string frame = s.frame.empty() ? "m, \u00b0" : s.frame;
             const std::pair<const char *, const char *> headings[] = {{frame.c_str(), frame.c_str()},
                                                                       {"Actual", "Act"},
@@ -199,8 +199,8 @@ class MotionPanel final : public Panel {
                 const bool first = full == headings[0].first;
                 const char *shown = fits || first ? full : brief; // right-aligned over the right-aligned figures
                 if (!first)
-                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
-                                         std::max(0.f, ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(shown).x));
+                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.f, ImGui::GetContentRegionAvail().x -
+                                                                                    ImGui::CalcTextSize(shown).x));
                 ImGui::TextDisabled("%s", shown);
                 if (first && ImGui::IsItemHovered())
                     ImGui::SetTooltip("%s: positions in metres, angles in degrees",

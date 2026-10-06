@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run the contributor checks without inheriting a sourced ROS workspace."""
+
 import argparse
 import ast
 import json
@@ -37,8 +38,12 @@ def main():
     formatter = shutil.which("clang-format")
     if not all((cmake, ctest, formatter)):
         parser.error("cmake, ctest, and clang-format are required (see CONTRIBUTING.md)")
-    sources = sorted(p for folder in ("libraries", "extensions")
-                     for p in (ROOT / folder).rglob("*") if p.suffix in (".cpp", ".hpp"))
+    sources = sorted(
+        p
+        for folder in ("libraries", "extensions")
+        for p in (ROOT / folder).rglob("*")
+        if p.suffix in (".cpp", ".hpp")
+    )
     run([formatter, "--dry-run", "--Werror", *sources], env=env)
     for path in sources:
         for line in path.read_text().splitlines():
@@ -54,11 +59,15 @@ def main():
         relative = path.relative_to(ROOT).as_posix()
         if relative.startswith(("libraries/spatial/", "libraries/rendering/")):
             for line in path.read_text().splitlines():
-                if line.startswith("#include") and any(token in line for token in ("nereus/simulation", "nereus/sensors", "pybind11")):
+                if line.startswith("#include") and any(
+                    token in line for token in ("nereus/simulation", "nereus/sensors", "pybind11")
+                ):
                     raise RuntimeError(f"Rendering depends on simulation: {path}: {line}")
         if relative.startswith("libraries/spatial/"):
             for line in path.read_text().splitlines():
-                if line.startswith("#include") and any(token in line for token in ("GL/", "GLFW/", "imgui")):
+                if line.startswith("#include") and any(
+                    token in line for token in ("GL/", "GLFW/", "imgui")
+                ):
                     raise RuntimeError(f"Spatial library depends on graphics: {path}: {line}")
     for folder in ("tools", "tests", "python"):
         for path in (ROOT / folder).rglob("*.py"):
@@ -75,7 +84,9 @@ def main():
         for path in sources:
             if path.resolve() not in compiled:
                 continue
-            if path.suffix == ".cpp" and ("/src/" in path.as_posix() or "/applications/" in path.as_posix()):
+            if path.suffix == ".cpp" and (
+                "/src/" in path.as_posix() or "/applications/" in path.as_posix()
+            ):
                 run([tidy, path, "-p", ROOT / "build" / args.preset], env=env)
     print("All requested checks passed.")
 

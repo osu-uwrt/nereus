@@ -21,8 +21,8 @@ struct ExtraVisual {
     std::string mechanism;
 };
 struct SceneModelOptions {
-    YAML::Node config;                     // host viewer document
-    bool robotOnly = false;                // hide pool, water and course visuals (real-robot use)
+    YAML::Node config;      // host viewer document
+    bool robotOnly = false; // hide pool, water and course visuals (real-robot use)
 };
 class SceneModel {
   public:

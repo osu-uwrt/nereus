@@ -157,5 +157,6 @@ int main() {
     assert(pins::needsDrawing("panel.a"));
     (void)mode;
     ImGui::DestroyContext();
-    std::cout << "PASS: pinned buttons, checkboxes, scoped keys, disabled state, off-screen panels, ini, search index\n";
+    std::cout
+        << "PASS: pinned buttons, checkboxes, scoped keys, disabled state, off-screen panels, ini, search index\n";
 }

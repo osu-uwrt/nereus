@@ -67,9 +67,7 @@ class AutonomyPanel final : public Panel {
         ImGui::EndDisabled();
         if (!s.activeTree.empty())
             ImGui::TextWrapped("Tree: %s", std::filesystem::path(s.activeTree).filename().c_str());
-        sectionTitle(s.stackStale ? "Execution stack (stale)"
-                             : s.busy     ? "Execution stack"
-                                          : "Last execution stack");
+        sectionTitle(s.stackStale ? "Execution stack (stale)" : s.busy ? "Execution stack" : "Last execution stack");
         if (s.stack.empty()) {
             ImGui::TextDisabled(s.busy ? "Waiting for the stack..." : "None yet: start a tree to see its stack.");
             return;

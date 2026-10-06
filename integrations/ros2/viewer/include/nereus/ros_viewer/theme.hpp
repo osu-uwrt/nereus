@@ -51,9 +51,9 @@ inline ImVec2 ui(ImVec2 pixels) {
 }
 // The host's fonts beyond the body font, at the interface scale (null until the host loads them: the current font).
 struct TypeRamp {
-    ImFont *strong = nullptr; // the body size in bold: section titles, table headers
-    ImFont *number = nullptr; // large figures: run time, score
-    ImFont *small = nullptr;  // captions
+    ImFont *strong = nullptr;      // the body size in bold: section titles, table headers
+    ImFont *number = nullptr;      // large figures: run time, score
+    ImFont *small = nullptr;       // captions
     ImFont *smallStrong = nullptr; // chart labels
 };
 void setTypeRamp(const TypeRamp &);
@@ -151,7 +151,8 @@ inline void progressBar(float fraction, const char *label = nullptr) {
         draw->AddRect(at, end, ImGui::GetColorU32(ImGuiCol_Border), rounding, 0, style.FrameBorderSize);
     const ImVec4 fill = style.Colors[ImGuiCol_PlotHistogram], ink = style.Colors[ImGuiCol_Text],
                  paper = style.Colors[ImGuiCol_WindowBg];
-    const ImVec4 onFill = contrastRatio(ink, fill) >= contrastRatio(paper, fill) ? ink : ImVec4(paper.x, paper.y, paper.z, 1);
+    const ImVec4 onFill =
+        contrastRatio(ink, fill) >= contrastRatio(paper, fill) ? ink : ImVec4(paper.x, paper.y, paper.z, 1);
     const ImVec2 text{at.x + style.FramePadding.x, at.y + (size.y - ImGui::GetFontSize()) * .5f};
     draw->PushClipRect({filled, at.y}, end, true);
     draw->AddText(text, ImGui::GetColorU32(ink), label);

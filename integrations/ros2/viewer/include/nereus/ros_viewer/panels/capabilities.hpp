@@ -208,11 +208,11 @@ struct BagTargetState {
     bool known = false;                     // a reply has come back since the viewer started
     bool reachable = false;                 // the last command reached the machine
     bool recording = false, stopping = false, pending = false; // pending: a start or stop is under way
-    std::string bag;                        // the running (or finishing) recording's path on that machine
+    std::string bag;                               // the running (or finishing) recording's path on that machine
     double elapsed = 0, bytes = 0, freeBytes = -1; // seconds, bytes; free -1: unknown
-    std::string message;                    // the last outcome or problem
-    bool failed = false;                    // `message` is a problem
-    std::string lastBag, lastNote;          // the most recent recording that ended there (whoever stopped it)
+    std::string message;                           // the last outcome or problem
+    bool failed = false;                           // `message` is a problem
+    std::string lastBag, lastNote;                 // the most recent recording that ended there (whoever stopped it)
     double lastBytes = 0;
     bool lastComplete = true; // its metadata.yaml was written (closed cleanly)
 };

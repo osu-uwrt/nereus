@@ -22,8 +22,9 @@ std::pair<glm::vec2, glm::vec2> topDownBounds(const std::vector<TopDownPart> &pa
         if (part.mesh)
             for (int corner = 0; corner < 8; ++corner) {
                 const auto &a = part.mesh->minimum, &b = part.mesh->maximum;
-                const glm::vec4 p = part.planeFromAsset * glm::vec4(corner & 1 ? b.x() : a.x(), corner & 2 ? b.y() : a.y(),
-                                                                    corner & 4 ? b.z() : a.z(), 1);
+                const glm::vec4 p =
+                    part.planeFromAsset *
+                    glm::vec4(corner & 1 ? b.x() : a.x(), corner & 2 ? b.y() : a.y(), corner & 4 ? b.z() : a.z(), 1);
                 low = glm::min(low, glm::vec2(p));
                 high = glm::max(high, glm::vec2(p));
             }
@@ -55,7 +56,8 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
         if (!part.mesh)
             continue;
         for (const auto &submesh : part.mesh->submeshes) {
-            const Texture *map = submesh.material.diffuse_texture ? texture(*submesh.material.diffuse_texture) : nullptr;
+            const Texture *map =
+                submesh.material.diffuse_texture ? texture(*submesh.material.diffuse_texture) : nullptr;
             const auto &base = submesh.material.base_color;
             // a diffuse texture replaces the base colour (as the renderer draws it)
             const glm::vec3 flat = map ? glm::vec3(1) : glm::vec3(toSrgb(base.x()), toSrgb(base.y()), toSrgb(base.z()));
@@ -76,8 +78,7 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
                 if (std::abs(area) < 1e-9f)
                     continue; // edge-on from above: no footprint
                 // shade by the face's slope: tops full, walls darker (the plane's z is "up")
-                const glm::vec3 normal =
-                    glm::normalize(glm::cross(plane[ib] - plane[ia], plane[ic] - plane[ia]));
+                const glm::vec3 normal = glm::normalize(glm::cross(plane[ib] - plane[ia], plane[ic] - plane[ia]));
                 const float shade = .62f + .38f * std::abs(normal.z);
                 const int x0 = std::max(0, int(std::floor(std::min({a.x, b.x, c.x})))),
                           x1 = std::min(image.width - 1, int(std::ceil(std::max({a.x, b.x, c.x})))),
@@ -99,11 +100,15 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
                         if (map) { // the texture through the UVs (v up, as the renderer flips its rows)
                             const float u = wa * ua.x() + wb * ub.x() + wc * uc.x(),
                                         v = wa * ua.y() + wb * ub.y() + wc * uc.y();
-                            const int tx = ((int(std::floor((u - std::floor(u)) * float(map->width))) % map->width) +
-                                            map->width) % map->width;
-                            const int ty = ((int(std::floor((1 - (v - std::floor(v))) * float(map->height))) %
-                                             map->height) + map->height) % map->height;
-                            const auto *texel = &map->rgba[(std::size_t(ty) * std::size_t(map->width) + std::size_t(tx)) * 4];
+                            const int tx =
+                                ((int(std::floor((u - std::floor(u)) * float(map->width))) % map->width) + map->width) %
+                                map->width;
+                            const int ty =
+                                ((int(std::floor((1 - (v - std::floor(v))) * float(map->height))) % map->height) +
+                                 map->height) %
+                                map->height;
+                            const auto *texel =
+                                &map->rgba[(std::size_t(ty) * std::size_t(map->width) + std::size_t(tx)) * 4];
                             if (texel[3] < 128)
                                 continue;
                             colour = glm::vec3(texel[0], texel[1], texel[2]) / 255.f;

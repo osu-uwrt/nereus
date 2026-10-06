@@ -69,7 +69,7 @@ TEST(HostThrusterVisuals, RpmIntegrationTimeoutAndGeometry) {
     ASSERT_TRUE(visuals.receive(std::vector<float>(8, .005f), 2));
     visuals.advance(2.1);
     ASSERT_TRUE(near(visuals.rotors[0].angle, timedOut)); // Negligible residual force is idle.
-    visuals.advance(0);                               // A simulator clock reset clears old forces and phase.
+    visuals.advance(0);                                   // A simulator clock reset clears old forces and phase.
     visuals.advance(.2);
     for (const auto &rotor : visuals.rotors)
         ASSERT_TRUE(near(rotor.angle, 0));

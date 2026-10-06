@@ -27,8 +27,8 @@ struct VisualState {
     std::vector<glm::vec3> lightColor;  // parallel to StatusLights::lights
     std::array<float, 2> claw{0.f, 0.f};
     std::vector<MarkerDraw> markers;
-    std::map<std::string, bool> indicatorLatched;              // task indicator region -> latched (magnet target LEDs)
-    std::vector<glm::mat4> loadedPayloads;                     // world poses (body already applied), unit length scaled
+    std::map<std::string, bool> indicatorLatched; // task indicator region -> latched (magnet target LEDs)
+    std::vector<glm::mat4> loadedPayloads;        // world poses (body already applied), unit length scaled
     bool showEquipment = true, showWalls = true, showFloor = true; // walls include the deck and coping
     bool showCourse = true; // the pack's task visuals (false: the course comes from mapping markers)
 };

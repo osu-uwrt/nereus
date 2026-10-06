@@ -716,8 +716,9 @@ void RosSide::captureMpc(bool wanted) {
         plannedPath.clear();
     } else {
         try {
-            const auto toMap = matrixOf(buffer_->lookupTransform(scenario_->mapFrame, plannedMessage_.header.frame_id,
-                                                                 rclcpp::Time(0, 0, RCL_ROS_TIME))
+            const auto toMap = matrixOf(buffer_
+                                            ->lookupTransform(scenario_->mapFrame, plannedMessage_.header.frame_id,
+                                                              rclcpp::Time(0, 0, RCL_ROS_TIME))
                                             .transform);
             plannedPath.clear();
             for (const auto &pose : plannedMessage_.poses)

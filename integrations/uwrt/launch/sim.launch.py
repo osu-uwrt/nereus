@@ -91,24 +91,35 @@ def _gpu_env(context):
 
 def _mpc_sim_model(context, resolved, output):
     """MPC model files for this run's plant (see mpc_sim_model.py), as mission_stack arguments."""
-    if LC("active_control_model").perform(context) != "mpc" or LC("mpc_model").perform(context) not in ("", "sim"):
+    if LC("active_control_model").perform(context) != "mpc" or LC("mpc_model").perform(
+        context
+    ) not in ("", "sim"):
         return []
     from ament_index_python.packages import get_package_share_directory as share
     import mpc_sim_model
 
     robot = json.loads(Path(resolved).read_text())["robot"]["id"]
     vehicle, hydro, params = mpc_sim_model.write(
-        resolved, f"{output}.mpc", Path(share("riptide_descriptions2"), "config", f"{robot}.yaml"),
-        Path(share("riptide_mpc"), "config", "mpc.yaml"))
+        resolved,
+        f"{output}.mpc",
+        Path(share("riptide_descriptions2"), "config", f"{robot}.yaml"),
+        Path(share("riptide_mpc"), "config", "mpc.yaml"),
+    )
     print(f"MPC model: this run's plant ({output}.mpc)")
-    return [("mpc_vehicle_config", vehicle), ("mpc_hydrodynamics_config", hydro), ("mpc_config", params)]
+    return [
+        ("mpc_vehicle_config", vehicle),
+        ("mpc_hydrodynamics_config", hydro),
+        ("mpc_config", params),
+    ]
 
 
 def _processes(context):
     rmw = LC("rmw").perform(context)
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
     # The resolver and simulator run in the repository root: relative paths mean the caller's directory.
-    output = os.path.abspath(LC("output").perform(context) or f"/tmp/nereus_sim/{time.strftime('%Y%m%d-%H%M%S')}")
+    output = os.path.abspath(
+        LC("output").perform(context) or f"/tmp/nereus_sim/{time.strftime('%Y%m%d-%H%M%S')}"
+    )
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     scenario = _scenario(context)
     binary = LC("bridge_binary").perform(context)
@@ -116,56 +127,111 @@ def _processes(context):
     sim_supervisor.resolve(scenario, resolved)
     stack_args = [(k, LC(k)) for k in CONTROLLER_ARGS] + _mpc_sim_model(context, resolved, output)
     # The supervisor runs `binary <resolved> --output <dir> <options>` and restarts it in another pool on request.
-    command = [sys.executable, str(SUPERVISOR), "--resolved", resolved, "--scenario", scenario, "--output", output,
-               "--", binary]
+    command = [
+        sys.executable,
+        str(SUPERVISOR),
+        "--resolved",
+        resolved,
+        "--scenario",
+        scenario,
+        "--output",
+        output,
+        "--",
+        binary,
+    ]
     if LC("cameras").perform(context).lower() in ("false", "0", "no"):
         command.append("--no-cameras")
     elif LC("always_cameras").perform(context).lower() in ("true", "1", "yes"):
         command.append("--always-cameras")
     if LC("camera_supersample").perform(context):
         command += ["--camera-supersample", LC("camera_supersample").perform(context)]
-    actions.append(ExecuteProcess(cmd=command, cwd=str(ROOT), output="screen",
-                                  sigterm_timeout="20", name="simulator"))
-    actions.append(IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(str(STACK)),
-        launch_arguments=stack_args,
-        condition=IfCondition(LC("stack"))))
+    actions.append(
+        ExecuteProcess(
+            cmd=command, cwd=str(ROOT), output="screen", sigterm_timeout="20", name="simulator"
+        )
+    )
+    actions.append(
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(str(STACK)),
+            launch_arguments=stack_args,
+            condition=IfCondition(LC("stack")),
+        )
+    )
     # Closing the viewer ends the whole launch (as Ctrl-C: the simulator writes its records), unless
     # close_with_viewer:=false keeps the simulator and stack running for a viewer reopened by hand.
     close = LC("close_with_viewer").perform(context).lower() not in ("false", "0", "no")
-    actions.append(ExecuteProcess(
-        cmd=[str(ROOT / "build/ros-viewer/nereus-viewer")], cwd=str(ROOT),
-        output="screen", name="pool_viewer", additional_env=_gpu_env(context),
-        on_exit=[Shutdown(reason="the pool viewer was closed")] if close else None,
-        condition=IfCondition(LC("viewer"))))
+    actions.append(
+        ExecuteProcess(
+            cmd=[str(ROOT / "build/ros-viewer/nereus-viewer")],
+            cwd=str(ROOT),
+            output="screen",
+            name="pool_viewer",
+            additional_env=_gpu_env(context),
+            on_exit=[Shutdown(reason="the pool viewer was closed")] if close else None,
+            condition=IfCondition(LC("viewer")),
+        )
+    )
     return actions
 
 
 def generate_launch_description():
-    return LaunchDescription([
-        DeclareLaunchArgument("pool", default_value="",
-                              description=f"pool to run in: {' | '.join(POOLS)} (empty: robosub)"),
-        DeclareLaunchArgument("scenario", default_value="", description="scenario pack folder (overrides pool)"),
-        DeclareLaunchArgument("output", default_value=""),
-        DeclareLaunchArgument("stack", default_value="true", description="launch the UWRT stack"),
-        DeclareLaunchArgument("viewer", default_value="true", description="launch the pool viewer"),
-        DeclareLaunchArgument("close_with_viewer", default_value="true",
-                              description="closing the viewer stops the simulator and the stack (false: keep them)"),
-        DeclareLaunchArgument("bridge_binary", default_value=str(
-            ROOT / "build/ros-viewer/integrations/ros2/bridge/nereus-sim"),
-            description="nereus-sim executable"),
-        DeclareLaunchArgument("nvidia", default_value="auto",
-                              description="viewer on the NVIDIA GPU via PRIME offload: auto | true | false"),
-        DeclareLaunchArgument("cameras", default_value="true", description="run camera acquisition"),
-        DeclareLaunchArgument("always_cameras", default_value="false",
-                              description="render cameras regardless of subscribers"),
-        DeclareLaunchArgument("camera_supersample", default_value="",
-                              description="camera anti-aliasing factor 1..4 (empty: the simulator's default)"),
-        # Default: the shell's RMW (UWRT uses rmw_zenoh_cpp with a running `ros2 run rmw_zenoh_cpp
-        # rmw_zenohd`). FastDDS showed 0.4-0.9 s reliable-delivery stalls of the simulator's /tf under
-        # full-stack load with camera traffic; Zenoh delivered the same run without stalls.
-        DeclareLaunchArgument("rmw", default_value="",
-                              description="RMW for every process (e.g. rmw_zenoh_cpp); empty keeps the shell's"),
-        *[DeclareLaunchArgument(k, default_value="", description=d) for k, d in CONTROLLER_ARGS.items()],
-        OpaqueFunction(function=_processes),
-    ])
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "pool",
+                default_value="",
+                description=f"pool to run in: {' | '.join(POOLS)} (empty: robosub)",
+            ),
+            DeclareLaunchArgument(
+                "scenario", default_value="", description="scenario pack folder (overrides pool)"
+            ),
+            DeclareLaunchArgument("output", default_value=""),
+            DeclareLaunchArgument(
+                "stack", default_value="true", description="launch the UWRT stack"
+            ),
+            DeclareLaunchArgument(
+                "viewer", default_value="true", description="launch the pool viewer"
+            ),
+            DeclareLaunchArgument(
+                "close_with_viewer",
+                default_value="true",
+                description="closing the viewer stops the simulator and the stack (false: keep them)",
+            ),
+            DeclareLaunchArgument(
+                "bridge_binary",
+                default_value=str(ROOT / "build/ros-viewer/integrations/ros2/bridge/nereus-sim"),
+                description="nereus-sim executable",
+            ),
+            DeclareLaunchArgument(
+                "nvidia",
+                default_value="auto",
+                description="viewer on the NVIDIA GPU via PRIME offload: auto | true | false",
+            ),
+            DeclareLaunchArgument(
+                "cameras", default_value="true", description="run camera acquisition"
+            ),
+            DeclareLaunchArgument(
+                "always_cameras",
+                default_value="false",
+                description="render cameras regardless of subscribers",
+            ),
+            DeclareLaunchArgument(
+                "camera_supersample",
+                default_value="",
+                description="camera anti-aliasing factor 1..4 (empty: the simulator's default)",
+            ),
+            # Default: the shell's RMW (UWRT uses rmw_zenoh_cpp with a running `ros2 run rmw_zenoh_cpp
+            # rmw_zenohd`). FastDDS showed 0.4-0.9 s reliable-delivery stalls of the simulator's /tf under
+            # full-stack load with camera traffic; Zenoh delivered the same run without stalls.
+            DeclareLaunchArgument(
+                "rmw",
+                default_value="",
+                description="RMW for every process (e.g. rmw_zenoh_cpp); empty keeps the shell's",
+            ),
+            *[
+                DeclareLaunchArgument(k, default_value="", description=d)
+                for k, d in CONTROLLER_ARGS.items()
+            ],
+            OpaqueFunction(function=_processes),
+        ]
+    )

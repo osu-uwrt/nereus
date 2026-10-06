@@ -54,7 +54,7 @@ struct Binding {
     std::function<void(const std::string &)> focus{};
     bool showWindow = false;
     std::function<void()> drawOverlayControls{};
-    std::function<void()> drawPanelMenu{}; // the Windows popup (toolbar item "panels_menu")
+    std::function<void()> drawPanelMenu{};   // the Windows popup (toolbar item "panels_menu")
     std::function<bool()> keyboardDriving{}; // Context's
     std::function<void(bool)> setKeyboardDriving{};
 };

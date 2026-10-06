@@ -186,8 +186,9 @@ bool Switch(const char *label, int *current, std::initializer_list<const char *>
     std::vector<float> widths(static_cast<std::size_t>(count));
     float total = 0;
     for (int i = 0; i < count; ++i) {
-        widths[std::size_t(i)] = width > 0 ? width / float(count)
-                                           : ImGui::CalcTextSize(items[std::size_t(i)], nullptr, true).x + 2 * style.FramePadding.x;
+        widths[std::size_t(i)] =
+            width > 0 ? width / float(count)
+                      : ImGui::CalcTextSize(items[std::size_t(i)], nullptr, true).x + 2 * style.FramePadding.x;
         total += widths[std::size_t(i)];
     }
     const float height = ImGui::GetFrameHeight(), rounding = style.FrameRounding;
@@ -232,7 +233,8 @@ bool Switch(const char *label, int *current, std::initializer_list<const char *>
     for (int i = 0; i < chosen; ++i)
         targetX += widths[std::size_t(i)];
     auto *storage = ImGui::GetStateStorage();
-    float *thumbX = storage->GetFloatRef(id, targetX), *thumbW = storage->GetFloatRef(id + 1, widths[std::size_t(chosen)]);
+    float *thumbX = storage->GetFloatRef(id, targetX),
+          *thumbW = storage->GetFloatRef(id + 1, widths[std::size_t(chosen)]);
     const float follow = 1 - std::exp(-ImGui::GetIO().DeltaTime * 28);
     *thumbX += (targetX - *thumbX) * follow;
     *thumbW += (widths[std::size_t(chosen)] - *thumbW) * follow;
@@ -248,9 +250,10 @@ bool Switch(const char *label, int *current, std::initializer_list<const char *>
             const float w = widths[std::size_t(i)];
             const ImVec2 min(at.x + x, at.y), max(at.x + x + w, end.y);
             const bool on = i == chosen;
-            draw->AddRectFilled(min, max,
-                                ImGui::GetColorU32(on ? p.active
-                                                      : style.Colors[i == hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button]));
+            draw->AddRectFilled(
+                min, max,
+                ImGui::GetColorU32(on ? p.active
+                                      : style.Colors[i == hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button]));
             bevel(draw, min, max, !on);
             const char *text = items[std::size_t(i)];
             const ImVec2 size = ImGui::CalcTextSize(text, nullptr, true);
@@ -281,7 +284,8 @@ bool Switch(const char *label, int *current, std::initializer_list<const char *>
         const ImVec2 size = ImGui::CalcTextSize(text, nullptr, true);
         const float w = widths[std::size_t(i)];
         // a label the thumb covers (more than half) takes the "on" text colour
-        const float covered = std::max(0.f, std::min(at.x + x + w, at.x + *thumbX + *thumbW) - std::max(at.x + x, at.x + *thumbX));
+        const float covered =
+            std::max(0.f, std::min(at.x + x + w, at.x + *thumbX + *thumbW) - std::max(at.x + x, at.x + *thumbX));
         const ImVec4 ink = ((disabled >> i) & 1u) ? p.muted : covered > w * .5f ? p.activeText : p.text;
         draw->AddText({at.x + x + (w - size.x) * .5f, at.y + (height - size.y) * .5f}, ImGui::GetColorU32(ink), text,
                       ImGui::FindRenderedTextEnd(text));
@@ -330,7 +334,7 @@ std::vector<Control> controls() {
         c.key = key;
         c.label = r.label.empty() ? key.substr(key.rfind('/') + 1) : r.label;
         c.window = r.scopeTitle;
-        c.kind = r.kind == Kind::Button ? Control::Kind::Button
+        c.kind = r.kind == Kind::Button     ? Control::Kind::Button
                  : r.kind == Kind::Checkbox ? Control::Kind::Checkbox
                                             : Control::Kind::Choice;
         c.checked = r.value;

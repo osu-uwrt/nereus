@@ -211,8 +211,8 @@ class RosBagging final : public Bagging {
             std::string reason = result.timedOut ? "no answer in time" : lastLine(result.output);
             if (reason.empty())
                 reason = "exit status " + std::to_string(result.status);
-            v.message = (target.host.host.empty() ? "Could not run bash: " : "Can't reach " + target.host.host + ": ") +
-                        reason;
+            v.message =
+                (target.host.host.empty() ? "Could not run bash: " : "Can't reach " + target.host.host + ": ") + reason;
             v.failed = true;
             return;
         }
@@ -254,8 +254,8 @@ class RosBagging final : public Bagging {
         } else if (state == "idle" && wasRecording) { // ended between polls: stopped elsewhere
             v.message = v.lastBag.empty() ? "Stopped" : saved();
             v.failed = false;
-        } else if (op == Op::Status && (wasUnreachable || v.message.rfind("Checking", 0) == 0 ||
-                                        v.message.rfind("Connecting", 0) == 0)) {
+        } else if (op == Op::Status &&
+                   (wasUnreachable || v.message.rfind("Checking", 0) == 0 || v.message.rfind("Connecting", 0) == 0)) {
             v.message.clear();
             v.failed = false;
         }
@@ -282,44 +282,43 @@ class RosBagging final : public Bagging {
 void registerRosBagging(Registry &registry, const RuntimeFactory &runtime) {
     registry.providers.emplace(
         "ros.bagging",
-        ProviderFactory{Kind::Bagging,
-                        [](const YAML::Node &cfg) {
-                            keys(cfg, {"targets", "presets", "stop_timeout", "request_timeout"}, "ros.bagging");
-                            positive(cfg, "stop_timeout", 10, 300);
-                            positive(cfg, "request_timeout", 30, 300);
-                            if (!cfg["targets"].IsSequence() || cfg["targets"].size() == 0)
-                                throw std::invalid_argument("targets must be a non-empty sequence");
-                            std::set<std::string> ids;
-                            for (const auto &entry : cfg["targets"]) {
-                                keys(entry,
-                                     {"id", "label", "host", "directory", "setup", "ssh", "record_args",
-                                      "stop_on_exit"},
-                                     "bag target");
-                                required(entry, {"id"});
-                                if (!ids.insert(entry["id"].as<std::string>()).second)
-                                    throw std::invalid_argument("duplicate bag target ID");
-                                (void)entry["label"].as<std::string>("");
-                                (void)entry["host"].as<std::string>("");
-                                (void)entry["directory"].as<std::string>("");
-                                (void)entry["setup"].as<std::string>("");
-                                (void)entry["stop_on_exit"].as<bool>(false);
-                                for (const char *list : {"ssh", "record_args"})
-                                    if (entry[list] && !entry[list].IsSequence())
-                                        throw std::invalid_argument(std::string(list) + " must be a sequence");
-                                    else if (entry[list])
-                                        (void)entry[list].as<std::vector<std::string>>();
-                                if (entry["ssh"] && entry["ssh"].size() == 0)
-                                    throw std::invalid_argument("ssh must name the ssh program");
-                            }
-                            if (cfg["presets"]) {
-                                if (!cfg["presets"].IsMap())
-                                    throw std::invalid_argument("presets must map names to topic lists");
-                                for (const auto &preset : cfg["presets"])
-                                    (void)preset.second.as<std::vector<std::string>>();
-                            }
-                        },
-                        [runtime](const YAML::Node &cfg, const Context &ctx) {
-                            return std::make_shared<RosBagging>(runtime(ctx), cfg, ctx);
-                        }});
+        ProviderFactory{
+            Kind::Bagging,
+            [](const YAML::Node &cfg) {
+                keys(cfg, {"targets", "presets", "stop_timeout", "request_timeout"}, "ros.bagging");
+                positive(cfg, "stop_timeout", 10, 300);
+                positive(cfg, "request_timeout", 30, 300);
+                if (!cfg["targets"].IsSequence() || cfg["targets"].size() == 0)
+                    throw std::invalid_argument("targets must be a non-empty sequence");
+                std::set<std::string> ids;
+                for (const auto &entry : cfg["targets"]) {
+                    keys(entry, {"id", "label", "host", "directory", "setup", "ssh", "record_args", "stop_on_exit"},
+                         "bag target");
+                    required(entry, {"id"});
+                    if (!ids.insert(entry["id"].as<std::string>()).second)
+                        throw std::invalid_argument("duplicate bag target ID");
+                    (void)entry["label"].as<std::string>("");
+                    (void)entry["host"].as<std::string>("");
+                    (void)entry["directory"].as<std::string>("");
+                    (void)entry["setup"].as<std::string>("");
+                    (void)entry["stop_on_exit"].as<bool>(false);
+                    for (const char *list : {"ssh", "record_args"})
+                        if (entry[list] && !entry[list].IsSequence())
+                            throw std::invalid_argument(std::string(list) + " must be a sequence");
+                        else if (entry[list])
+                            (void)entry[list].as<std::vector<std::string>>();
+                    if (entry["ssh"] && entry["ssh"].size() == 0)
+                        throw std::invalid_argument("ssh must name the ssh program");
+                }
+                if (cfg["presets"]) {
+                    if (!cfg["presets"].IsMap())
+                        throw std::invalid_argument("presets must map names to topic lists");
+                    for (const auto &preset : cfg["presets"])
+                        (void)preset.second.as<std::vector<std::string>>();
+                }
+            },
+            [runtime](const YAML::Node &cfg, const Context &ctx) {
+                return std::make_shared<RosBagging>(runtime(ctx), cfg, ctx);
+            }});
 }
 } // namespace nereus::ros_viewer::panels

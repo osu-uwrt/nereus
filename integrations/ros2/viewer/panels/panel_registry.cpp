@@ -46,10 +46,9 @@ void registerPanels(Registry &registry) {
                             ViewFactory<Panel>{Kind::Motion, [](const YAML::Node &n) { keys(n, {}, "panels_menu"); },
                                                [](const Binding &b) { return std::make_unique<PanelsMenu>(b); }, true,
                                                true});
-    registry.panels.emplace("separator",
-                            ViewFactory<Panel>{Kind::Motion, [](const YAML::Node &n) { keys(n, {}, "separator"); },
-                                               [](const Binding &) { return std::make_unique<Separator>(); }, true,
-                                               true});
+    registry.panels.emplace(
+        "separator", ViewFactory<Panel>{Kind::Motion, [](const YAML::Node &n) { keys(n, {}, "separator"); },
+                                        [](const Binding &) { return std::make_unique<Separator>(); }, true, true});
     registerSimulationPanel(registry);
     registerRunPanel(registry);
     registerActuatorPanel(registry);

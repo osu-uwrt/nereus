@@ -16,7 +16,7 @@ struct BagHost {
     std::string directory; // where bags go on that machine; a leading ~ is that machine's home
     std::string setup;     // shell lines run before ros2 (source the workspace); empty: the inherited environment
     std::vector<std::string> ssh{"ssh"}; // the ssh program (and its own leading arguments)
-    std::vector<std::string> recordArgs;  // extra `ros2 bag record` arguments (storage, splitting, ...)
+    std::vector<std::string> recordArgs; // extra `ros2 bag record` arguments (storage, splitting, ...)
 };
 // What to record.
 struct BagRequest {

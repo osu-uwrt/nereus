@@ -172,8 +172,8 @@ TEST_F(EditorTest, PlanViewDragFollowsThePointerInARotatedPool) {
     editor->setPool(pool);
     const auto gate = pose("gate");
     const auto world = [&](double dx, double dy) { // a map pose offset, in the world
-        const auto toWorld = pool.poolToWorld *
-                             glm::rotate(glm::translate(glm::mat4(1), {19.5f, 0, 0}), glm::radians(90.f), {0, 0, 1});
+        const auto toWorld =
+            pool.poolToWorld * glm::rotate(glm::translate(glm::mat4(1), {19.5f, 0, 0}), glm::radians(90.f), {0, 0, 1});
         return glm::vec3(toWorld * glm::vec4(float(gate.x + dx), float(gate.y + dy), float(gate.z), 1));
     };
     const glm::vec3 centre = world(0, 0);
@@ -219,7 +219,7 @@ TEST_F(EditorTest, DraggingTheRobotMovesARobotFrameOrigin) {
     EXPECT_NEAR(editor->origin().y, 4, .03);
     EXPECT_NEAR((*editor->robotStart())[3].x, 11.5, .03);
     EXPECT_NEAR(pose("gate").x, gate.x, 1e-9); // props ride with the map (not pinned to the pool)
-    EXPECT_FALSE(editor->dirty());              // the origin is not in the file
+    EXPECT_FALSE(editor->dirty());             // the origin is not in the file
     frame(to, false, ImGuiKey_None);
     ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
     frame(to, false, ImGuiKey_Z);

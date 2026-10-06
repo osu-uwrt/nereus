@@ -21,8 +21,8 @@ struct TopDownImage {
     glm::vec2 low{0}, high{0}; // the plane rectangle the image covers
 };
 // Reads a diffuse texture (PNG) as top-down RGBA rows; false when it cannot (the part takes its base colour).
-using ImageReader = std::function<bool(const std::filesystem::path &, int &width, int &height,
-                                       std::vector<unsigned char> &rgba)>;
+using ImageReader =
+    std::function<bool(const std::filesystem::path &, int &width, int &height, std::vector<unsigned char> &rgba)>;
 // The parts' top-down image over [low, high] at `pixelsPerMetre` (capped at `maximumSide` pixels a side).
 TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, glm::vec2 high, float pixelsPerMetre,
                          const ImageReader &readImage = {}, int maximumSide = 4096);

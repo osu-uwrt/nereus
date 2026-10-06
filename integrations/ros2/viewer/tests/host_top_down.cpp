@@ -11,9 +11,9 @@ std::shared_ptr<nereus::rendering::MeshAsset> box(Eigen::Vector3f low, Eigen::Ve
     nereus::rendering::Submesh part;
     part.material.base_color = {rgb.x(), rgb.y(), rgb.z(), 1};
     for (int i = 0; i < 8; ++i)
-        part.vertices.push_back({Eigen::Vector3f(i & 1 ? high.x() : low.x(), i & 2 ? high.y() : low.y(),
-                                                 i & 4 ? high.z() : low.z()),
-                                 Eigen::Vector3f::UnitZ(), Eigen::Vector2f::Zero()});
+        part.vertices.push_back(
+            {Eigen::Vector3f(i & 1 ? high.x() : low.x(), i & 2 ? high.y() : low.y(), i & 4 ? high.z() : low.z()),
+             Eigen::Vector3f::UnitZ(), Eigen::Vector2f::Zero()});
     part.indices = {0, 1, 3, 0, 3, 2, 4, 5, 7, 4, 7, 6, 0, 1, 5, 0, 5, 4,
                     2, 3, 7, 2, 7, 6, 0, 2, 6, 0, 6, 4, 1, 3, 7, 1, 7, 5};
     mesh->submeshes.push_back(part);

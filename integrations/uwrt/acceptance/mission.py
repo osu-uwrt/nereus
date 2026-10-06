@@ -80,8 +80,13 @@ def drive(args: argparse.Namespace, log: list[dict]) -> dict:
         def feedback(message) -> None:
             stack = list(message.feedback.stack.stack)
             if not log or log[-1]["stack"] != stack:
-                log.append({"wall_s": round(time.monotonic() - start, 3),
-                            "sim_s": round(clock["sim_s"], 3), "stack": stack})
+                log.append(
+                    {
+                        "wall_s": round(time.monotonic() - start, 3),
+                        "sim_s": round(clock["sim_s"], 3),
+                        "stack": stack,
+                    }
+                )
 
         goal = ExecuteTree.Goal(tree=str(args.tree))
         future = client.send_goal_async(goal, feedback_callback=feedback)
@@ -118,10 +123,13 @@ def drive(args: argparse.Namespace, log: list[dict]) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--scenario", type=Path, default=ROOT / "content/packs/scenarios/talos_uwrt")
+    parser.add_argument(
+        "--scenario", type=Path, default=ROOT / "content/packs/scenarios/talos_uwrt"
+    )
     parser.add_argument("--tree", type=Path, default=DEFAULT_TREE)
-    parser.add_argument("--sim", type=Path,
-                        default=ROOT / "build/ros-viewer/integrations/ros2/bridge/nereus-sim")
+    parser.add_argument(
+        "--sim", type=Path, default=ROOT / "build/ros-viewer/integrations/ros2/bridge/nereus-sim"
+    )
     parser.add_argument("--domain", type=int, default=221)
     parser.add_argument("--startup", type=float, default=120, help="wall s for the stack")
     parser.add_argument("--settle", type=float, default=15, help="wall s before the goal")
@@ -131,14 +139,31 @@ def main() -> int:
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
     args.tree = args.tree.resolve()
-    env = dict(os.environ, ROS_DOMAIN_ID=str(args.domain), ROS_LOCALHOST_ONLY="1",
-               RMW_IMPLEMENTATION="rmw_fastrtps_cpp")
+    env = dict(
+        os.environ,
+        ROS_DOMAIN_ID=str(args.domain),
+        ROS_LOCALHOST_ONLY="1",
+        RMW_IMPLEMENTATION="rmw_fastrtps_cpp",
+    )
     env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "python/src"), env.get("PYTHONPATH", "")])
-    os.environ.update({k: env[k] for k in ("ROS_DOMAIN_ID", "ROS_LOCALHOST_ONLY",
-                                           "RMW_IMPLEMENTATION")})
+    os.environ.update(
+        {k: env[k] for k in ("ROS_DOMAIN_ID", "ROS_LOCALHOST_ONLY", "RMW_IMPLEMENTATION")}
+    )
     resolved = args.output / "resolved.json"
-    subprocess.run([sys.executable, "-m", "nereus.packs", "resolve", str(args.scenario.resolve()),
-                    "-o", str(resolved)], cwd=ROOT, env=env, check=True)
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "nereus.packs",
+            "resolve",
+            str(args.scenario.resolve()),
+            "-o",
+            str(resolved),
+        ],
+        cwd=ROOT,
+        env=env,
+        check=True,
+    )
     commands = [
         [str(args.sim.resolve()), str(resolved), "--output", str(args.output / "bridge")],
         ["ros2", "launch", str(HERE / "mission_stack.launch.py")],
@@ -151,8 +176,16 @@ def main() -> int:
         for i, command in enumerate(commands):
             handle = (args.output / f"process-{i}.log").open("w")
             logs.append(handle)
-            processes.append(subprocess.Popen(command, cwd=ROOT, env=env, stdout=handle,
-                                              stderr=subprocess.STDOUT, start_new_session=True))
+            processes.append(
+                subprocess.Popen(
+                    command,
+                    cwd=ROOT,
+                    env=env,
+                    stdout=handle,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+            )
         result = drive(args, log)
     finally:
         for process in reversed(processes):

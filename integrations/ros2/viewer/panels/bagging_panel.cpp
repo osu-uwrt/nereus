@@ -217,14 +217,15 @@ class BaggingPanel final : public Panel {
         ImGui::TextUnformatted("ssh");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-1);
-        const bool entered = ImGui::InputTextWithHint("##host", "user@host", buffer.data(), buffer.size(),
-                                                      ImGuiInputTextFlags_EnterReturnsTrue |
-                                                          ImGuiInputTextFlags_CharsNoBlank);
+        const bool entered =
+            ImGui::InputTextWithHint("##host", "user@host", buffer.data(), buffer.size(),
+                                     ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsNoBlank);
         if ((entered || ImGui::IsItemDeactivatedAfterEdit()) && buffer[0])
             bagging->setHost(t.id, buffer.data());
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("%s", busy ? "Stop the bag to change machines."
-                                         : "Where to record: as you would type `ssh <this>` (a key login, no password).");
+            ImGui::SetTooltip("%s",
+                              busy ? "Stop the bag to change machines."
+                                   : "Where to record: as you would type `ssh <this>` (a key login, no password).");
         ImGui::EndDisabled();
         ImGui::PopID();
     }
@@ -273,8 +274,7 @@ class BaggingPanel final : public Panel {
         std::snprintf(count, sizeof(count), "%zu selected of %zu", selected.size(), rows.size());
         muted(count);
 
-        ImGui::BeginChild("topics", {0, std::max(ui(120), ImGui::GetContentRegionAvail().y)},
-                          ImGuiChildFlags_Borders);
+        ImGui::BeginChild("topics", {0, std::max(ui(120), ImGui::GetContentRegionAvail().y)}, ImGuiChildFlags_Borders);
         ImGuiListClipper clipper;
         clipper.Begin(int(shown.size()));
         while (clipper.Step())
@@ -302,8 +302,7 @@ void registerBaggingPanel(Registry &r) {
     r.panels.emplace("bagging",
                      ViewFactory<Panel>{Kind::Bagging,
                                         [](const YAML::Node &n) {
-                                            keys(n, {"name", "timestamp", "all", "exclude", "target"},
-                                                 "bagging panel");
+                                            keys(n, {"name", "timestamp", "all", "exclude", "target"}, "bagging panel");
                                             const auto name = n["name"].as<std::string>("bag");
                                             if (!name.empty() && !validBagName(name))
                                                 throw std::invalid_argument("bag name: letters, digits, . _ - only");

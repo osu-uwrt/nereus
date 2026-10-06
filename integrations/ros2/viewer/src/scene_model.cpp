@@ -189,7 +189,7 @@ r::Scene SceneModel::build(const VisualState &state) const {
         scene.water.reset();
     }
     const auto &equipment = pack_->equipmentInstances(); // the last static instances
-    if (!state.showCourse) // task visuals follow the pool instances in the static scene
+    if (!state.showCourse)                               // task visuals follow the pool instances in the static scene
         for (std::size_t i = pack_->poolInstanceCount();
              i < (equipment.empty() ? pack_->staticScene().instances.size() : equipment.front()); ++i)
             scene.instances[i].visible = false;

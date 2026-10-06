@@ -53,8 +53,8 @@ class Window {
     ImFont *normal = nullptr, *small = nullptr, *title = nullptr, *number = nullptr;
     ImFont *strong = nullptr;      // the body size in bold: section titles, table headers
     ImFont *smallStrong = nullptr; // the small size in bold: chart labels
-    ImFont *menu = nullptr; // the title bar's menus, at the desktop's scale like other apps' title bars
-    ImFont *titleSmall = nullptr; // the title bar's search box (smaller than its menus, as VS Code's)
+    ImFont *menu = nullptr;        // the title bar's menus, at the desktop's scale like other apps' title bars
+    ImFont *titleSmall = nullptr;  // the title bar's search box (smaller than its menus, as VS Code's)
     // Loads the fonts at the interface scale (`ui`) and the title bar's at `titleBar`; between frames only. The
     // theme's own font files (in `fontDirectory`) or family (fontconfig name, e.g. a Qt theme's) at its point size
     // replace the viewer's DejaVu Sans.
@@ -67,9 +67,9 @@ class Window {
     void moveResize(long direction);
     void render(int width, int height); // ImGui's draw data over a cleared framebuffer
     bool backendReady_ = false;
-    bool detached_ = false;    // another thread is drawing (contentScale answers from the last query)
-    mutable float scale_ = 1;  // the last content scale queried
-    unsigned kept_ = 0;        // the frame kept for detached frames (a texture, until reattach)
+    bool detached_ = false;   // another thread is drawing (contentScale answers from the last query)
+    mutable float scale_ = 1; // the last content scale queried
+    unsigned kept_ = 0;       // the frame kept for detached frames (a texture, until reattach)
     GLFWwindow *window_ = nullptr;
     bool custom_ = false;
 };

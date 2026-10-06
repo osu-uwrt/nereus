@@ -88,10 +88,11 @@ std::string resolveScenarioPack(const fs::path &folder) {
     close(fd);
     const fs::path out(path.data());
     const char *existing = std::getenv("PYTHONPATH");
-    const std::string command = "cd " + quoted(root.string()) + " && PYTHONPATH=" +
-                                quoted((root / "python/src").string() + (existing ? std::string(":") + existing : "")) +
-                                " " + quoted(python) + " -m nereus.packs resolve " + quoted(folder.string()) + " -o " +
-                                quoted(out.string()) + " 2>&1";
+    const std::string command =
+        "cd " + quoted(root.string()) +
+        " && PYTHONPATH=" + quoted((root / "python/src").string() + (existing ? std::string(":") + existing : "")) +
+        " " + quoted(python) + " -m nereus.packs resolve " + quoted(folder.string()) + " -o " + quoted(out.string()) +
+        " 2>&1";
     std::string output;
     if (FILE *pipe = popen(command.c_str(), "r")) {
         std::array<char, 512> buffer{};

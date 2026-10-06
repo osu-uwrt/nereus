@@ -107,8 +107,7 @@ int main(int argc, char **argv) {
             options.workspace = value();
             if (options.workspace != "operate" && options.workspace != "map")
                 throw std::runtime_error("--workspace takes operate or map");
-        }
-        else if (arg == "--theme")
+        } else if (arg == "--theme")
             options.theme = value();
         else if (arg == "--ui-scale")
             options.uiScale = value();

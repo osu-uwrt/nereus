@@ -52,7 +52,9 @@ def _axis(q):
 def _same(params, key, name):
     values = {json.dumps(p["parameters"][key]) for p in params}
     if len(values) != 1:
-        raise ValueError(f"thrusters differ in {key}; the MPC model has one {name} for all thrusters")
+        raise ValueError(
+            f"thrusters differ in {key}; the MPC model has one {name} for all thrusters"
+        )
     return params[0]["parameters"][key]
 
 
@@ -73,8 +75,11 @@ def vehicle(resolved, descriptions):
         frame = tf[f"thruster_{entry['name']}"]
         dx, dy, dz = _axis(frame["orientation_wxyz"])
         # The MPC only uses rpy -> direction (rotated x), so roll is free.
-        pose = _in_origin(tf, f"thruster_{entry['name']}") + [0.0, -math.asin(max(-1.0, min(1.0, dz))),
-                                                               math.atan2(dy, dx)]
+        pose = _in_origin(tf, f"thruster_{entry['name']}") + [
+            0.0,
+            -math.asin(max(-1.0, min(1.0, dz))),
+            math.atan2(dy, dx),
+        ]
         thrusters.append({**entry, "pose": pose})
     out["thrusters"] = thrusters
     return out
@@ -86,18 +91,31 @@ def hydrodynamics(resolved):
     thrusters = robot["thrusters"]
     kinds = {t["type"] for t in thrusters}
     if kinds != {"lagged_force"}:
-        raise ValueError(f"thruster type {sorted(kinds)}: only lagged_force maps onto the MPC thruster model")
+        raise ValueError(
+            f"thruster type {sorted(kinds)}: only lagged_force maps onto the MPC thruster model"
+        )
     order = resolved["bridge"]["thrusters"]["order"]
     by_id = {t["id"]: t for t in thrusters}
     scales = resolved["bridge"]["thrusters"].get("input_scales", [1] * len(order))
     p = thrusters[0]["parameters"]
-    for key in ("delay_s", "rise_time_s", "fall_time_s", "slew_rate_n_s", "forward_limit_n", "reverse_limit_n",
-                "deadband_n", "propeller_radius_m"):
+    for key in (
+        "delay_s",
+        "rise_time_s",
+        "fall_time_s",
+        "slew_rate_n_s",
+        "forward_limit_n",
+        "reverse_limit_n",
+        "deadband_n",
+        "propeller_radius_m",
+    ):
         _same(thrusters, key, key)
     # Forward/reverse scales may differ per thruster (identified per thruster); riptide_mpc reads them as
     # thruster_forward_scales / thruster_reverse_scales (bridge order), else the shared values.
     per_thruster = {}
-    for key, name in (("forward_scale", "thruster_forward_scales"), ("reverse_scale", "thruster_reverse_scales")):
+    for key, name in (
+        ("forward_scale", "thruster_forward_scales"),
+        ("reverse_scale", "thruster_reverse_scales"),
+    ):
         values = [by_id[thruster]["parameters"][key] for thruster in order]
         if len(set(values)) > 1:
             per_thruster[name] = values
@@ -117,7 +135,9 @@ def hydrodynamics(resolved):
         "buoyancy_radii": body["buoyancy_radii_m"],
         "water_level": pool.get("water_level_m", 0.0),
         "current_velocity": pool.get("current_m_s", [0.0, 0.0, 0.0]),
-        "current_oscillation_amplitude": pool.get("current_oscillation_amplitude_m_s", [0.0, 0.0, 0.0]),
+        "current_oscillation_amplitude": pool.get(
+            "current_oscillation_amplitude_m_s", [0.0, 0.0, 0.0]
+        ),
         "current_oscillation_frequency": pool.get("current_oscillation_frequency_hz", 0.0),
         "thruster_dynamics": {
             "delay": p["delay_s"],
@@ -132,8 +152,9 @@ def hydrodynamics(resolved):
             "reverse_max_force": p["reverse_limit_n"],
             "propeller_radius": p["propeller_radius_m"],
         },
-        "thruster_efficiencies": [by_id[name]["parameters"]["efficiency"] * scale
-                                  for name, scale in zip(order, scales)],
+        "thruster_efficiencies": [
+            by_id[name]["parameters"]["efficiency"] * scale for name, scale in zip(order, scales)
+        ],
         **per_thruster,
     }
 

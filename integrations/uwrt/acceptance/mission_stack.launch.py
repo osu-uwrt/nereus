@@ -10,7 +10,12 @@ that launch file's own default):
 
 from ament_index_python.packages import get_package_share_directory as share
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import (
+    DeclareLaunchArgument,
+    GroupAction,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+)
 from launch.launch_description_sources import AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration as LC
 from launch_ros.actions import PushRosNamespace, SetParameter
@@ -40,14 +45,18 @@ def _stack(context):
                 SetParameter(name="use_sim_time", value=True),
                 SetParameter(name="write_ff_autotune", value=False),
                 IncludeLaunchDescription(
-                    AnyLaunchDescriptionSource(share("riptide_bringup2") + "/launch/bringup.launch.py"),
+                    AnyLaunchDescriptionSource(
+                        share("riptide_bringup2") + "/launch/bringup.launch.py"
+                    ),
                     launch_arguments=arguments.items(),
                 ),
                 GroupAction(
                     [
                         PushRosNamespace("talos"),
                         IncludeLaunchDescription(
-                            AnyLaunchDescriptionSource(share("riptide_hardware2") + "/launch/apriltag.launch.py"),
+                            AnyLaunchDescriptionSource(
+                                share("riptide_hardware2") + "/launch/apriltag.launch.py"
+                            ),
                             launch_arguments={"robot": "talos"}.items(),
                         ),
                     ]

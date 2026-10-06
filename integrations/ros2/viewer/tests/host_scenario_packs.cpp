@@ -27,7 +27,8 @@ TEST(ScenarioPacks, Labels) {
 
 TEST(ScenarioPacks, ResolvesAPack) {
     const auto packs = scenarioPacks();
-    const auto rpac = std::find_if(packs.begin(), packs.end(), [](const auto &p) { return p.poolId == "rpac_divewell"; });
+    const auto rpac =
+        std::find_if(packs.begin(), packs.end(), [](const auto &p) { return p.poolId == "rpac_divewell"; });
     ASSERT_NE(rpac, packs.end());
     std::string resolved;
     try {

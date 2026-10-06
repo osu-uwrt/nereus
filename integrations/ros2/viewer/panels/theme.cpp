@@ -210,9 +210,9 @@ struct Entry {
     int order = 0;
 };
 std::vector<Entry> &entries() {
-    static std::vector<Entry> list{
-        {{"fallback", "Fallback", "Dark teal (built in: no theme files were found)"},
-         [] { return derived(hex(0x091116), hex(0xdeebf2), hex(0x7891a3), hex(0x52dbd1), 8); }}};
+    static std::vector<Entry> list{{{"fallback", "Fallback", "Dark teal (built in: no theme files were found)"}, [] {
+                                        return derived(hex(0x091116), hex(0xdeebf2), hex(0x7891a3), hex(0x52dbd1), 8);
+                                    }}};
     return list;
 }
 std::vector<Theme> &themeList() {
@@ -225,7 +225,9 @@ namespace {
 // A colour as "#rrggbb" or "#rrggbbaa".
 ImVec4 colour(const YAML::Node &node, const std::string &where) {
     const auto text = node.as<std::string>("");
-    const auto bad = [&] { return std::runtime_error(where + ": \"" + text + "\" is not a #rrggbb or #rrggbbaa colour"); };
+    const auto bad = [&] {
+        return std::runtime_error(where + ": \"" + text + "\" is not a #rrggbb or #rrggbbaa colour");
+    };
     const auto digit = [&](char c) -> int {
         if (c >= '0' && c <= '9')
             return c - '0';
@@ -253,35 +255,65 @@ using SpecColour = ImVec4 Spec::*;
 using PaletteColour = ImVec4 Palette::*;
 const std::vector<std::pair<const char *, SpecColour>> &surfaceKeys() {
     static const std::vector<std::pair<const char *, SpecColour>> keys{
-        {"window", &Spec::window}, {"child", &Spec::child}, {"popup", &Spec::popup}, {"frame", &Spec::frame},
-        {"frame_hovered", &Spec::frameHovered}, {"frame_active", &Spec::frameActive}, {"button", &Spec::button},
-        {"button_hovered", &Spec::buttonHovered}, {"button_pressed", &Spec::buttonPressed}, {"border", &Spec::border},
-        {"border_shadow", &Spec::borderShadow}, {"header", &Spec::header}, {"header_hovered", &Spec::headerHovered},
-        {"header_pressed", &Spec::headerPressed}, {"title", &Spec::title}, {"title_active", &Spec::titleActive},
-        {"tab", &Spec::tab}, {"tab_hovered", &Spec::tabHovered}, {"tab_selected", &Spec::tabSelected},
-        {"tab_dimmed", &Spec::tabDimmed}, {"tab_dimmed_selected", &Spec::tabDimmedSelected},
-        {"tab_overline", &Spec::tabOverline}, {"scroll_grab", &Spec::scrollGrab},
+        {"window", &Spec::window},
+        {"child", &Spec::child},
+        {"popup", &Spec::popup},
+        {"frame", &Spec::frame},
+        {"frame_hovered", &Spec::frameHovered},
+        {"frame_active", &Spec::frameActive},
+        {"button", &Spec::button},
+        {"button_hovered", &Spec::buttonHovered},
+        {"button_pressed", &Spec::buttonPressed},
+        {"border", &Spec::border},
+        {"border_shadow", &Spec::borderShadow},
+        {"header", &Spec::header},
+        {"header_hovered", &Spec::headerHovered},
+        {"header_pressed", &Spec::headerPressed},
+        {"title", &Spec::title},
+        {"title_active", &Spec::titleActive},
+        {"tab", &Spec::tab},
+        {"tab_hovered", &Spec::tabHovered},
+        {"tab_selected", &Spec::tabSelected},
+        {"tab_dimmed", &Spec::tabDimmed},
+        {"tab_dimmed_selected", &Spec::tabDimmedSelected},
+        {"tab_overline", &Spec::tabOverline},
+        {"scroll_grab", &Spec::scrollGrab},
         {"table_row_alt", &Spec::tableRowAlt}};
     return keys;
 }
 const std::vector<std::pair<const char *, PaletteColour>> &paletteKeys() {
-    static const std::vector<std::pair<const char *, PaletteColour>> keys{
-        {"text", &Palette::text}, {"muted", &Palette::muted}, {"accent", &Palette::accent},
-        {"active", &Palette::active}, {"active_hovered", &Palette::activeHovered},
-        {"active_pressed", &Palette::activePressed}, {"active_text", &Palette::activeText},
-        {"danger", &Palette::danger}, {"danger_hovered", &Palette::dangerHovered},
-        {"danger_pressed", &Palette::dangerPressed}, {"danger_text", &Palette::dangerText}, {"warn", &Palette::warn},
-        {"error", &Palette::error}, {"robot_enabled", &Palette::robotEnabled}, {"robot_killed", &Palette::robotKilled},
-        {"bar", &Palette::bar}, {"toolbar", &Palette::toolbar}, {"change", &Palette::change},
-        {"change_text", &Palette::changeText}, {"enable", &Palette::enable}, {"enable_hovered", &Palette::enableHovered},
-        {"enable_pressed", &Palette::enablePressed}, {"enable_text", &Palette::enableText}};
+    static const std::vector<std::pair<const char *, PaletteColour>> keys{{"text", &Palette::text},
+                                                                          {"muted", &Palette::muted},
+                                                                          {"accent", &Palette::accent},
+                                                                          {"active", &Palette::active},
+                                                                          {"active_hovered", &Palette::activeHovered},
+                                                                          {"active_pressed", &Palette::activePressed},
+                                                                          {"active_text", &Palette::activeText},
+                                                                          {"danger", &Palette::danger},
+                                                                          {"danger_hovered", &Palette::dangerHovered},
+                                                                          {"danger_pressed", &Palette::dangerPressed},
+                                                                          {"danger_text", &Palette::dangerText},
+                                                                          {"warn", &Palette::warn},
+                                                                          {"error", &Palette::error},
+                                                                          {"robot_enabled", &Palette::robotEnabled},
+                                                                          {"robot_killed", &Palette::robotKilled},
+                                                                          {"bar", &Palette::bar},
+                                                                          {"toolbar", &Palette::toolbar},
+                                                                          {"change", &Palette::change},
+                                                                          {"change_text", &Palette::changeText},
+                                                                          {"enable", &Palette::enable},
+                                                                          {"enable_hovered", &Palette::enableHovered},
+                                                                          {"enable_pressed", &Palette::enablePressed},
+                                                                          {"enable_text", &Palette::enableText}};
     return keys;
 }
 const std::vector<std::pair<const char *, SpecColour>> &boardKeys() {
-    static const std::vector<std::pair<const char *, SpecColour>> keys{
-        {"button", &Spec::boardButton}, {"button_hovered", &Spec::boardButtonHovered},
-        {"button_pressed", &Spec::boardButtonPressed}, {"frame", &Spec::boardFrame}, {"popup", &Spec::boardPopup},
-        {"border", &Spec::boardBorder}};
+    static const std::vector<std::pair<const char *, SpecColour>> keys{{"button", &Spec::boardButton},
+                                                                       {"button_hovered", &Spec::boardButtonHovered},
+                                                                       {"button_pressed", &Spec::boardButtonPressed},
+                                                                       {"frame", &Spec::boardFrame},
+                                                                       {"popup", &Spec::boardPopup},
+                                                                       {"border", &Spec::boardBorder}};
     return keys;
 }
 template <typename Target, typename Keys>
@@ -375,10 +407,10 @@ Entry parseTheme(const YAML::Node &doc, const std::string &file) {
         t.boardBorder = t.border;
         for (const auto &item : board) {
             const auto key = item.first.as<std::string>();
-            const auto extra = std::find_if(boardKeys().begin(), boardKeys().end(),
-                                            [&](const auto &k) { return key == k.first; });
-            const auto shade = std::find_if(paletteKeys().begin(), paletteKeys().end(),
-                                            [&](const auto &k) { return key == k.first; });
+            const auto extra =
+                std::find_if(boardKeys().begin(), boardKeys().end(), [&](const auto &k) { return key == k.first; });
+            const auto shade =
+                std::find_if(paletteKeys().begin(), paletteKeys().end(), [&](const auto &k) { return key == k.first; });
             if (extra != boardKeys().end())
                 t.*(extra->second) = colour(item.second, file + " board." + key);
             else if (shade != paletteKeys().end())
@@ -521,9 +553,8 @@ Spec legible(Spec t) {
         *status = readable(*status, grounds, true, 5);
     // tabs stand out from the tab bar behind them (an inactive tab used to vanish into it)
     for (auto *tab : {&t.tab, &t.tabDimmed})
-        *tab = pushUntil(*tab, ImVec4(p.text.x, p.text.y, p.text.z, tab->w), 1.2f, [&](ImVec4 c) {
-            return std::min(contrast(c, t.title), contrast(c, t.titleActive));
-        });
+        *tab = pushUntil(*tab, ImVec4(p.text.x, p.text.y, p.text.z, tab->w), 1.2f,
+                         [&](ImVec4 c) { return std::min(contrast(c, t.title), contrast(c, t.titleActive)); });
     p.active = fillFor(p.active, p.activeText, 5);
     p.activeHovered = fillFor(p.activeHovered, p.activeText, 5);
     p.activePressed = fillFor(p.activePressed, p.activeText, 5);
@@ -720,6 +751,4 @@ void endSurface() {
     surfaceStack.pop_back();
 }
 
-
 } // namespace nereus::ros_viewer
-

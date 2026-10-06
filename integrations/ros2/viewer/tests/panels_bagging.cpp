@@ -74,7 +74,8 @@ int main(int argc, char **argv) {
     // own home and state directory.
     write(root / "ssh",
           "#!/bin/sh\nwhile [ $# -gt 0 ]; do case \"$1\" in -o) shift 2 ;; -T) shift ;; *) break ;; esac; done\n"
-          "echo \"$1\" >> " + (root / "ssh_hosts").string() + "\nshift\nexport HOME=" + robotHome.string() +
+          "echo \"$1\" >> " +
+              (root / "ssh_hosts").string() + "\nshift\nexport HOME=" + robotHome.string() +
               " XDG_STATE_HOME=" + (root / "robot_state").string() + "\nexec sh -c \"$*\"\n",
           true);
     write(root / "ssh_down", "#!/bin/sh\necho 'ssh: connect to host down port 22: No route to host' >&2\nexit 255\n",
@@ -140,8 +141,8 @@ int main(int argc, char **argv) {
            std::string::npos); // within the start check
     write(bin / "exit_after", "40");
     assert(run(host, bagStartScript(host, {"short2", "", true, {}, ""})).get("state") == "recording");
-    assert(waitFor([&] { return run(host, bagStatusScript(host)).get("last_bag") == (hostBags / "short2").string(); },
-                   8));
+    assert(
+        waitFor([&] { return run(host, bagStatusScript(host)).get("last_bag") == (hostBags / "short2").string(); }, 8));
     fs::remove(bin / "exit_after");
     r = run(host, bagStatusScript(host));
     assert(r.get("state") == "idle" && r.get("last_state") == "died" &&
@@ -217,8 +218,7 @@ header:
         return BagTargetState{};
     };
     assert(bagging->state().presets.size() == 1 &&
-           bagging->state().presets[0].topics ==
-               (std::vector<std::string>{"/" + ns + "/odometry/filtered", "/tf"}));
+           bagging->state().presets[0].topics == (std::vector<std::string>{"/" + ns + "/odometry/filtered", "/tf"}));
     assert(waitFor([&] { return target("host").known && target("robot").known && target("down").known; }, 10));
     assert(target("host").reachable && target("robot").reachable && !target("down").reachable);
     assert(target("down").message.find("Can't reach ros@down") != std::string::npos &&
@@ -289,8 +289,7 @@ header:
     assert(waitFor([&] { return !target("robot").recording && !target("robot").pending; }, 10));
     const auto stopped = target("robot");
     assert(!stopped.failed && stopped.message.find("Saved " + (robotHome / "bags" / "nav").string()) == 0);
-    assert(read(robotHome / "bags" / "nav" / "args") ==
-           "/" + ns + "/odometry/filtered\n/tf\n");
+    assert(read(robotHome / "bags" / "nav" / "args") == "/" + ns + "/odometry/filtered\n/tf\n");
     for (int frame = 0; frame < 2; ++frame)
         draw();
     ImGui::DestroyContext();

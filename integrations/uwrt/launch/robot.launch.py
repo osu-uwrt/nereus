@@ -20,7 +20,12 @@ import tempfile
 from pathlib import Path
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction, SetEnvironmentVariable
+from launch.actions import (
+    DeclareLaunchArgument,
+    ExecuteProcess,
+    OpaqueFunction,
+    SetEnvironmentVariable,
+)
 from launch.substitutions import LaunchConfiguration as LC
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -63,34 +68,78 @@ def _processes(context):
     resolved = str(Path(tempfile.gettempdir()) / "nereus_robot_resolved.json")
     subprocess.run(
         [PYTHON, "-m", "nereus.packs", "resolve", scenario, "-o", resolved],
-        check=True, cwd=str(ROOT),
-        env={**os.environ, "PYTHONPATH": os.pathsep.join([str(ROOT / "python/src"), os.environ.get("PYTHONPATH", "")])})
-    command = [LC("viewer_binary").perform(context), "--scenario", resolved, "--pose-source", "estimate",
-               "--use-sim-time", "false"]
+        check=True,
+        cwd=str(ROOT),
+        env={
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join(
+                [str(ROOT / "python/src"), os.environ.get("PYTHONPATH", "")]
+            ),
+        },
+    )
+    command = [
+        LC("viewer_binary").perform(context),
+        "--scenario",
+        resolved,
+        "--pose-source",
+        "estimate",
+        "--use-sim-time",
+        "false",
+    ]
     if config:
         command += ["--config", os.path.abspath(config)]
     if LC("robot_only").perform(context).lower() in ("true", "1", "yes"):
         command.append("--robot-only")
-    actions.append(ExecuteProcess(cmd=command, cwd=str(ROOT), output="screen", name="pool_viewer",
-                                  additional_env=_gpu_env(context)))
+    actions.append(
+        ExecuteProcess(
+            cmd=command,
+            cwd=str(ROOT),
+            output="screen",
+            name="pool_viewer",
+            additional_env=_gpu_env(context),
+        )
+    )
     return actions
 
 
 def generate_launch_description():
-    return LaunchDescription([
-        DeclareLaunchArgument("pool", default_value="",
-                              description=f"pool to run in: {' | '.join(POOLS)} (empty: robosub)"),
-        DeclareLaunchArgument("scenario", default_value="",
-                              description="scenario pack folder (robot model, cameras, frames); overrides pool"),
-        DeclareLaunchArgument("robot_only", default_value="false",
-                              description="hide the simulated pool and course; draw only the robot"),
-        DeclareLaunchArgument("config", default_value="",
-                              description="viewer host yaml (default: content/viewer/talos_uwrt_host.yaml)"),
-        DeclareLaunchArgument("viewer_binary", default_value=str(ROOT / "build/ros-viewer/nereus-viewer"),
-                              description="nereus-viewer executable"),
-        DeclareLaunchArgument("nvidia", default_value="auto",
-                              description="viewer on the NVIDIA GPU via PRIME offload: auto | true | false"),
-        DeclareLaunchArgument("rmw", default_value="",
-                              description="RMW for the viewer (e.g. rmw_zenoh_cpp); empty keeps the shell's"),
-        OpaqueFunction(function=_processes),
-    ])
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "pool",
+                default_value="",
+                description=f"pool to run in: {' | '.join(POOLS)} (empty: robosub)",
+            ),
+            DeclareLaunchArgument(
+                "scenario",
+                default_value="",
+                description="scenario pack folder (robot model, cameras, frames); overrides pool",
+            ),
+            DeclareLaunchArgument(
+                "robot_only",
+                default_value="false",
+                description="hide the simulated pool and course; draw only the robot",
+            ),
+            DeclareLaunchArgument(
+                "config",
+                default_value="",
+                description="viewer host yaml (default: content/viewer/talos_uwrt_host.yaml)",
+            ),
+            DeclareLaunchArgument(
+                "viewer_binary",
+                default_value=str(ROOT / "build/ros-viewer/nereus-viewer"),
+                description="nereus-viewer executable",
+            ),
+            DeclareLaunchArgument(
+                "nvidia",
+                default_value="auto",
+                description="viewer on the NVIDIA GPU via PRIME offload: auto | true | false",
+            ),
+            DeclareLaunchArgument(
+                "rmw",
+                default_value="",
+                description="RMW for the viewer (e.g. rmw_zenoh_cpp); empty keeps the shell's",
+            ),
+            OpaqueFunction(function=_processes),
+        ]
+    )

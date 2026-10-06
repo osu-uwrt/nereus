@@ -117,7 +117,9 @@ class Simulator:
         while True:
             command, result = self._starts.get()
             try:
-                result.set_result(subprocess.Popen(command, cwd=str(ROOT), preexec_fn=_die_with_parent))
+                result.set_result(
+                    subprocess.Popen(command, cwd=str(ROOT), preexec_fn=_die_with_parent)
+                )
             except Exception as error:  # noqa: BLE001  (handed to the caller)
                 result.set_exception(error)
 
@@ -144,10 +146,14 @@ class Simulator:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--resolved", required=True, help="the first scenario, already resolved")
     parser.add_argument("--scenario", required=True, help="its scenario pack folder")
-    parser.add_argument("--output", required=True, help="run records of the first run (later runs: -2, -3, ...)")
+    parser.add_argument(
+        "--output", required=True, help="run records of the first run (later runs: -2, -3, ...)"
+    )
     parser.add_argument("--namespace", default="/talos")
     parser.add_argument("command", nargs=argparse.REMAINDER, help="-- nereus-sim [its options]")
     args = parser.parse_args(argv)
@@ -196,7 +202,11 @@ def main(argv: list[str] | None = None) -> int:
         simulator.stop()
         current["scenario"], document = str(folder), resolved
         simulator.start(f"{output}.resolved.json")
-        note = f"water differs from the last pool ({', '.join(changes)}): a generated MPC model is stale" if changes else ""
+        note = (
+            f"water differs from the last pool ({', '.join(changes)}): a generated MPC model is stale"
+            if changes
+            else ""
+        )
         publish("running", note)
 
     # Switches run one at a time, off the ROS callback thread (resolving takes seconds).
@@ -212,7 +222,9 @@ def main(argv: list[str] | None = None) -> int:
 
     def requested(message: String) -> None:
         if lock.locked() or not requests.empty():
-            node.get_logger().warning(f"ignoring load_scenario {message.data}: a switch is in progress")
+            node.get_logger().warning(
+                f"ignoring load_scenario {message.data}: a switch is in progress"
+            )
             return
         publish("switching", message.data)
         requests.put(message.data)

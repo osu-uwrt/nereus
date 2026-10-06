@@ -83,8 +83,9 @@ ParsedMove parseMove(const std::string &text, const PoseTarget &from) {
         const std::string word = words[i++];
         float value = 0;
         if (!moveWord(word)) {
-            parsed.error = "\"" + word + "\" is not a move: forward / back / left / right / up / down, turn, x / y / z, "
-                                         "roll / pitch / yaw, go, level";
+            parsed.error = "\"" + word +
+                           "\" is not a move: forward / back / left / right / up / down, turn, x / y / z, "
+                           "roll / pitch / yaw, go, level";
             return parsed;
         }
         if (along(word)) {
@@ -97,7 +98,9 @@ ParsedMove parseMove(const std::string &text, const PoseTarget &from) {
             const float left = word == "left" ? value : word == "right" ? -value : 0;
             const float up = word == "up" ? value : word == "down" ? -value : 0;
             target = stepped(target, forward, left, up, 0);
-            said.push_back((backward ? std::string("back") : word == "fwd" || word == "ahead" ? "forward" : word) +
+            said.push_back((backward                           ? std::string("back")
+                            : word == "fwd" || word == "ahead" ? "forward"
+                                                               : word) +
                            format(" %g m", value));
         } else if (word == "turn") {
             float sign = 1;
@@ -113,7 +116,9 @@ ParsedMove parseMove(const std::string &text, const PoseTarget &from) {
             const bool angle = word == "roll" || word == "pitch" || word == "yaw" || word == "heading";
             if (!next(value)) {
                 parsed.error = word + (angle ? " needs degrees, e.g. " : " needs metres, e.g. ") + word +
-                               (angle ? " 90" : word == "z" ? " -1.5" : " 2");
+                               (angle         ? " 90"
+                                : word == "z" ? " -1.5"
+                                              : " 2");
                 return parsed;
             }
             if (word == "x" || word == "y" || word == "z")

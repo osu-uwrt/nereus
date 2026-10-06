@@ -10,12 +10,15 @@ Run from anywhere: python3 make_meshes.py. Writes next to this file:
 - wall_vent.obj: a slatted square vent on a wall. Origin at its centre on the wall face; it faces +y.
 - floor_vent.obj: a flush slotted square vent. Origin at its centre on the floor; it faces +z.
 """
+
 import math
 from pathlib import Path
 
 HERE = Path(__file__).parent
 DECK = 0.3048  # deck above the water
-WELL_DEPTH = 2.4  # tower stair well, back from the wall face (pool.yaml's recess depth_m must match)
+WELL_DEPTH = (
+    2.4  # tower stair well, back from the wall face (pool.yaml's recess depth_m must match)
+)
 
 COLORS = {
     "steel": (0.75, 0.77, 0.78),
@@ -51,27 +54,55 @@ class Mesh:
             n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
             length = math.sqrt(sum(x * x for x in n))
             normal = [[x / length for x in n]] * len(points)
-        self.faces.setdefault(material, []).append([self.vertex(p, n) for p, n in zip(points, normal)])
+        self.faces.setdefault(material, []).append(
+            [self.vertex(p, n) for p, n in zip(points, normal)]
+        )
 
     def box(self, material: str, lo, hi) -> None:
         (x0, y0, z0), (x1, y1, z1) = lo, hi
-        c = [(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0), (x0, y0, z1), (x1, y0, z1), (x1, y1, z1),
-             (x0, y1, z1)]
-        for quad in ((0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)):
+        c = [
+            (x0, y0, z0),
+            (x1, y0, z0),
+            (x1, y1, z0),
+            (x0, y1, z0),
+            (x0, y0, z1),
+            (x1, y0, z1),
+            (x1, y1, z1),
+            (x0, y1, z1),
+        ]
+        for quad in (
+            (0, 3, 2, 1),
+            (4, 5, 6, 7),
+            (0, 1, 5, 4),
+            (1, 2, 6, 5),
+            (2, 3, 7, 6),
+            (3, 0, 4, 7),
+        ):
             self.polygon(material, [c[i] for i in quad])
 
     def frustum(self, center, base: float, top: float, height: float) -> None:
         """Square base and smaller square top; the sides slope in equally."""
         cx, cy, cz = center
         b, t = base / 2, top / 2
-        lo = [(cx - b, cy - b, cz), (cx + b, cy - b, cz), (cx + b, cy + b, cz), (cx - b, cy + b, cz)]
-        hi = [(cx - t, cy - t, cz + height), (cx + t, cy - t, cz + height), (cx + t, cy + t, cz + height),
-              (cx - t, cy + t, cz + height)]
+        lo = [
+            (cx - b, cy - b, cz),
+            (cx + b, cy - b, cz),
+            (cx + b, cy + b, cz),
+            (cx - b, cy + b, cz),
+        ]
+        hi = [
+            (cx - t, cy - t, cz + height),
+            (cx + t, cy - t, cz + height),
+            (cx + t, cy + t, cz + height),
+            (cx - t, cy + t, cz + height),
+        ]
         self.polygon("grate_top", hi)
         for k in range(4):
             self.polygon("grate_side", [lo[k], lo[(k + 1) % 4], hi[(k + 1) % 4], hi[k]])
 
-    def tube(self, material: str, path, radius: float = 0.022, bend: float = 0.12, sides: int = 10) -> None:
+    def tube(
+        self, material: str, path, radius: float = 0.022, bend: float = 0.12, sides: int = 10
+    ) -> None:
         """A round rail along a polyline, its corners rounded with `bend` radius."""
         points = [path[0]]
         for a, b, c in zip(path, path[1:], path[2:]):
@@ -82,7 +113,12 @@ class Mesh:
             p0, p1 = _add(b, _scale(u, cut)), _add(b, _scale(v, cut))
             for i in range(9):  # quadratic Bezier through the corner
                 s = i / 8
-                points.append(tuple((1 - s) ** 2 * p0[k] + 2 * (1 - s) * s * b[k] + s * s * p1[k] for k in range(3)))
+                points.append(
+                    tuple(
+                        (1 - s) ** 2 * p0[k] + 2 * (1 - s) * s * b[k] + s * s * p1[k]
+                        for k in range(3)
+                    )
+                )
         points.append(path[-1])
         rings = []
         normal = None
@@ -161,7 +197,9 @@ def tower_stairs() -> Mesh:
     m = Mesh()
     half, back, floor, run, risers = 1.05, WELL_DEPTH, -1.22, 0.3, 8
     rise = (DECK - floor) / risers
-    landing = run * (risers - 1)  # the landing's front edge, back from the wall; the treads fill the rest to the
+    landing = run * (
+        risers - 1
+    )  # the landing's front edge, back from the wall; the treads fill the rest to the
     # wall face, where the last riser drops to the well floor
     m.box("tread", (-half, -back, floor), (half, -landing, DECK))
     for k in range(1, risers):
@@ -173,9 +211,16 @@ def tower_stairs() -> Mesh:
         return DECK - rise / run * (y + landing)
 
     for x in (-0.92, 0.25, 0.92):
-        m.tube("steel", [(x, -back + 0.08, DECK), (x, -back + 0.08, DECK + 0.95),
-                         (x, -landing, nosing_z(-landing) + 0.9), (x, -0.15, nosing_z(-0.15) + 0.9),
-                         (x, -0.15, floor)])
+        m.tube(
+            "steel",
+            [
+                (x, -back + 0.08, DECK),
+                (x, -back + 0.08, DECK + 0.95),
+                (x, -landing, nosing_z(-landing) + 0.9),
+                (x, -0.15, nosing_z(-0.15) + 0.9),
+                (x, -0.15, floor),
+            ],
+        )
         mid = -landing + run * 3
         m.tube("steel", [(x, mid, nosing_z(mid) + 0.9), (x, mid, DECK - rise * 3)])
     return m
@@ -186,11 +231,22 @@ def ladder() -> Mesh:
     the wall, each with a brace to the deck; four dark toe holds in the wall between them."""
     m = Mesh()
     for x in (-0.3, 0.3):
-        m.tube("steel", [(x, -0.55, DECK), (x, -0.55, 0.95), (x, 0.12, 0.95), (x, 0.12, -0.5)], bend=0.15)
+        m.tube(
+            "steel",
+            [(x, -0.55, DECK), (x, -0.55, 0.95), (x, 0.12, 0.95), (x, 0.12, -0.5)],
+            bend=0.15,
+        )
         m.tube("steel", [(x, -0.12, DECK), (x, -0.12, 0.95)])
     for z in (-0.28, -0.55, -0.82, -1.09):
-        m.polygon("hold", [(-0.15, 0.002, z - 0.075), (0.15, 0.002, z - 0.075), (0.15, 0.002, z + 0.075),
-                           (-0.15, 0.002, z + 0.075)][::-1])
+        m.polygon(
+            "hold",
+            [
+                (-0.15, 0.002, z - 0.075),
+                (0.15, 0.002, z - 0.075),
+                (0.15, 0.002, z + 0.075),
+                (-0.15, 0.002, z + 0.075),
+            ][::-1],
+        )
     return m
 
 
@@ -205,7 +261,10 @@ def raised_grates() -> Mesh:
 def wall_vent() -> Mesh:
     """0.28 m square, dark, with three light horizontal slats, 3 mm off the wall."""
     m = Mesh()
-    m.polygon("vent", [(0.14, 0.003, -0.14), (-0.14, 0.003, -0.14), (-0.14, 0.003, 0.14), (0.14, 0.003, 0.14)])
+    m.polygon(
+        "vent",
+        [(0.14, 0.003, -0.14), (-0.14, 0.003, -0.14), (-0.14, 0.003, 0.14), (0.14, 0.003, 0.14)],
+    )
     for z in (-0.07, 0.0, 0.07):
         m.box("slat", (-0.13, 0.0, z - 0.006), (0.13, 0.006, z + 0.006))
     return m
@@ -214,10 +273,20 @@ def wall_vent() -> Mesh:
 def floor_vent() -> Mesh:
     """0.40 m square flush vent: pale like the lines, with three dark slots, 3 mm off the floor."""
     m = Mesh()
-    m.polygon("floor_vent", [(-0.2, -0.2, 0.003), (0.2, -0.2, 0.003), (0.2, 0.2, 0.003), (-0.2, 0.2, 0.003)])
+    m.polygon(
+        "floor_vent",
+        [(-0.2, -0.2, 0.003), (0.2, -0.2, 0.003), (0.2, 0.2, 0.003), (-0.2, 0.2, 0.003)],
+    )
     for y in (-0.1, 0.0, 0.1):
-        m.polygon("floor_slot", [(-0.16, y - 0.02, 0.004), (0.16, y - 0.02, 0.004), (0.16, y + 0.02, 0.004),
-                                 (-0.16, y + 0.02, 0.004)])
+        m.polygon(
+            "floor_slot",
+            [
+                (-0.16, y - 0.02, 0.004),
+                (0.16, y - 0.02, 0.004),
+                (0.16, y + 0.02, 0.004),
+                (-0.16, y + 0.02, 0.004),
+            ],
+        )
     return m
 
 
