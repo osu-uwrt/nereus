@@ -1,3 +1,5 @@
+// Viewer themes: YAML theme loading, derivation of a full ImGui style from a few colours, the WCAG legibility
+// pass, and the shared section / table / surface helpers that draw in the active theme.
 #include "nereus/ros_viewer/theme.hpp"
 #include <imgui_internal.h>
 #include <algorithm>
@@ -37,6 +39,7 @@ struct Spec {
     Palette palette;
 };
 
+// The palette palette() returns (swapped by beginSurface / endSurface) and the applied theme's id.
 Palette current;
 std::string currentId;
 
@@ -44,10 +47,12 @@ ImVec4 alpha(ImVec4 c, float a) {
     return {c.x, c.y, c.z, a};
 }
 
+// Interface scale and the applied theme's spec factory, kept so a scale change can re-apply it.
 float scale = 1;
 std::function<Spec()> currentSpec;
 Spec active; // the applied theme (after the legibility pass): the surfaces' colours
 
+// Builds the ImGui style from a theme spec at the current scale and makes it the live style and palette.
 void apply(const Spec &t) {
     ImGuiStyle s; // from ImGui's defaults each time, so scaling never compounds
     // Sizes are shared by every theme so a layout looks the same in each; only corners and borders change.
@@ -74,6 +79,8 @@ void apply(const Spec &t) {
     s.WindowMenuButtonPosition = ImGuiDir_None; // windows move by their tab; no separate handle
     s.TabCloseButtonMinWidthSelected = 0;       // a tab's close box shows while the tab is hovered
     s.TabCloseButtonMinWidthUnselected = 0;
+
+    // Colours: text and surfaces from the spec, interactive accents from the palette.
     const auto &p = t.palette;
     auto *c = s.Colors;
     c[ImGuiCol_Text] = p.text;
@@ -137,18 +144,23 @@ void apply(const Spec &t) {
     c[ImGuiCol_NavWindowingHighlight] = alpha(p.text, .7f);
     c[ImGuiCol_NavWindowingDimBg] = {.2f, .2f, .2f, .2f};
     c[ImGuiCol_ModalWindowDimBg] = {.1f, .1f, .1f, .45f};
+
     s.ScaleAllSizes(scale);
     ImGui::GetStyle() = s;
     current = p;
     active = t;
 }
 
+// Linear blend from a to b (t = 0..1); the result is always opaque.
 ImVec4 mix(ImVec4 a, ImVec4 b, float t) {
     return {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t, 1};
 }
+
+// Quick luma (Rec. 709 weights, no gamma) used only to tell light themes from dark ones.
 float luminance(ImVec4 c) {
     return .2126f * c.x + .7152f * c.y + .0722f * c.z;
 }
+
 // A whole theme from four colours: the background, body and secondary text, and the accent. Surfaces step from
 // the background toward the text; hovered / pressed states and "on" fills lean toward the accent.
 Spec derived(ImVec4 bg, ImVec4 text, ImVec4 muted, ImVec4 accent, float rounding) {
@@ -179,6 +191,8 @@ Spec derived(ImVec4 bg, ImVec4 text, ImVec4 muted, ImVec4 accent, float rounding
     t.tabDimmedSelected = mix(bg, text, .06f);
     t.scrollGrab = mix(bg, text, .22f);
     t.tableRowAlt = {text.x, text.y, text.z, .035f};
+
+    // Palette: active fills from the accent, fixed status hues tuned separately for light and dark backgrounds.
     auto &p = t.palette;
     p.text = text;
     p.muted = muted;
@@ -200,21 +214,27 @@ Spec derived(ImVec4 bg, ImVec4 text, ImVec4 muted, ImVec4 accent, float rounding
     return t;
 }
 
+// 0xRRGGBB to an opaque colour.
 ImVec4 hex(unsigned rgb) {
     return {float((rgb >> 16) & 255) / 255.f, float((rgb >> 8) & 255) / 255.f, float(rgb & 255) / 255.f, 1};
 }
+
 // Themes are data (content/viewer/themes/*.yaml, read by loadThemes); until they load, one built-in fallback.
 struct Entry {
     Theme theme;
     std::function<Spec()> spec;
     int order = 0;
 };
+
+// The loaded themes in menu order (replaced by loadThemes).
 std::vector<Entry> &entries() {
     static std::vector<Entry> list{{{"fallback", "Fallback", "Dark teal (built in: no theme files were found)"}, [] {
                                         return derived(hex(0x091116), hex(0xdeebf2), hex(0x7891a3), hex(0x52dbd1), 8);
                                     }}};
     return list;
 }
+
+// Cached Theme descriptions for themes(); rebuilt when its size no longer matches entries().
 std::vector<Theme> &themeList() {
     static std::vector<Theme> list;
     return list;
@@ -242,6 +262,8 @@ ImVec4 colour(const YAML::Node &node, const std::string &where) {
     const auto byte = [&](std::size_t i) { return float(digit(text[i]) * 16 + digit(text[i + 1])) / 255.f; };
     return {byte(1), byte(3), byte(5), text.size() == 9 ? byte(7) : 1.f};
 }
+
+// Throws unless `node` is a map whose keys are all in `allowed`.
 void only(const YAML::Node &node, std::initializer_list<const char *> allowed, const std::string &where) {
     if (!node.IsMap())
         throw std::runtime_error(where + " must be a map");
@@ -251,6 +273,8 @@ void only(const YAML::Node &node, std::initializer_list<const char *> allowed, c
             throw std::runtime_error(where + ": unknown key '" + key + "'");
     }
 }
+
+// YAML key -> colour member tables for the theme file's surfaces, palette and board sections.
 using SpecColour = ImVec4 Spec::*;
 using PaletteColour = ImVec4 Palette::*;
 const std::vector<std::pair<const char *, SpecColour>> &surfaceKeys() {
@@ -281,6 +305,7 @@ const std::vector<std::pair<const char *, SpecColour>> &surfaceKeys() {
         {"table_row_alt", &Spec::tableRowAlt}};
     return keys;
 }
+
 const std::vector<std::pair<const char *, PaletteColour>> &paletteKeys() {
     static const std::vector<std::pair<const char *, PaletteColour>> keys{{"text", &Palette::text},
                                                                           {"muted", &Palette::muted},
@@ -307,6 +332,8 @@ const std::vector<std::pair<const char *, PaletteColour>> &paletteKeys() {
                                                                           {"enable_text", &Palette::enableText}};
     return keys;
 }
+
+// Board-only colours; a board section may also override any palette key.
 const std::vector<std::pair<const char *, SpecColour>> &boardKeys() {
     static const std::vector<std::pair<const char *, SpecColour>> keys{{"button", &Spec::boardButton},
                                                                        {"button_hovered", &Spec::boardButtonHovered},
@@ -316,6 +343,8 @@ const std::vector<std::pair<const char *, SpecColour>> &boardKeys() {
                                                                        {"border", &Spec::boardBorder}};
     return keys;
 }
+
+// Reads a map of key: colour into `target`, rejecting keys missing from `keys`.
 template <typename Target, typename Keys>
 void readColours(const YAML::Node &node, const Keys &keys, Target &target, const std::string &where) {
     if (!node.IsMap())
@@ -328,6 +357,7 @@ void readColours(const YAML::Node &node, const Keys &keys, Target &target, const
         target.*(found->second) = colour(item.second, where + "." + key);
     }
 }
+
 // One theme file: its name and fonts, then its colours and sizes (derived from four colours, or given as surfaces
 // and palette, with any explicit values on top), and optionally the board's own colours.
 Entry parseTheme(const YAML::Node &doc, const std::string &file) {
@@ -343,6 +373,7 @@ Entry parseTheme(const YAML::Node &doc, const std::string &file) {
     theme.label = doc["label"].as<std::string>(theme.id);
     theme.description = doc["description"].as<std::string>("");
     entry.order = doc["order"].as<int>(100);
+
     if (const auto fonts = doc["fonts"]) {
         only(fonts, {"family", "points", "regular", "strong", "figures"}, file + " fonts");
         theme.fontFamily = fonts["family"].as<std::string>("");
@@ -351,6 +382,8 @@ Entry parseTheme(const YAML::Node &doc, const std::string &file) {
         theme.fontStrong = fonts["strong"].as<std::string>("");
         theme.fontFigures = fonts["figures"].as<std::string>("");
     }
+
+    // Base colours: derived from four, or (with no derive block) the defaults that surfaces / palette fill in.
     Spec t;
     if (const auto d = doc["derive"]) {
         only(d, {"background", "text", "muted", "accent", "rounding"}, file + " derive");
@@ -359,6 +392,8 @@ Entry parseTheme(const YAML::Node &doc, const std::string &file) {
                     d["rounding"].as<float>(6));
     } else if (!doc["surfaces"] || !doc["palette"])
         throw std::runtime_error(file + ": needs derive, or surfaces and palette");
+
+    // Optional overrides on top: shape, spacing, style flags, then explicit colours.
     if (const auto shape = doc["shape"]) {
         only(shape,
              {"window_rounding", "frame_rounding", "tab_rounding", "window_border", "frame_border", "scrollbar",
@@ -424,6 +459,8 @@ Entry parseTheme(const YAML::Node &doc, const std::string &file) {
 }
 } // namespace
 
+// Parses every *.yaml in the directory (sorted by file name); bad files and duplicate ids become warnings.
+// The current set is only replaced when at least one theme loads.
 std::vector<std::string> loadThemes(const std::filesystem::path &directory) {
     std::vector<std::string> warnings;
     std::vector<Entry> loaded;
@@ -433,6 +470,7 @@ std::vector<std::string> loadThemes(const std::filesystem::path &directory) {
         if (file.path().extension() == ".yaml")
             files.push_back(file.path());
     std::sort(files.begin(), files.end());
+
     for (const auto &file : files)
         try {
             auto entry = parseTheme(YAML::LoadFile(file.string()), file.filename().string());
@@ -445,10 +483,13 @@ std::vector<std::string> loadThemes(const std::filesystem::path &directory) {
         }
     if (error)
         warnings.push_back(directory.string() + ": " + error.message());
+
     if (loaded.empty()) {
         warnings.push_back(directory.string() + ": no themes; using the built-in fallback");
         return warnings;
     }
+
+    // Menu order: the theme's `order`, then id.
     std::stable_sort(loaded.begin(), loaded.end(), [](const Entry &a, const Entry &b) {
         return a.order != b.order ? a.order < b.order : a.theme.id < b.theme.id;
     });
@@ -473,23 +514,30 @@ const std::vector<Theme> &themes() {
 // accent text on every surface it is drawn on, and for the labels of filled "on" controls. A colour that falls short
 // moves toward black or white (keeping its hue) until it passes; KILL's colours are the theme's own.
 namespace {
+// sRGB channel to linear light (the WCAG relative-luminance transfer).
 float channel(float c) {
     return c <= .04045f ? c / 12.92f : std::pow((c + .055f) / 1.055f, 2.4f);
 }
+
 float relativeLuminance(ImVec4 c) {
     return .2126f * channel(c.x) + .7152f * channel(c.y) + .0722f * channel(c.z);
 }
 } // namespace
+
+// WCAG contrast ratio, 1..21, independent of argument order.
 float contrastRatio(ImVec4 a, ImVec4 b) {
     float la = relativeLuminance(a), lb = relativeLuminance(b);
     if (la < lb)
         std::swap(la, lb);
     return (la + .05f) / (lb + .05f);
 }
+
 namespace {
 float contrast(ImVec4 a, ImVec4 b) {
     return contrastRatio(a, b);
 }
+
+// Moves `c` toward `toward` in 2 % steps until worst(c) reaches `target`; gives `toward` itself if none does.
 template <typename Worst> ImVec4 pushUntil(ImVec4 c, ImVec4 toward, float target, Worst worst) {
     if (worst(c) >= target)
         return c;
@@ -500,8 +548,10 @@ template <typename Worst> ImVec4 pushUntil(ImVec4 c, ImVec4 toward, float target
     }
     return toward;
 }
+
 // Text `fg` readable on every surface in `surfaces` (pills included: their fill is the window tinted 18 % by fg).
 ImVec4 readable(ImVec4 fg, const std::vector<ImVec4> &surfaces, bool onPill, float target = 4.5f) {
+    // Push toward white on dark surfaces, black on light ones.
     float mean = 0;
     for (const auto &s : surfaces)
         mean += relativeLuminance(s);
@@ -516,11 +566,14 @@ ImVec4 readable(ImVec4 fg, const std::vector<ImVec4> &surfaces, bool onPill, flo
         return worst;
     });
 }
+
 // A filled control's colour, darkened or lightened (away from its label) until the label reads.
 ImVec4 fillFor(ImVec4 fill, ImVec4 label, float target = 4.5f) {
     const ImVec4 toward = relativeLuminance(label) > .5f ? ImVec4(0, 0, 0, fill.w) : ImVec4(1, 1, 1, fill.w);
     return pushUntil(fill, toward, target, [&](ImVec4 c) { return contrast(c, label); });
 }
+
+// The legibility pass (see above) applied to a theme spec before it is used.
 Spec legible(Spec t) {
     auto &p = t.palette;
     // Input boxes, checkboxes and buttons stand out from the panel they sit on (an unchecked checkbox used to vanish
@@ -539,6 +592,7 @@ Spec legible(Spec t) {
         stepOut(t.frame, {&t.frameHovered, &t.frameActive}, 1.35f);
         stepOut(t.button, {&t.buttonHovered, &t.buttonPressed}, 1.25f);
     }
+
     // the panels' text is held against the panels; the bar too unless the board carries its own palette
     std::vector<ImVec4> surfaces{t.window, t.child, t.popup, t.frame, t.button, t.tabSelected, p.toolbar},
         grounds{t.window, t.child};
@@ -555,9 +609,12 @@ Spec legible(Spec t) {
     for (auto *tab : {&t.tab, &t.tabDimmed})
         *tab = pushUntil(*tab, ImVec4(p.text.x, p.text.y, p.text.z, tab->w), 1.2f,
                          [&](ImVec4 c) { return std::min(contrast(c, t.title), contrast(c, t.titleActive)); });
+
+    // Filled "on" controls: darken / lighten the fill until its label reads.
     p.active = fillFor(p.active, p.activeText, 5);
     p.activeHovered = fillFor(p.activeHovered, p.activeText, 5);
     p.activePressed = fillFor(p.activePressed, p.activeText, 5);
+
     // Enable is green in every theme (go beside KILL's stop red; the labels tell them apart without colour): the
     // theme's own green, or its "robot enabled" green deepened under white text
     if (p.enable.w <= 0) {
@@ -567,11 +624,13 @@ Spec legible(Spec t) {
         p.enablePressed = mix(p.enable, ImVec4(0, 0, 0, 1), .15f);
     }
     p.enable = fillFor(p.enable, p.enableText, 5);
+
     // The figure lamp: the theme's own, or its warning colour as a lamp (a pale amber on a light theme)
     if (p.change.w <= 0)
         p.change = relativeLuminance(t.window) > .18f ? mix(p.warn, ImVec4(1, 1, 1, 1), .55f) : p.warn;
     if (p.changeText.w <= 0)
         p.changeText = relativeLuminance(p.change) > .18f ? ImVec4(.05f, .05f, .06f, 1) : ImVec4(1, 1, 1, 1);
+
     // The board: its own palette held to the same floor against the board, or the panels' colours.
     if (t.hasBoard) {
         auto &b = t.board;
@@ -606,6 +665,7 @@ Spec legible(Spec t) {
 
 } // namespace
 
+// Makes `id` the current theme; without an ImGui context yet only the palette is set. False if unknown.
 bool applyTheme(const std::string &id) {
     for (const auto &entry : entries())
         if (entry.theme.id == id) {
@@ -658,15 +718,20 @@ const Palette &palette() {
     return current;
 }
 
+// The fonts from setTypeRamp (any may be null: draw with the default font then).
 namespace {
 TypeRamp ramp;
 }
+
 void setTypeRamp(const TypeRamp &fonts) {
     ramp = fonts;
 }
+
 const TypeRamp &typeRamp() {
     return ramp;
 }
+
+// A section heading in the strong font: a ruled heading on ruled themes, ImGui's separator text otherwise.
 void sectionTitle(const char *text) {
     if (ramp.strong)
         ImGui::PushFont(ramp.strong);
@@ -683,6 +748,8 @@ void sectionTitle(const char *text) {
     if (ramp.strong)
         ImGui::PopFont();
 }
+
+// Table header row in the strong font, ruled underneath on ruled themes.
 void tableHeaders() {
     if (ramp.strong)
         ImGui::PushFont(ramp.strong);
@@ -691,6 +758,8 @@ void tableHeaders() {
         ImGui::PopFont();
     ruleUnderHeaders();
 }
+
+// Draws the heavy rule under the current table's header row (ruled themes only).
 void ruleUnderHeaders() {
     auto *table = ImGui::GetCurrentTable();
     if (!active.ruled || !table)
@@ -701,17 +770,23 @@ void ruleUnderHeaders() {
     draw->AddLine({table->WorkRect.Min.x, y}, {table->WorkRect.Max.x, y}, ImGui::GetColorU32(current.text), ui(2));
     draw->PopClipRect();
 }
+
 bool ruledTheme() {
     return active.ruled;
 }
+
+// Status chip corner radius: the frame's corners on square-chip themes, a full capsule otherwise.
 float chipRounding(float height) {
     return active.squareChips ? ImGui::GetStyle().FrameRounding : height * .5f;
 }
 
+// Palettes saved by beginSurface; kSurfaceColors must match the number of colours it pushes.
 namespace {
 std::vector<Palette> surfaceStack;
 constexpr int kSurfaceColors = 14;
 } // namespace
+
+// Switches palette() and the ImGui colours to the board's or the panels' (pushes kSurfaceColors colours).
 void beginSurface(Surface surface) {
     surfaceStack.push_back(current);
     const bool board = surface == Surface::Board;
@@ -735,14 +810,19 @@ void beginSurface(Surface surface) {
     for (const auto &[index, color] : colors)
         ImGui::PushStyleColor(index, color);
 }
+
+// Popup background and border for the given surface (pair with popPopupColors).
 void pushPopupColors(Surface surface) {
     const bool board = surface == Surface::Board;
     ImGui::PushStyleColor(ImGuiCol_PopupBg, board ? active.boardPopup : active.popup);
     ImGui::PushStyleColor(ImGuiCol_Border, board ? active.boardBorder : active.border);
 }
+
 void popPopupColors() {
     ImGui::PopStyleColor(2);
 }
+
+// Restores the colours and palette from before the matching beginSurface.
 void endSurface() {
     if (surfaceStack.empty())
         return;

@@ -18,6 +18,9 @@
 #include <vector>
 
 namespace nereus::ros_viewer::host {
+
+// Owned by the viewer host; all calls on the UI thread. `stateDirectory` keeps per-config editor state (origins,
+// locks, display options); `defaultConfig` is opened at start if it exists.
 class PriorMapEditor {
   public:
     // What the editor needs of the pool (set when the scenario loads).
@@ -28,6 +31,7 @@ class PriorMapEditor {
         std::vector<prior_map::Line> lines;                // floor lines, pool coordinates
         prior_map::Origin scenarioOrigin;                  // where the scenario has the map
     };
+
     // The pool view this frame.
     struct View {
         glm::mat4 viewProjection{1};
@@ -36,10 +40,12 @@ class PriorMapEditor {
         bool plan = false;                // the 2D top-down view: moves in x / y only (no height handle)
         std::optional<glm::vec3> pointer; // the scene point under the pointer (last frame's depth), if any
     };
+
     PriorMapEditor(std::filesystem::path stateDirectory, std::filesystem::path defaultConfig);
 
     void setPool(const Pool &);
     void setMeshes(std::vector<MappingMarker> markers); // by TF frame: "<name>_frame"
+
     // Each meshed prop's extent in its own frame (the mesh's bounds through its marker pose): what a click on the
     // prop hits. By TF frame.
     struct Extent {
@@ -48,6 +54,7 @@ class PriorMapEditor {
     void setExtents(std::map<std::string, Extent> byFrame) {
         extents_ = std::move(byFrame);
     }
+
     // The Map workspace is shown: the props are drawn in the pool view and take its pointer.
     void setActive(bool on) {
         active_ = on;
@@ -55,12 +62,15 @@ class PriorMapEditor {
     bool active() const {
         return active_ && loaded();
     }
+
+    // The two windows' open flags (for the host's window menu).
     bool &objectsOpen() {
         return objectsOpen_;
     }
     bool &inspectorOpen() {
         return inspectorOpen_;
     }
+    // The simulator's own course should be hidden (the Map workspace is shown and "Hide sim course" is on).
     bool hidesCourse() const {
         return active() && hideCourse_;
     }
@@ -70,6 +80,7 @@ class PriorMapEditor {
     bool dirty() const {
         return dirty_;
     }
+
     void save() {
         saveFile();
     }
@@ -79,6 +90,7 @@ class PriorMapEditor {
     void reload() { // the file again, dropping unsaved edits
         openFile(configPath_);
     }
+
     // The editor's last status line ("Saved ...", "Loaded ...", or what went wrong).
     const std::string &message() const {
         return message_;
@@ -99,18 +111,23 @@ class PriorMapEditor {
     void drawInspectorWindow(const char *name, const std::function<void()> &insideWindow = {});
     // The pool view toolbar's map tools: place the origin, labels, hide the simulator's course.
     void drawViewTools();
+    // The props' meshes (boxes for mesh-less stand-alone props in 3D) for the pool view's renderer.
     void addMarkers(std::vector<MarkerDraw> &) const;
+
     // Pointer input in the pool view; true when the editor used it (the camera must not).
     bool input(const View &);
+    // The 2D layer over the pool view: origin, badges, labels, the selection's handles and a hint line.
     void drawOverlay(const View &, ImFont *small) const;
+    // Keyboard shortcuts (undo / redo / save, nudges, lock / hide / delete) when the view or a window has focus.
     void shortcuts(bool viewHovered);
-    // A prop double-clicked (view or list): where the camera should look, once.
-    // A robot-frame origin is the robot's start pose: the robot is drawn there (base_link), frozen, and dragging
-    // it moves the origin. None with an AprilTag origin.
+
     const prior_map::Origin &origin() const {
         return origin_;
     }
     void setOrigin(const prior_map::Origin &); // one undo step
+
+    // A robot-frame origin is the robot's start pose: the robot is drawn there (base_link), frozen, and dragging
+    // it moves the origin. None with an AprilTag origin.
     std::optional<glm::mat4> robotStart() const {
         if (!active() || !origin_.robot)
             return std::nullopt;
@@ -119,6 +136,8 @@ class PriorMapEditor {
     void setPlan(bool plan) { // the 2D view: stand-alone props without a mesh are badges, not boxes
         plan_ = plan;
     }
+
+    // A prop double-clicked (view or list): where the camera should look, once.
     std::optional<glm::vec3> takeFocus() {
         auto out = focus_;
         focus_.reset();
@@ -126,10 +145,13 @@ class PriorMapEditor {
     }
 
   private:
+    // One undo / redo step: the objects and the origin.
     struct Snapshot {
         std::vector<prior_map::Object> objects;
         prior_map::Origin origin;
     };
+
+    // What a pointer gesture is dragging: the selected prop (body, axis arrows, yaw ring) or the robot-frame origin.
     enum class Handle { None, Body, X, Y, Z, Yaw, OriginBody, OriginYaw, OriginX, OriginY };
 
     // files
@@ -138,6 +160,7 @@ class PriorMapEditor {
     void loadState();
     void saveState() const;
     std::filesystem::path statePath() const;
+
     // edits (each records an undo step)
     void record();
     void undo();
@@ -145,6 +168,7 @@ class PriorMapEditor {
     void changed();
     void originMoved();
     void moveSelected(double dx, double dy, double dz, double dyaw); // pool frame
+
     // geometry
     glm::mat4 worldFromMap() const;
     glm::mat4 worldOf(const prior_map::Pose &mapPose) const;
@@ -161,25 +185,31 @@ class PriorMapEditor {
     // The map axis (0 x, 1 y) whose origin arrow is under the pointer, or -1 (robot-frame origins drag by them).
     int onOriginArrow(const View &, const glm::vec2 &mouse) const;
     float handleLength(const View &, const glm::vec3 &center) const; // metres for ~90 px on screen
+
     // window parts
     void drawFileBar();
     void drawObjects();
     void drawInspector();
     void drawOriginInspector();
 
+    // The file and its contents.
     std::filesystem::path stateDirectory_, configPath_;
-    char pathField_[512]{};
+    char pathField_[512]{}; // the Objects window's path field
     prior_map::Document doc_;
     prior_map::Origin origin_;
     Pool pool_;
     std::map<std::string, MappingMarker> meshes_;
     std::map<std::string, Extent> extents_;
+
+    // Labels drawn last frame (drawOverlay() is const but records them for pick()).
     mutable ImFont *labelFont_ = nullptr; // the overlay's (labels are click targets)
     struct LabelBox {
         std::string name;
         ImVec2 min, max;
     };
     mutable std::vector<LabelBox> labelBoxes_; // last drawn label boxes, for picking
+
+    // Edit state and options.
     std::vector<Snapshot> undo_, redo_;
     std::string selected_, message_, filter_;
     bool messageError_ = false, active_ = false, objectsOpen_ = true, inspectorOpen_ = true, hideCourse_ = true,
@@ -191,6 +221,7 @@ class PriorMapEditor {
     bool plan_ = false;       // the pool view is the 2D top-down one
     int labels_ = 1;          // 0 none, 1 roots, 2 all
     bool poseColumns_ = true; // the object table's x / y / z / yaw columns (relative to the parent, as stored)
+
     // gesture
     Handle drag_ = Handle::None;
     bool pressed_ = false;
@@ -201,12 +232,15 @@ class PriorMapEditor {
     std::vector<prior_map::Object> startObjects_; // and the props (pinned to the pool, they move back)
     bool originSelected_ = false;                 // the robot-frame origin is selected (its ring is shown)
     double grabAngle_ = 0;
+
     // keyboard nudges: one undo step per run of presses on one prop
     std::chrono::steady_clock::time_point lastNudge_{};
     std::string lastNudgeObject_;
-    bool windowFocused_ = false;
+
+    bool windowFocused_ = false; // an editor window had focus this frame (keyboard shortcuts apply)
     std::optional<glm::vec3> focus_;
     void focusOn(const std::string &name);
     char renameField_[128]{};
 };
+
 } // namespace nereus::ros_viewer::host

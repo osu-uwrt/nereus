@@ -1,3 +1,4 @@
+// Loads a resolved scenario document (`python -m nereus.packs resolve`) into ResolvedScenario.
 #include <nereus/session/scenario.hpp>
 
 #include <fstream>
@@ -5,6 +6,7 @@
 
 namespace nereus::session {
 namespace {
+// A required top-level key.
 const Json &member(const Json &document, const char *key) {
     const auto found = document.find(key);
     if (found == document.end())
@@ -34,6 +36,8 @@ ResolvedScenario parseResolvedScenario(const Json &document) {
     if (!document.is_object() || member(document, "format") != "nereus.resolved_scenario")
         throw std::runtime_error("resolved scenario: unexpected format (write it with "
                                  "`python -m nereus.packs resolve`)");
+
+    // Required roles; bridge, equipment and run_options are optional.
     ResolvedScenario result;
     result.scenario = member(document, "scenario");
     result.robot = member(document, "robot");
@@ -45,6 +49,8 @@ ResolvedScenario parseResolvedScenario(const Json &document) {
     result.run_options = document.value("run_options", Json::object());
     if (!result.task_definitions.is_array())
         throw std::runtime_error("resolved scenario: task_definitions must be an array");
+
+    // Asset paths must already be absolute (the pack tool resolves them).
     for (const auto &[role, assets] : member(document, "asset_paths").items())
         for (const auto &[id, path] : assets.items()) {
             const std::filesystem::path absolute(path.get<std::string>());
@@ -60,6 +66,8 @@ ResolvedScenario loadResolvedScenario(const std::filesystem::path &resolved_json
     std::ifstream stream(resolved_json);
     if (!stream)
         throw std::runtime_error("resolved scenario: cannot read " + resolved_json.string());
+
+    // Prefix parse and validation errors with the file name.
     Json document;
     try {
         document = Json::parse(stream);

@@ -1,3 +1,5 @@
+// Geometry judges used by the task runtime: gate passages, perforated panels, open crates, proximity
+// targets, surfacing and turns. Numeric details mirror the Python originals so results match exactly.
 #include "tasks/trackers.hpp"
 
 #include <algorithm>
@@ -32,10 +34,12 @@ double floorDivide(double a, double b) {
     return floored;
 }
 
+// Angle wrapped to (-pi, pi].
 double wrapAngle(double angle) {
     return std::atan2(std::sin(angle), std::cos(angle));
 }
 
+// Advance a tracker's sample clock: dt since the previous sample (0 on the first), and reject time going back.
 void checkSampleTime(std::optional<std::int64_t> &current, std::int64_t time_ns, std::int64_t &dt, const char *what) {
     dt = current ? time_ns - *current : 0;
     if (dt < 0)
@@ -51,6 +55,7 @@ std::optional<Vec3> crossing(const Vec3 &start, const Vec3 &end, int coordinate,
     return Vec3(start + (end - start) * (-a / (b - a)));
 }
 
+// Rotation vector (axis * angle) taking `before` to `after`, in the `before` body frame.
 Vec3 rotationDelta(const Mat3 &before, const Mat3 &after) {
     const Mat3 r = before.transpose() * after;
     Vec3 v(r(2, 1) - r(1, 2), r(0, 2) - r(2, 0), r(1, 0) - r(0, 1));
@@ -60,6 +65,7 @@ Vec3 rotationDelta(const Mat3 &before, const Mat3 &after) {
     return magnitude > 1e-9 ? Vec3(v * (angle / magnitude)) : v;
 }
 
+// Envelope vertices placed at a pose.
 std::vector<Vec3> transformed(const std::vector<Vec3> &vertices, const Mat3 &rotation, const Vec3 &position) {
     std::vector<Vec3> out;
     out.reserve(vertices.size());
@@ -165,6 +171,7 @@ Json PortalEvent::data() const {
 
 PortalTracker::PortalTracker(const Json &parameters, const Pose &world_from_task, const std::vector<Vec3> &envelope,
                              double floor_z) {
+    // Validate the parameter shape and the supported options.
     requireKeys(parameters,
                 {"plane", "bounds_local", "world_floor_clearance", "crossing_reference", "fit_checks", "traversal",
                  "approach_radius_m", "max_pose_step_m"},
@@ -193,6 +200,8 @@ PortalTracker::PortalTracker(const Json &parameters, const Pose &world_from_task
     check_crossing_orientation_ = seen.count("envelope_at_crossing_point_with_current_orientation") > 0;
     check_completion_ = seen.count("envelope_at_completion") > 0;
     check_origin_ = seen.count("reference_origin_at_crossing") > 0;
+
+    // Numbers.
     if (!parameters.at("world_floor_clearance").is_boolean())
         invalid("world_floor_clearance must be boolean");
     floor_ = number(floor_z, "floor_z");
@@ -233,6 +242,7 @@ void PortalTracker::checkTime(std::int64_t time_ns) const {
         invalid("portal time must not decrease without reset");
 }
 
+// The attempt's recorded passages re-issued as attempt_finished, with its total rotation.
 std::vector<PortalEvent> PortalTracker::finished(const std::optional<Attempt> &attempt, std::int64_t time_ns,
                                                  double top) {
     std::vector<PortalEvent> out;
@@ -259,6 +269,8 @@ std::vector<PortalEvent> PortalTracker::finishAttempt(std::int64_t time_ns) {
 
 std::vector<PortalEvent> PortalTracker::observe(std::int64_t time_ns, const Pose &world_reference) {
     checkTime(time_ns);
+
+    // Sample the robot and its envelope in the world and in the task frame.
     const Pose pose = ownedPose(world_reference);
     Observation current;
     current.position = pose.translation;
@@ -272,6 +284,8 @@ std::vector<PortalEvent> PortalTracker::observe(std::int64_t time_ns, const Pose
     current.top = -std::numeric_limits<double>::infinity();
     for (const auto &v : world)
         current.top = std::max(current.top, v[2]);
+
+    // Compute the next state, then commit it.
     Advance result = advance(time_ns, current, world, local);
     previous_ = current;
     entry_side_ = result.entry;
@@ -282,6 +296,7 @@ std::vector<PortalEvent> PortalTracker::observe(std::int64_t time_ns, const Pose
     return std::move(result.events);
 }
 
+// Pure step: works on copies of the tracker state and returns them with the events.
 PortalTracker::Advance PortalTracker::advance(std::int64_t time_ns, const Observation &current,
                                               const std::vector<Vec3> &world, const std::vector<Vec3> &local) const {
     auto previous = previous_;
@@ -294,6 +309,8 @@ PortalTracker::Advance PortalTracker::advance(std::int64_t time_ns, const Observ
         for (auto &e : more)
             events.push_back(std::move(e));
     };
+
+    // A pose jump (teleport) ends the attempt and forgets the side history.
     if (previous && (current.position - previous->position).norm() > max_step_) {
         extend(finished(attempt, time_ns, previous->top));
         previous.reset();
@@ -301,6 +318,8 @@ PortalTracker::Advance PortalTracker::advance(std::int64_t time_ns, const Observ
         cross.reset();
         attempt.reset();
     }
+
+    // Close to the gate centre: start an attempt if none is open.
     const bool near = (current.local_position - Vec3(offset_, 0, 0)).norm() <= radius_;
     if (near && !attempt) {
         attempt = Attempt{next_id, Vec3::Zero(), {}};
@@ -313,10 +332,13 @@ PortalTracker::Advance PortalTracker::advance(std::int64_t time_ns, const Observ
     };
     std::optional<Passage> passage;
     if (previous) {
+        // Remember where the reference origin last crossed the plane.
         const double a = previous->local_position[0] - offset_, b = current.local_position[0] - offset_;
         if ((a > 0 && 0 >= b) || (a < 0 && 0 <= b))
             cross =
                 Vec3(previous->local_position + (a / (a - b)) * (current.local_position - previous->local_position));
+
+        // Which side the robot is now fully on (whole envelope, or just the origin), 0 while straddling.
         double xmin, xmax;
         if (full_envelope_) {
             xmin = std::numeric_limits<double>::infinity();
@@ -329,6 +351,8 @@ PortalTracker::Advance PortalTracker::advance(std::int64_t time_ns, const Observ
             xmin = xmax = current.local_position[0] - offset_;
         }
         const int side = xmin > 0 ? 1 : xmax < 0 ? -1 : 0;
+
+        // Reached the other side: a passage if the fit checks pass at the crossing.
         if (side && entry != 0 && side != entry) {
             if (cross) {
                 bool fits = true;
@@ -355,6 +379,7 @@ PortalTracker::Advance PortalTracker::advance(std::int64_t time_ns, const Observ
                 if (check_completion_)
                     fits = fits && within(local);
                 if (fits) {
+                    // Depth band: the envelope's vertical extent (bounding-box approximation) at the crossing.
                     std::optional<bool> depth;
                     if (band_) {
                         Vec3 maxabs = Vec3::Constant(0);
@@ -375,6 +400,8 @@ PortalTracker::Advance PortalTracker::advance(std::int64_t time_ns, const Observ
     } else {
         entry = current.local_position[0] > offset_ ? 1 : -1;
     }
+
+    // Report the passage and keep the latest one per direction in the attempt.
     if (passage) {
         PortalEvent event;
         event.kind = "pass_through";
@@ -397,6 +424,8 @@ PortalTracker::Advance PortalTracker::advance(std::int64_t time_ns, const Observ
                 list.emplace_back(event.from_side, event);
         }
     }
+
+    // Leaving the approach radius ends the attempt.
     if (!near) {
         extend(finished(attempt, time_ns, current.top));
         attempt.reset();
@@ -418,6 +447,7 @@ PerforatedPanel::PerforatedPanel(const Json &parameters, const Pose &world_from_
     min_cosine_ = number(clearance.at("min_cosine"), "min_cosine");
     if (half_ <= 0 || !(0 < min_cosine_ && min_cosine_ <= 1))
         invalid("invalid panel geometry");
+    // Holes: uv in [0, 1] across the panel -> panel-centred y, z in metres.
     for (const auto &hole : parameters.at("holes")) {
         const Json &uv = hole.at("uv");
         if (!uv.is_array() || uv.size() != 2)
@@ -449,12 +479,16 @@ std::optional<PanelHit> PerforatedPanel::intersect(const Vec3 &start_world, cons
         invalid("projectile axis must be unit length");
     if (!std::isfinite(radius_m) || radius_m <= 0)
         invalid("projectile radius must be positive and finite");
+
+    // Where the segment crosses the panel plane (none when it starts on it).
     const double a = start[0] - offset_, b = end[0] - offset_;
     if (a * b > 0 || a == b || a == 0)
         return std::nullopt;
     const Vec3 hit = start + (end - start) * (-a / (b - a));
     if (std::max(std::abs(hit[1]), std::abs(hit[2])) > half_)
         return std::nullopt;
+
+    // The projectile's footprint on the panel grows as 1 / cos(incidence), capped by min_cosine.
     const Vec3 local_axis = task_from_world_.rotation.normalized() * axis;
     const double clearance = radius_m / std::max(min_cosine_, std::abs(local_axis[0]));
     const Eigen::Vector2d yz(hit[1], hit[2]);
@@ -482,6 +516,8 @@ OpenCrate::OpenCrate(const Json &parameters, const Pose &world_from_crate) {
 
 CrateStep OpenCrate::step(const Vec3 &old_world, const Vec3 &new_world, const Vec3 &velocity_world,
                           const Vec3 &axis_world, double radius_m, double length_m, bool entered) const {
+    // Work in the crate frame with the payload as an axis-aligned box: `extent` is its half size (a capsule of
+    // radius_m and length_m along its axis).
     Vec3 new_position = new_world, velocity = velocity_world;
     const Vec3 a = rotation_.transpose() * (old_world - origin_);
     Vec3 b = rotation_.transpose() * (new_position - origin_);
@@ -491,9 +527,14 @@ CrateStep OpenCrate::step(const Vec3 &old_world, const Vec3 &new_world, const Ve
     auto fitsInner = [&](const Vec3 &p) {
         return std::abs(p[0]) + extent[0] <= inner && std::abs(p[1]) + extent[1] <= inner;
     };
+
+    // Coming down through the top plane within the inner opening enters the crate.
     const auto top = crossing(a, b, 2, height + extent[2]);
     if (top && b[2] < a[2] && fitsInner(*top))
         entered = true;
+
+    // Walls (inner faces once entered, else outer faces): stop at the wall, keep 15 % of the velocity, and drop
+    // its normal component.
     for (int axis = 0; axis < 2; ++axis)
         for (int sign : {-1, 1}) {
             const double surface = sign * (entered ? inner - extent[axis] : outer + extent[axis]);
@@ -507,11 +548,15 @@ CrateStep OpenCrate::step(const Vec3 &old_world, const Vec3 &new_world, const Ve
                 new_position = rotation_ * b + origin_;
             }
         }
+
+    // Landing on the floor ends the flight: inside only if it entered and fits the inner opening.
     const auto floor = crossing(a, b, 2, extent[2]);
     if (floor && b[2] < a[2] && std::max(std::abs((*floor)[0]), std::abs((*floor)[1])) <= outer) {
         const bool inside = fitsInner(*floor);
         return {rotation_ * *floor + origin_, Vec3::Zero(), entered, entered && inside ? "inside" : "blocked", "floor"};
     }
+
+    // Coming down onto the rim (crossing the top plane over the walls, not the opening) also ends it.
     if (top && b[2] < a[2] && !fitsInner(*top) && std::abs((*top)[0]) <= outer + extent[0] &&
         std::abs((*top)[1]) <= outer + extent[1])
         return {rotation_ * *top + origin_, Vec3::Zero(), entered, "blocked", "rim"};
@@ -607,6 +652,9 @@ std::vector<Fact> SurfaceTracker::observe(std::int64_t time_ns, const Pose &worl
         clear();
     previous_ = position;
     std::vector<Fact> facts;
+
+    // Envelope top against the surface (with breach_margin_m hysteresis), and whether every envelope vertex is
+    // inside the octagon (8 half-planes at the shrunken apothem).
     double top = -std::numeric_limits<double>::infinity();
     for (const auto &v : vertices_)
         top = std::max(top, (rotation * v + position)[2]);
@@ -623,6 +671,7 @@ std::vector<Fact> SurfaceTracker::observe(std::int64_t time_ns, const Pose &worl
                 inside = false;
         }
     }
+
     if (submerged_ && top > surface_ + margin_ && !inside) {
         breached_ = true;
         return {Fact{"breach", {{"envelope_top_world", top}}}};
@@ -639,6 +688,8 @@ std::vector<Fact> SurfaceTracker::observe(std::int64_t time_ns, const Pose &worl
         }
         return facts;
     }
+
+    // Not surfaced in the octagon: reset the dwell and report anything lost.
     dwell_ = 0;
     facing_dwell_ = 0;
     facing_.reset();
@@ -655,6 +706,8 @@ std::vector<Fact> SurfaceTracker::observe(std::int64_t time_ns, const Pose &worl
 
 std::vector<Fact> SurfaceTracker::facingStep(const Vec3 &position, const Mat3 &rotation, std::int64_t dt) {
     const Eigen::Vector2d heading(rotation(0, 0), rotation(1, 0));
+
+    // Nearest target by bearing angle (ties broken by target name).
     std::pair<double, std::string> best{std::numeric_limits<double>::infinity(), ""};
     bool first = true;
     for (const auto &target : targets_) {
@@ -669,6 +722,8 @@ std::vector<Fact> SurfaceTracker::facingStep(const Vec3 &position, const Mat3 &r
     }
     const double angle = best.first;
     const std::string &facing = best.second;
+
+    // Dwell on the same target within tolerance.
     std::optional<std::string> achieved;
     if (angle <= tolerance_) {
         facing_dwell_ = (facing_ && *facing_ == facing) ? facing_dwell_ + static_cast<double>(dt) : 0.0;
@@ -679,6 +734,7 @@ std::vector<Fact> SurfaceTracker::facingStep(const Vec3 &position, const Mat3 &r
         facing_dwell_ = 0.0;
         facing_.reset();
     }
+
     std::vector<Fact> facts;
     if (achieved != achieved_) {
         if (achieved_)
@@ -705,6 +761,7 @@ TurnTracker::TurnTracker(const Json &parameters, const Pose &world_from_frame) {
     reset();
 }
 
+// Forget everything (run reset); clear() only restarts the current count.
 void TurnTracker::reset() {
     time_.reset();
     previous_.reset();
@@ -727,6 +784,7 @@ std::vector<Fact> TurnTracker::judge(const std::string &reason) const {
     const double travel = std::abs(peak_ - start_);
     if (travel < minimum_)
         return {};
+    // Whole turns, allowing turn_tolerance_deg short of each full turn.
     const int turns = static_cast<int>(floorDivide(travel + tolerance_, 2 * kPi));
     return {Fact{"rotation_judged", {{"reason", reason}, {"travel_rad", travel}, {"turns", turns}}}};
 }
@@ -737,6 +795,8 @@ std::vector<Fact> TurnTracker::observe(std::int64_t time_ns, const Pose &world_r
     const Pose pose = ownedPose(world_reference);
     const Vec3 position = pose.translation;
     const Mat3 rotation = rotationMatrix(pose);
+
+    // A pose jump (teleport) drops the count.
     if (previous_ && (position - *previous_).norm() > max_step_) {
         clear();
         tracking_ = restart_ = false;
@@ -749,6 +809,8 @@ std::vector<Fact> TurnTracker::observe(std::int64_t time_ns, const Pose &world_r
         for (auto &f : more)
             facts.push_back(std::move(f));
     };
+
+    // Near the frame: accumulate unwrapped yaw, track the peak, judge on a reversal, and judge once per settle.
     const bool near = spatial::apply(frame_from_world_, position).norm() <= radius_;
     if (near) {
         if (!tracking_ || restart_) {

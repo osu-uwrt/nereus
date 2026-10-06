@@ -7,7 +7,9 @@
 #include <vector>
 
 struct GLFWwindow;
+
 namespace nereus::ros_viewer::host {
+// Owns the GLFW window, its GL context and the ImGui context / backends. Call from the main thread unless noted.
 class Window {
   public:
     // customTitleBar: no system decorations; the application draws the title bar (menus, window buttons) and
@@ -18,14 +20,17 @@ class Window {
     ~Window();
     Window(const Window &) = delete;
     Window &operator=(const Window &) = delete;
+
     GLFWwindow *handle() const {
         return window_;
     }
+
     bool closing() const;
     void setTitle(const std::string &);
     void beginFrame();                                                           // poll events + ImGui NewFrame
     void present(bool screenshotFrame, const std::filesystem::path &screenshot); // render ImGui, optional PNG
     void swap();                                                                 // present the frame (blocks on vsync)
+
     // Frames from another thread while this one is busy (the loading screen while the scene builds): this thread
     // keeps the frame it just drew (keepFrame, before swap) and detaches; the other makes the GL context current
     // there and draws ImGui frames over the kept one without GLFW's window calls (main-thread only, so no input
@@ -36,9 +41,11 @@ class Window {
     void currentOnThisThread(bool current);
     void beginDetachedFrame(float dt);
     void presentDetached();
+
     bool customTitleBar() const {
         return custom_;
     }
+
     // Window-manager move / resize from the current pointer position, as when dragging a system title bar or
     // border. Edge: 0 top-left, 1 top, 2 top-right, 3 right, 4 bottom-right, 5 bottom, 6 bottom-left, 7 left.
     void beginMove();
@@ -48,24 +55,31 @@ class Window {
     bool maximized() const;
     void requestClose();
     void cancelClose(); // a close the application refuses (asks first)
+
     // The window's icon (dock, task switcher) from PNG files of several sizes; missing files are skipped.
     void setIcon(const std::vector<std::filesystem::path> &pngs);
+
+    // Fonts, valid after loadFonts().
     ImFont *normal = nullptr, *small = nullptr, *title = nullptr, *number = nullptr;
     ImFont *strong = nullptr;      // the body size in bold: section titles, table headers
     ImFont *smallStrong = nullptr; // the small size in bold: chart labels
     ImFont *menu = nullptr;        // the title bar's menus, at the desktop's scale like other apps' title bars
     ImFont *titleSmall = nullptr;  // the title bar's search box (smaller than its menus, as VS Code's)
+
     // Loads the fonts at the interface scale (`ui`) and the title bar's at `titleBar`; between frames only. The
     // theme's own font files (in `fontDirectory`) or family (fontconfig name, e.g. a Qt theme's) at its point size
     // replace the viewer's DejaVu Sans.
     void loadFonts(float ui, float titleBar, const Theme &theme = {}, const std::filesystem::path &fontDirectory = {});
     // The desktop's UI scale for this window (GNOME at 200 %: 2), as other applications size themselves.
     float contentScale() const;
+    // ImGui errors recovered in the current frame (a --frames run fails on any).
     int imguiErrors() const;
 
   private:
+    // _NET_WM_MOVERESIZE request to the window manager (X11), `direction` as that protocol numbers it.
     void moveResize(long direction);
     void render(int width, int height); // ImGui's draw data over a cleared framebuffer
+
     bool backendReady_ = false;
     bool detached_ = false;   // another thread is drawing (contentScale answers from the last query)
     mutable float scale_ = 1; // the last content scale queried
@@ -73,8 +87,10 @@ class Window {
     GLFWwindow *window_ = nullptr;
     bool custom_ = false;
 };
+
 // Writes RGB8 rows (top row first) as a PNG; throws on failure.
 void writePng(const std::filesystem::path &, int width, int height, const std::vector<unsigned char> &rgb);
+
 // Reads a PNG as RGBA8 rows (top row first); false if it cannot be read.
 bool readPng(const std::filesystem::path &, int &width, int &height, std::vector<unsigned char> &rgba);
 } // namespace nereus::ros_viewer::host

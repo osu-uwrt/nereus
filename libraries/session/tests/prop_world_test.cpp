@@ -27,6 +27,7 @@ Json readFixture() {
     return Json::parse(stream);
 }
 
+// 4x4 matrix from a JSON array of rows.
 Matrix4 matrixOf(const Json &rows) {
     Matrix4 m;
     for (int r = 0; r < 4; ++r)
@@ -34,18 +35,24 @@ Matrix4 matrixOf(const Json &rows) {
             m(r, c) = rows.at(static_cast<std::size_t>(r)).at(static_cast<std::size_t>(c)).get<double>();
     return m;
 }
+
 Eigen::Vector3d vec(const Json &v) {
     return {v.at(0).get<double>(), v.at(1).get<double>(), v.at(2).get<double>()};
 }
+
+// Quaternion from JSON [w, x, y, z].
 Eigen::Quaterniond quat(const Json &v) {
     return {v.at(0).get<double>(), v.at(1).get<double>(), v.at(2).get<double>(), v.at(3).get<double>()};
 }
 
+// Worst position/rotation differences seen so far, overall and per prop.
 struct Stats {
     double position{0}, rotation{0};
     std::map<std::string, double> position_by_prop;
 };
 
+// Records prop pose differences against a recorded state; asserts tolerances, attachment and basket only
+// when `check` is set.
 void compareState(const std::map<std::string, PropState> &actual, const Json &expected, const std::string &where,
                   Stats &stats, bool check) {
     ASSERT_EQ(actual.size(), expected.size()) << where;
@@ -67,6 +74,7 @@ void compareState(const std::map<std::string, PropState> &actual, const Json &ex
     }
 }
 
+// Outcome of one scripted replay: events with the tick they fired on, comparison stats and timing.
 struct Replay {
     Events events;
     std::vector<int> event_ticks;
@@ -75,6 +83,9 @@ struct Replay {
     int ticks{0};
 };
 
+// Replays one fixture case: moves the claw mount by the scripted ops (place / reset / move at a velocity), steps
+// the prop world each tick with the recorded jaw position, and compares props at every sampled tick.
+// `shared` reuses a caller's world, `op_limit` stops early and `final_mount` returns the last mount pose.
 Replay replay(const ResolvedScenario &scenario, const Json &data, double dt, int sample_ticks,
               PropWorld *shared = nullptr, bool check = true, std::size_t op_limit = SIZE_MAX,
               Matrix4 *final_mount = nullptr) {
@@ -85,6 +96,7 @@ Replay replay(const ResolvedScenario &scenario, const Json &data, double dt, int
     Stats initial_stats;
     compareState(world.props(), data.at("initial"), "initial", initial_stats, false);
 
+    // The robot body pose is derived from the claw mount pose through the inverse mount transform.
     const Matrix4 inverse_mount = matrixOf(data.at("mount_local")).inverse();
     Matrix4 mount = Matrix4::Identity();
     for (int r = 0; r < 3; ++r)
@@ -102,6 +114,7 @@ Replay replay(const ResolvedScenario &scenario, const Json &data, double dt, int
     const auto &samples = data.at("samples");
     const std::int64_t tick_ns = std::llround(dt * 1e9);
     double spent = 0;
+    // Run the scripted ops.
     for (const auto &op : data.at("ops")) {
         if (op_limit-- == 0)
             break;
@@ -146,6 +159,7 @@ Replay replay(const ResolvedScenario &scenario, const Json &data, double dt, int
     return run;
 }
 
+// Events must match in order and content exactly; their ticks within kEventToleranceTicks.
 void compareEvents(const Replay &run, const Json &expected, const std::string &name) {
     ASSERT_EQ(run.events.size(), expected.size()) << name;
     for (std::size_t i = 0; i < expected.size(); ++i) {
@@ -159,6 +173,7 @@ void compareEvents(const Replay &run, const Json &expected, const std::string &n
 }
 } // namespace
 
+// Runs each recorded case and prints the observed agreement alongside the pass/fail checks.
 class PropWorldEquivalence : public testing::TestWithParam<const char *> {};
 
 TEST_P(PropWorldEquivalence, MatchesRecordedReference) {
@@ -182,6 +197,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PropWorldEquivalence,
                          testing::Values("grasp_carry_release", "drop_helmet_basket", "drop_warning_basket",
                                          "release_elsewhere", "empty_jaws", "reset_then_pick"));
 
+// After a full replay the end states, jaw position and basket contents match the recording.
 TEST(PropWorld, FinalStatesAndQueriesMatch) {
     const Json fixture = readFixture();
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
@@ -210,9 +226,12 @@ State stateAt(const Matrix4 &mount, const Matrix4 &mount_local, const Eigen::Vec
     x << body.block<3, 1>(0, 3), q.w(), q.x(), q.y(), q.z(), q.conjugate() * velocity, Eigen::Vector3d::Zero();
     return x;
 }
+
+// COM velocity in the world frame (the state stores body-frame linear velocity).
 Eigen::Vector3d worldVelocity(const State &x) {
     return Eigen::Quaterniond(x[3], x[4], x[5], x[6]).normalized() * Eigen::Vector3d(x.segment<3>(7));
 }
+
 // Mount height at which lowering the robot in 1 mm steps first meets robot-side contact.
 double contactHeight(nereus::simulation::ContactResolver &contacts, Matrix4 mount, const Matrix4 &mount_local,
                      const Matrix6 &inverse_mass) {
@@ -223,6 +242,7 @@ double contactHeight(nereus::simulation::ContactResolver &contacts, Matrix4 moun
     }
     return std::nan("");
 }
+
 // Translation-only robot (these harnesses integrate position only): the contact impulse cannot
 // turn into rotation about the COM, so the contact point velocity is the COM velocity.
 const Matrix6 kInverseMass =
@@ -307,6 +327,8 @@ TEST(PropWorld, HeldPropIsPartOfTheRobotAgainstScenery) {
     EXPECT_FALSE(without.empty()) << "the same press without robot contacts should tear the prop out";
 }
 
+// step() rejects a zero dt, non-finite velocities and time going backwards; unknown tasks and missing claw
+// pad assets fail construction.
 TEST(PropWorld, RejectsInvalidInputsAndMissingAssets) {
     auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     PropWorld world(scenario, "table");

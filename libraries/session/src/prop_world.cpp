@@ -31,11 +31,20 @@ using Vec3 = Eigen::Vector3d;
 constexpr double kPadSpinningFriction = 0.01;
 constexpr double kPadMarginM = 0.0005;
 constexpr double kUrdfDefaultMarginM = 0.001; // Bullet's URDF importer default collision margin
+
+// Jaw stall (driveJaws): a closing/opening pad stops against a contact that approaches faster than this along the
+// jaw axis and penetrates deeper than this.
 constexpr double kStallNormalSpeed = -0.2;
 constexpr double kStallPenetrationM = -0.0008;
+
+// Grasp detection (tryGrasp): minimum pad contact force and alignment of the contact normal with the jaw axis.
 constexpr double kGraspNormalForceN = 0.01;
 constexpr double kGraspNormalAlignment = 0.6;
+
+// Smallest change in the commanded jaw position that counts as an open/close command.
 constexpr double kDirectionEpsilonM = 1e-9;
+
+// Homogeneous transform from a position and a (normalised here) wxyz quaternion.
 
 Matrix4 matrixFrom(const Vec3 &position, double w, double x, double y, double z) {
     const double n = std::sqrt(w * w + x * x + y * y + z * z);
@@ -46,6 +55,7 @@ Matrix4 matrixFrom(const Vec3 &position, double w, double x, double y, double z)
     t.block<3, 1>(0, 3) = position;
     return t;
 }
+
 Matrix4 matrixFrom(const Vec3 &position, const Eigen::Quaterniond &q) {
     return matrixFrom(position, q.w(), q.x(), q.y(), q.z());
 }
@@ -75,51 +85,64 @@ std::array<double, 4> xyzw(const Matrix4 &m) {
         v /= norm;
     return q;
 }
+
 Matrix4 fromXyzw(const Vec3 &position, const btQuaternion &q) {
     return matrixFrom(position, q.w(), q.x(), q.y(), q.z());
 }
+
 Matrix4 poseMatrix(const spatial::Pose &pose) {
     return matrixFrom(pose.translation, pose.rotation);
 }
 
+// Eigen <-> Bullet conversions.
 btVector3 toBt(const Vec3 &v) {
     return btVector3(v.x(), v.y(), v.z());
 }
+
 Vec3 fromBt(const btVector3 &v) {
     return Vec3(v.x(), v.y(), v.z());
 }
+
 btQuaternion quatOf(const Matrix4 &m) {
     const auto q = xyzw(m);
     return btQuaternion(q[0], q[1], q[2], q[3]);
 }
+
 btTransform transformOf(const Matrix4 &m) {
     return btTransform(quatOf(m), toBt(m.block<3, 1>(0, 3)));
 }
 
+// JSON readers for pack data.
 Vec3 vec3(const Json &j, const char *name) {
     if (!j.is_array() || j.size() != 3)
         throw std::invalid_argument(std::string(name) + " must contain 3 values");
     return Vec3(j[0].get<double>(), j[1].get<double>(), j[2].get<double>());
 }
+
 Matrix4 poseOf(const Json &position, const Json &wxyz) {
     return matrixFrom(vec3(position, "position_m"), wxyz.at(0).get<double>(), wxyz.at(1).get<double>(),
                       wxyz.at(2).get<double>(), wxyz.at(3).get<double>());
 }
+
+// A scenario placement (`position_m` + `yaw_deg` about world z) as a transform.
 Matrix4 yawMatrix(const Json &placement) {
     const double half = placement.at("yaw_deg").get<double>() * M_PI / 180.0 / 2;
     return matrixFrom(vec3(placement.at("position_m"), "position_m"), std::cos(half), 0, 0, std::sin(half));
 }
+
 bool allFinite(const Vec3 &v) {
     return v.allFinite();
 }
+
 double sign(double v) {
     return v > 0 ? 1.0 : (v < 0 ? -1.0 : 0.0);
 }
 
+// One contact point as seen from a queried body.
 struct Contact {
-    int other{-1}; // body index of the other object
-    Vec3 normal;   // normal on the other body (points towards the queried body)
-    double distance{0}, force{0};
+    int other{-1};                // body index of the other object
+    Vec3 normal;                  // normal on the other body (points towards the queried body)
+    double distance{0}, force{0}; // signed distance (negative = penetration), normal force in N
 };
 
 // Records closest points (normal on B as reported by
@@ -135,6 +158,7 @@ struct ClosestPoints : btManifoldResult {
         btManifoldResult::addContactPoint(normalOnB, point, depth);
     }
 };
+
 // Pair exclusions. btMultiBodyLinkCollider overrides
 // checkCollideWithOverride without consulting setIgnoreCollisionCheck, so the ignore list alone never
 // stops multibody pairs; this filter keeps excluded pairs out of the broadphase instead.
@@ -157,15 +181,20 @@ struct PairFilter : btOverlapFilterCallback {
 // out along the deepest contact, then sequential normal impulses with Coulomb friction (<= 8 passes).
 class VehicleContacts final : public simulation::ContactResolver {
   public:
+    // Also the collision filter groups: robot shapes collide with scenery and props only.
     enum Kind { kRobot = 1, kScenery = 2, kProp = 4 };
+
     explicit VehicleContacts(double friction) : friction_(friction) {
         if (!std::isfinite(friction) || friction < 0)
             throw std::invalid_argument("contact friction must be finite and nonnegative");
     }
+
     ~VehicleContacts() override {
         for (auto &e : entries_)
             world_.removeCollisionObject(&e->object);
     }
+
+    // Add a shape (and the triangle mesh it references, if any) and return its entry index.
     int add(std::unique_ptr<btCollisionShape> shape, std::unique_ptr<btTriangleMesh> mesh, Kind kind,
             const Matrix4 &pose) {
         auto e = std::make_unique<Entry>();
@@ -184,12 +213,16 @@ class VehicleContacts final : public simulation::ContactResolver {
         entries_.push_back(std::move(e));
         return static_cast<int>(entries_.size()) - 1;
     }
+
     // Robot shape: COM-local pose. Prop: world pose, or COM-local when attached to the robot.
     void pose(int index, const Matrix4 &pose, bool attached = false) {
         auto &e = *entries_.at(static_cast<std::size_t>(index));
         e.pose = pose;
         e.attached = attached;
     }
+
+    // Plant state layout: [0..2] COM position (world), [3..6] orientation wxyz, [7..12] body-axis linear and
+    // angular velocity (hence the q.conjugate() rotations of world normals and lever arms below).
     State resolve(State state, const Matrix6 &inverse_mass) override {
         Eigen::Quaterniond q(state[3], state[4], state[5], state[6]);
         q.normalize();
@@ -199,9 +232,14 @@ class VehicleContacts final : public simulation::ContactResolver {
                 break;
             const auto deepest = std::max_element(contacts.begin(), contacts.end(),
                                                   [](const Hit &a, const Hit &b) { return a.depth < b.depth; });
+
+            // Positional correction: push out along the deepest contact (plus a 0.05 mm skin).
             bool changed = deepest->depth > 1e-5;
             if (changed)
                 state.head<3>() += deepest->normal * (deepest->depth + .00005);
+
+            // Velocity correction: cancel each approaching normal velocity, then Coulomb friction along the
+            // sliding direction, capped by friction * normal impulse.
             for (const auto &c : contacts) {
                 const Vec3 n = q.conjugate() * c.normal, r = q.conjugate() * (c.point - Vec3(state.head<3>()));
                 Eigen::Matrix<double, 6, 1> j;
@@ -233,11 +271,12 @@ class VehicleContacts final : public simulation::ContactResolver {
   private:
     struct Entry {
         Kind kind{kScenery};
-        bool attached{false};
+        bool attached{false}; // a prop held by the claw: moves and collides as part of the robot
         Matrix4 pose{Matrix4::Identity()};
         std::unique_ptr<btCollisionShape> shape;
         std::unique_ptr<btTriangleMesh> mesh;
         btCollisionObject object;
+
         bool robot() const {
             return kind == kRobot || attached;
         }
@@ -246,6 +285,9 @@ class VehicleContacts final : public simulation::ContactResolver {
         Vec3 point, normal; // world; normal pushes the robot out
         double depth;
     };
+
+    // Pose the robot-side shapes at `state` and collect robot-vs-obstacle contacts within 0.5 mm. A free prop
+    // only counts when the contact pushes the robot up (normal z >= 0.7) and the prop is resting on scenery.
     std::vector<Hit> detect(const State &state, const Eigen::Quaterniond &q) {
         const Matrix4 body = matrixFrom(state.head<3>(), q);
         for (auto &e : entries_) {
@@ -276,6 +318,7 @@ class VehicleContacts final : public simulation::ContactResolver {
         }
         return out;
     }
+
     // A free prop resting on scenery (a contact within 3 mm whose normal points up at the prop).
     bool supported(const Entry &prop) {
         struct Support : btCollisionWorld::ContactResultCallback {
@@ -295,6 +338,7 @@ class VehicleContacts final : public simulation::ContactResolver {
                 world_.contactPairTest(const_cast<btCollisionObject *>(&prop.object), &e->object, support);
         return support.up;
     }
+
     double friction_;
     btDefaultCollisionConfiguration configuration_;
     btCollisionDispatcher dispatcher_{&configuration_};
@@ -305,6 +349,8 @@ class VehicleContacts final : public simulation::ContactResolver {
 } // namespace
 
 struct PropWorld::Impl {
+    // One Bullet multibody (base only). Bodies are addressed by their index in `bodies`, which is also the
+    // collider's user index.
     struct Body {
         std::unique_ptr<btCollisionShape> shape;
         std::unique_ptr<btTriangleMesh> mesh;
@@ -312,14 +358,19 @@ struct PropWorld::Impl {
         std::unique_ptr<btMultiBodyLinkCollider> collider;
         bool fixed{true};
     };
+
+    // A rigid_body prop. The Bullet body sits at the mesh's bounding-box centre; `center` is that offset in the
+    // mesh frame and `half` the box half extents.
     struct Prop {
         std::string id;
         int body{-1};
         Vec3 center{Vec3::Zero()}, half{Vec3::Zero()};
-        const Json *config{nullptr};
-        double settled{0};
-        bool scored{false}, picked{false};
+        const Json *config{nullptr};       // the prop's parameters (in `rigid`)
+        double settled{0};                 // seconds at rest with a landing label (see settle())
+        bool scored{false}, picked{false}; // scored: its drop event was emitted; picked: it has been grasped
     };
+
+    // A `box` task region that counts as a basket for dropped props.
     struct Basket {
         std::string id;
         Matrix4 region_from_world;
@@ -329,15 +380,17 @@ struct PropWorld::Impl {
     // Owning references into the resolved scenario copy.
     Json definition;
     std::string task, mechanism_id;
-    Json settings, claw;
-    std::vector<Json> statics, rigid, baskets;
-    std::map<std::string, Json> events;
+    Json settings, claw;                       // contact_world parameters, claw mechanism parameters
+    std::vector<Json> statics, rigid, baskets; // static_body props, rigid_body props, box regions
+    std::map<std::string, Json> events;        // attach / detach / drop_in_region / drop_elsewhere
     Matrix4 world_from_task;
-    std::map<std::string, Matrix4> frames;
+    std::map<std::string, Matrix4> frames; // task frame id -> world pose
     std::filesystem::path pad_paths[2];
     std::map<std::string, std::filesystem::path> task_assets;
-    Matrix4 mount{Matrix4::Identity()};
-    double travel{0}, initial_q{0}, surface_z{0};
+    Matrix4 mount{Matrix4::Identity()};           // claw frame in the robot frame-tree root
+    double travel{0}, initial_q{0}, surface_z{0}; // per-jaw travel (m), initial jaw position, water surface z
+
+    // Pool contact boxes in world coordinates.
     struct PoolBox {
         Matrix4 transform;
         Vec3 half;
@@ -354,21 +407,22 @@ struct PropWorld::Impl {
     std::unique_ptr<btMultiBodyConstraintSolver> solver;
     std::unique_ptr<btMultiBodyDynamicsWorld> world;
     std::vector<Body> bodies;
-    std::vector<int> scenery, floors, pads;
-    std::map<std::string, int> static_meshes;
+    std::vector<int> scenery, floors, pads;   // body indices; floors is the subset of scenery that is pool floor
+    std::map<std::string, int> static_meshes; // collision mesh id -> body index
     std::vector<Prop> props;
-    int claw_body{-1};
+    int claw_body{-1}; // shapeless body moved to the claw mount each step; the grasp constraint's parent
     std::vector<Basket> basket;
 
-    std::optional<std::size_t> held;
+    // Grasp and jaw state, restored by resetState().
+    std::optional<std::size_t> held; // index into props
     std::unique_ptr<btMultiBodyFixedConstraint> constraint;
-    Matrix4 held_relative{Matrix4::Identity()};
-    double q{0};
-    int direction{0};
-    bool lockout{false};
+    Matrix4 held_relative{Matrix4::Identity()}; // held prop body in the claw frame at grasp time
+    double q{0};                                // physical per-jaw position (lags the mechanism when blocked)
+    int direction{0};                           // inferred from the mechanism: +1 opening, -1 closing, 0 hold
+    bool lockout{false};                        // set by a grasp; further closing is ignored until an open
     double last_command{0};
-    std::map<std::string, double> contact_time;
-    Events pending;
+    std::map<std::string, double> contact_time; // prop id -> seconds both pads have gripped it
+    Events pending;                             // events produced this step
     std::optional<std::int64_t> time_ns;
     double dt{1.0 / 240};
 
@@ -383,11 +437,12 @@ struct PropWorld::Impl {
         teardown();
     }
 
-    void build();
-    void teardown();
-    void resetState();
+    void build();      // create the Bullet world and every body
+    void teardown();   // destroy them, in dependency order
+    void resetState(); // grasp/jaw state and prop poses back to initial
     void restore(Prop &prop);
 
+    // Thin wrappers over the Bullet body API, addressed by body index.
     int addBody(std::unique_ptr<btCollisionShape> shape, std::unique_ptr<btTriangleMesh> mesh, double mass,
                 const Matrix4 &pose);
     void resetBase(int index, const Vec3 &position, const btQuaternion &orientation);
@@ -396,10 +451,13 @@ struct PropWorld::Impl {
     std::pair<Vec3, Vec3> baseVelocity(int index) const;
     void changeDynamics(int index, double friction, double restitution);
 
+    // Contacts of body a (with b, or with anything when b < 0) from the last step's manifolds, and a fresh
+    // narrow-phase query between two bodies at their current poses.
     std::vector<Contact> contactPoints(int a, int b = -1) const;
     std::vector<Contact> closestPoints(int a, int b) const;
     void setCollisionPair(int a, int b, bool enabled);
 
+    // Per-step logic, in the order step() runs it.
     Matrix4 propPose(const Prop &prop) const;
     std::optional<std::string> destination(std::size_t key, std::vector<std::size_t> resting = {}) const;
     void placePads(const Matrix4 &mount_pose, double q_value, const Vec3 &velocity, const Vec3 &angular, double dq);
@@ -412,6 +470,7 @@ struct PropWorld::Impl {
 };
 
 PropWorld::Impl::Impl(const ResolvedScenario &resolved, const std::string &task_id, const std::string &mechanism) {
+    // The task definition and where the scenario placed it.
     const Json *found = nullptr;
     for (const auto &item : resolved.task_definitions)
         if (item.at("id") == task_id)
@@ -432,6 +491,7 @@ PropWorld::Impl::Impl(const ResolvedScenario &resolved, const std::string &task_
         frames[frame.at("id").get<std::string>()] =
             world_from_task * poseOf(frame.at("position_m"), frame.at("orientation_wxyz"));
 
+    // Sort the task's props by type; exactly one contact_world carries the settings.
     std::vector<Json> worlds;
     for (const auto &prop : definition.at("props")) {
         const auto type = prop.at("type").get<std::string>();
@@ -445,6 +505,9 @@ PropWorld::Impl::Impl(const ResolvedScenario &resolved, const std::string &task_
     if (worlds.size() != 1 || rigid.empty())
         throw std::invalid_argument("task needs one contact_world prop and at least one rigid_body");
     settings = worlds[0].at("parameters");
+
+    // Basket regions and the events the prop world emits. A drop_into event is keyed by its outcome
+    // (drop_in_region / drop_elsewhere).
     for (const auto &region : definition.at("regions"))
         if (region.at("type") == "box")
             baskets.push_back(region);
@@ -465,6 +528,8 @@ PropWorld::Impl::Impl(const ResolvedScenario &resolved, const std::string &task_
     for (const auto &[id, path] : resolved.asset_paths.count("tasks") ? resolved.asset_paths.at("tasks")
                                                                       : std::map<std::string, std::filesystem::path>{})
         task_assets[id] = path;
+
+    // The claw: the one robot mechanism of the configured type (or the named one).
     std::vector<const Json *> claws;
     for (const auto &item : resolved.robot.at("mechanisms"))
         if (item.at("type") == settings.at("claw_mechanism_type") && (mechanism.empty() || item.at("id") == mechanism))
@@ -483,6 +548,8 @@ PropWorld::Impl::Impl(const ResolvedScenario &resolved, const std::string &task_
         throw std::invalid_argument("Invalid claw travel");
     travel = (claw.at("max_gap_m").get<double>() - claw.at("min_gap_m").get<double>()) / 2;
     initial_q = claw.at("initial_state") == "open" ? travel : 0.0;
+
+    // Pad collision meshes (left, right) and the claw mount from the robot frame tree.
     int side = 0;
     for (const char *name : {"left", "right"}) {
         const auto id = claw.at("pads").at(name).get<std::string>();
@@ -506,6 +573,7 @@ PropWorld::Impl::Impl(const ResolvedScenario &resolved, const std::string &task_
     const spatial::FixedFrames fixed(resolved.robot.at("frames").at("root").get<std::string>(), edges);
     mount = poseMatrix(fixed.fromRoot(claws[0]->at("frame").get<std::string>()));
 
+    // Pool contact boxes and water surface, moved into the world by the pool placement.
     const PoolModel pool = poolModel(resolved.pool);
     const Json &pool_placement = resolved.scenario.at("pool_placement");
     surface_z = pool.surface_z + pool_placement.at("position_m").at(2).get<double>();
@@ -537,6 +605,7 @@ void PropWorld::Impl::teardown() {
     configuration.reset();
 }
 
+// Add a base-only multibody; mass <= 0 makes it fixed. A null shape gives a body without a collider.
 int PropWorld::Impl::addBody(std::unique_ptr<btCollisionShape> shape, std::unique_ptr<btTriangleMesh> mesh, double mass,
                              const Matrix4 &pose) {
     Body b;
@@ -564,6 +633,7 @@ int PropWorld::Impl::addBody(std::unique_ptr<btCollisionShape> shape, std::uniqu
     }
     world->addMultiBody(b.body.get());
     if (b.collider) {
+        // Fixed bodies don't collide with each other.
         const int group = b.fixed ? int(btBroadphaseProxy::StaticFilter) : int(btBroadphaseProxy::DefaultFilter);
         const int mask = b.fixed ? int(btBroadphaseProxy::AllFilter ^ btBroadphaseProxy::StaticFilter)
                                  : int(btBroadphaseProxy::AllFilter);
@@ -603,6 +673,7 @@ std::pair<Vec3, Vec3> PropWorld::Impl::baseVelocity(int index) const {
     return {fromBt(mb.getBaseVel()), fromBt(mb.getBaseOmega())};
 }
 
+// Enable or disable collisions between two bodies (via the broadphase PairFilter).
 void PropWorld::Impl::setCollisionPair(int a, int b, bool enabled) {
     auto *ca = bodies[static_cast<std::size_t>(a)].collider.get();
     auto *cb = bodies[static_cast<std::size_t>(b)].collider.get();
@@ -623,6 +694,7 @@ void PropWorld::Impl::setCollisionPair(int a, int b, bool enabled) {
 }
 
 void PropWorld::Impl::build() {
+    // Bullet world, with deterministic overlapping-pair order so runs are reproducible.
     const double gravity = settings.at("gravity_m_s2").get<double>();
     configuration = std::make_unique<btDefaultCollisionConfiguration>();
     dispatcher = std::make_unique<btCollisionDispatcher>(configuration.get());
@@ -643,6 +715,8 @@ void PropWorld::Impl::build() {
         shape->setMargin(kUrdfDefaultMarginM);
         return shape;
     };
+
+    // Scenery: pool boxes, then each static_body's collision meshes and boxes.
     for (const auto &box : pool_boxes) {
         const int uid = addBody(boxShape(box.half), nullptr, 0, box.transform);
         scenery.push_back(uid);
@@ -675,6 +749,8 @@ void PropWorld::Impl::build() {
             scenery.push_back(addBody(boxShape(vec3(box.at("size_m"), "size_m") / 2), nullptr, 0, t));
         }
     }
+
+    // Rigid props: a convex hull of the collision mesh, centred on its bounding box.
     for (const auto &prop : rigid) {
         const Json &c = prop.at("parameters");
         const auto asset = c.at("collision_asset").get<std::string>();
@@ -733,7 +809,7 @@ void PropWorld::Impl::build() {
         shape->recalcLocalAabb();
         btCollisionShape *raw = shape.get();
         Matrix4 pose = Matrix4::Identity();
-        pose(2, 3) = 10;
+        pose(2, 3) = 10; // parked out of the way; resetState() places the pads at the claw
         const int uid = addBody(std::move(shape), nullptr, 0, pose);
         auto &collider = *bodies[static_cast<std::size_t>(uid)].collider;
         collider.setFriction(claw.at("friction").get<double>());
@@ -742,6 +818,7 @@ void PropWorld::Impl::build() {
         raw->setMargin(kPadMarginM);
         pads.push_back(uid);
     }
+
     for (const auto &r : baskets)
         basket.push_back({r.at("id").get<std::string>(),
                           frames.at(r.at("parameters").at("frame").get<std::string>()).inverse(), &r.at("parameters")});
@@ -764,6 +841,7 @@ void PropWorld::Impl::resetState() {
         restore(p);
 }
 
+// Put a prop back at its configured frame, at rest.
 void PropWorld::Impl::restore(Prop &prop) {
     const Matrix4 &t = frames.at(prop.config->at("frame").get<std::string>());
     resetBase(prop.body, t.block<3, 1>(0, 3) + t.block<3, 3>(0, 0) * prop.center, quatOf(t));
@@ -789,13 +867,14 @@ std::vector<Contact> PropWorld::Impl::contactPoints(int a, int b) const {
             c.other = direct ? i1 : i0;
             c.normal = fromBt(pt.m_normalWorldOnB) * (swapped ? -1.0 : 1.0);
             c.distance = pt.getDistance();
-            c.force = pt.m_appliedImpulse / dt;
+            c.force = pt.m_appliedImpulse / dt; // impulse over the last step -> force
             result.push_back(c);
         }
     }
     return result;
 }
 
+// Runs the closest-point algorithm directly on the pair, independent of the broadphase and last step.
 std::vector<Contact> PropWorld::Impl::closestPoints(int a, int b) const {
     const btCollisionObject *ca = bodies[static_cast<std::size_t>(a)].collider.get();
     const btCollisionObject *cb = bodies[static_cast<std::size_t>(b)].collider.get();
@@ -819,12 +898,16 @@ std::vector<Contact> PropWorld::Impl::closestPoints(int a, int b) const {
     return collector.points;
 }
 
+// Mesh-origin pose of a prop (the Bullet body is at the bounding-box centre).
 Matrix4 PropWorld::Impl::propPose(const Prop &prop) const {
     Matrix4 t = basePose(prop.body);
     t.block<3, 1>(0, 3) -= t.block<3, 3>(0, 0) * prop.center;
     return t;
 }
 
+// The basket a (free) prop is in: its bounds fit inside the basket footprint, its centre is within the z
+// range, and it touches the basket's support mesh or rests on a prop that is itself in the basket.
+// `resting` holds the props already on the stack walk, to stop cycles.
 std::optional<std::string> PropWorld::Impl::destination(std::size_t key, std::vector<std::size_t> resting) const {
     const Prop &p = props[key];
     if (held && *held == key)
@@ -863,6 +946,8 @@ std::optional<std::string> PropWorld::Impl::destination(std::size_t key, std::ve
 
 // ---------------------------------------------------------------------------------- dynamics
 
+// Place both pads q_value either side of the mount along its y axis, moving with the robot (velocity, angular)
+// plus the jaw rate dq.
 void PropWorld::Impl::placePads(const Matrix4 &mount_pose, double q_value, const Vec3 &velocity, const Vec3 &angular,
                                 double dq) {
     const double signs[2] = {1, -1};
@@ -875,6 +960,7 @@ void PropWorld::Impl::placePads(const Matrix4 &mount_pose, double q_value, const
     }
 }
 
+// Move the jaws toward `target` at jaw speed, shortening the step where a pad would drive into a contact.
 void PropWorld::Impl::driveJaws(double dt_s, const Matrix4 &mount_pose, const Vec3 &velocity, const Vec3 &angular,
                                 double target) {
     const double old = q;
@@ -916,6 +1002,7 @@ void PropWorld::Impl::driveJaws(double dt_s, const Matrix4 &mount_pose, const Ve
     placePads(mount_pose, q, velocity, angular, (q - old) / dt_s);
 }
 
+// Build an event from the task's event definition; `data` is filtered to the definition's `emits` list if any.
 Event PropWorld::Impl::event(const std::string &key, std::int64_t t, const Json &region, Json data) const {
     const Json &source = events.at(key);
     const auto emits = source.at("parameters").find("emits");
@@ -931,6 +1018,7 @@ Event PropWorld::Impl::event(const std::string &key, std::int64_t t, const Json 
                  {"time_ns", t},          {"data", data}};
 }
 
+// Drop the held prop (if any): remove the grasp constraint, let the pads collide with it again, emit detach.
 void PropWorld::Impl::release(const std::string &reason, std::int64_t t) {
     if (constraint) {
         world->removeMultiBodyConstraint(constraint.get());
@@ -945,6 +1033,8 @@ void PropWorld::Impl::release(const std::string &reason, std::int64_t t) {
     held.reset();
 }
 
+// The prop world only sees the mechanism's jaw position, so the open/close/stop command is inferred from how
+// that position changed since the last step.
 void PropWorld::Impl::inferDirection(double command, bool enabled) {
     const double delta = command - last_command;
     last_command = command;
@@ -960,6 +1050,8 @@ void PropWorld::Impl::inferDirection(double command, bool enabled) {
     }
 }
 
+// While closing: a prop both pads press on (force and normal along the jaw axis) for grasp_dwell_s is grasped
+// with a fixed constraint whose strength is limited to hold_force_n.
 void PropWorld::Impl::tryGrasp(double dt_s, const Matrix4 &mount_pose, std::int64_t t) {
     const double signs[2] = {1, -1};
     const Vec3 axis = mount_pose.block<3, 1>(0, 1);
@@ -1002,6 +1094,8 @@ void PropWorld::Impl::tryGrasp(double dt_s, const Matrix4 &mount_pose, std::int6
     }
 }
 
+// Emit one drop event per free prop once it has been at rest for rest_time_s with a landing label: a basket,
+// or (only for props that were picked up) the floor or another support.
 void PropWorld::Impl::settle(double dt_s, std::int64_t t) {
     const double rest_speed = settings.at("rest_speed_m_s").get<double>();
     const double rest_time = settings.at("rest_time_s").get<double>();
@@ -1049,6 +1143,7 @@ void PropWorld::Impl::settle(double dt_s, std::int64_t t) {
 
 // ----------------------------------------------------------------------------- robot contacts
 
+// Mirror the prop world's scenery, pads and props into a VehicleContacts world for the plant.
 void PropWorld::Impl::buildVehicle(double friction) {
     vehicle = std::make_shared<VehicleContacts>(friction);
     const auto meshShape = [](const ObjMesh &obj) {
@@ -1068,6 +1163,7 @@ void PropWorld::Impl::buildVehicle(double friction) {
         shape->optimizeConvexHull();
         return shape;
     };
+
     for (const auto &box : pool_boxes)
         vehicle->add(std::make_unique<btBoxShape>(toBt(box.half)), nullptr, VehicleContacts::kScenery, box.transform);
     for (const auto &prop : statics) {
@@ -1094,6 +1190,7 @@ void PropWorld::Impl::buildVehicle(double friction) {
     syncVehicle();
 }
 
+// Copy the current jaw position and prop poses into the robot-side contact world.
 void PropWorld::Impl::syncVehicle() {
     if (!vehicle)
         return;
@@ -1120,9 +1217,11 @@ PropWorld::~PropWorld() = default;
 const std::string &PropWorld::task() const {
     return impl_->task;
 }
+
 const std::string &PropWorld::mechanismId() const {
     return impl_->mechanism_id;
 }
+
 double PropWorld::jawPosition() const {
     return impl_->q;
 }
@@ -1159,6 +1258,7 @@ std::map<std::string, PropState> PropWorld::props() const {
     return result;
 }
 
+// Props that have settled (at rest longer than rest_time_s) in a basket: prop id -> basket id.
 std::map<std::string, std::string> PropWorld::basketContents() const {
     std::map<std::string, std::string> result;
     const double rest_time = impl_->settings.at("rest_time_s").get<double>();
@@ -1175,6 +1275,8 @@ Events PropWorld::step(double dt_s, std::int64_t time_ns, const spatial::Pose &r
                        const Eigen::Vector3d &linear_velocity_world, const Eigen::Vector3d &angular_velocity_world,
                        const std::array<double, 2> &claw_joint_positions, const Water &water, bool enabled) {
     Impl &s = *impl_;
+
+    // Validate inputs.
     if (time_ns < 0 || (s.time_ns && time_ns < *s.time_ns))
         throw std::invalid_argument("time_ns must be a nondecreasing nonnegative int");
     if (!std::isfinite(dt_s) || dt_s <= 0)
@@ -1190,12 +1292,15 @@ Events PropWorld::step(double dt_s, std::int64_t time_ns, const spatial::Pose &r
     if (!std::isfinite(water.density) || water.density <= 0)
         throw std::invalid_argument("water density must be positive and finite");
     s.time_ns = time_ns;
+
+    // Claw mount pose and velocity in the world; the mechanism's jaw position becomes the command.
     const Matrix4 body = poseMatrix(robot_root_pose);
     const Matrix4 mount = body * s.mount;
     const Vec3 mount_velocity =
         linear_velocity_world + angular_velocity_world.cross(Vec3(mount.block<3, 1>(0, 3) - body.block<3, 1>(0, 3)));
     const double command = std::min(std::max((claw_joint_positions[0] + claw_joint_positions[1]) / 2, 0.0), s.travel);
 
+    // Jaws: opening releases any held prop, then the claw body and pads follow the robot.
     s.dt = dt_s;
     s.inferDirection(command, enabled);
     if (s.direction > 0)
@@ -1205,6 +1310,10 @@ Events PropWorld::step(double dt_s, std::int64_t time_ns, const spatial::Pose &r
     s.resetBase(s.claw_body, mount.block<3, 1>(0, 3), quatOf(mount));
     s.setVelocity(s.claw_body, mount_velocity, angular_velocity_world);
     s.driveJaws(dt_s, mount, mount_velocity, angular_velocity_world, target);
+
+    // Water forces on each prop, scaled by its submerged fraction `wet` (from its bounding box against the
+    // surface): quadratic drag on the box face areas in the current-relative velocity, buoyancy, and
+    // linear angular drag.
     const Json &settings = s.settings;
     const double gravity = settings.at("gravity_m_s2").get<double>();
     for (auto &p : s.props) {
@@ -1226,6 +1335,9 @@ Events PropWorld::step(double dt_s, std::int64_t time_ns, const spatial::Pose &r
         mb.addBaseTorque(toBt(-settings.at("angular_drag_n_m_s_per_rad").get<double>() * wet * omega));
     }
     s.world->stepSimulation(dt_s, 0);
+
+    // Grasp bookkeeping: a held prop that slipped too far from its grasp pose is released; a closing claw may
+    // grasp a new one.
     if (s.held) {
         const Vec3 position = s.basePose(s.props[*s.held].body).block<3, 1>(0, 3);
         const Vec3 expected = (mount * s.held_relative).block<3, 1>(0, 3);
@@ -1234,6 +1346,8 @@ Events PropWorld::step(double dt_s, std::int64_t time_ns, const spatial::Pose &r
     }
     if (!s.held && s.direction < 0 && enabled)
         s.tryGrasp(dt_s, mount, time_ns);
+
+    // Landing events, the robot-side contact mirror, and this step's events.
     s.settle(dt_s, time_ns);
     s.syncVehicle();
     Events events;

@@ -1,3 +1,4 @@
+// SceneModel: the pack composition plus the viewer's animated and overlay instances, per frame.
 #include "scene_model.hpp"
 #include <algorithm>
 #include <iostream>
@@ -9,11 +10,13 @@ namespace {
 namespace r = nereus::rendering;
 } // namespace
 
+// Keep the warning for the UI and also print it.
 void SceneModel::warn(const std::string &text) const {
     warnings_.push_back(text);
     std::cerr << "nereus-viewer: " << text << '\n';
 }
 
+// Load once per path; a failed load is cached as null and warned about once.
 std::shared_ptr<const r::MeshAsset> SceneModel::mesh(const std::filesystem::path &path) const {
     if (path.empty())
         return nullptr;
@@ -58,6 +61,7 @@ SceneModel::SceneModel(const Scenario &scenario, const SceneModelOptions &option
         item.clawSide = leftAssets.count(visual.asset) ? 1 : rightAssets.count(visual.asset) ? -1 : 0;
         animation_.push_back(item);
     }
+
     // Viewer-only robot visuals that the pack lists as assets but not as visuals (launcher, magnet).
     for (const auto &entry : options.config["extra_visuals"]) {
         const auto assetId = entry["asset"].as<std::string>();
@@ -82,6 +86,8 @@ SceneModel::SceneModel(const Scenario &scenario, const SceneModelOptions &option
         }
         extras_.emplace_back(asset, base);
     }
+
+    // Payload mesh for loaded launcher / dropper slots.
     const auto payloadAsset = lookup(options.config, {"payloads", "mesh_asset"});
     if (payloadAsset) {
         const auto it = scenario.robotAssets.find(payloadAsset.as<std::string>());
@@ -90,6 +96,7 @@ SceneModel::SceneModel(const Scenario &scenario, const SceneModelOptions &option
     }
 }
 
+// Unit payload mesh scaled to projectile length (x) and diameter (y, z) at each slot.
 std::vector<glm::mat4> SceneModel::payloadMounts(const std::string &mechanism) const {
     std::vector<glm::mat4> result;
     if (const auto *m = scenario_.mechanism(mechanism))
@@ -99,6 +106,7 @@ std::vector<glm::mat4> SceneModel::payloadMounts(const std::string &mechanism) c
     return result;
 }
 
+// world <- base_link <- robot root.
 Eigen::Matrix4d SceneModel::worldFromRoot(const glm::mat4 &worldFromBase) const {
     return toEigen(worldFromBase).cast<double>() * baseFromRoot_;
 }
@@ -111,7 +119,9 @@ r::Scene SceneModel::build(const VisualState &state) const {
         instance.transform = toEigen(world);
         into.push_back(std::move(instance));
     };
+
     std::vector<r::Instance> dynamic;
+
     // Rotor spin and claw travel replace the reset placement of those robot visuals.
     std::vector<pack_scene::RobotOverride> overrides;
     for (std::size_t i = 0; i < animation_.size(); ++i) {
@@ -119,6 +129,9 @@ r::Scene SceneModel::build(const VisualState &state) const {
         const auto &item = animation_[i];
         if (item.rotor < 0 && item.clawSide == 0)
             continue;
+
+        // Spin about the rotor's own axis in its frame; slide claw jaws along the frame's y (claw[0] left,
+        // claw[1] right, opposite signs).
         Eigen::Matrix4d local = part.frame_from_asset;
         if (item.rotor >= 0 && std::size_t(item.rotor) < state.rotorSpin.size())
             local = local * toEigen(state.rotorSpin[std::size_t(item.rotor)]).cast<double>();
@@ -130,8 +143,12 @@ r::Scene SceneModel::build(const VisualState &state) const {
         }
         overrides.push_back({i, rootFromFrame * local});
     }
+
+    // Extra visuals ride on the body.
     for (const auto &[asset, base] : extras_)
         add(dynamic, asset, state.body * base);
+
+    // Status lights: emissive boxes in this frame's colours (black when the state has none).
     for (std::size_t i = 0; i < lights_.lights.size(); ++i) {
         const auto &light = lights_.lights[i];
         r::Instance instance;
@@ -145,10 +162,13 @@ r::Scene SceneModel::build(const VisualState &state) const {
                                      light.mount * glm::scale(glm::mat4(1), light.size));
         dynamic.push_back(std::move(instance));
     }
+
+    // Loaded payloads.
     if (!payloadMesh_.empty())
         if (auto payload = mesh(payloadMesh_))
             for (const auto &world : state.loadedPayloads)
                 add(dynamic, payload, world);
+
     if (state.ghostBody) { // estimate robot: the pack's robot visuals at the estimate pose, translucent
         const Eigen::Matrix4d root = worldFromRoot(*state.ghostBody);
         for (const auto &visual : pack_->robotVisuals()) {
@@ -163,6 +183,8 @@ r::Scene SceneModel::build(const VisualState &state) const {
             dynamic.push_back(std::move(instance));
         }
     }
+
+    // Markers: a mesh (or the unit box) scaled in place, optionally emissive or translucent ghost.
     for (const auto &marker : state.markers) {
         r::Instance instance;
         instance.mesh = marker.mesh.empty() ? box_ : mesh(marker.mesh);
@@ -182,12 +204,16 @@ r::Scene SceneModel::build(const VisualState &state) const {
         }
         dynamic.push_back(std::move(instance));
     }
+
+    // Compose, then hide what the toggles turn off. Instance order: pool, task visuals, equipment, then robot
+    // and dynamic instances.
     r::Scene scene = pack_->compose(worldFromRoot(state.body), dynamic, overrides, state.indicatorLatched);
     if (robotOnly_) { // static scene = pool + task visuals; robot and dynamic instances follow it
         for (std::size_t i = 0; i < pack_->staticScene().instances.size() && i < scene.instances.size(); ++i)
             scene.instances[i].visible = false;
         scene.water.reset();
     }
+
     const auto &equipment = pack_->equipmentInstances(); // the last static instances
     if (!state.showCourse)                               // task visuals follow the pool instances in the static scene
         for (std::size_t i = pack_->poolInstanceCount();

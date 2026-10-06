@@ -1,3 +1,5 @@
+// "ros.simulation_rate" provider: reads and writes the simulator's speed parameter through the remote
+// node's parameter services, and calls optional sync / reset Trigger services.
 #include "ros_runtime.hpp"
 #include <rcl_interfaces/msg/parameter_type.hpp>
 #include <rcl_interfaces/srv/get_parameters.hpp>
@@ -9,6 +11,9 @@ namespace {
 using Get = rcl_interfaces::srv::GetParameters;
 using Set = rcl_interfaces::srv::SetParameters;
 using Trigger = std_srvs::srv::Trigger;
+
+// Rate 0 means paused; resumeRate remembers the last nonzero rate. Every async request carries an epoch
+// so replies that arrive after a timeout or a newer request are ignored.
 class SimulationRate final : public Simulation {
   public:
     SimulationRate(std::shared_ptr<RosRuntime> runtime, const YAML::Node &cfg, const Context &ctx)
@@ -23,30 +28,38 @@ class SimulationRate final : public Simulation {
             syncClient = runtime->node->create_client<Trigger>(expand(cfg["sync_service"].as<std::string>(), ctx));
         if (cfg["reset_service"])
             resetClient = runtime->node->create_client<Trigger>(expand(cfg["reset_service"].as<std::string>(), ctx));
+        // Poll at 10 Hz: refresh readiness, expire timed-out requests and re-read the rate.
         timer = runtime->node->create_wall_timer(std::chrono::milliseconds(100), [this] { tick(); });
     }
+
     SimulationState state() override {
         std::lock_guard<std::mutex> lock(mutex);
         return value;
     }
+
     void setRate(double rate) override {
         std::lock_guard<std::mutex> lock(mutex);
         if (!std::isfinite(rate) || rate < 0 || rate > value.maxRate)
             return;
         setRateLocked(rate);
     }
+
+    // Pausing writes rate 0; resuming writes back the remembered resumeRate.
     void setPaused(bool paused) override {
         std::lock_guard<std::mutex> lock(mutex);
         setRateLocked(paused ? 0 : value.resumeRate);
     }
+
     void sync() override {
         trigger(syncClient, "Sync");
     }
+
     void reset() override {
         trigger(resetClient, "Reset");
     }
 
   private:
+    // Calls a sync/reset Trigger service; one operation may be in flight at a time.
     void trigger(const rclcpp::Client<Trigger>::SharedPtr &client, const std::string &name) {
         std::lock_guard<std::mutex> lock(mutex);
         if (value.operationPending || !client || !client->service_is_ready())
@@ -69,6 +82,8 @@ class SimulationRate final : public Simulation {
                                                })
                           .request_id;
     }
+
+    // Sends a SetParameters request for the rate (mutex held). The reply forces an immediate re-read.
     void setRateLocked(double rate) {
         if (!value.connected || value.pending || !set->service_is_ready())
             return;
@@ -78,6 +93,7 @@ class SimulationRate final : public Simulation {
             reading = false;
             ++readEpoch;
         }
+
         auto request = std::make_shared<Set::Request>();
         rcl_interfaces::msg::Parameter item;
         item.name = parameter;
@@ -111,12 +127,15 @@ class SimulationRate final : public Simulation {
                     .request_id;
     }
 
+    // Timer callback: timeouts for operations, writes and reads, then a GetParameters poll every 0.5 s.
     void tick() {
         std::lock_guard<std::mutex> lock(mutex);
         const auto now = Steady::now();
         auto elapsed = [&](auto t) { return std::chrono::duration<double>(now - t).count(); };
         value.syncReady = syncClient && syncClient->service_is_ready();
         value.resetReady = resetClient && resetClient->service_is_ready();
+
+        // Expire requests that outlived request_timeout; their late replies are dropped by the epoch bump.
         if (value.operationPending && elapsed(operationSince) > timeout) {
             operationClient->remove_pending_request(operationId);
             ++operationEpoch;
@@ -137,10 +156,13 @@ class SimulationRate final : public Simulation {
             value.connected = false;
             value.message = "Simulator speed read timed out";
         }
+
         if (!get->service_is_ready() || !set->service_is_ready()) {
             value.message = "Simulator unavailable";
             return;
         }
+
+        // Start the next read unless one is in flight, a write is pending, or we polled < 0.5 s ago.
         if (reading || value.pending || elapsed(lastPoll) < .5)
             return;
         reading = true;
@@ -175,24 +197,33 @@ class SimulationRate final : public Simulation {
                    })
                 .request_id;
     }
+
     std::shared_ptr<RosRuntime> runtime;
     std::mutex mutex;
     SimulationState value;
+    // error: last write failure, shown instead of the running/paused status until a write succeeds.
     std::string parameter, error;
     double timeout;
+
+    // Rate read / write bookkeeping.
     bool reading = false;
     uint64_t readEpoch = 0, writeEpoch = 0;
     int64_t getId = 0, setId = 0;
     Steady::time_point lastPoll{}, lastRead{}, setSince{};
+
+    // Sync / reset operation bookkeeping (operationClient is the one in flight).
     rclcpp::Client<Trigger>::SharedPtr syncClient, resetClient, operationClient;
     uint64_t operationEpoch = 0;
     int64_t operationId = 0;
     Steady::time_point operationSince{};
+
     rclcpp::Client<Get>::SharedPtr get;
     rclcpp::Client<Set>::SharedPtr set;
     rclcpp::TimerBase::SharedPtr timer;
 };
 } // namespace
+
+// Registers "ros.simulation_rate" (max_rate defaults to 10x, capped at 1000x).
 void registerSimulationRate(Registry &registry, const RuntimeFactory &runtime) {
     registry.providers.emplace(
         "ros.simulation_rate",

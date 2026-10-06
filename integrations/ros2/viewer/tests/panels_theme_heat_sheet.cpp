@@ -15,12 +15,15 @@ int main(int argc, char **argv) {
     const std::filesystem::path fonts = argv[1];
     assert(loadThemes(NEREUS_VIEWER_THEMES).empty());
     assert(themes().front().id == "heat-sheet"); // the default
+
     ImGui::CreateContext();
     auto &io = ImGui::GetIO();
     io.DisplaySize = {800, 600};
+
     for (const char *id : {"heat-sheet", "timing-board"}) {
         assert(applyTheme(id));
         const auto &theme = currentThemeInfo();
+
         // the fonts ship with the viewer, and every digit has one advance (columns of figures line up)
         for (const auto &file : {theme.fontRegular, theme.fontStrong, theme.fontFigures}) {
             assert(!file.empty() && std::filesystem::exists(fonts / file));
@@ -31,6 +34,8 @@ int main(int argc, char **argv) {
             for (char digit = '1'; digit <= '9'; ++digit)
                 assert(std::abs(font->FindGlyph(digit)->AdvanceX - zero) < .01f);
         }
+
+        // Sheet style and contrast floors against the window background.
         assert(ruledTheme() && ImGui::GetStyle().FrameRounding == 2 && ImGui::GetStyle().FrameBorderSize == 1);
         const auto &c = ImGui::GetStyle().Colors;
         const Palette sheet = palette();
@@ -39,6 +44,7 @@ int main(int argc, char **argv) {
         assert(contrastRatio(sheet.accent, c[ImGuiCol_WindowBg]) >= 5);
         assert(contrastRatio(sheet.changeText, sheet.change) >= 7); // a lit figure (the running clock) reads
         assert(c[ImGuiCol_TableHeaderBg].w == 0);                   // ruled heads, no header fill
+
         // the board: light type on the dark bar, its own colours inside the surface, the sheet's after
         beginSurface(Surface::Board);
         const Palette board = palette();
@@ -52,6 +58,7 @@ int main(int argc, char **argv) {
         endSurface();
         assert(palette().text.x == sheet.text.x && ImGui::GetStyleColorVec4(ImGuiCol_Text).x == sheet.text.x);
     }
+
     ImGui::DestroyContext();
     std::cout << "PASS: Heat sheet pair (tabular fonts, legibility, board surface)\n";
 }

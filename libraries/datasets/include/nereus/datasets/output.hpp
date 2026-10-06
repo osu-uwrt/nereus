@@ -19,6 +19,8 @@ inline void writeAtomic(const std::filesystem::path &path, const std::vector<std
 inline void writeAtomic(const std::filesystem::path &path, const std::string &data, bool sync_directory = false) {
     writeAtomic(path, data.data(), data.size(), sync_directory);
 }
+
+// A regular file with at least one byte (the resume check's notion of "already written").
 bool nonEmptyFile(const std::filesystem::path &);
 
 // Nonlinear [0, 1] depth -> optical-axis metres (+inf at the far plane / background).
@@ -35,10 +37,13 @@ struct KeyStats {
     // §10.1: >= min_visible_px in total and >= 2 components of >= min_fragment_px.
     bool fragmented(std::int64_t min_visible_px, std::int64_t min_fragment_px) const;
 };
+
+// Per-key statistics of one label capture plus the near-geometry pixel counts.
 struct LabelStats {
     std::map<std::uint32_t, KeyStats> keys;
     std::int64_t near_pixels = 0, counted_pixels = 0; // pixels nearer than near_m / pixels considered
 };
+
 // `exclude` (optional, bottom-up like the capture, 1 = skip) masks the robot's own pixels out of the near count.
 LabelStats analyzeLabels(const rendering::LabelCapture &, float near_plane, float far_plane, float near_m,
                          const std::vector<std::uint8_t> *exclude = nullptr);
@@ -53,6 +58,7 @@ std::vector<std::uint16_t> idMap(const rendering::LabelCapture &, const std::map
 // image, in place. Noise is drawn from `noise_seed` (OpenCV RNG), deterministic for a seed.
 void postProcess(std::vector<std::uint8_t> &rgb, int width, int height, double blur_sigma, double noise_sigma,
                  std::uint64_t noise_seed);
+
 // Encoders for top-down packed images.
 std::vector<std::uint8_t> encodePngRgb(const std::vector<std::uint8_t> &rgb, int width, int height);
 std::vector<std::uint8_t> encodePng16(const std::vector<std::uint16_t> &gray, int width, int height);

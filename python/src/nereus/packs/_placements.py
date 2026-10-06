@@ -24,6 +24,7 @@ IDENTITY: Pose = ([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])
 
 
 def _about(axis: int, degrees: float) -> Vector:
+    """Quaternion (wxyz) for a rotation about axis 0/1/2 (x/y/z)."""
     half = math.radians(degrees) / 2
     q = [math.cos(half), 0.0, 0.0, 0.0]
     q[1 + axis] = math.sin(half)
@@ -31,6 +32,7 @@ def _about(axis: int, degrees: float) -> Vector:
 
 
 def _orientation(item: dict[str, Any]) -> Vector:
+    """Placement orientation: ``rpy_deg`` as intrinsic Z-Y-X (yaw, then pitch, then roll)."""
     if "rpy_deg" in item:
         roll, pitch, yaw = (float(value) for value in item["rpy_deg"])
         return _unit(_multiply(_multiply(_about(2, yaw), _about(1, pitch)), _about(0, roll)))
@@ -52,6 +54,7 @@ def _pose(item: dict[str, Any]) -> Pose:
 
 
 def _rounded(values: Vector) -> Vector:
+    """Round to ``DIGITS`` decimals for the manifest."""
     return [round(value, DIGITS) + 0.0 for value in values]  # + 0.0: no -0.0
 
 
@@ -77,18 +80,21 @@ def resolve_placements(
     # frame -> (parent or None for the root, pose in the parent, JSON pointer of its placement)
     nodes: dict[str, tuple[str | None, Pose, str]] = {}
 
+    # Report a placement that gives both orientation spellings (or neither, when required)
     def oriented(item: dict[str, Any], where: str, required: bool) -> None:
         if "yaw_deg" in item and "rpy_deg" in item:
             problems.append(f"{where}: give yaw_deg or rpy_deg, not both")
         elif required and "yaw_deg" not in item and "rpy_deg" not in item:
             problems.append(f"{where}: needs yaw_deg or rpy_deg")
 
+    # Register a frame in the placement tree; frame names must be unique across all placements
     def add(name: str, parent: str | None, pose: Pose, where: str) -> None:
         if name in nodes:
             problems.append(f"{where}: frame '{name}' is already placed at {nodes[name][2]}")
         else:
             nodes[name] = (parent, pose, where)
 
+    # Root of the tree: the pool when the world itself is placed, else the world
     if "world_placement" in scenario:
         placement = scenario["world_placement"]
         oriented(placement, "/world_placement", True)
@@ -106,11 +112,15 @@ def resolve_placements(
             placement = scenario["pool_placement"]
             oriented(placement, "/pool_placement", True)
             add(POOL, placement.get("relative_to", WORLD), _placed(placement), "/pool_placement")
+
+    # Task frames
     for index, placement in enumerate(scenario["task_placements"]):
         where = f"/task_placements/{index}"
         oriented(placement, where, True)
         if placement["task"] in task_ids:  # unknown tasks are reported by the scenario checks
             add(placement["task"], placement.get("relative_to", WORLD), _placed(placement), where)
+
+    # Equipment placements, plus each placed item's own fixed frames as "<placement>/<frame>"
     items = {item["id"]: item for item in (equipment or {}).get("items", [])}
     placements = scenario.get("equipment_placements", [])
     if placements and equipment is None:
@@ -127,6 +137,8 @@ def resolve_placements(
         add(name, placement.get("relative_to", WORLD), _placed(placement), where)
         for frame in item.get("frames", []):
             add(f"{name}/{frame['id']}", name, _pose(frame), where)
+
+    # Every relative_to (including the robot start's) must name a placed frame
     initial_parent = scenario["initial"].get("relative_to", WORLD)
     references = [(parent, where) for parent, _, where in nodes.values()] + [
         (initial_parent, "/initial")
@@ -137,6 +149,7 @@ def resolve_placements(
     if problems:
         return problems
 
+    # Resolve every frame's pose in the root frame, memoized, reporting cycles
     in_root: dict[str, Pose] = {}
 
     def resolve(name: str, visiting: tuple[str, ...] = ()) -> Pose | None:
@@ -159,14 +172,17 @@ def resolve_placements(
         resolve(name)
     if problems:
         return problems
+    # Re-express root poses in the world (identity unless the world itself was placed)
     world_from_root = _inverse(in_root[WORLD])
 
     def in_world(name: str) -> Pose:
         return _compose(world_from_root, in_root[name])
 
+    # Placements already in the world with yaw_deg (or level) keep their authored values
     def rewritten(placement: dict[str, Any]) -> bool:
         return placement.get("relative_to", WORLD) != WORLD or "rpy_deg" in placement
 
+    # Pool and tasks must end up yaw-only in the world
     if "world_placement" in scenario or rewritten(scenario["pool_placement"]):
         upright = _upright(in_world(POOL), "/pool_placement", problems)
         if upright is not None:
@@ -176,11 +192,15 @@ def resolve_placements(
             upright = _upright(in_world(placement["task"]), f"/task_placements/{index}", problems)
             if upright is not None:
                 scenario["task_placements"][index] = {"task": placement["task"], **upright}
+
+    # Robot start: a full 6-DOF pose, rewritten only when it was relative to another frame
     initial = scenario["initial"]
     if initial_parent != WORLD:
         start = _compose(in_world(initial_parent), _pose(initial))
         initial.pop("relative_to")
         initial["position_m"], initial["orientation_wxyz"] = _rounded(start[0]), _rounded(start[1])
+
+    # World pose of every equipment placement, for the runtime
     if equipment is not None:
         equipment["placed"] = []
         for placement in placements:

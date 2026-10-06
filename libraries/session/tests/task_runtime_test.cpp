@@ -25,6 +25,7 @@ Json readJson(const std::string &path) {
     return Json::parse(in);
 }
 
+// Recursive JSON comparison: integers and discrete values exactly, floats within 1e-9 abs + 1e-9 rel.
 ::testing::AssertionResult near(const Json &expected, const Json &actual, const std::string &where) {
     if (expected.is_number() && actual.is_number()) {
         if (expected.is_number_integer() && actual.is_number_integer())
@@ -61,18 +62,22 @@ Json readJson(const std::string &path) {
     return ::testing::AssertionSuccess();
 }
 
+// Pose from an op's "position" and "wxyz" fields.
 nereus::spatial::Pose poseOf(const Json &op) {
     nereus::spatial::Pose pose;
     pose.translation = Eigen::Vector3d(op["position"][0], op["position"][1], op["position"][2]);
     pose.rotation = Eigen::Quaterniond(op["wxyz"][0], op["wxyz"][1], op["wxyz"][2], op["wxyz"][3]);
     return pose;
 }
+
 Eigen::Vector3d vec(const Json &v) {
     return Eigen::Vector3d(v[0].get<double>(), v[1].get<double>(), v[2].get<double>());
 }
+
 Json toJson(const Events &events) {
     return Json(events);
 }
+
 Json vecJson(const Eigen::Vector3d &v) {
     return Json::array({v[0], v[1], v[2]});
 }
@@ -84,10 +89,12 @@ class NoRules : public Rules {
         return {{"scores", Json::array()}, {"events", Json::array()}};
     }
 };
+
 RulesRegistry noRules() {
     return {{"robosub_2026", [] { return std::make_unique<NoRules>(); }}};
 }
 
+// Talos scenario with auto_start enabled, loaded once for the whole binary.
 const ResolvedScenario &scenario() {
     // The recorded cases start scoring at boot, not at the pack default (operator "start").
     static const ResolvedScenario s = [] {
@@ -109,6 +116,7 @@ void replay(const Json &captured, const RulesRegistry &rules, bool with_derived)
         const std::string where = name + " op " + std::to_string(i) + " (" + op["op"].get<std::string>() + ")";
         const std::int64_t t = op["t"];
         const std::string kind = op["op"];
+        // Dispatch the op and compare its result with the recorded one.
         if (kind == "observe") {
             const Events events = runtime.observe(t, poseOf(op));
             ASSERT_TRUE(near(expected["events"], toJson(events), where));
@@ -144,6 +152,8 @@ void replay(const Json &captured, const RulesRegistry &rules, bool with_derived)
             FAIL() << "unknown op " << kind;
         }
     }
+
+    // With no-op rules the whole snapshot is compared; with real rules, scores/history/latched and describe().
     EXPECT_EQ(captured["event_count"].get<std::size_t>(), events_seen) << name;
     const Json snapshot = runtime.snapshot();
     if (!with_derived) {
@@ -160,6 +170,7 @@ void replay(const Json &captured, const RulesRegistry &rules, bool with_derived)
 }
 } // namespace
 
+// Geometry-only cases (no scoring) against the reference.
 TEST(TaskRuntimeEquivalence, GeometryCasesMatchReference) {
     const Json fixture = readJson(std::string(NEREUS_SESSION_FIXTURES) + "/task_runtime_capture.json");
     ASSERT_EQ(fixture["cases"].size(), 7u);
@@ -169,6 +180,7 @@ TEST(TaskRuntimeEquivalence, GeometryCasesMatchReference) {
     }
 }
 
+// The compiled robosub_2026 rules against the reference, including derived events and scores.
 TEST(TaskRuntimeEquivalence, Robosub2026RulesMatchReference) {
     const Json fixture = readJson(std::string(NEREUS_SESSION_FIXTURES) + "/task_runtime_capture.json");
     ASSERT_EQ(fixture["rules_cases"].size(), 7u);
@@ -179,6 +191,7 @@ TEST(TaskRuntimeEquivalence, Robosub2026RulesMatchReference) {
 }
 
 namespace {
+// Test rules: 5 points and one derived event per gate forward_pass; feed reports what it was given.
 struct ScriptedRules : Rules {
     Json evaluate(const Json &state, const Events &events, const Json &) override {
         Json out = {{"scores", Json::array()}, {"events", Json::array()}};
@@ -206,13 +219,16 @@ struct ScriptedRules : Rules {
     bool seen_running{false};
 };
 
+// Registry that serves `factory` under the robosub_2026 name the Talos scenario uses.
 RulesRegistry scripted(std::function<std::unique_ptr<Rules>()> factory) {
     return {{"robosub_2026", factory}};
 }
 
+// Pose x_local metres along the gate task's local x axis (fixed y and z offsets), in world coordinates.
 nereus::spatial::Pose gatePose(double x_local) {
     // Gate task frame at the placement in the Talos scenario.
     const Json &placement = scenario().scenario["task_placements"][0];
+    // Half the yaw angle, for the quaternion below.
     const double yaw = placement["yaw_deg"].get<double>() * 3.14159265358979323846 / 180 / 2;
     nereus::spatial::Pose base{
         Eigen::Vector3d(placement["position_m"][0], placement["position_m"][1], placement["position_m"][2]),
@@ -221,6 +237,8 @@ nereus::spatial::Pose gatePose(double x_local) {
 }
 } // namespace
 
+// Rule scores and derived events are committed to the snapshot after the input events, and describe()/feed()
+// pass through.
 TEST(TaskRuntime, RulesOutputsAreValidatedCommittedAndVisible) {
     const std::vector<std::string> gate = {"gate"};
     TaskRuntime runtime(scenario(), scripted([] { return std::make_unique<ScriptedRules>(); }), &gate);
@@ -243,6 +261,7 @@ TEST(TaskRuntime, RulesOutputsAreValidatedCommittedAndVisible) {
     EXPECT_TRUE(feed[0]["has_run"]);
 }
 
+// A rules event naming an unknown task throws, leaves nothing committed, and blocks observe() until reset.
 TEST(TaskRuntime, MalformedRulesOutputFailsTheObserverUntilReset) {
     struct Bad : Rules {
         Json evaluate(const Json &, const Events &events, const Json &) override {
@@ -298,6 +317,8 @@ TEST(TaskRuntime, ConstructionAndRunControlErrors) {
     EXPECT_EQ(runtime.snapshot()["run"]["stopped_ns"], 5);
 }
 
+// Steps before release, releases from the claw, negative ids, zero radius, duplicate releases and a non-unit
+// axis are rejected.
 TEST(TaskRuntime, ProjectileContractErrors) {
     TaskRuntime runtime(scenario(), noRules());
     const Eigen::Vector3d p(0, 0, 0), axis(1, 0, 0);

@@ -23,16 +23,19 @@ DIRECTION_TOLERANCE = 1e-9
 SYMMETRY_TOLERANCE = 1e-10
 SEMIDEFINITE_TOLERANCE = 1e-10
 TRIANGLE_TOLERANCE = 1e-9
+# Top-level keys that are free-form data, not geometry the runtime reads (skipped by _quaternions)
 INACTIVE_KEYS = frozenset({"metadata", "scoring_rules"})
 
 
 def duplicates(values: Iterable[str], what: str, problems: list[str]) -> None:
+    """Append one problem per id that occurs more than once."""
     for value, count in Counter(values).items():
         if count > 1:
             problems.append(f"duplicate {what} id '{value}'")
 
 
 def _unit(vector: list[float], where: str, problems: list[str], tolerance: float) -> None:
+    """Report a vector whose norm is not 1 within ``tolerance`` (written to also catch NaN)."""
     norm = math.sqrt(sum(value * value for value in vector))
     if not abs(norm - 1.0) < tolerance:
         problems.append(f"{where}: must have unit norm (got {norm:.12g})")
@@ -56,6 +59,7 @@ def _quaternions(node: Any, where: str, problems: list[str]) -> None:
 def _symmetric_semidefinite(matrix: Any, where: str, problems: list[str]) -> bool:
     """Eigen isApprox symmetry and eigenvalue floor, as the native plant validates."""
     array = np.asarray(matrix, float)
+    # Relative Frobenius-norm test: |A - A^T| <= tol * |A|, compared squared
     difference = float(np.sum((array - array.T) ** 2))
     if difference > SYMMETRY_TOLERANCE**2 * float(np.sum(array**2)):
         problems.append(f"{where}: must be symmetric")
@@ -67,6 +71,7 @@ def _symmetric_semidefinite(matrix: Any, where: str, problems: list[str]) -> boo
 
 
 def sha256(path: Path) -> str:
+    """Hex SHA-256 of a file, read in 1 MiB blocks."""
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for block in iter(lambda: stream.read(1 << 20), b""):
@@ -106,10 +111,12 @@ def assets(data: dict[str, Any], root: Path, present: dict[Path, str] | None = N
 
 
 def robot_frames(robot: dict[str, Any]) -> set[str]:
+    """Every frame name in a robot's frame tree (root plus each transform child)."""
     frames = robot["frames"]
     return {frames["root"], *(item["child"] for item in frames["transforms"])}
 
 
+# Stereo camera outputs that need a right-eye frame
 _RIGHT_OUTPUTS = frozenset({"rgb_right", "camera_info_right"})
 
 
@@ -136,6 +143,8 @@ def _stereo(
             f"sensor frame '{item['frame']}'"
         )
         return
+
+    # Rectified pair: right eye at +baseline along X, same orientation (either quaternion sign)
     transform = transforms[right]
     offset = np.subtract(transform["position_m"], [parameters["baseline_m"], 0, 0])
     rotation = np.abs(transform["orientation_wxyz"]) - [1, 0, 0, 0]
@@ -147,7 +156,10 @@ def _stereo(
 
 
 def robot(data: dict[str, Any]) -> list[str]:
+    """Single-pack checks of a robot: frame tree, inertia, thrusters, sensors, mechanisms."""
     problems: list[str] = []
+
+    # Frame tree: unique children, known parents, no cycles
     frames = data["frames"]
     root = frames["root"]
     children = [item["child"] for item in frames["transforms"]]
@@ -169,12 +181,16 @@ def robot(data: dict[str, Any]) -> list[str]:
             problems.append(f"/frames/{start}: cycle in frame tree")
             break
 
+    # Report an unknown frame name; ``world`` allows the reserved world reporting frame
     def frame(name: str, where: str, world: bool = False) -> None:
         if name not in names and not (world and name == WORLD):
             problems.append(f"{where}: unknown frame '{name}'")
 
     frame(data["reference_frame"], "/reference_frame")
     frame(frames.get("body", root), "/frames/body")
+
+    # Rigid-body matrices: a physical inertia tensor (positive definite, each principal moment
+    # at most the sum of the other two), symmetric PSD added mass and damping
     body = data["body"]["parameters"]
     where = "/body/parameters/inertia_matrix"
     if _symmetric_semidefinite(body["inertia_matrix"], where, problems):
@@ -187,6 +203,7 @@ def robot(data: dict[str, Any]) -> list[str]:
     for key in ("added_mass_matrix", "linear_damping_matrix"):
         _symmetric_semidefinite(body[key], f"/body/parameters/{key}", problems)
 
+    # Collision boxes and thrusters (placed by frame, or by explicit position and direction)
     boxes = [item["id"] for item in data["collision_boxes"]]
     duplicates(boxes, "collision box", problems)
     for item in data["collision_boxes"]:
@@ -208,6 +225,7 @@ def robot(data: dict[str, Any]) -> list[str]:
         if response["forward_limit_n"] <= 0 and response["reverse_limit_n"] <= 0:
             problems.append(f"{where}: cannot produce force")
 
+    # Sensors
     duplicates((item["id"] for item in data["sensors"]), "sensor", problems)
     for item in data["sensors"]:
         where = f"/sensors/{item['id']}"
@@ -226,6 +244,7 @@ def robot(data: dict[str, Any]) -> list[str]:
         if item["type"] == "stereo_camera":
             _stereo(item, parent_of, transforms, where, problems)
 
+    # Visuals reference declared assets and robot frames
     asset_ids = {item["id"] for item in data.get("assets", [])}
     for index, visual in enumerate(data.get("visuals", [])):
         if visual["asset"] not in asset_ids:
@@ -235,6 +254,8 @@ def robot(data: dict[str, Any]) -> list[str]:
         if "indicator" in visual:
             problems.append(f"/visuals/{index}/indicator: only task visuals follow indicators")
         frame(visual["frame"], f"/visuals/{index}/frame")
+
+    # Mechanisms: slot counts for launchers/droppers, gap range and pad assets for claws
     mechanisms = {item["id"]: item for item in data["mechanisms"]}
     duplicates((item["id"] for item in data["mechanisms"]), "mechanism", problems)
     for identifier, item in mechanisms.items():
@@ -252,6 +273,8 @@ def robot(data: dict[str, Any]) -> list[str]:
             for side, asset in parameters["pads"].items():
                 if asset not in asset_ids:
                     problems.append(f"{where}/parameters/pads/{side}: unknown asset '{asset}'")
+
+    # Cross-references from the safety and scoring-envelope blocks
     for name in data["safety"]["arming"]["applies_to"]:
         if name not in mechanisms:
             problems.append(f"/safety/arming/applies_to: unknown mechanism '{name}'")
@@ -273,6 +296,7 @@ POOL_EDGE_TOLERANCE = 1e-6  # m: stripe ends may sit exactly on a pool edge
 
 
 def pool(data: dict[str, Any]) -> list[str]:
+    """Single-pack checks of a pool: floor profile, markings and fixtures fit the pool."""
     problems: list[str] = []
     duplicates((item["id"] for item in data["collision_boxes"]), "collision box", problems)
     _quaternions(data, "", problems)
@@ -299,6 +323,7 @@ def _pool_fixtures(
     deck = parameters["deck_height_m"]
     for index, fixture in enumerate(fixtures):
         where = f"/fixtures/{index}"
+        # Free-standing fixtures; a 2-element center sits on the floor, so it must be over it
         if fixture["type"] in ("box", "mesh"):
             center = fixture["center_m"]
             if len(center) == 2 and not (
@@ -319,6 +344,8 @@ def _pool_fixtures(
                     f"{where}/center_m: z {center[2]:g} m is outside {-parameters['depth_m']:g}..{deck + 2:g} m"
                 )
             continue
+
+        # Wall recesses: a rectangle on the wall, between the floor (at its ends) and the deck
         along = width if fixture["wall"] in ("x_min", "x_max") else length
         if fixture["from"][0] == fixture["to"][0] or fixture["from"][1] == fixture["to"][1]:
             problems.append(f"{where}: from and to must differ in both coordinates")
@@ -362,12 +389,15 @@ def _floor_profile(
         if any(depth <= 0 for depth in depths):
             problems.append(f"{where}/points_m: depths must be positive")
         deepest.append(max(depths))
+
     # Each profile varies along one axis only, so the floor's deepest point is the shallowest of theirs.
     if abs(min(deepest) - parameters["depth_m"]) > POOL_EDGE_TOLERANCE:
         problems.append(
             f"/parameters/depth_m: {parameters['depth_m']:g} m must be the floor's deepest point "
             f"({min(deepest):g} m)"
         )
+
+    # A box whose top is at the floor level is a leftover flat floor (1 mm match)
     floor_top = parameters["water_level_m"] - parameters["depth_m"]
     for box in boxes:
         if abs(box["center_m"][2] + box["size_m"][2] / 2 - floor_top) < 1e-3:
@@ -387,6 +417,8 @@ def _floor_depth(parameters: dict[str, Any], wall: str, along: float) -> float:
     for _, profile in profiles:
         points = profile["points_m"]
         across_axis = {"x": ("x_min", "x_max"), "y": ("y_min", "y_max")}[profile["along"]]
+        # A wall across the profile meets it at one end; a wall along it follows the curve, so
+        # bound by the segment containing ``along``
         if wall in across_axis:
             bounds.append(points[0][1] if wall == across_axis[0] else points[-1][1])
             continue
@@ -405,6 +437,8 @@ def _pool_markings(
     """Every stripe lies on the surface it is painted on (T bars may overhang)."""
     length, width = parameters["length_m"], parameters["width_m"]
     deck = parameters["deck_height_m"]
+
+    # Lane grid: line families along x and y (centred unless first_m is given) and T targets
     grid = markings.get("lane_grid")
     if grid is not None:
         inset = grid.get("inset_m", 0.0)
@@ -429,6 +463,8 @@ def _pool_markings(
                     problems.append(
                         f"/markings/lane_grid/targets: z {value:g} m is outside {-parameters['depth_m']:g}..{deck:g} m"
                     )
+
+    # Floor lines (x, y on the floor) and wall lines (along the wall, z)
     for index, line in enumerate(markings.get("lines", [])):
         _stripe(line, f"/markings/lines/{index}", ("x", 0, length), ("y", 0, width), problems)
     for index, line in enumerate(markings.get("wall_lines", [])):
@@ -440,6 +476,7 @@ def _pool_markings(
         _stripe(line, where, ("along the wall", 0, along), ("z", -bottom, deck), problems)
 
 
+# Closed-interval test with the pool edge tolerance
 def _between(value: float, low: float, high: float) -> bool:
     return low - POOL_EDGE_TOLERANCE <= value <= high + POOL_EDGE_TOLERANCE
 
@@ -451,6 +488,8 @@ def _stripe(
     second: tuple[str, float, float],
     problems: list[str],
 ) -> None:
+    """Check a stripe's from/to ends: they differ and each coordinate lies in its (axis, low,
+    high) range."""
     if line["from"] == line["to"]:
         problems.append(f"{where}: from and to must differ")
     for end in ("from", "to"):
@@ -463,6 +502,7 @@ def _stripe(
 
 
 def tasks(data: dict[str, Any], root: Path) -> list[str]:
+    """Single-pack checks of a tasks pack: includes stay inside it, run options are consistent."""
     problems: list[str] = []
     for relative in data["tasks"]:
         if inside(root, relative) is None:
@@ -490,11 +530,13 @@ _EVENT_REGION = {
 }
 
 
+# Report a reference to an unknown name (``field`` names its kind in the message)
 def _known(value: str, known: set[str], where: str, field: str, problems: list[str]) -> None:
     if value not in known:
         problems.append(f"{where}: unknown {field} '{value}'")
 
 
+# Report an unknown asset; skipped when the owning pack's assets are unknown (None)
 def _asset(value: str, asset_ids: set[str] | None, where: str, problems: list[str]) -> None:
     if asset_ids is not None and value not in asset_ids:
         problems.append(f"{where}: unknown asset '{value}'")
@@ -503,6 +545,8 @@ def _asset(value: str, asset_ids: set[str] | None, where: str, problems: list[st
 def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
     """Check one task include; asset references are checked when the owning pack is known."""
     problems: list[str] = []
+
+    # Ids: frames (plus the reserved task-local frame), props, regions, events, scoring
     frames = {item["id"] for item in data["frames"]}
     duplicates((item["id"] for item in data["frames"]), "frame", problems)
     if TASK in frames:
@@ -518,6 +562,8 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
         ("scoring", data["scoring"]),
     ):
         duplicates((item["id"] for item in items), what, problems)
+
+    # Prop visuals: assets, frames, emissive materials and indicator colors; panel cutouts
     for identifier, item in props.items():
         parameters = item["parameters"]
         duplicates(
@@ -556,6 +602,8 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
             region = regions.get(cutouts["region"])
             if region is None or region["type"] != "perforated_panel":
                 problems.append(f"/props/{identifier}/cutouts: region must be a perforated_panel")
+
+    # Collision meshes (unique across all props) and rigid-body props
     meshes: set[str] = set()
     for identifier, item in props.items():
         for mesh in item["parameters"].get("collision_meshes", []):
@@ -575,6 +623,8 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
             if target is None or target["type"] != "box":
                 problems.append(f"{where}/expected_region: must name a box region")
     duplicates(sorted(meshes), "collision mesh", problems)
+
+    # Regions: hole ids, referenced frames, box supports and z ranges
     for identifier, item in regions.items():
         if item["type"] == "perforated_panel":
             duplicates((hole["id"] for hole in item["parameters"]["holes"]), "hole", problems)
@@ -595,6 +645,8 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
             low, high = item["parameters"]["z_range_m"]
             if low >= high:
                 problems.append(f"/regions/{identifier}/z_range_m: must be increasing")
+
+    # Events name regions of the right type; scoring entries name events
     for item in data["events"]:
         where = f"/events/{item['id']}"
         parameters = item["parameters"]
@@ -626,6 +678,7 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
 
 
 def equipment(data: dict[str, Any]) -> list[str]:
+    """Single-pack checks of an equipment pack: item assets and frame ids."""
     problems: list[str] = []
     asset_ids = {item["id"] for item in data["assets"]}
     duplicates((item["id"] for item in data["items"]), "item", problems)
@@ -649,6 +702,7 @@ def bridge(data: dict[str, Any]) -> list[str]:
     converters = {item["name"] for item in data.get("converters", [])}
     duplicates((item["name"] for item in data.get("converters", [])), "converter", problems)
 
+    # Report an unknown stream, or one in the wrong direction
     def stream(name: str, where: str, direction: str | None = None) -> None:
         item = streams.get(name)
         if item is None:
@@ -656,6 +710,7 @@ def bridge(data: dict[str, Any]) -> list[str]:
         elif direction is not None and item["direction"] != direction:
             problems.append(f"{where}: stream '{name}' must be a {direction} stream")
 
+    # References inside the bridge: converters, reply streams, kill switch, reset and placement
     for item in [*data["streams"], *data.get("services", [])]:
         if "converter" in item and item["converter"] not in converters:
             problems.append(f"/{item['id']}/converter: unknown converter '{item['converter']}'")
@@ -678,12 +733,16 @@ def bridge(data: dict[str, Any]) -> list[str]:
             "/placement/estimator_alignment/estimate_stream",
             "subscribe",
         )
+
+    # Thruster command mapping
     thrusters = data.get("thrusters")
     if thrusters is not None and len(thrusters["order"]) != len(thrusters["input_scales"]):
         problems.append("/thrusters: order and input_scales must have equal length")
     uses_thrusters = any(item["native"].startswith("command:thrusters") for item in data["streams"])
     if uses_thrusters and thrusters is None:
         problems.append("/streams: thruster command stream requires a thrusters block")
+
+    # TF: each child has one owner, published children avoid never_publish, no parent cycles
     tf = data.get("tf", {})
     published = [*tf.get("publish", []), *tf.get("static", [])]
     edges = [*published, *tf.get("lookup", [])]
@@ -707,6 +766,7 @@ def bridge(data: dict[str, Any]) -> list[str]:
 
 
 def bridge_binding(data: dict[str, Any], robot_data: dict[str, Any]) -> list[str]:
+    """Checks of a bridge against the selected robot: ids, frames, sensors and mechanisms."""
     problems: list[str] = []
     if "requires_robot" in data and data["requires_robot"] != robot_data["id"]:
         problems.append(
@@ -717,6 +777,8 @@ def bridge_binding(data: dict[str, Any], robot_data: dict[str, Any]) -> list[str
     robot_thrusters = [item["id"] for item in robot_data["thrusters"]]
     if thrusters is not None and sorted(thrusters["order"]) != sorted(robot_thrusters):
         problems.append("/thrusters/order: must be a permutation of the robot thruster ids")
+
+    # Frame names: frame_names keys and static TF edges must name robot frames
     frames = robot_frames(robot_data) | {WORLD}
     for name in data.get("frame_names", {}):
         if name not in frames:
@@ -731,6 +793,8 @@ def bridge_binding(data: dict[str, Any], robot_data: dict[str, Any]) -> list[str
                 problems.append(
                     f"/tf/static/{index}/{ros_name}: differs from frame_names['{frame}']"
                 )
+
+    # Native endpoints ("sensor:<id>.<output>", "command:mechanisms.<id>.<...>") must exist
     sensors = {item["id"]: item for item in robot_data["sensors"]}
     mechanisms = {item["id"] for item in robot_data["mechanisms"]}
     for item in [*data["streams"], *data.get("services", [])]:
@@ -771,6 +835,8 @@ def scenario(
 ) -> tuple[list[str], dict[str, Any]]:
     """Check scenario bindings and return resolved run options (defaults applied)."""
     problems: list[str] = []
+
+    # Every task in the tasks pack is placed exactly once
     placed = [item["task"] for item in data["task_placements"]]
     duplicates(placed, "task placement", problems)
     for name in placed:
@@ -779,6 +845,8 @@ def scenario(
     for name in task_ids:
         if name not in placed:
             problems.append(f"/task_placements: task '{name}' has no placement")
+
+    # Robot start frame, and no enabled sensor sampling faster than the physics step
     if data["initial"]["frame"] not in robot_frames(robot_data):
         problems.append(f"/initial/frame: unknown robot frame '{data['initial']['frame']}'")
     for sensor in robot_data["sensors"]:
@@ -787,6 +855,8 @@ def scenario(
                 f"robot sensor '{sensor['id']}': rate_hz {sensor['rate_hz']:g} is faster than "
                 f"the {data['timestep_s']:g} s physics step"
             )
+
+    # Mechanisms the tasks need
     for requirement in tasks_data["requires"]:
         if requirement["task"] not in task_ids:
             problems.append(f"tasks /requires: unknown task '{requirement['task']}'")
@@ -796,6 +866,8 @@ def scenario(
                 f"{requirement['mechanism_type']} mechanism(s); robot has "
                 f"{mechanism_types[requirement['mechanism_type']]}"
             )
+
+    # Run options: start from the declared defaults, override with valid scenario values
     declared = {item["key"]: item for item in tasks_data["run_options"]}
     options = {key: item["default"] for key, item in declared.items()}
     for key, value in data["run"]["options"].items():

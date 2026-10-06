@@ -1,3 +1,5 @@
+// Window: GLFW window and GL 3.3 context, ImGui setup and fonts, frame presentation, detached (loading-screen)
+// frames, X11 move / resize for the custom title bar, and PNG read / write.
 #include "window.hpp"
 #include "nereus/ros_viewer/theme.hpp"
 #include <GL/glew.h>
@@ -19,6 +21,7 @@
 namespace nereus::ros_viewer::host {
 Window::Window(int width, int height, const std::string &titleText, bool hidden, bool vsync, bool customTitleBar)
     : custom_(customTitleBar) {
+    // GLFW and a core-profile GL 3.3 window (undecorated for the custom title bar).
     glfwSetErrorCallback([](int, const char *text) { std::cerr << "GLFW: " << text << '\n'; });
     if (!glfwInit())
         throw std::runtime_error("GLFW initialization failed. OpenGL 3.3 and an X/Wayland display are required.");
@@ -33,6 +36,7 @@ Window::Window(int width, int height, const std::string &titleText, bool hidden,
         glfwTerminate();
         throw std::runtime_error("Cannot create an OpenGL 3.3 window");
     }
+
     // The configured size is at 100 %: on a scaled desktop (GNOME at 200 %) the window opens that size in the
     // desktop's units, or maximized when that would not fit the screen. Capture runs keep the exact pixels.
     if (!hidden) {
@@ -47,10 +51,13 @@ Window::Window(int width, int height, const std::string &titleText, bool hidden,
         else if (scaleX > 1.01f)
             glfwSetWindowSize(window_, scaledW, scaledH);
     }
+
     if (custom_ && !glfwGetX11Display()) { // no window-manager protocol to move / resize with
         custom_ = false;
         glfwSetWindowAttrib(window_, GLFW_DECORATED, GLFW_TRUE);
     }
+
+    // GL context and function loading; drain errors GLEW leaves behind.
     glfwMakeContextCurrent(window_);
     glfwSwapInterval(vsync && !hidden ? 1 : 0);
     glewExperimental = GL_TRUE;
@@ -59,6 +66,8 @@ Window::Window(int width, int height, const std::string &titleText, bool hidden,
     while (glGetError() != GL_NO_ERROR) {
     }
     std::cout << "Renderer: " << glGetString(GL_RENDERER) << " / " << glGetString(GL_VERSION) << '\n';
+
+    // ImGui context, docking, fonts and the GLFW / OpenGL backends.
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     auto &io = ImGui::GetIO();
@@ -74,6 +83,7 @@ Window::Window(int width, int height, const std::string &titleText, bool hidden,
     backendReady_ = true;
 }
 
+// While detached, answer from the cached value (GLFW window calls are main-thread only).
 float Window::contentScale() const {
     if (detached_)
         return scale_;
@@ -108,6 +118,8 @@ std::string fontFile(const std::string &family, const char *style) {
 }
 } // namespace
 
+// Font choice: the theme's shipped files, else its fontconfig family, else DejaVu Sans; the ImGui default font
+// when none of those exists.
 void Window::loadFonts(float ui, float titleBar, const Theme &theme, const std::filesystem::path &fontDirectory) {
     auto &io = ImGui::GetIO();
     io.Fonts->Clear();
@@ -117,6 +129,7 @@ void Window::loadFonts(float ui, float titleBar, const Theme &theme, const std::
     const auto shipped = [&](const std::string &name) {
         return name.empty() ? std::filesystem::path() : fontDirectory / name;
     };
+
     if (!theme.fontRegular.empty() && std::filesystem::exists(shipped(theme.fontRegular))) {
         font = shipped(theme.fontRegular);
         bold = std::filesystem::exists(shipped(theme.fontStrong)) ? shipped(theme.fontStrong) : font;
@@ -129,8 +142,10 @@ void Window::loadFonts(float ui, float titleBar, const Theme &theme, const std::
         const auto heavy = fontFile(theme.fontFamily, "Bold");
         bold = heavy.empty() ? regular : heavy;
         if (theme.fontPoints > 0)
-            body = theme.fontPoints * 96.f / 72.f;
+            body = theme.fontPoints * 96.f / 72.f; // points to pixels at 96 dpi
     }
+
+    // Every size scales with the body size (k) and the interface scale; the title bar's with `titleBar`.
     const float k = body / 15;
     if (std::filesystem::exists(font)) {
         normal = io.Fonts->AddFontFromFileTTF(font.c_str(), 15 * k * ui);
@@ -147,6 +162,7 @@ void Window::loadFonts(float ui, float titleBar, const Theme &theme, const std::
         titleSmall = io.Fonts->AddFontFromFileTTF(font.c_str(), (figures.empty() ? 12 : 14) * k * titleBar);
     } else
         normal = small = title = number = menu = strong = smallStrong = titleSmall = io.Fonts->AddFontDefault();
+
     io.FontDefault = normal;
     setTypeRamp({strong, number, small, smallStrong});
     io.Fonts->Build();
@@ -164,26 +180,33 @@ Window::~Window() {
         glfwDestroyWindow(window_);
     glfwTerminate();
 }
+
 bool Window::closing() const {
     return glfwWindowShouldClose(window_) != 0;
 }
+
 void Window::setTitle(const std::string &text) {
     glfwSetWindowTitle(window_, text.c_str());
 }
+
 int Window::imguiErrors() const {
     return ImGui::GetCurrentContext()->ErrorCountCurrentFrame;
 }
+
 void Window::beginFrame() {
     glfwPollEvents();
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 }
+
 void Window::present(bool screenshotFrame, const std::filesystem::path &screenshot) {
     ImGui::Render();
     int w = 0, h = 0;
     glfwGetFramebufferSize(window_, &w, &h);
     render(w, h);
+
+    // Screenshot: read the back buffer (rows bottom-up) and flip to top-down for the PNG.
     if (screenshotFrame && !screenshot.empty()) {
         std::vector<unsigned char> pixels(std::size_t(w) * std::size_t(h) * 3), flipped(pixels.size());
         glReadBuffer(GL_BACK);
@@ -196,6 +219,7 @@ void Window::present(bool screenshotFrame, const std::filesystem::path &screensh
         std::cout << "Saved " << screenshot << '\n';
     }
 }
+
 void Window::render(int width, int height) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, width, height);
@@ -203,9 +227,12 @@ void Window::render(int width, int height) {
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
+
 void Window::swap() {
     glfwSwapBuffers(window_);
 }
+
+// Copy the back buffer into a texture that detached frames draw underneath (restoring the texture binding).
 void Window::keepFrame() {
     int w = 0, h = 0;
     glfwGetFramebufferSize(window_, &w, &h);
@@ -224,14 +251,17 @@ void Window::keepFrame() {
     glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 0, 0, w, h, 0);
     glBindTexture(GL_TEXTURE_2D, GLuint(bound));
 }
+
 void Window::detach() {
     contentScale(); // fresh, for the other thread
     detached_ = true;
     glfwMakeContextCurrent(nullptr);
 }
+
 void Window::currentOnThisThread(bool current) {
     glfwMakeContextCurrent(current ? window_ : nullptr);
 }
+
 void Window::reattach() {
     glfwMakeContextCurrent(window_);
     detached_ = false;
@@ -240,6 +270,8 @@ void Window::reattach() {
         kept_ = 0;
     }
 }
+
+// An ImGui frame without the GLFW backend (no input, no window queries): only the GL backend and our own dt.
 void Window::beginDetachedFrame(float dt) {
     ImGui_ImplOpenGL3_NewFrame();
     auto &io = ImGui::GetIO();
@@ -248,30 +280,38 @@ void Window::beginDetachedFrame(float dt) {
     if (kept_) // the kept frame under everything (GL's rows run bottom-up)
         ImGui::GetBackgroundDrawList()->AddImage(ImTextureID(kept_), {0, 0}, io.DisplaySize, {0, 1}, {1, 0});
 }
+
 void Window::presentDetached() {
     ImGui::Render();
     const auto &io = ImGui::GetIO();
     render(int(io.DisplaySize.x * io.DisplayFramebufferScale.x), int(io.DisplaySize.y * io.DisplayFramebufferScale.y));
     glfwSwapBuffers(window_); // allowed from any thread
 }
+
 void Window::minimize() {
     glfwIconifyWindow(window_);
 }
+
 bool Window::maximized() const {
     return glfwGetWindowAttrib(window_, GLFW_MAXIMIZED) != 0;
 }
+
 void Window::toggleMaximized() {
     if (maximized())
         glfwRestoreWindow(window_);
     else
         glfwMaximizeWindow(window_);
 }
+
 void Window::requestClose() {
     glfwSetWindowShouldClose(window_, GLFW_TRUE);
 }
+
 void Window::cancelClose() {
     glfwSetWindowShouldClose(window_, GLFW_FALSE);
 }
+
+// `pixels` owns the decoded images until glfwSetWindowIcon has copied them.
 void Window::setIcon(const std::vector<std::filesystem::path> &pngs) {
     std::vector<std::vector<unsigned char>> pixels;
     std::vector<GLFWimage> images;
@@ -291,10 +331,12 @@ void Window::setIcon(const std::vector<std::filesystem::path> &pngs) {
 void Window::beginMove() {
     moveResize(8); // _NET_WM_MOVERESIZE_MOVE
 }
+
 void Window::beginResize(int edge) {
     if (edge >= 0 && edge <= 7)
         moveResize(edge); // _NET_WM_MOVERESIZE_SIZE_TOPLEFT ... _SIZE_LEFT
 }
+
 // EWMH _NET_WM_MOVERESIZE: the window manager takes the pointer and moves or resizes the window like its own
 // decorations would (snapping, tiling, maximize on drag). It also takes the button release, so ImGui is told the
 // button went up.
@@ -303,11 +345,14 @@ void Window::moveResize(long direction) {
     const ::Window window = glfwGetX11Window(window_);
     if (!display || !window)
         return;
+
+    // Pointer position in root coordinates, where the move / resize starts.
     ::Window root = 0, child = 0;
     int rootX = 0, rootY = 0, x = 0, y = 0;
     unsigned int mask = 0;
     XQueryPointer(display, window, &root, &child, &rootX, &rootY, &x, &y, &mask);
     XUngrabPointer(display, CurrentTime); // release the implicit grab of the button press
+
     XEvent event{};
     event.xclient.type = ClientMessage;
     event.xclient.window = window;
@@ -320,9 +365,11 @@ void Window::moveResize(long direction) {
     event.xclient.data.l[4] = 1; // source: a normal application
     XSendEvent(display, DefaultRootWindow(display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
     XFlush(display);
+
     ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
 }
 
+// libpng simplified API, converting any PNG to RGBA8.
 bool readPng(const std::filesystem::path &path, int &width, int &height, std::vector<unsigned char> &rgba) {
     png_image image{};
     image.version = PNG_IMAGE_VERSION;
@@ -345,6 +392,8 @@ void writePng(const std::filesystem::path &path, int width, int height, const st
     FILE *file = std::fopen(path.c_str(), "wb");
     if (!file)
         throw std::runtime_error("cannot write screenshot: " + path.string());
+
+    // libpng reports errors by longjmp to this setjmp.
     png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     png_infop info = png ? png_create_info_struct(png) : nullptr;
     if (!png || !info || setjmp(png_jmpbuf(png))) {
@@ -352,6 +401,7 @@ void writePng(const std::filesystem::path &path, int width, int height, const st
         std::fclose(file);
         throw std::runtime_error("cannot encode screenshot: " + path.string());
     }
+
     png_init_io(png, file);
     png_set_IHDR(png, info, png_uint_32(width), png_uint_32(height), 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);

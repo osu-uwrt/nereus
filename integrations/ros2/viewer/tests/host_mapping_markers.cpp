@@ -1,3 +1,5 @@
+// Mapping markers: the riptide_rviz markers.yaml meshes the viewer draws at mapping frames, plus hiding, sorting
+// and filtering them in the panel.
 #include "mapping_markers.hpp"
 
 #include <gtest/gtest.h>
@@ -10,12 +12,14 @@ using nereus::ros_viewer::host::mappingMarkerMatches;
 using nereus::ros_viewer::host::sortMappingMarkers;
 
 namespace {
+// Writes `text` to a per-process temp YAML file and returns its path (the caller removes it).
 std::filesystem::path write(const std::string &text) {
     const auto path =
         std::filesystem::temp_directory_path() / ("nereus_markers_" + std::to_string(::getpid()) + ".yaml");
     std::ofstream(path) << text;
     return path;
 }
+
 // Same shape as riptide_rviz config/markers.yaml (MarkerPublisher parameters).
 const char *kMarkers = R"(/**/marker_publisher:
   ros__parameters:
@@ -30,6 +34,8 @@ const char *kMarkers = R"(/**/marker_publisher:
 )";
 } // namespace
 
+// Markers are read in markerN order through the mesh package's share folder, with the pose (xyz + rpy) and scale
+// baked into each marker's local transform.
 TEST(MappingMarkers, ReadsMeshMarkersInOrderLikeMarkerPublisher) {
     const auto file = write(kMarkers);
     std::string asked;
@@ -39,19 +45,24 @@ TEST(MappingMarkers, ReadsMeshMarkersInOrderLikeMarkerPublisher) {
     });
     std::filesystem::remove(file);
     EXPECT_EQ(asked, "riptide_meshes");
+
     // The arrow is a builtin shape (skipped); marker3 is incomplete, so marker4 is never read.
     ASSERT_EQ(markers.size(), 2u);
     EXPECT_EQ(markers[0].frame, "gate_frame");
     EXPECT_EQ(markers[0].path, std::filesystem::path("/share/riptide_meshes/meshes/gate/model.dae"));
+
     // pose xyz then yaw 90 deg: the local +X axis maps to +Y.
     const glm::vec4 x = markers[0].local * glm::vec4(1, 0, 0, 0);
     EXPECT_NEAR(x.y, 1, 1e-5);
     EXPECT_NEAR(markers[0].local[3].y, -1.5, 1e-6);
+
     // scale applies after the pose: a unit point at x=1 lands at 1 + 2.
     const glm::vec4 p = markers[1].local * glm::vec4(1, 0, 0, 1);
     EXPECT_NEAR(p.x, 3, 1e-6);
 }
 
+// Labels are the frame minus "_frame"; hideMappingMarkers matches a frame, label or mesh name and returns the
+// names that matched nothing.
 TEST(MappingMarkers, HidesByFrameLabelOrMesh) {
     const auto file = write(R"(/**/marker_publisher:
   ros__parameters:
@@ -69,17 +80,21 @@ TEST(MappingMarkers, HidesByFrameLabelOrMesh) {
     EXPECT_EQ(markers[3].label, "bin"); // no _frame suffix: the frame itself
     for (const auto &marker : markers)
         EXPECT_TRUE(marker.visible);
+
     EXPECT_EQ(hideMappingMarkers(markers, {"slalom", "nope"}), std::vector<std::string>{"nope"});
     EXPECT_FALSE(markers[0].visible); // a mesh name hides every copy
     EXPECT_FALSE(markers[1].visible);
     EXPECT_TRUE(markers[2].visible);
+
     EXPECT_TRUE(hideMappingMarkers(markers, {"table_frame", "bin"}).empty()); // frame, label
     EXPECT_FALSE(markers[2].visible);
     EXPECT_FALSE(markers[3].visible);
 }
 
+// The panel list sorts by label case-insensitively, and the search box matches label, mesh or frame substrings.
 TEST(MappingMarkers, SortsByLabelAndFiltersIgnoringCase) {
     std::vector<nereus::ros_viewer::host::MappingMarker> markers(4);
+    // label, mesh, frame
     const char *rows[][3] = {{"table", "table", "table_frame"},
                              {"slalom_front", "slalom", "slalom_front_frame"},
                              {"Gate", "gate", "gate_frame"},
@@ -89,11 +104,13 @@ TEST(MappingMarkers, SortsByLabelAndFiltersIgnoringCase) {
         markers[i].mesh = rows[i][1];
         markers[i].frame = rows[i][2];
     }
+
     sortMappingMarkers(markers);
     std::vector<std::string> order;
     for (const auto &marker : markers)
         order.push_back(marker.label);
     EXPECT_EQ(order, (std::vector<std::string>{"bin_vinyl1", "Gate", "slalom_front", "table"}));
+
     EXPECT_TRUE(mappingMarkerMatches(markers[1], ""));          // empty query: everything
     EXPECT_TRUE(mappingMarkerMatches(markers[1], "GATE"));      // case
     EXPECT_TRUE(mappingMarkerMatches(markers[0], "vinyl1_fr")); // frame
@@ -101,6 +118,7 @@ TEST(MappingMarkers, SortsByLabelAndFiltersIgnoringCase) {
     EXPECT_FALSE(mappingMarkerMatches(markers[3], "gate"));
 }
 
+// A local mesh folder replaces <package share>/<mesh_directory> entirely.
 TEST(MappingMarkers, LocalMeshFolderOverridesThePackage) {
     const auto file = write(kMarkers);
     bool asked = false;

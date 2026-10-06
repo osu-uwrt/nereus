@@ -16,6 +16,7 @@ NS=/talos
 OUT="$(mktemp -d)/run"
 failures=0
 
+# Helpers.
 check() {  # check <description> <command...>: run, report PASS/FAIL
   local description="$1"; shift
   if "$@"; then echo "PASS  $description"; else echo "FAIL  $description"; failures=$((failures + 1)); fi
@@ -29,11 +30,13 @@ echo_once() {  # echo_once <topic> [extra args]: one message (no ros2 daemon: it
   done
   echo "$text"
 }
+
 contains() { grep -qF -- "$1" <<<"$2"; }
 
 cleanup() { [ -n "${BRIDGE:-}" ] && kill "$BRIDGE" 2>/dev/null; wait 2>/dev/null; ros2 daemon stop >/dev/null 2>&1; }
 trap cleanup EXIT
 
+# Resolve the Talos scenario, start the bridge headless, and wait up to 60 s for its node to appear.
 ros2 daemon stop >/dev/null 2>&1
 mkdir -p "$OUT"
 python3 -m nereus.packs resolve "$ROOT/content/packs/scenarios/talos_uwrt" -o "$OUT.resolved.json" || exit 1
@@ -47,6 +50,7 @@ done
 check "bridge node is /talos/physics_simulator" bash -c \
   "ros2 node list --no-daemon 2>/dev/null | grep -q $NS/physics_simulator"
 
+# Every viewer topic publishes; the scenario topic is latched (transient local).
 for topic in run_score task_score actual_thruster_forces claw_joints; do
   text="$(echo_once $NS/simulator/$topic)"; echo "--- $topic"; echo "$text" | head -6 | cut -c1-240
   check "$topic publishes" contains "data" "$text"
@@ -77,6 +81,8 @@ check "reset_tasks topic resets the run" contains '"adjustment": 0.0' "$(score)"
 pub '{"action":"adjustment","points":5}'
 ros2 service call $NS/simulator/reset_tasks std_srvs/srv/Trigger >/dev/null 2>&1
 check "reset_tasks service still works" contains '"adjustment": 0.0' "$(score)"
+
+# Start listening for task_events first, then reset after 4 s so the echo catches the reset event.
 (sleep 4; ros2 topic pub --once -w 1 $NS/simulator/reset_tasks std_msgs/msg/Empty '{}' >/dev/null 2>&1) &
 publisher=$!
 events="$(echo_once $NS/simulator/task_events)"; wait "$publisher"

@@ -11,26 +11,33 @@
 #include <vector>
 
 namespace nereus::ros_viewer::host {
+// One mesh to bake and its placement in the image plane (metres).
 struct TopDownPart {
     std::shared_ptr<const rendering::MeshAsset> mesh;
     glm::mat4 planeFromAsset{1}; // into the image's plane: x right, y up, z towards the viewer
 };
+
+// A baked image and the plane rectangle (metres) it covers.
 struct TopDownImage {
     std::vector<std::uint8_t> rgba; // straight alpha; row 0 is the top (largest y)
     int width = 0, height = 0;
     glm::vec2 low{0}, high{0}; // the plane rectangle the image covers
 };
+
 // Reads a diffuse texture (PNG) as top-down RGBA rows; false when it cannot (the part takes its base colour).
 using ImageReader =
     std::function<bool(const std::filesystem::path &, int &width, int &height, std::vector<unsigned char> &rgba)>;
+
 // The parts' top-down image over [low, high] at `pixelsPerMetre` (capped at `maximumSide` pixels a side).
 TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, glm::vec2 high, float pixelsPerMetre,
                          const ImageReader &readImage = {}, int maximumSide = 4096);
+
 // The image and its smaller sizes for the GPU (a mip chain, each level half the last), made so thin props survive
 // being drawn small: a pixel is opaque when any pixel under it is, its colour the average of those that are (an
 // ordinary mip chain averages a pole into a faint smear). Each level then gets its own 1 px dark edge, so props
 // keep a crisp outline at every zoom. Level 0 is the full-size image.
 std::vector<TopDownImage> topDownLevels(TopDownImage image);
+
 // The parts' extent in the plane (x, y), or an empty box (low > high) when there are none.
 std::pair<glm::vec2, glm::vec2> topDownBounds(const std::vector<TopDownPart> &parts);
 } // namespace nereus::ros_viewer::host

@@ -21,14 +21,17 @@ from std_srvs.srv import SetBool
 
 
 def yaw(q):
+    """Heading (rad) of a geometry_msgs quaternion."""
     return math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
 
 
 def wrapped(angle):
+    """The angle wrapped to [-pi, pi]."""
     return math.atan2(math.sin(angle), math.cos(angle))
 
 
 def main():
+    """Holds two depth/heading setpoints and writes truth vs EKF tracking metrics to --output."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--settle", type=float, default=25.0)
@@ -37,6 +40,8 @@ def main():
     if os.environ.get("ROS_LOCALHOST_ONLY") != "1" or os.environ.get("ROS_DOMAIN_ID", "0") == "0":
         parser.error("use a private ROS_DOMAIN_ID and ROS_LOCALHOST_ONLY=1")
     args.output.mkdir(parents=True, exist_ok=False)
+
+    # Node state: the latest message per kind, and truth/estimate samples while a phase records.
     rclpy.init()
     node = Node("platform_hold_acceptance")
     latest, rows, alignment_rows = {}, [], []
@@ -57,6 +62,7 @@ def main():
                 }
             )
 
+    # Subscriptions, controller command publishers and the services used below.
     for kind, topic, typ in (
         ("truth", "simulator/ground_truth", Odometry),
         ("estimate", "odometry/filtered", Odometry),
@@ -73,11 +79,13 @@ def main():
         kill_switch_id=1, sender_id="platform_hold_acceptance", switch_asserting_kill=True
     )
 
+    # Spin the node for `seconds` of wall time.
     def spin(seconds):
         until = time.monotonic() + seconds
         while time.monotonic() < until:
             rclpy.spin_once(node, timeout_sec=min(0.02, max(0.0, until - time.monotonic())))
 
+    # Synchronous service call with 10 s timeouts for discovery and the reply.
     def call(client, request):
         if not client.wait_for_service(timeout_sec=10.0):
             raise RuntimeError("missing service " + client.srv_name)
@@ -89,6 +97,8 @@ def main():
             raise RuntimeError("service timed out " + client.srv_name)
         return future.result()
 
+    # Wait (up to 20 s) until the EKF estimate matches truth (10 cm, 0.05 rad) for 0.5 s with fresh
+    # messages; logs every check to alignment_rows.
     def wait_for_alignment(phase):
         started, stable_since = time.monotonic(), None
         errors = {}
@@ -131,6 +141,8 @@ def main():
         raise RuntimeError(f"EKF did not align with physical truth: {errors}")
 
     try:
+        # Wait for exactly one of each stack node and topic publisher (no stale duplicates from an
+        # earlier run on the domain).
         deadline = time.monotonic() + 25.0
         required = ("complete_controller", "controller_overseer", "ekf_localization_node")
         topics = (
@@ -163,6 +175,9 @@ def main():
         ):
             if len(node.get_publishers_info_by_topic(topic)) != 1:
                 raise RuntimeError("expected one publisher: " + topic)
+
+        # Keep the software kill asserted (republished at 4 Hz) while the EKF settles and the vehicle
+        # is teleported to (8, 8, -1.15).
         node.create_timer(0.25, lambda: kill.publish(report))
         kill.publish(report)
         startup_alignment = wait_for_alignment("startup")
@@ -174,6 +189,8 @@ def main():
         request.pose.pose.pose.orientation.w = 1.0
         call(placement, request)
         placement_alignment = wait_for_alignment("placement")
+
+        # Leave teleop mode (retrying for up to 20 s), then release the kill.
         deadline = time.monotonic() + 20.0
         while True:
             response = call(teleop, SetBool.Request(data=False))
@@ -184,6 +201,8 @@ def main():
             spin(0.5)
         spin(3.0)
         report.switch_asserting_kill = False
+
+        # Each phase: command a depth and heading at 10 Hz, settle, then measure the hold error.
         phases = []
         for phase, (depth, heading) in enumerate(((-1.4, 0.4), (-1.0, -0.35))):
             target = ControllerCommand(mode=ControllerCommand.POSITION)
@@ -203,6 +222,8 @@ def main():
             spin(args.settle + args.measure)
             node.destroy_timer(timer)
             recording[0] = None
+
+            # Metrics over the samples after the settle period, for truth and the EKF separately.
             cutoff = start + args.settle
             metrics = {}
             for kind in ("truth", "estimate"):
@@ -249,6 +270,7 @@ def main():
         }
         (args.output / "summary.json").write_text(json.dumps(result, indent=2) + "\n")
     finally:
+        # Always re-kill the vehicle and keep the raw samples, even when a check failed.
         report.switch_asserting_kill = True
         kill.publish(report)
         spin(0.1)

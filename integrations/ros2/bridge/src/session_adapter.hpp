@@ -15,6 +15,7 @@ class SessionAdapter final : public SessionPort {
                    const std::vector<std::string> *sensor_ids = nullptr);
     ~SessionAdapter() override;
 
+    // SessionPort: thin forwards to the Session (session_port.hpp documents the contract).
     StepResult advance() override;
     simulation::Snapshot observe() const override;
     const simulation::Snapshot &lastSnapshot() const override;

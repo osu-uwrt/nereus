@@ -1,3 +1,5 @@
+// "run" panel: competition run timer and score, run options/start/stop, and a detachable scorecard window.
+// Everything shown is driven by the run profile's "ui" schema.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/pins.hpp"
@@ -5,6 +7,7 @@
 #include <cmath>
 #include <cstdio>
 #include <imgui.h>
+
 namespace nereus::ros_viewer::panels {
 namespace {
 // A large figure (run time, score) in the number font.
@@ -17,18 +20,22 @@ void figure(const char *format, double value, double second = 0) {
     if (typeRamp().number)
         ImGui::PopFont();
 }
+
 class RunPanel final : public Panel {
     std::shared_ptr<Run> run;
+    // schema: the profile's "ui" block; options: current run_options values, keyed by option key.
     YAML::Node schema, options;
     std::function<void(const std::string &)> focus;
     bool details = false, focusDetails = false, enabled = true;
     float manualPoints = 0;
     std::string title;
+    // Where the scorecard window first opens: just below the toolbar toggle.
     ImVec2 anchor{120, 120};
 
   public:
     explicit RunPanel(const Binding &b)
         : run(std::dynamic_pointer_cast<Run>(b.provider)), focus(b.focus), details(b.showWindow) {
+        // Load the run profile's scoring flag and UI schema, then seed options with their defaults.
         auto profile = b.options["profile"].as<std::string>("");
         if (b.documents.count(profile)) {
             const auto document = b.documents.at(profile);
@@ -40,18 +47,22 @@ class RunPanel final : public Panel {
         for (const auto &option : schema["run_options"])
             options[option["key"].as<std::string>()] = YAML::Clone(option["default"]);
     }
+
     void toolbar() override {
         if (nereus::ros_viewer::windowToggle("Run tracking", &details))
             focusDetails = details;
         anchor = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y};
     }
+
     void windowMenu() override {
         if (ImGui::MenuItem(title.c_str(), nullptr, details))
             details = focusDetails = !details;
     }
+
     void draw() override {
         controls(true);
     }
+
     void drawWindows() override {
         if (!details)
             return;
@@ -68,6 +79,7 @@ class RunPanel final : public Panel {
     }
 
   private:
+    // Timer, total, run options and run buttons. showDetails adds the button that opens the scorecard window.
     void controls(bool showDetails) {
         auto s = run ? run->state() : RunState{};
         const auto score = s.score;
@@ -79,8 +91,11 @@ class RunPanel final : public Panel {
         ImGui::SameLine(0, ui(6));
         ImGui::AlignTextToFramePadding();
         ImGui::TextColored(palette().muted, "points");
+
         if (showDetails && pins::Button("Detailed scorecard", {-1, ui(36)}))
             details = focusDetails = true;
+
+        // Run options (bool / number / choice) are editable only while no run is in progress.
         ImGui::BeginDisabled(!run || !s.fresh || !enabled);
         ImGui::BeginDisabled(running);
         for (const auto &option : schema["run_options"]) {
@@ -114,6 +129,8 @@ class RunPanel final : public Panel {
             }
             ImGui::PopID();
         }
+
+        // Start (with the chosen options) and Stop share one row.
         const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * .5f;
         if (pins::Button("Start run", {half, ui(36)})) {
             auto cmd = YAML::Clone(options);
@@ -132,12 +149,15 @@ class RunPanel final : public Panel {
             run->command(cmd);
         }
         ImGui::EndDisabled();
+
         if (pins::Button("Reset run & tasks", {-1, ui(36)}))
             run->reset();
         for (const auto &action : schema["actions"])
             if (pins::Button(action["label"].as<std::string>().c_str(), {-1, ui(36)}))
                 run->command(action["command"]);
         ImGui::EndDisabled();
+
+        // Status: provider message, schema status fields, then the score's own message / end reason.
         if (run && !s.message.empty())
             ImGui::TextWrapped("%s", s.message.c_str());
         for (const auto &field : schema["status_fields"]) {
@@ -152,17 +172,22 @@ class RunPanel final : public Panel {
             adjustment(s);
         ImGui::TextWrapped("Timer uses simulation time; pauses with physics. Stop is manual.");
     }
+
     // Subjective points: each entry adds to (or, negative, subtracts from) the run's adjustment.
     void adjustment(const RunState &s) {
         const double current = s.score["adjustment"].as<double>(0);
         sectionTitle("Score adjustment");
         ImGui::Text("Current: %+.1f", current);
         ImGui::BeginDisabled(!run || !s.fresh || !enabled);
+
+        // Size the input so it shares the row with the Add and Clear buttons.
         const float button = ImGui::CalcTextSize("Clear").x + 2 * ImGui::GetStyle().FramePadding.x;
         ImGui::SetNextItemWidth(std::max(60.f, ImGui::GetContentRegionAvail().x - 2 * button -
                                                    2 * ImGui::GetStyle().ItemSpacing.x - ImGui::CalcTextSize("Add").x));
         ImGui::InputFloat("##points", &manualPoints, 10, 50, "%+.1f");
         ImGui::SameLine();
+
+        // The run stores the absolute adjustment, so Add sends current + entered points.
         const auto send = [&](double value) {
             YAML::Node cmd;
             cmd["action"] = "adjustment";
@@ -184,6 +209,8 @@ class RunPanel final : public Panel {
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
             ImGui::SetTooltip("Subjective points: enter a positive or negative amount and Add; Clear removes all.");
     }
+
+    // Task summary, magnet targets, simulation readings, recent events and scene inspection shortcuts.
     void taskStatus() {
         const auto s = run ? run->state() : RunState{};
         if (!s.taskSummary.empty()) {
@@ -210,6 +237,8 @@ class RunPanel final : public Panel {
             ImGui::TreePop();
         }
     }
+
+    // Awards table (label / points per row), adjustment and total, then schema score fields and note.
     void scorecard() {
         auto s = run ? run->state() : RunState{};
         const auto score = s.score;
@@ -233,6 +262,7 @@ class RunPanel final : public Panel {
             }
             ImGui::EndTable();
         }
+
         ImGui::TextColored(palette().muted, "Score adjustment  %+.1f", score["adjustment"].as<double>(0));
         figure("%.1f", score["total"].as<double>(0));
         ImGui::SameLine(0, ui(6));
@@ -248,6 +278,7 @@ class RunPanel final : public Panel {
     }
 };
 } // namespace
+
 void registerRunPanel(Registry &r) {
     r.panels.emplace("run",
                      ViewFactory<Panel>{Kind::Run, [](const YAML::Node &n) { keys(n, {"profile"}, "run panel"); },

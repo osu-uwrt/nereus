@@ -20,6 +20,7 @@
 #include <vector>
 
 namespace nereus::pack_scene {
+
 using Matrix4d = Eigen::Matrix4d;
 
 struct Options {
@@ -28,36 +29,43 @@ struct Options {
     bool strict = true;
 };
 
+// Homogeneous 4x4 transform of a pose.
 Matrix4d toMatrix(const spatial::Pose &);
+
 // Pack placement {position_m, orientation_wxyz} (validated like the native pose).
 spatial::Pose placement(const session::Json &item);
 // Upright pose: position_m and yaw_deg about +Z.
 spatial::Pose upright(const session::Json &position_m, double yaw_deg);
+
 // Painted stripes of a pool pack's `markings` (pool-local): lane_grid along_x then along_y lines and their
 // wall continuations, then `lines`, then `wall_lines`; each T end follows its stripe as a separate bar.
 // Wall stripes run down to `floor` where they meet their wall; the first form builds it from the document.
 std::vector<rendering::PoolStripe> poolStripes(const session::Json &pool);
 std::vector<rendering::PoolStripe> poolStripes(const session::Json &pool, const simulation::PoolFloor &floor);
 
+// One entry of the robot pack's `visuals`, with its mount resolved through the robot's fixed frames.
 struct RobotVisual {
     std::string asset, frame;
     std::shared_ptr<const rendering::MeshAsset> mesh; // null when skipped (non-strict)
     Matrix4d root_from_frame = Matrix4d::Identity();
     Matrix4d frame_from_asset = Matrix4d::Identity(); // the visual's placement in its frame
+
     Matrix4d rootFromAsset() const {
         return root_from_frame * frame_from_asset;
     }
 };
+
 // Replaces the reset placement of robot visual `index` (moving claw jaws, spinning rotors).
 struct RobotOverride {
     std::size_t index = 0;
     Matrix4d root_from_asset = Matrix4d::Identity();
 };
+
 // A moving (rigid_body) prop that names a display mesh; the caller supplies its pose.
 struct PropVisual {
     std::string task, prop, asset;
-    std::string frame; // the task frame of its rigid body
-    std::shared_ptr<const rendering::MeshAsset> mesh;
+    std::string frame;                                // the task frame of its rigid body
+    std::shared_ptr<const rendering::MeshAsset> mesh; // null when skipped (non-strict)
     Matrix4d world_from_asset_at_reset = Matrix4d::Identity();
 };
 
@@ -78,8 +86,10 @@ struct IndicatorVisual {
     Eigen::Vector4f initial = Eigen::Vector4f::Ones(), latched = Eigen::Vector4f::Ones();
 };
 
+// The composed scene of one resolved scenario. Build once; compose() a renderer Scene per frame.
 class PackScene {
   public:
+    // Builds the pool, task, equipment and robot visuals (loading their meshes).
     explicit PackScene(const session::ResolvedScenario &, Options = {});
 
     const rendering::Appearance &appearance() const {
@@ -113,6 +123,8 @@ class PackScene {
     const std::vector<rendering::PoolStripe> &poolStripes() const {
         return pool_stripes_;
     }
+
+    // Robot frames (root = `robot.frames.root`) and the visuals / props drawn by compose().
     const std::string &rootFrame() const {
         return frames_.root();
     }
@@ -148,10 +160,12 @@ class PackScene {
                              const std::map<std::string, bool> &latched = {}) const {
         return compose(toMatrix(world_from_root), dynamic, overrides, latched);
     }
+
     const std::vector<IndicatorVisual> &indicatorVisuals() const {
         return indicators_;
     }
 
+    // Problems skipped in non-strict mode (also printed to stderr).
     const std::vector<std::string> &warnings() const {
         return warnings_;
     }
@@ -163,21 +177,32 @@ class PackScene {
     Options options_;
     spatial::FixedFrames frames_;
     rendering::Appearance appearance_;
+
+    // Static scene and its bookkeeping (indices into static_.instances).
     rendering::Scene static_;
     std::vector<StaticSource> sources_;
     std::size_t pool_instances_ = 0;
     std::vector<std::size_t> pool_floor_, pool_walls_, equipment_;
     std::vector<rendering::PoolStripe> pool_stripes_;
+
+    // Content drawn per compose() call.
     std::vector<RobotVisual> robot_;
     std::vector<PropVisual> props_;
     std::vector<IndicatorVisual> indicators_;
+
+    // Mesh cache keyed by role, asset and texture override; mutex_ guards it and warnings_.
     mutable std::mutex mutex_;
     mutable std::map<std::string, std::shared_ptr<const rendering::MeshAsset>> cache_;
     mutable std::vector<std::string> warnings_;
+
+    // describe() records gathered while building.
     session::Json pool_record_, cutouts_ = session::Json::array(), textures_ = session::Json::array(),
                                 unrendered_ = session::Json::array();
 
+    // Records a non-strict problem and prints it to stderr.
     void warn(const std::string &) const;
+
+    // Constructor phases, in order: pool geometry and fixtures, task static visuals and props, equipment.
     void buildPool();
     void buildTasks();
     void buildEquipment();

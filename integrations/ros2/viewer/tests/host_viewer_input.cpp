@@ -1,3 +1,4 @@
+// Viewer mouse input maths: orbit panning, depth-buffer picking for focus (F), overlay picking and depth texels.
 #include "viewer_input.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <gtest/gtest.h>
@@ -7,15 +8,19 @@ using namespace nereus::ros_viewer::host;
 #include <limits>
 
 namespace {
+// Projects a world point to normalized screen coordinates: x/y in [0, 1] from the top-left, z = depth in [0, 1].
 glm::vec3 screen(const glm::mat4 &vp, glm::vec3 point) {
     auto clip = vp * glm::vec4(point, 1);
     auto ndc = glm::vec3(clip) / clip.w;
     return {(ndc.x + 1) * .5f, (1 - ndc.y) * .5f, (ndc.z + 1) * .5f};
 }
 } // namespace
+
 TEST(HostViewerInput, PanFocusPicking) {
     const glm::vec3 target(2, -3, -.8), eye(5, -7, 3), up(0, 0, 1);
     const auto view = glm::lookAt(eye, target, up);
+
+    // A pan drag moves the orbit target by exactly the dragged number of pixels on screen.
     // Unequal dimensions catch accidentally using horizontal FOV for vertical motion.
     const float width = 940, height = 700;
     const auto projection = glm::perspective(glm::radians(53.f), width / height, .05f, 100.f);
@@ -24,19 +29,24 @@ TEST(HostViewerInput, PanFocusPicking) {
     auto moved = glm::lookAt(eye + translation, target + translation, up);
     auto before = screen(projection * view, target), after = screen(projection * moved, target);
     ASSERT_TRUE(glm::length(glm::vec2(after - before) * glm::vec2(width, height) - drag) < .001f);
+
     // Pan scales with distance, maintaining the same grab behavior after zooming.
     ASSERT_TRUE(glm::length(orbitPan(view, projection, glm::distance(eye, target) * 2, height, drag) -
                             translation * 2.f) < .0001f);
+
     // F can focus an off-center rendered surface, including under a rotated camera.
     const glm::vec3 surface(2.2, -2.6, -1.4);
     auto pixel = screen(projection * view, surface);
     glm::vec3 picked;
     ASSERT_TRUE(depthPoint(projection * view, pixel, pixel.z, picked));
     ASSERT_TRUE(glm::distance(surface, picked) < .0002f);
+    // Far-plane (empty) depth, off-screen pixels and invalid depths pick nothing.
     ASSERT_TRUE(!depthPoint(projection * view, {.5, .5}, 1, picked));
     ASSERT_TRUE(!depthPoint(projection * view, {1.1, .5}, .5, picked));
     ASSERT_TRUE(!depthPoint(projection * view, {.5, .5}, -.1, picked));
     ASSERT_TRUE(!depthPoint(projection * view, {.5, .5}, std::numeric_limits<float>::quiet_NaN(), picked));
+
+    // Screen-space TF/marker overlays are hit-tested directly; a hit focuses the overlay's origin.
     const glm::mat4 overlayVP = glm::perspective(glm::radians(53.f), 4.f / 3.f, .05f, 100.f) *
                                 glm::lookAt(glm::vec3(0, 0, 5), glm::vec3(0), glm::vec3(0, 1, 0));
     auto axisPixel = screen(overlayVP, {.5, 0, 0});
@@ -53,6 +63,8 @@ TEST(HostViewerInput, PanFocusPicking) {
     OverlayFocusPicker behind(overlayVP, {800, 600}, {400, 300});
     behind.quad(glm::translate(glm::mat4(1), glm::vec3(0, 0, 10)), {1, 1});
     ASSERT_TRUE(!behind.result(picked));
+
+    // Focusing empty space lands on the plane through the orbit target, facing the camera, under the cursor.
     glm::vec3 emptyFocus;
     ASSERT_TRUE(focusPlanePoint(projection * view, eye, target, {.8f, .7f}, emptyFocus));
     ASSERT_TRUE(std::abs(glm::dot(emptyFocus - target, glm::normalize(target - eye))) < .001f);
@@ -60,6 +72,8 @@ TEST(HostViewerInput, PanFocusPicking) {
     ASSERT_TRUE(glm::length(glm::vec2(emptyPixel) - glm::vec2(.8f, .7f)) < .001f);
     ASSERT_TRUE(!focusPlanePoint(projection * view, eye, target, {1.1f, .5f}, emptyFocus));
 }
+
+// Maps a normalized cursor position to the depth-texture texel to read back (GL rows run bottom-up).
 TEST(HostViewerInput, DepthTexelFollowsTheDepthTextureSize) {
     EXPECT_EQ(depthTexel({0, 0}, 640, 480), glm::ivec2(0, 479)) << "top-left cursor, bottom-up rows";
     EXPECT_EQ(depthTexel({.9999f, .9999f}, 640, 480), glm::ivec2(639, 0));

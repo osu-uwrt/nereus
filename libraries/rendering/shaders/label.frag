@@ -1,4 +1,5 @@
 #version 330 core
+// Label pass: writes id << 8 | part per fragment, with the same discards as the colour pass.
 in vec2 texcoord;
 layout(location=0) out uint label;
 uniform sampler2D albedo;
@@ -6,6 +7,7 @@ uniform usampler2D partMap;
 uniform int hasTexture, hasPartMap, holeCount;
 uniform vec3 holes[4];
 uniform uint id, part;
+
 void main(){
   float alpha=texture(albedo,texcoord).a; // sampled in uniform control flow (implicit derivatives)
   uint value=part;
@@ -20,5 +22,6 @@ void main(){
   for(int i=0;i<holeCount;i++)hole=hole || distance(texcoord,holes[i].xy)<holes[i].z;
   if(hole && (hasPartMap==0 || value==0u || id==0u))discard;
   if(!hole && hasTexture==1 && alpha<.4)discard;
+  // Pixel value: 24-bit instance id in the high bits, 8-bit part in the low byte.
   label=id==0u?0u:(id<<8u)|value;
 }

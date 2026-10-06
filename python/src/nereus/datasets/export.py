@@ -25,6 +25,7 @@ from ._mapping import ClassMap
 
 FORMATS = ("yolo-seg", "yolo-bbox", "yolo-obb")
 SPLITS = ("train", "val", "test")
+# approxPolyDP tolerance for segmentation polygons, in pixels
 POLYGON_EPSILON_PX = 0.75
 BALANCE_TOLERANCE = 0.2  # team training guide: classes within 20 % of the mean
 
@@ -48,6 +49,7 @@ def cv2_module() -> Any:
 
 
 def read_json(path: Path) -> dict[str, Any]:
+    """Parse a JSON file, turning read and parse errors into a PackError."""
     try:
         result: dict[str, Any] = json.loads(path.read_text("utf-8"))
     except (OSError, ValueError) as error:
@@ -64,6 +66,7 @@ def records(render: Path) -> list[dict[str, Any]]:
 
 
 def read_ids(render: Path, record: dict[str, Any]) -> NDArray[np.uint16]:
+    """A record's instance-id image (one 16-bit id per pixel), checked against its camera size."""
     cv2 = cv2_module()
     path = render / record["ids"]
     ids = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
@@ -84,10 +87,12 @@ def class_map(
     """The label-pack model to export with: arguments, else what the plan recorded."""
     settings_path = render / "job" / "export.json"
     settings = read_json(settings_path) if settings_path.is_file() else {}
+
     labels_path = labels if labels is not None else settings.get("labels")
     model = model if model is not None else settings.get("model")
     if labels_path is None or model is None:
         raise PackError(f"{render}: no job/export.json: pass --labels and --model")
+
     document = load_document(Path(labels_path), "labels")
     if labels is not None and settings.get("scenarios"):
         # A label pack other than the planned one: check it against the rendered course.
@@ -102,6 +107,7 @@ def class_map(
 
 
 def fill_holes(mask: Mask) -> Mask:
+    """The mask with every interior hole filled (outer contours drawn solid)."""
     cv2 = cv2_module()
     contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     filled = np.zeros(mask.shape, np.uint8)
@@ -129,6 +135,7 @@ def polygons(mask: Mask) -> list[Points]:
 
 
 def _nearest(a: Points, b: Points) -> tuple[int, int]:
+    """Indices of the closest pair of points between two polygons."""
     distances = ((a[:, None, :] - b[None, :, :]) ** 2).sum(-1)
     first, second = np.unravel_index(int(np.argmin(distances)), distances.shape)
     return int(first), int(second)
@@ -143,11 +150,16 @@ def merge_multi_segment(segments: list[Points]) -> Points:
     """
     if len(segments) == 1:
         return segments[0]
+
+    # Per segment: its point nearest the previous segment, then the one nearest the next
     links: list[list[int]] = [[] for _ in segments]
     for index in range(1, len(segments)):
         first, second = _nearest(segments[index - 1], segments[index])
         links[index - 1].append(first)
         links[index].append(second)
+
+    # Each segment starts at its entry point. End segments are walked whole (closed); a middle
+    # one is split at its exit point: entry..exit going forward, exit..entry coming back.
     last = len(segments) - 1
     forward: list[Points] = []
     backward: list[Points] = []
@@ -165,6 +177,7 @@ def merge_multi_segment(segments: list[Points]) -> Points:
 
 
 def _numbers(values: NDArray[np.float64]) -> str:
+    """Normalized coordinates as YOLO text: clipped to [0, 1], six decimals."""
     return " ".join(f"{value:.6f}" for value in np.clip(values, 0.0, 1.0).reshape(-1))
 
 
@@ -197,6 +210,8 @@ def _ordered_corners(corners: Points) -> Points:
     centre = corners.mean(axis=0)
     angles = np.arctan2(corners[:, 1] - centre[1], corners[:, 0] - centre[0])
     corners = corners[np.argsort(angles, kind="stable")]
+
+    # Pick the start on rounded values so float noise cannot change the first corner
     rounded = np.round(corners, 6)
     start = min(range(4), key=lambda index: (rounded[index, 1], rounded[index, 0]))
     return np.roll(corners, -start, axis=0)
@@ -208,6 +223,8 @@ def obb_line(mask: Mask, cls: int) -> str | None:
     contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     if not contours:
         return None
+    # Contour points are pixel indices; use all four corners of each pixel so the rectangle
+    # covers whole pixels, as the bbox does
     centres = np.concatenate([np.asarray(c, dtype=np.float32).reshape(-1, 2) for c in contours])
     offsets = np.array([[0, 0], [1, 0], [0, 1], [1, 1]], dtype=np.float32)
     points = (centres[:, None, :] + offsets[None, :, :]).reshape(-1, 2)
@@ -217,6 +234,7 @@ def obb_line(mask: Mask, cls: int) -> str | None:
     return f"{cls} {_numbers(corners)}"
 
 
+# Label-line writer per export format; each returns None for an empty mask
 LINES = {"yolo-seg": seg_line, "yolo-bbox": bbox_line, "yolo-obb": obb_line}
 
 
@@ -225,6 +243,8 @@ LINES = {"yolo-seg": seg_line, "yolo-bbox": bbox_line, "yolo-obb": obb_line}
 
 @dataclass
 class Label:
+    """One exported instance: class id, final pixel mask and its renderer record entry."""
+
     cls: int
     mask: Mask
     instance: dict[str, Any]
@@ -251,6 +271,7 @@ def pieces(mask: Mask, min_px: int) -> tuple[list[Mask], int]:
     count, labels, stats, _ = cv2.connectedComponentsWithStats(
         mask.astype(np.uint8), connectivity=8
     )
+    # Component 0 is the background
     areas = np.asarray(stats, dtype=np.int64)[1:, cv2.CC_STAT_AREA]
     order = sorted(range(len(areas)), key=lambda index: -int(areas[index]))
     kept = [index + 1 for index in order if areas[index] >= min_px]
@@ -259,12 +280,14 @@ def pieces(mask: Mask, min_px: int) -> tuple[list[Mask], int]:
 
 
 def label_record(record: dict[str, Any], ids: NDArray[np.uint16], classes: ClassMap) -> Labelled:
+    """Apply the label-pack model to one record's instances (see the module docstring)."""
     sensor = record["camera"]["sensor"]
     if sensor != classes.camera:
         raise PackError(
             f"{record['name']}: rendered by camera '{sensor}', but model '{classes.model}' "
             f"is for camera '{classes.camera}'"
         )
+
     result = Labelled()
     for instance in record["instances"]:
         cls = classes.classify(instance["task"], instance["part"], instance.get("indicator"))
@@ -273,6 +296,8 @@ def label_record(record: dict[str, Any], ids: NDArray[np.uint16], classes: Class
         if instance["depth_m"]["median"] > classes.max_range_m:
             result.far.append(instance)
             continue
+
+        # Size and fragmentation filters on the instance's pixels
         mask = ids == instance["id"]
         if int(np.count_nonzero(mask)) < classes.min_visible_px:
             result.dropped_small += 1
@@ -285,6 +310,8 @@ def label_record(record: dict[str, Any], ids: NDArray[np.uint16], classes: Class
         if len(kept) >= 2 and classes.fragments == "reject":
             result.fragmented.append(instance)
             continue
+
+        # Final mask: largest piece only, or every kept piece without the crumbs
         if len(kept) >= 2 and classes.fragments == "keep_largest":
             mask = kept[0]
         elif crumbs:
@@ -302,6 +329,8 @@ def split_of(name: str, fractions: dict[str, float]) -> str:
     """Stable split from the sample name's hash (the same name always lands in one split)."""
     digest = hashlib.sha256(name.encode("utf-8")).digest()
     position = int.from_bytes(digest[:8], "big") / 2.0**64
+
+    # Walk the cumulative fractions; the last non-empty split absorbs any rounding shortfall
     total = 0.0
     chosen = "train"
     for split in SPLITS:
@@ -336,6 +365,7 @@ def _prepare(out: Path) -> None:
 
 
 def _data_yaml(names: list[str], fractions: dict[str, float], has_test: bool) -> str:
+    """Ultralytics ``data.yaml``; the test split is listed only when it is used."""
     lines = [
         # No absolute path: Ultralytics then uses this file's folder, so the export can move.
         "train: images/train",
@@ -350,6 +380,8 @@ def _data_yaml(names: list[str], fractions: dict[str, float], has_test: bool) ->
 
 @dataclass
 class Summary:
+    """What one export wrote and dropped; ``report`` prints it."""
+
     out: Path
     format: str
     names: list[str]
@@ -375,6 +407,7 @@ class Summary:
         ]
 
     def report(self) -> list[str]:
+        """Human-readable summary lines, ending with per-class counts and a balance warning."""
         written = sum(self.images.values())
         splits = ", ".join(f"{split} {count}" for split, count in self.images.items() if count)
         lines = [f"{self.format}: {written} images ({splits or 'none'}) -> {self.out}"]
@@ -390,11 +423,14 @@ class Summary:
             lines.append(f"  instances under min_visible_px: {self.dropped_small}")
         if self.dropped_degenerate:
             lines.append(f"  instances without a polygon (slivers): {self.dropped_degenerate}")
+
         if self.environments:
             lines.append(
                 "  environments: "
                 + ", ".join(f"{name} {count}" for name, count in sorted(self.environments.items()))
             )
+
+        # Per-class instance counts as an aligned table
         width = max((len(name) for name in self.names), default=0)
         for index, (name, count) in enumerate(zip(self.names, self.counts)):
             lines.append(f"  {index:>3} {name:<{width}} {count:>7}")
@@ -422,12 +458,15 @@ def export(
         raise PackError(f"unknown format '{fmt}' (choose from {', '.join(FORMATS)})")
     render = Path(render).resolve()
     out = Path(out).resolve()
+
+    # Split fractions: argument, else the plan's, else 80/20 train/val
     classes, settings = class_map(render, labels, model)
     fractions = split or settings.get("split") or {"train": 0.8, "val": 0.2, "test": 0.0}
     line_of = LINES[fmt]
     found = records(render)
     _prepare(out)
     summary = Summary(out, fmt, classes.names, dict.fromkeys(SPLITS, 0), [0] * len(classes.names))
+
     for record in found:
         name = record["name"]
         labelled = label_record(record, read_ids(render, record), classes)
@@ -437,11 +476,14 @@ def export(
         if labelled.fragmented:
             summary.skipped_fragmented.append(name)
             continue
+
         summary.dropped_small += labelled.dropped_small
         summary.crumbs += labelled.crumbs
         environment = record.get("environment")
         if environment is not None:
             summary.environments[environment] = summary.environments.get(environment, 0) + 1
+
+        # One label line per instance; an image with none is kept as a background
         lines = []
         for label in labelled.labels:
             line = line_of(label.mask, label.cls)
@@ -452,6 +494,8 @@ def export(
             summary.counts[label.cls] += 1
         if not lines:
             summary.backgrounds += 1
+
+        # Image (hard-linked or copied) and label file into the record's split
         chosen = split_of(name, fractions)
         image = render / record["image"]
         if not image.is_file():
@@ -460,6 +504,7 @@ def export(
         text = "".join(f"{line}\n" for line in lines)
         (out / "labels" / chosen / f"{name}.txt").write_text(text, encoding="utf-8")
         summary.images[chosen] += 1
+
     (out / "data.yaml").write_text(
         _data_yaml(classes.names, fractions, summary.images["test"] > 0), encoding="utf-8"
     )

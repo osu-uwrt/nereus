@@ -41,11 +41,14 @@ SMALL_HOLE_FRACTION = 0.15  # fill: small fills holes below this fraction of the
 FILLS = ("small", "all", "none")
 PART_NAME = re.compile(r"[a-z0-9_]+")
 
+# A per-pixel boolean image, indexed [y, x].
 Mask = npt.NDArray[np.bool_]
 
 
 @dataclass(frozen=True)
 class Part:
+    """One labelled part: its mask value, name, seed pixel and segmentation settings."""
+
     value: int
     name: str
     seed: tuple[int, int]  # x, y (texture px, top-left origin)
@@ -56,6 +59,8 @@ class Part:
 
 @dataclass(frozen=True)
 class TextureParts:
+    """One textures[] entry: the texture PNG, its output mask path and the parts painted on it."""
+
     texture: Path
     mask: Path
     background: tuple[float, float, float] | None
@@ -79,6 +84,8 @@ def read_parts(parts_yaml: Path) -> list[TextureParts]:
     result = []
     for entry in doc.get("textures", []):
         texture_id = entry["texture"]
+
+        # Entry-level threshold/close_px are the defaults for its parts.
         if texture_id not in assets or not str(assets[texture_id]).endswith(".png"):
             raise ValueError(
                 f"{parts_yaml}: texture {texture_id!r} is not a .png asset of the pack"
@@ -89,6 +96,7 @@ def read_parts(parts_yaml: Path) -> list[TextureParts]:
         if background is not None:
             r, g, b = (float(c) for c in background)
             background = (r, g, b)
+
         parts = []
         for p in entry["parts"]:
             value, name = int(p["value"]), str(p["part"])
@@ -110,6 +118,7 @@ def read_parts(parts_yaml: Path) -> list[TextureParts]:
                     fill=fill,
                 )
             )
+
         values = [p.value for p in parts]
         if len(set(values)) != len(values):
             raise ValueError(f"{texture_id}: duplicate part values {values}")
@@ -133,6 +142,8 @@ def background_colour(rgba: npt.NDArray[np.int32]) -> npt.NDArray[np.float64]:
     pixels = rgba[inside & (rgba[..., 3] >= 128)][:, :3]
     if len(pixels) == 0:
         raise ValueError("no opaque pixels in the border band; set background explicitly")
+
+    # Bucket colours into 16 levels per channel, then take the median of the fullest bucket.
     bins = pixels // 16
     keys = (bins[:, 0] * 16 + bins[:, 1]) * 16 + bins[:, 2]
     mode = np.bincount(keys).argmax()
@@ -141,18 +152,23 @@ def background_colour(rgba: npt.NDArray[np.int32]) -> npt.NDArray[np.float64]:
 
 
 def disk(radius: int) -> Mask:
+    """A (2r+1)-square structuring element that is True inside the circle of `radius`."""
     yy, xx = np.mgrid[-radius : radius + 1, -radius : radius + 1]
     result: Mask = xx * xx + yy * yy <= radius * radius
     return result
 
 
 def part_mask(rgba: npt.NDArray[np.int32], background: npt.NDArray[np.float64], part: Part) -> Mask:
+    """The pixels of one part: the closed foreground component under its seed, holes per `fill`."""
+    # Foreground: opaque and far enough from the background colour, closed into whole emoji.
     distance = np.abs(rgba[..., :3] - background).max(axis=-1)
     foreground = (rgba[..., 3] >= 128) & (distance > part.threshold)
     if part.close_px > 0:
         pad = part.close_px + 1  # closing must not erode at the image edge
         padded = np.pad(foreground, pad)
         foreground = ndimage.binary_closing(padded, disk(part.close_px))[pad:-pad, pad:-pad]
+
+    # Keep the connected component under the seed; it must not touch the texture border.
     labels, _ = ndimage.label(foreground)
     x, y = part.seed
     height, width = foreground.shape
@@ -162,6 +178,8 @@ def part_mask(rgba: npt.NDArray[np.int32], background: npt.NDArray[np.float64], 
     edges = (component[0, :], component[-1, :], component[:, 0], component[:, -1])
     if any(edge.any() for edge in edges):  # merged with a frame line
         raise ValueError(f"part {part.name} ({part.value}): component reaches the texture border")
+
+    # Fill holes: none, all, or (small) only those under SMALL_HOLE_FRACTION of its area.
     if part.fill == "none":
         return component
     holes = ndimage.binary_fill_holes(component) & ~component
@@ -175,18 +193,23 @@ def part_mask(rgba: npt.NDArray[np.int32], background: npt.NDArray[np.float64], 
 
 
 def build_mask(entry: TextureParts) -> npt.NDArray[np.uint8]:
+    """Paint every part of a texture into one 8-bit mask (0 = unlabelled), rejecting overlaps."""
     with Image.open(entry.texture) as image:
         rgba = np.asarray(image.convert("RGBA")).astype(np.int32)
     if entry.background is not None:
         background = np.asarray(entry.background, dtype=np.float64)
     else:
         background = background_colour(rgba)
+
+    # Check every seed first, so an out-of-range seed is reported before segmentation.
     out = np.zeros(rgba.shape[:2], dtype=np.uint8)
     height, width = out.shape
     for part in entry.parts:
         x, y = part.seed
         if not (0 <= x < width and 0 <= y < height):
             raise ValueError(f"{entry.texture.name}: part {part.name} seed {part.seed} is outside")
+
+    # A part may not swallow another part's seed or overlap pixels already painted.
     for part in entry.parts:
         mask = part_mask(rgba, background, part)
         for other in entry.parts:
@@ -206,6 +229,7 @@ def build_mask(entry: TextureParts) -> npt.NDArray[np.uint8]:
 
 
 def read_mask(path: Path) -> npt.NDArray[np.uint8] | None:
+    """The committed mask as an array, or None if it is missing or not 8-bit greyscale."""
     if not path.is_file():
         return None
     with Image.open(path) as image:
@@ -220,6 +244,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("parts", nargs="?", type=Path, default=DEFAULT_PARTS)
     parser.add_argument("--check", action="store_true", help="exit 1 if a committed mask differs")
     args = parser.parse_args(argv)
+
+    # Build every mask; --check compares against the committed file instead of writing it.
     stale = []
     for entry in read_parts(args.parts):
         mask = build_mask(entry)
@@ -234,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         entry.mask.parent.mkdir(parents=True, exist_ok=True)
         Image.fromarray(mask, mode="L").save(entry.mask, optimize=True)
         print(f"wrote {entry.mask}")
+
     if stale:
         for path in stale:
             print(f"stale part mask: {path}", file=sys.stderr)

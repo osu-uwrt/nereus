@@ -1,3 +1,5 @@
+// PayloadDynamics against trajectories captured from the original Python model
+// (fixtures/capture_payload_reference.py), plus the helpers and input validation.
 #include "nereus/simulation/payload.hpp"
 
 #include <cmath>
@@ -10,6 +12,7 @@
 
 namespace {
 using namespace nereus::simulation;
+// Comma-separated fields of one CSV line.
 std::vector<std::string> split(const std::string &line) {
     std::istringstream stream(line);
     std::vector<std::string> fields;
@@ -24,11 +27,14 @@ TEST(Payload, MatchesEveryStateOfIndependentOriginalTrajectories) {
     // current, dry gyroscopic motion and angular-damping substeps for both models.
     std::ifstream input(NEREUS_PAYLOAD_FIXTURE);
     ASSERT_TRUE(input);
+
     PayloadParameters parameters;
     PayloadEnvironment environment;
     PayloadState actual;
     double dt = 0.0;
     int current_case = -1, next_tick = 0, states = 0, cases = 0;
+
+    // '# case' rows set the parameters for the 101 state rows that follow; other '#' rows are headers.
     for (std::string line; std::getline(input, line);) {
         const auto fields = split(line);
         ASSERT_FALSE(fields.empty());
@@ -41,6 +47,7 @@ TEST(Payload, MatchesEveryStateOfIndependentOriginalTrajectories) {
             ASSERT_EQ(current_case, cases++);
             parameters.model = std::stoi(fields[2]) ? PayloadModel::Finned : PayloadModel::FixedAxis;
             parameters.neutral_buoyancy = std::stoi(fields[3]) != 0;
+            // Case columns from index 4: the parameters in FIELDS order, then the environment and dt.
             const std::vector<double *> targets{&parameters.mass,
                                                 &parameters.displaced_volume,
                                                 &parameters.added_mass,
@@ -64,6 +71,7 @@ TEST(Payload, MatchesEveryStateOfIndependentOriginalTrajectories) {
             next_tick = 0;
             continue;
         }
+
         if (fields[0][0] == '#')
             continue;
         ASSERT_GE(current_case, 0);
@@ -71,12 +79,16 @@ TEST(Payload, MatchesEveryStateOfIndependentOriginalTrajectories) {
         ASSERT_EQ(std::stoi(fields[0]), current_case);
         ASSERT_EQ(std::stoi(fields[1]), next_tick);
         SCOPED_TRACE("case=" + fields[0] + " tick=" + fields[1]);
+
+        // State columns: mesh position, COM velocity, row-major rotation, world angular velocity.
         Eigen::Matrix<double, 18, 1> expected;
         for (int i = 0; i < 18; ++i) {
             expected[i] = std::stod(fields[2 + i]);
             ASSERT_TRUE(std::isfinite(expected[i]));
         }
         const Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::RowMajor>> expected_rotation(expected.data() + 6);
+
+        // Tick 0 seeds the state; later ticks advance it one caller step.
         if (next_tick == 0) {
             actual.position = expected.head<3>();
             actual.velocity = expected.segment<3>(3);
@@ -85,6 +97,7 @@ TEST(Payload, MatchesEveryStateOfIndependentOriginalTrajectories) {
         } else {
             actual = PayloadDynamics(parameters).advance(actual, environment, dt);
         }
+
         EXPECT_TRUE(actual.position.isApprox(expected.head<3>(), 1e-10));
         EXPECT_LE((actual.position - expected.head<3>()).cwiseAbs().maxCoeff(), 1e-10);
         EXPECT_LE((actual.velocity - expected.segment<3>(3)).cwiseAbs().maxCoeff(), 1e-10);
@@ -94,6 +107,7 @@ TEST(Payload, MatchesEveryStateOfIndependentOriginalTrajectories) {
         ++next_tick;
         ++states;
     }
+
     EXPECT_EQ(cases, 16);
     EXPECT_EQ(next_tick, 101);
     EXPECT_EQ(states, 1616);
@@ -111,12 +125,16 @@ TEST(Payload, HelpersUseEffectiveMassAndCapsuleSupport) {
     environment.water_density = 998.2;
     const PayloadDynamics dynamics(parameters);
     EXPECT_DOUBLE_EQ(dynamics.launch_speed(environment), std::sqrt(2.0 * .047 / (.01222 + .003)));
+
+    // Neutral buoyancy swaps the mass for the displaced water mass.
     parameters.neutral_buoyancy = true;
     EXPECT_DOUBLE_EQ(PayloadDynamics(parameters).launch_speed(environment),
                      std::sqrt(2.0 * .047 / (998.2 * 1.2e-5 + .003)));
+
     const Eigen::Vector3d axis = Eigen::Vector3d(1., -2., 3.).normalized();
     EXPECT_TRUE(dynamics.support_extent(axis).isApprox(
         Eigen::Vector3d::Constant(.013) + (.08299993 / 2. - .013) * axis.cwiseAbs(), 1e-15));
+
     parameters.mass = 12.0;
     EXPECT_DOUBLE_EQ(dynamics.parameters().mass, .01222); // Owns parameter copy.
 }
@@ -128,6 +146,7 @@ TEST(Payload, DryFreeFallAndFixedAxisDoNotIntegrateAngularVelocity) {
     input.velocity = Eigen::Vector3d(1., 2., 3.);
     input.angular_velocity = Eigen::Vector3d(3., -2., 1.);
     input.orientation = Eigen::AngleAxisd(.6, Eigen::Vector3d::UnitY());
+    // Default parameters and environment, above the water: pure ballistic motion over 0.1 s.
     const auto output = PayloadDynamics(parameters).advance(input, {}, .1);
     EXPECT_TRUE(
         output.position.isApprox(input.position + .1 * input.velocity + Eigen::Vector3d(0., 0., -.04903325), 1e-15));
@@ -156,6 +175,8 @@ TEST(Payload, InvalidRequestsAreRejectedWithoutMutation) {
     parameters.model = static_cast<PayloadModel>(42);
     EXPECT_THROW(PayloadDynamics{parameters}, std::invalid_argument);
     parameters = {};
+
+    // advance(): bad dt, environment or state throw and leave the input untouched.
     const PayloadDynamics dynamics(parameters);
     PayloadState state;
     PayloadEnvironment environment;
@@ -172,6 +193,8 @@ TEST(Payload, InvalidRequestsAreRejectedWithoutMutation) {
     state.velocity.x() = inf;
     EXPECT_THROW(dynamics.advance(state, environment, .1), std::invalid_argument);
     EXPECT_THROW(dynamics.support_extent(Eigen::Vector3d::Zero()), std::invalid_argument);
+
+    // Finned: angular damping needing more than 100000 substeps is rejected.
     parameters.model = PayloadModel::Finned;
     parameters.angular_damping = 1e10;
     state = {};

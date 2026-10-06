@@ -1,3 +1,5 @@
+// Sensor model implementations: noise processes and the IMU, attitude, FOG, velocity, DVL, altitude and
+// pressure models.
 #include "nereus/sensors/models.hpp"
 #include <algorithm>
 #include <cmath>
@@ -7,6 +9,7 @@
 
 namespace nereus::sensors {
 namespace {
+// Validates the mount and renormalizes its quaternion (inputs must already be unit within 1e-9).
 void normalizeMount(Mount &mount) {
     if (!mount.position_body.allFinite() || !mount.sensor_to_body.coeffs().allFinite() ||
         std::abs(mount.sensor_to_body.norm() - 1) > 1e-9) {
@@ -14,11 +17,13 @@ void normalizeMount(Mount &mount) {
     }
     mount.sensor_to_body.normalize();
 }
+
 void validateAxis(const Eigen::Vector3d &axis) {
     if (!axis.allFinite() || std::abs(axis.norm() - 1) > 1e-9) {
         throw std::invalid_argument("sensor axis must be finite and unit length");
     }
 }
+
 void validateMotion(const simulation::MotionSample &motion) {
     const auto &body = motion.state.body;
     if (!body.position.allFinite() || !body.orientation.coeffs().allFinite() ||
@@ -27,6 +32,7 @@ void validateMotion(const simulation::MotionSample &motion) {
         throw std::invalid_argument("sensor input requires finite motion and a unit orientation");
     }
 }
+
 // Stable, length-framed FNV-1a; does not depend on implementation-defined std::hash.
 std::uint64_t noiseSeed(std::uint64_t root, const std::string &id, const std::string &component) {
     std::uint64_t hash = 14695981039346656037ULL;
@@ -48,6 +54,7 @@ std::uint64_t noiseSeed(std::uint64_t root, const std::string &id, const std::st
 }
 } // namespace
 
+// Noise3: per-axis constant bias + random-walk drift + white noise.
 Noise3::Noise3(NoiseParameters parameters) : parameters_(std::move(parameters)) {
     if (!parameters_.bias.allFinite() || !parameters_.white_stddev.allFinite() ||
         !parameters_.walk_stddev.allFinite() || (parameters_.white_stddev.array() < 0).any() ||
@@ -56,12 +63,15 @@ Noise3::Noise3(NoiseParameters parameters) : parameters_(std::move(parameters)) 
         throw std::invalid_argument("noise requires finite bias and nonnegative finite variances");
     }
 }
+
 void Noise3::reset(std::uint64_t seed, const std::string &id, const std::string &component) {
     random_.seed(noiseSeed(seed, id, component));
     normal_.reset();
     drift_.setZero();
     elapsed_ = 0;
 }
+
+// Advances the random walk by elapsed_seconds and returns bias + drift + white noise for this acquisition.
 Eigen::Vector3d Noise3::sample(double elapsed_seconds) {
     if (!std::isfinite(elapsed_seconds) || elapsed_seconds <= 0) {
         throw std::invalid_argument("sensor acquisition interval must be positive and finite");
@@ -77,6 +87,8 @@ Eigen::Vector3d Noise3::sample(double elapsed_seconds) {
     }
     return result;
 }
+
+// Diagonal variance: white noise plus random-walk variance accumulated since reset (bias excluded).
 Eigen::Matrix3d Noise3::covariance() const {
     return (parameters_.white_stddev.array().square() + elapsed_ * parameters_.walk_stddev.array().square())
         .matrix()
@@ -94,12 +106,16 @@ Imu::Imu(Mount mount, NoiseParameters acceleration, NoiseParameters gyro, ImuRep
         if (*variance && (!(**variance).allFinite() || ((**variance).array() < 0).any()))
             throw std::invalid_argument("IMU reported variances must be finite and nonnegative");
 }
+
 void Imu::reset(std::uint64_t seed, const std::string &id) {
     acceleration_.reset(seed, id, "imu.acceleration");
     gyro_.reset(seed, id, "imu.gyro");
 }
+
+// Specific force and angular rate at the mount point, in the sensor frame.
 Measurement<Imu::Reading> Imu::sample(const simulation::MotionSample &motion, double elapsed_seconds) {
     validateMotion(motion);
+    // Draw noise before the availability check so the noise streams advance on every acquisition.
     const auto acceleration_noise = acceleration_.sample(elapsed_seconds);
     const auto gyro_noise = gyro_.sample(elapsed_seconds);
     if (!motion.acceleration_valid) {
@@ -110,6 +126,8 @@ Measurement<Imu::Reading> Imu::sample(const simulation::MotionSample &motion, do
         throw std::invalid_argument("IMU requires finite acceleration and gravity");
     }
     const auto &body = motion.state.body;
+
+    // Optionally rescale gravity to the calibrated magnitude, keeping the environment's direction.
     Eigen::Vector3d gravity = motion.gravity_world;
     if (reporting_.gravity_magnitude) {
         const double magnitude = gravity.stableNorm();
@@ -117,14 +135,20 @@ Measurement<Imu::Reading> Imu::sample(const simulation::MotionSample &motion, do
             throw std::invalid_argument("IMU gravity calibration requires a gravity direction");
         gravity = (gravity / magnitude) * *reporting_.gravity_magnitude;
     }
+
+    // Rigid-body transport of the COM acceleration to the mount: a + alpha x r + w x (w x r).
     const Eigen::Vector3d acceleration = motion.acceleration_body +
                                          motion.angular_acceleration_body.cross(mount_.position_body) +
                                          body.angular_velocity.cross(body.angular_velocity.cross(mount_.position_body));
+
+    // Specific force = acceleration minus gravity, rotated world -> body -> sensor.
     Reading result;
     result.specific_force =
         mount_.sensor_to_body.conjugate() * (acceleration - body.orientation.conjugate() * gravity) +
         acceleration_noise;
     result.angular_velocity = mount_.sensor_to_body.conjugate() * body.angular_velocity + gyro_noise;
+
+    // Report the generated-noise covariance unless fixed variances were configured.
     result.force_covariance = acceleration_.covariance();
     result.angular_covariance = gyro_.covariance();
     if (reporting_.force_variance)
@@ -150,14 +174,19 @@ Attitude::Attitude(Mount mount, AttitudeParameters parameters)
         (!parameters_.reported_variance->allFinite() || (parameters_.reported_variance->array() < 0).any()))
         throw std::invalid_argument("attitude reported variances must be finite and nonnegative");
 }
+
 void Attitude::reset(std::uint64_t seed, const std::string &id) {
     random_.seed(noiseSeed(seed, id, "attitude.orientation"));
     normal_.reset();
 }
+
+// Truth attitude perturbed by a random-axis rotation of N(0, angle_stddev) and a deterministic heading drift.
 Measurement<Attitude::Reading> Attitude::sample(const simulation::MotionSample &motion, double elapsed_seconds) {
     validateMotion(motion);
     if (!std::isfinite(elapsed_seconds) || elapsed_seconds <= 0 || motion.state.elapsed.count() < 0)
         throw std::invalid_argument("attitude requires positive acquisition interval and nonnegative time");
+
+    // Random isotropic rotation axis (normalized Gaussian vector).
     Eigen::Vector3d axis;
     for (auto &component : axis)
         component = normal_(random_);
@@ -165,14 +194,18 @@ Measurement<Attitude::Reading> Attitude::sample(const simulation::MotionSample &
         axis = Eigen::Vector3d::UnitX();
     else
         axis /= axis.stableNorm();
+
     const double angle = parameters_.angle_stddev * normal_(random_);
     const double drift = parameters_.heading_drift_rate * std::chrono::duration<double>(motion.state.elapsed).count();
     if (!std::isfinite(angle) || !std::isfinite(drift))
         throw std::overflow_error("attitude rotation overflow");
+
+    // Drift (world heading axis) * noise rotation * true sensor-to-world orientation.
     Reading result;
     result.sensor_to_world = Eigen::AngleAxisd(drift, parameters_.heading_axis_world) * Eigen::AngleAxisd(angle, axis) *
                              motion.state.body.orientation * mount_.sensor_to_body;
     result.sensor_to_world.normalize();
+    // A random-axis rotation with angle variance s^2 puts s^2/3 on each sensor axis.
     result.covariance = Eigen::Matrix3d::Identity() * (parameters_.angle_stddev * parameters_.angle_stddev / 3);
     if (parameters_.reported_variance)
         result.covariance = parameters_.reported_variance->asDiagonal();
@@ -185,10 +218,13 @@ Ahrs::Ahrs(Mount mount, AhrsParameters parameters)
     : inertial_(mount, std::move(parameters.acceleration_noise), std::move(parameters.gyro_noise),
                 std::move(parameters.inertial_reporting)),
       attitude_(mount, std::move(parameters.attitude)) {}
+
 void Ahrs::reset(std::uint64_t seed, const std::string &id) {
     inertial_.reset(seed, id);
     attitude_.reset(seed, id);
 }
+
+// Samples both halves every time so their noise streams stay in step, then reports the first unavailability.
 Measurement<Ahrs::Reading> Ahrs::sample(const simulation::MotionSample &motion, double elapsed_seconds) {
     auto inertial = inertial_.sample(motion, elapsed_seconds);
     auto attitude = attitude_.sample(motion, elapsed_seconds);
@@ -214,9 +250,12 @@ Fog::Fog(Mount mount, std::vector<Eigen::Vector3d> axes, NoiseParameters gyro,
         axes_.row(static_cast<Eigen::Index>(i)) = axes[i].normalized().transpose();
     }
 }
+
 void Fog::reset(std::uint64_t seed, const std::string &id) {
     gyro_.reset(seed, id, "fog.gyro");
 }
+
+// Body rate in the sensor frame plus noise, projected onto each configured axis.
 Measurement<Fog::Reading> Fog::sample(const simulation::MotionSample &motion, double elapsed_seconds) {
     validateMotion(motion);
     const Eigen::Vector3d rate =
@@ -249,15 +288,20 @@ ReferenceVelocity::ReferenceVelocity(ReferenceVelocityParameters parameters)
             throw std::invalid_argument("inclination limit must be in [0, pi] radians");
     }
 }
+
 void ReferenceVelocity::reset(std::uint64_t seed, const std::string &id) {
     noise_.reset(seed, id, "reference_velocity.velocity");
 }
+
+// Mount-point velocity relative to the reference world velocity, in the sensor frame.
 Measurement<ReferenceVelocity::Reading> ReferenceVelocity::sample(const simulation::MotionSample &motion,
                                                                   double elapsed_seconds) {
     validateMotion(motion);
     const auto noise = noise_.sample(elapsed_seconds);
     const auto &body = motion.state.body;
     const auto &mount = parameters_.mount;
+
+    // Report unavailable when the sensor axis tilts too far from the reference axis.
     if (parameters_.inclination_limit) {
         const auto &limit = *parameters_.inclination_limit;
         const Eigen::Vector3d axis_world = (body.orientation * (mount.sensor_to_body * limit.sensor_axis)).normalized();
@@ -267,6 +311,7 @@ Measurement<ReferenceVelocity::Reading> ReferenceVelocity::sample(const simulati
         if (angle - limit.maximum_angle > 16 * std::numeric_limits<double>::epsilon())
             return {std::nullopt, "reference velocity inclination limit exceeded"};
     }
+
     Reading result;
     result.reference_relative_velocity =
         mount.sensor_to_body.conjugate() * (body.linear_velocity + body.angular_velocity.cross(mount.position_body) -
@@ -280,6 +325,7 @@ Measurement<ReferenceVelocity::Reading> ReferenceVelocity::sample(const simulati
     return {std::move(result), {}};
 }
 
+// Precomputes the world -> pool transform; the pool frame has x in [0, length] and y in [0, width].
 PoolBottom::PoolBottom(const simulation::Pool &pool)
     : length_(pool.length), width_(pool.width), surface_(pool.water_level), origin_xy_(pool.origin_xy_world),
       world_to_pool_(Eigen::Rotation2Dd(-pool.yaw_world).toRotationMatrix()) {
@@ -289,16 +335,23 @@ PoolBottom::PoolBottom(const simulation::Pool &pool)
         throw std::invalid_argument("pool bottom requires positive finite dimensions and finite level");
     }
     floor_ = simulation::floorOf(pool);
+
+    // Only offset/rotated pools need a roundoff tolerance at the walls, scaled by the coordinates involved.
     if (!origin_xy_.isZero(0) || pool.yaw_world != 0)
         boundary_tolerance_ = 16 * std::numeric_limits<double>::epsilon() *
                               std::max({1.0, origin_xy_.cwiseAbs().maxCoeff(), length_, width_});
 }
+
+// Ray-casts the floor from a submerged origin inside the pool footprint; misses return nullopt.
+// The floor is stationary, so hits always report zero velocity.
 std::optional<BottomHit> PoolBottom::operator()(const Eigen::Vector3d &origin_world,
                                                 const Eigen::Vector3d &direction_world) const {
     validateAxis(direction_world);
     if (!origin_world.allFinite()) {
         throw std::invalid_argument("bottom query requires a finite origin");
     }
+
+    // Transform the ray into the pool frame (z is unchanged).
     Eigen::Vector3d origin = origin_world, direction = direction_world;
     origin.head<2>() = world_to_pool_ * (origin_world.head<2>() - origin_xy_);
     direction.head<2>() = world_to_pool_ * direction_world.head<2>();
@@ -306,10 +359,13 @@ std::optional<BottomHit> PoolBottom::operator()(const Eigen::Vector3d &origin_wo
         return point.x() >= -boundary_tolerance_ && point.x() <= length_ + boundary_tolerance_ &&
                point.y() >= -boundary_tolerance_ && point.y() <= width_ + boundary_tolerance_;
     };
+
+    // Origin must be inside the footprint, above the floor, below the surface, and the ray must point down.
     if (!inside(origin) || origin.z() <= surface_ - floor_.depthAt(Eigen::Vector2d(origin.head<2>())) ||
         origin.z() > surface_ || direction.z() >= 0) {
         return std::nullopt;
     }
+
     const auto ray = floor_.rayDistance(origin, direction, surface_);
     if (!ray)
         return std::nullopt;
@@ -320,6 +376,7 @@ std::optional<BottomHit> PoolBottom::operator()(const Eigen::Vector3d &origin_wo
     }
     return BottomHit{distance, Eigen::Vector3d::Zero()};
 }
+
 Dvl::Dvl(DvlParameters parameters, BottomQuery bottom)
     : parameters_(std::move(parameters)), bottom_(std::move(bottom)), velocity_(parameters_.velocity_noise) {
     normalizeMount(parameters_.mount);
@@ -330,14 +387,19 @@ Dvl::Dvl(DvlParameters parameters, BottomQuery bottom)
         throw std::invalid_argument("DVL requires a bottom query and ordered finite range limits");
     }
 }
+
 void Dvl::reset(std::uint64_t seed, const std::string &id) {
     velocity_.reset(seed, id, "dvl.velocity");
 }
+
+// Bottom-track velocity: mount-point velocity relative to the bottom in the sensor frame, plus slant range.
 Measurement<Dvl::Reading> Dvl::sample(const simulation::MotionSample &motion, double elapsed_seconds) {
     validateMotion(motion);
     const auto noise = velocity_.sample(elapsed_seconds); // Drift continues through loss of lock.
     const auto &body = motion.state.body;
     const auto &mount = parameters_.mount;
+
+    // Cast the beam along bottom_axis from the mount point.
     const Eigen::Vector3d origin = body.position + body.orientation * mount.position_body;
     const Eigen::Vector3d direction = body.orientation * (mount.sensor_to_body * parameters_.bottom_axis);
     if (!origin.allFinite()) {
@@ -353,6 +415,8 @@ Measurement<Dvl::Reading> Dvl::sample(const simulation::MotionSample &motion, do
     if (hit->distance < parameters_.minimum_range || hit->distance > parameters_.maximum_range) {
         return {std::nullopt, "bottom out of range"};
     }
+
+    // Velocity of the mount point relative to the (possibly moving) bottom, in the body frame.
     const Eigen::Vector3d velocity_body = body.linear_velocity + body.angular_velocity.cross(mount.position_body) -
                                           body.orientation.conjugate() * hit->velocity_world;
     Reading result{mount.sensor_to_body.conjugate() * velocity_body + noise, velocity_.covariance(), hit->distance};
@@ -361,6 +425,8 @@ Measurement<Dvl::Reading> Dvl::sample(const simulation::MotionSample &motion, do
     }
     return {std::move(result), {}};
 }
+
+// Altitude noise reuses Noise3's X component (Y/Z are zero); target_delta_body_ is the mount -> target offset.
 ReferenceAltitude::ReferenceAltitude(ReferenceAltitudeParameters parameters)
     : parameters_(std::move(parameters)),
       target_delta_body_(parameters_.target_position_body.value_or(parameters_.mount.position_body) -
@@ -376,9 +442,12 @@ ReferenceAltitude::ReferenceAltitude(ReferenceAltitudeParameters parameters)
         (!std::isfinite(*parameters_.reported_variance) || *parameters_.reported_variance < 0))
         throw std::invalid_argument("altitude reported variance must be finite and nonnegative");
 }
+
 void ReferenceAltitude::reset(std::uint64_t seed, const std::string &id) {
     noise_.reset(seed, id, "reference_altitude.height");
 }
+
+// Measured world Z of the mount, plus the same reading shifted to the target point via the current attitude.
 Measurement<ReferenceAltitude::Reading> ReferenceAltitude::sample(const simulation::MotionSample &motion,
                                                                   double elapsed_seconds) {
     validateMotion(motion);
@@ -404,6 +473,8 @@ HydrostaticPressure::HydrostaticPressure(double water_level, double density, dou
             "hydrostatic environment requires finite level and positive pressure/density/gravity");
     }
 }
+
+// Surface pressure plus rho*g*depth below the water level; constant surface pressure above it.
 std::optional<double> HydrostaticPressure::operator()(const Eigen::Vector3d &position) const {
     if (!position.allFinite()) {
         throw std::invalid_argument("pressure query requires a finite position");
@@ -414,6 +485,7 @@ std::optional<double> HydrostaticPressure::operator()(const Eigen::Vector3d &pos
     }
     return pressure;
 }
+
 Pressure::Pressure(PressureParameters parameters, PressureQuery environment)
     : parameters_(std::move(parameters)), environment_(std::move(environment)),
       noise_(NoiseParameters{{parameters_.noise.bias, 0, 0},
@@ -431,9 +503,12 @@ Pressure::Pressure(PressureParameters parameters, PressureQuery environment)
             "pressure sensor requires a provider, positive calibration and ordered finite limits");
     }
 }
+
 void Pressure::reset(std::uint64_t seed, const std::string &id) {
     noise_.reset(seed, id, "pressure");
 }
+
+// Absolute pressure at the mount plus noise, gated to the operating range, with derived depth.
 Measurement<Pressure::Reading> Pressure::sample(const simulation::MotionSample &motion, double elapsed_seconds) {
     validateMotion(motion);
     const double noise = noise_.sample(elapsed_seconds).x();
@@ -449,14 +524,19 @@ Measurement<Pressure::Reading> Pressure::sample(const simulation::MotionSample &
     if (!std::isfinite(*ideal) || *ideal < 0) {
         throw std::runtime_error("pressure provider returned invalid pressure");
     }
+
     const double measured = *ideal + noise;
     if (!std::isfinite(measured)) {
         throw std::overflow_error("pressure measurement overflow");
     }
+
+    // Both the ideal and the noisy pressure must lie inside the operating range.
     if (*ideal < parameters_.minimum_pressure || *ideal > parameters_.maximum_pressure ||
         measured < parameters_.minimum_pressure || measured > parameters_.maximum_pressure) {
         return {std::nullopt, "pressure out of range"};
     }
+
+    // Depth relative to the calibration pressure; its variance follows from the same linear scaling.
     const double variance = noise_.covariance()(0, 0);
     Reading reading{measured, variance, (measured - parameters_.reference_pressure) * depth_scale_,
                     variance * depth_scale_ * depth_scale_};

@@ -14,6 +14,7 @@
 namespace {
 using nereus::session::Json;
 
+// Path of the first difference between two JSON values ("" if equal); floats compare to 1e-9 relative.
 std::string firstDifference(const Json &a, const Json &b, const std::string &path) {
     if (a.is_number() && b.is_number()) {
         if (a.is_number_integer() != b.is_number_integer())
@@ -49,12 +50,14 @@ std::string firstDifference(const Json &a, const Json &b, const std::string &pat
     return a == b ? "" : path + ": " + a.dump() + " != " + b.dump();
 }
 
+// All recorded calls: {function, inputs, output | error}.
 Json loadCalls() {
     std::ifstream file(std::string(NEREUS_SOURCE_DIR) + "/extensions/rules/robosub_2026/tests/rules_calls.json");
     EXPECT_TRUE(file.good());
     return Json::parse(file).at("calls");
 }
 
+// A fresh robosub_2026 rules instance from the standard registry.
 std::unique_ptr<nereus::session::Rules> rules() {
     auto registry = nereus::rules::standardRules();
     return registry.at("robosub_2026")();
@@ -66,6 +69,8 @@ TEST(Robosub2026Rules, MatchesEveryRecordedCall) {
     auto impl = rules();
     std::map<std::string, int> checked, errors;
     for (const Json &call : calls) {
+
+        // Dispatch on the recorded function name; inputs are positional.
         const std::string name = call.at("function");
         const Json &in = call.at("inputs");
         Json out;
@@ -80,6 +85,8 @@ TEST(Robosub2026Rules, MatchesEveryRecordedCall) {
         } catch (const std::exception &) {
             threw = true;
         }
+
+        // Recorded errors only require that the call throws, not the same message.
         if (call.contains("error")) {
             EXPECT_TRUE(threw) << name << " should throw " << call.at("error") << " for " << in.dump();
             ++errors[name];
@@ -91,12 +98,15 @@ TEST(Robosub2026Rules, MatchesEveryRecordedCall) {
                                   << "\nactual   " << out.dump() << "\ninputs " << in.dump();
         ++checked[name];
     }
+
+    // Every function must have been exercised many times, plus at least one error case.
     EXPECT_GT(checked["evaluate"], 100);
     EXPECT_GT(checked["describe"], 100);
     EXPECT_GT(checked["feed"], 100);
     EXPECT_GE(errors["evaluate"], 1);
 }
 
+// The stateless feed overload throws: robosub_2026 needs the run snapshot passed by TaskRuntime.
 TEST(Robosub2026Rules, StatelessFeedRequiresState) {
     EXPECT_THROW(rules()->feed({}, Json::object(), Json::object()), std::logic_error);
 }

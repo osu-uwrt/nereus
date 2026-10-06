@@ -1,3 +1,5 @@
+// Panel composition: the YAML-configured set of providers, panels, toolbar/header items and overlays the viewer
+// shows, the registry of factories that build them, and the types panels and overlays receive.
 #pragma once
 #include "nereus/ros_viewer/panels/capabilities.hpp"
 #include <functional>
@@ -5,6 +7,8 @@
 #include <yaml-cpp/yaml.h>
 
 namespace nereus::ros_viewer::panels {
+// What the host knows when building providers and views: robot namespace, fixed frame, whether this is a
+// preview (no providers are bound), and hooks back into the host.
 struct Context {
     std::string robotNamespace, fixedFrame;
     bool preview = false, useSimTime = false;
@@ -16,6 +20,8 @@ struct Context {
     std::function<bool()> keyboardDriving{};
     std::function<void(bool)> setKeyboardDriving{};
 };
+
+// The 3D pool view an overlay draws into and takes input from (origin/size in screen pixels).
 struct Viewport {
     glm::mat4 projection{1}, view{1};
     glm::vec3 eye{0};
@@ -27,6 +33,8 @@ struct Viewport {
     // stays still while the offset carries estimation noise; large jumps are taken at once.
     glm::mat4 displayFromCommand{1};
 };
+
+// A view drawn in ImGui: the same panel can appear as a window, a toolbar/header item and pinned controls.
 struct Panel {
     virtual ~Panel() = default;
     virtual void toolbar() {} // compact form in the pool view's toolbar (composition `toolbar:`)
@@ -38,18 +46,25 @@ struct Panel {
     virtual void drawWindows() {} // tool windows the panel opens itself (e.g. a scorecard)
     virtual void windowMenu() {}  // ImGui::MenuItem per tool window of drawWindows(), for the Windows menu
 };
+
+// Something drawn in the 3D pool view (e.g. the pose gizmo).
 struct Overlay {
     virtual ~Overlay() = default;
     virtual void cancelInteraction() {}
+    // Handles mouse input; returns true when it consumed it (later overlays then see a non-interactive view).
     virtual bool input(const Viewport &) = 0;
     virtual void draw(const Viewport &) = 0;
 };
+
+// Instantiated providers by their configured id.
 using Providers = std::map<std::string, std::shared_ptr<Provider>>;
+
+// Everything a view factory gets: its provider (null in a preview), its `options:` map and host hooks.
 struct Binding {
     std::shared_ptr<Provider> provider;
     YAML::Node options;
-    std::function<bool()> mayStart;
-    std::function<void()> kill;
+    std::function<bool()> mayStart; // Composition::mayStart() for this provider
+    std::function<void()> kill;     // kills a Motion provider and stops any mission running with it
     std::map<std::string, YAML::Node> documents{};
     std::function<void(const std::string &)> focus{};
     bool showWindow = false;
@@ -58,11 +73,14 @@ struct Binding {
     std::function<bool()> keyboardDriving{}; // Context's
     std::function<void(bool)> setKeyboardDriving{};
 };
+
+// Registry entries: `validate` throws on a bad `options:` map; `create` builds the instance.
 struct ProviderFactory {
     Kind kind;
     std::function<void(const YAML::Node &)> validate;
     std::function<std::shared_ptr<Provider>(const YAML::Node &, const Context &)> create;
 };
+
 template <class T> struct ViewFactory {
     Kind kind;
     std::function<void(const YAML::Node &)> validate;
@@ -71,22 +89,33 @@ template <class T> struct ViewFactory {
     // panel window (its draw() has no window form).
     bool hosted = false, toolbarOnly = false;
 };
+
+// Every known provider, panel and overlay type, by the `type:` name used in compositions.
 struct Registry {
     std::map<std::string, ProviderFactory> providers;
     std::map<std::string, ViewFactory<Panel>> panels;
     std::map<std::string, ViewFactory<Overlay>> overlays;
 };
+
+// Option validation helpers for factories (each throws std::invalid_argument).
+// `node` is a mapping with only `allowed` keys, each at most once.
 void keys(const YAML::Node &, std::initializer_list<const char *> allowed, const std::string &where);
+// Every listed option is present as a non-empty scalar.
 void required(const YAML::Node &, std::initializer_list<const char *> names);
+// The optional number at `key` (default `fallback`) is finite and in (0, maximum].
 void positive(const YAML::Node &, const char *key, double fallback, double maximum = 60.);
+// Substitutes {namespace} and {fixed_frame}; any other brace left over throws.
 std::string expand(std::string value, const Context &context);
 
 // Where a panel window goes in the built-in layouts (`dock:`); the operator can move it anywhere afterwards.
 enum class Dock { LeftTop, Left, Right, RightBottom, Bottom, Floating };
 Dock parseDock(const std::string &);
+
+// A validated composition (throws on a bad config) and its live instances; draws them each frame.
 class Composition {
   public:
     Composition(const YAML::Node &, const Context &, const Registry &);
+    // Once per frame: marks every provider as watched and hands motion to autonomy while a mission is busy.
     void touch();
     // Every panel's pinned() on the current line (the command bar), visible or not.
     void drawPinned();
@@ -100,6 +129,7 @@ class Composition {
     // Instance IDs of the toolbar / panel windows in display order.
     std::vector<std::string> toolbarIds() const;
     std::vector<std::string> panelIds() const;
+    // The panels' own tool windows (Panel::drawWindows()).
     void drawWindows();
     // Windows menu items: one per panel window, and the panels' own tool windows.
     void drawPanelMenuItems();
@@ -128,9 +158,13 @@ class Composition {
     std::vector<PanelWindow> panelWindows() const;
     // Open state of each panel window by stable key ("panel.<id>"), for saved layouts.
     std::vector<std::pair<std::string, bool *>> visibility();
+    // Shows the panel window and brings it to the front.
     void focusPanel(const std::string &id);
+
+    // Visible overlays in order; true when one consumed the input.
     bool input(const Viewport &);
     void drawOverlays(const Viewport &);
+
     // Left dock column width in the built-in layout (`sidebar_width` or `sidebar_width_fraction` of the window).
     float width(float windowWidth = 0) const {
         return windowWidth > 0 && sidebarFraction > 0 ? windowWidth * sidebarFraction : sidebarWidth;
@@ -148,20 +182,23 @@ class Composition {
   private:
     struct PanelInstance {
         std::string id, title;
-        bool visible, open;
+        bool visible, open; // open: the shown tab of its dock area in a built-in layout
         std::unique_ptr<Panel> panel;
         Dock dock = Dock::Left;
         bool focus = false;
         std::string type, configuredTitle;
     };
+    // An `ownership:` link: the mission blocks the motion provider while it is busy.
     struct Ownership {
         std::shared_ptr<Motion> motion;
         std::shared_ptr<Autonomy> mission;
     };
+
     void syncOwnership();
     void drawOverlayControls(const std::string &provider);
     static std::string toolTitle(const PanelInstance &);
     void drawPanelMenu();
+
     float sidebarWidth = 350, sidebarFraction = .29f;
     Providers sources;
     std::vector<PanelInstance> panelInstances, toolbarInstances, headerInstances;
@@ -177,11 +214,13 @@ class Composition {
     std::function<void()> windowMenu;
     std::function<void(const std::string &)> windowContextMenu;
 };
+
 // ImGui window name of a panel instance: the title shown, the instance ID as the stable identity.
 std::string panelWindowName(const std::string &id, const std::string &title);
 // The built-in toolbar item used when a composition has no `toolbar:` list: the host registers the items it
 // provides (types not in the registry are skipped).
 YAML::Node defaultToolbar();
+
 // Host-application items (drawn by the viewer, no provider). hostItemTypes() is the canonical list with
 // whether each can also be a panel window; registerHostItem binds one to drawing functions (toolbar form,
 // optional window form). registerHostPlaceholders registers the whole list with no drawing, so tools and
@@ -194,5 +233,6 @@ const std::vector<HostItemType> &hostItemTypes();
 void registerHostItem(Registry &, const std::string &type, std::function<void()> toolbar,
                       std::function<void()> panel = {});
 void registerHostPlaceholders(Registry &);
+// Registers every built-in panel and overlay type.
 void registerPanels(Registry &);
 } // namespace nereus::ros_viewer::panels

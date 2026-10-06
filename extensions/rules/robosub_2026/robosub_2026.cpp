@@ -19,8 +19,13 @@ namespace {
 using session::Event;
 using session::Events;
 using session::Json;
+// Offers `points` for a score row; the row only ever rises (see the `award` lambda in evaluate()).
 using Award = std::function<void(const std::string &, std::int64_t)>;
 
+// Small JSON helpers with Python semantics: the rules were ported from Python and are checked against
+// fixtures recorded from the Python version.
+
+// Python-style truthiness: null, false, 0 and empty containers are false.
 bool truthy(const Json &v) {
     if (v.is_null())
         return false;
@@ -30,6 +35,7 @@ bool truthy(const Json &v) {
         return v.get<double>() != 0.0;
     return !v.empty(); // string, array, object
 }
+
 std::int64_t integer(const Json &v) { // integer arithmetic (bool counts as 0/1)
     if (v.is_boolean())
         return v.get<bool>() ? 1 : 0;
@@ -37,14 +43,19 @@ std::int64_t integer(const Json &v) { // integer arithmetic (bool counts as 0/1)
         return v.get<std::int64_t>();
     throw std::invalid_argument("expected an integer value");
 }
+
 double real(const Json &v) {
     if (!v.is_number())
         throw std::invalid_argument("expected a number");
     return v.get<double>();
 }
+
+// True when `value` is an element of the JSON array `list`.
 bool listed(const Json &value, const Json &list) {
     return std::find(list.begin(), list.end(), value) != list.end();
 }
+
+// Python str(): strings as-is, null as "None", anything else as its JSON dump.
 Json strOf(const Json &v) {
     return v.is_string() ? v : Json(v.is_null() ? "None" : v.dump());
 }
@@ -67,6 +78,7 @@ template <class V> struct Ordered {
     }
 };
 
+// A valid forward pass through the gate opening (positive -> negative side) on a real attempt.
 bool forward(const Event &event) {
     if (!(event.at("task") == "gate" && event.at("region") == "gate_opening" && event.at("id") == "forward_pass" &&
           event.at("type") == "pass_through"))
@@ -75,12 +87,14 @@ bool forward(const Event &event) {
     return data.at("attempt_id") > 0 && data.at("from_side") == "positive" && data.at("to_side") == "negative";
 }
 
+// Launcher event validation: these throw on malformed events instead of silently skipping them.
 Json projectileId(const Json &data) {
     auto it = data.find("projectile_id");
     if (it == data.end() || !it->is_number_integer() || it->get<std::int64_t>() < 0)
         throw std::invalid_argument("launcher event requires a nonnegative integer projectile_id");
     return *it;
 }
+
 double distance(const Json &data) {
     auto it = data.find("release_distance_m");
     if (it == data.end() || !it->is_number() || !std::isfinite(it->get<double>()) || it->get<double>() < 0)
@@ -88,6 +102,8 @@ double distance(const Json &data) {
     return it->get<double>();
 }
 
+// Role chosen by the first forward gate pass: "repair" when the crossing is on the same side (local y) as
+// the configured reference frame, else "rescue". Also returns the crossing side (+1 / -1).
 std::pair<std::string, int> selectRole(const Event &event, const Json &state, const Json &parameters) {
     double y = real(event.at("data").at("crossing_point_local").at(1));
     const auto &reference = parameters.at("gate").at("role_reference_frame").get_ref<const std::string &>();
@@ -95,22 +111,27 @@ std::pair<std::string, int> selectRole(const Event &event, const Json &state, co
     return {y * repair_y > 0 ? "repair" : "rescue", y > 0 ? 1 : -1};
 }
 
+// object.get(key, fallback).
 Json valueOr(const Json &object, const char *key, Json fallback) {
     auto it = object.find(key);
     return it == object.end() ? std::move(fallback) : *it;
 }
 
+// Scores the slalom, bins, table and surface tasks by replaying events in order. It keeps the state those
+// rows depend on (role, held/dropped props, basket contents, surfacing) and awards rows via `award`. Once a
+// surface breach ends scoring it ignores everything after.
 class Ledger {
   public:
     Ledger(const Json &state, const Json &parameters, Award award)
         : state_(state), parameters_(parameters), points_(parameters.at("points")), award_(std::move(award)) {}
 
-    std::optional<std::string> role;
-    int side{0};
-    bool ended{false};
-    Events *emit{nullptr};
-    std::map<Json, Json> contents;
+    std::optional<std::string> role; // set by the first forward gate pass
+    int side{0};                     // gate crossing side (+1 / -1), for slalom same/other side points
+    bool ended{false};               // scoring ended by a breach outside the octagon
+    Events *emit{nullptr};           // where to emit scoring_ended; null while replaying history
+    std::map<Json, Json> contents;   // prop id -> basket it was dropped into
 
+    // Apply one task event; surface rows are re-evaluated after every event.
     void feed(const Event &event) {
         if (ended)
             return;
@@ -162,10 +183,13 @@ class Ledger {
     std::int64_t pt(const char *key) const {
         return integer(points_.at(key));
     }
+    // The class of target (bin / hole) the selected role must hit.
     Json targetClass() const {
         return strOf(parameters_.at("roles").at(*role).at("target_class"));
     }
 
+    // One row per slalom gate passed forward: more points on the same side as the gate crossing, plus a
+    // depth bonus.
     void slalom(const Event &event) {
         const Json &data = event.at("data");
         const Json &region = event.at("region");
@@ -177,9 +201,13 @@ class Ledger {
                                               pt("slalom_depth") * (truthy(data.at("depth_overlap")) ? 1 : 0));
     }
 
+    // Bin lights (magnet activations, capped) and dropper shots: points per shot landing in any bin plus
+    // per distinct correct-class bin hit.
     void bins(const Event &event) {
         const Json &data = event.at("data");
         const Json &type = event.at("type");
+
+        // Lights count once per region, up to max_lights.
         if (type == "activate") {
             if (role) {
                 lights_.insert(event.at("region"));
@@ -187,6 +215,8 @@ class Ledger {
             }
             return;
         }
+
+        // Only the configured dropper mechanism's payloads count for the bins.
         if (valueOr(data, "mechanism_type", Json()) != parameters_.at("bins").at("mechanism_type"))
             return;
         Json identifier = valueOr(data, "projectile_id", Json());
@@ -203,6 +233,8 @@ class Ledger {
             (*shot)["result"] = correct ? "success" : "wrong_target";
             (*shot)["correct"] = correct;
             (*shot)["target"] = event.at("region");
+
+            // Recount from all shots so the row reflects the totals so far.
             std::int64_t good = 0;
             std::set<Json> unique;
             for (auto &item : shots_.items) {
@@ -217,6 +249,8 @@ class Ledger {
         }
     }
 
+    // Table task: props grasped by the claw, dropped after a grasp, and dropped into baskets (best value
+    // per prop).
     void table(const Event &event) {
         const Json &data = event.at("data");
         const Json &type = event.at("type");
@@ -249,6 +283,7 @@ class Ledger {
         }
     }
 
+    // Basket count judged from the turns the vehicle rotated at the surface: exact count, or off by one.
     void basketTurns(double turns) {
         double count = static_cast<double>(contents.size());
         if (role && count > 0 && turns > 0)
@@ -257,6 +292,8 @@ class Ledger {
                                                                    : 0);
     }
 
+    // Rows that hold while surfaced: surfacing itself, grasped props carried up, and the icon faced (the
+    // icon matching the basket count scores most).
     void surfaceRows() {
         if (!role || !surface_active_)
             return;
@@ -278,6 +315,7 @@ class Ledger {
 
 const char *const kEndedReason = "Breach outside octagon; scoring ended (timer remains manual)";
 
+// A ledger rebuilt from the run's history (awards discarded), for describe().
 Ledger replayed(const Json &state, const Json &parameters) {
     Ledger ledger(state, parameters, [](const std::string &, std::int64_t) {});
     const Json &started = state.at("run").at("started_ns");
@@ -287,10 +325,14 @@ Ledger replayed(const Json &state, const Json &parameters) {
     return ledger;
 }
 
+// Gate (role, coin bonuses, style) and torpedo rows are scored here directly; the remaining tasks go
+// through Ledger.
 class Robosub2026 final : public session::Rules {
   public:
     using session::Rules::feed;
 
+    // Score the new `events` against the run state, returning the rows that rose and any emitted events.
+    // Gate/torpedo state is rebuilt from the run history on each call.
     Json evaluate(const Json &state, const Events &events, const Json &parameters) override {
         Json scores_out = Json::array();
         Events emitted;
@@ -299,6 +341,8 @@ class Robosub2026 final : public session::Rules {
             return {{"scores", scores_out}, {"events", Json::array()}};
         const Json &options = run.at("options"), &points = parameters.at("points");
         const Json &started = run.at("started_ns");
+
+        // Rebuild this run's state from history: the selected role, torpedo shots and passed attempts.
         std::vector<const Json *> history;
         for (const Json &event : state.at("history"))
             if (event.at("time_ns") >= started)
@@ -336,6 +380,7 @@ class Robosub2026 final : public session::Rules {
                 if (event->at("time_ns") >= selected->at("time_ns") && forward(*event))
                     passed.insert(event->at("data").at("attempt_id"));
 
+        // Award rows only upward; `updated` keeps each raised row once, in first-raised order.
         Json scores = state.at("scores");
         std::vector<std::pair<std::string, std::int64_t>> updated;
         Award award = [&](const std::string &row, std::int64_t value) {
@@ -351,6 +396,7 @@ class Robosub2026 final : public session::Rules {
                 }
             updated.emplace_back(row, value);
         };
+        // Gate row: base + heading coin + role coin (when the chosen role is the intended one) + style.
         auto gatePoints = [&](std::int64_t style) {
             std::int64_t bonus = truthy(options.at("role_coin")) && role && Json(*role) == options.at("role")
                                      ? integer(points.at("role"))
@@ -366,6 +412,8 @@ class Robosub2026 final : public session::Rules {
                                {"time_ns", event.at("time_ns")},
                                {"data", std::move(data)}});
         };
+        // Torpedo rows: per good shot, release-distance bonus, and the sequence bonus when every shot was
+        // good, correct and went through the holes in sequence_order.
         auto awardTorpedoes = [&]() {
             const Json &rules = parameters.at("torpedo");
             const Json &goodResults = rules.at("good_results");
@@ -395,8 +443,11 @@ class Robosub2026 final : public session::Rules {
                 award("sequence", integer(points.at("sequence")));
         };
 
+        // Score one new event for the gate and torpedo tasks.
         auto handle = [&](const Event &event) {
             const Json &data = event.at("data");
+
+            // Torpedo launcher: register releases (up to max_shots) and judge the first hit of each shot.
             if (event.at("task") == "torpedo" && valueOr(data, "mechanism_type", Json()) == "launcher") {
                 if (event.at("type") == "payload_released" && event.at("id") == "payload_released") {
                     Json identifier = projectileId(data);
@@ -445,6 +496,8 @@ class Robosub2026 final : public session::Rules {
                 }
                 return;
             }
+
+            // Gate: the first forward pass selects the role; any forward pass scores the gate.
             if (event.at("task") != "gate" || event.at("region") != "gate_opening")
                 return;
             if (forward(event)) {
@@ -467,6 +520,8 @@ class Robosub2026 final : public session::Rules {
                 award("gate", gatePoints(0));
             } else if (event.at("id") == "gate_opening:attempt_finished" && event.at("type") == "attempt_finished" &&
                        role && passed.count(data.at("attempt_id"))) {
+                // Style: whole quarter turns about each body axis, capped at max_quarters in total; the
+                // parameters choose whether roll+pitch or yaw is credited first.
                 const Json &style = parameters.at("gate").at("style");
                 std::vector<std::int64_t> quarters;
                 for (const Json &turn : data.at("rotation_vector_body"))
@@ -485,10 +540,12 @@ class Robosub2026 final : public session::Rules {
             } else if (event.at("id") == "reverse_pass" && event.at("type") == "pass_through" &&
                        data.at("from_side") == "negative" && data.at("to_side") == "positive" && role &&
                        data.at("envelope_top_world") < state.at("environment").at("surface_z_m")) {
+                // Returning home: a reverse pass with the vehicle fully below the surface.
                 award("home", integer(points.at("home")));
             }
         };
 
+        // Replay history through the ledger (emitting nothing), then feed the new events to both scorers.
         Ledger ledger(state, parameters, award);
         for (const Json *event : history)
             ledger.feed(*event);
@@ -499,11 +556,14 @@ class Robosub2026 final : public session::Rules {
             handle(event);
             ledger.feed(event);
         }
+
         for (auto &entry : updated)
             scores_out.push_back({{"row", entry.first}, {"points", entry.second}});
         return {{"scores", scores_out}, {"events", Json(emitted)}};
     }
 
+    // Run summary for the scoreboard: role, coin bonuses, target class, ended reason and time-bonus
+    // eligibility.
     Json describe(const Json &state, const Json &parameters) override {
         Json intended = state.at("run").at("options").at("role");
         Ledger ledger = replayed(state, parameters);
@@ -536,10 +596,14 @@ class Robosub2026 final : public session::Rules {
                 {"time_bonus_eligible", score("surface") && anySlalom && (score("bins") || score("torpedoes"))}};
     }
 
+    // The stateless overload can't resolve the role's target class, so only the stateful one is supported.
     Json feed(const Events &, const Json &, const Json &) override {
         throw std::logic_error("robosub_2026 feed needs the run state: call feed(state, ...)");
     }
 
+    // Mechanism activity feed for the UI: one item per release, hit, landing, miss, magnet activation,
+    // grasp/release and basket drop, deduplicated by (kind, id, result). `context.payloads` maps projectile
+    // ids to their launcher slot.
     Json feed(const Json &state, const Events &events, const Json &context, const Json &parameters) override {
         const Json &spec = parameters.at("feed");
         const Json &kinds = spec.at("kinds"), &baskets = spec.at("basket_names");
@@ -564,6 +628,7 @@ class Robosub2026 final : public session::Rules {
         auto isKind = [&](const Json &mechanism) {
             return mechanism.is_string() && kinds.contains(mechanism.get<std::string>());
         };
+
         for (const Event &event : events) {
             const Json &kind = event.at("type"), &data = event.at("data"), &time_ns = event.at("time_ns");
             Json mechanism = valueOr(data, "mechanism_type", Json());
@@ -579,6 +644,7 @@ class Robosub2026 final : public session::Rules {
                 Json v = valueOr(data, "hole_id", Json());
                 return truthy(v) ? v : Json("");
             };
+
             if (kind == "payload_released" && isKind(mechanism)) {
                 add(identifier, kindOf(), "released", "", time_ns, slot);
             } else if (kind == "hit" && isKind(mechanism)) {

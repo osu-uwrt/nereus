@@ -1,3 +1,5 @@
+// Prior map: riptide_mapping config.yaml parsing, the splice-based comment-preserving save, the parent / child
+// tree edits and the pool <-> map origin transforms. See prior_map.hpp.
 #include "prior_map.hpp"
 #include <algorithm>
 #include <cmath>
@@ -9,16 +11,22 @@
 
 namespace nereus::ros_viewer::host::prior_map {
 namespace {
+
 constexpr double kPi = 3.14159265358979323846;
+
+// Entries the editor hides and save() must leave byte-identical.
 const std::set<std::string> kDeprecated{"prequal_gate", "prequal_pole"};
 
 double radians(double degrees) {
     return degrees * kPi / 180;
 }
+
+// Rounds to the 6 decimals the file is written with.
 double round6(double value) {
     const double r = std::round(value * 1e6) / 1e6;
     return r == 0 ? 0 : r; // never "-0.0"
 }
+
 // Always a YAML float ("2.0", never "2"): ROS 2 then types the parameter as a double.
 std::string formatFloat(double value) {
     char text[64];
@@ -28,9 +36,13 @@ std::string formatFloat(double value) {
         s.pop_back();
     return s;
 }
+
+// The parent as the file spells it: "map" or "<name>_frame".
 std::string parentText(const std::string &parent) {
     return parent == kMap ? kMap : parent + "_frame";
 }
+
+// Safe to write as an unquoted YAML scalar (letters, digits, '_', '-', '.').
 bool plain(const std::string &text) {
     return !text.empty() && std::all_of(text.begin(), text.end(), [](unsigned char c) {
         return std::isalnum(c) || c == '_' || c == '-' || c == '.';
@@ -41,33 +53,43 @@ bool plain(const std::string &text) {
 struct Source {
     const std::string &text;
     std::vector<std::size_t> lines; // byte offset of each line start
+
     explicit Source(const std::string &t) : text(t) {
         lines.push_back(0);
         for (std::size_t i = 0; i < text.size(); ++i)
             if (text[i] == '\n')
                 lines.push_back(i + 1);
     }
+
+    // Byte offset of a yaml-cpp mark (0-based line and column).
     std::size_t offset(const YAML::Mark &mark) const {
         if (mark.line < 0 || std::size_t(mark.line) >= lines.size())
             throw std::runtime_error("cannot locate a value in the file");
         return lines[std::size_t(mark.line)] + std::size_t(std::max(0, mark.column));
     }
+
+    // Offset of the start of the line containing `at`.
     std::size_t lineStart(std::size_t at) const {
         const auto found = text.rfind('\n', at == 0 ? 0 : at - 1);
         return at == 0 || found == std::string::npos ? 0 : found + 1;
     }
+
     std::size_t lineEnd(std::size_t at) const { // just past the newline
         const auto found = text.find('\n', at);
         return found == std::string::npos ? text.size() : found + 1;
     }
+
+    // Leading spaces of the line starting at `lineAt`.
     std::size_t indent(std::size_t lineAt) const {
         std::size_t i = lineAt;
         while (i < text.size() && text[i] == ' ')
             ++i;
         return i - lineAt;
     }
+
     // The [start, end) of a plain or quoted scalar beginning at `start`.
     std::size_t scalarEnd(std::size_t start) const {
+        // Quoted: up to the closing quote ('' is an escaped quote in single quotes, \" in double quotes).
         if (start < text.size() && (text[start] == '"' || text[start] == '\'')) {
             const char quote = text[start];
             for (std::size_t i = start + 1; i < text.size(); ++i)
@@ -76,6 +98,8 @@ struct Source {
                     return i + 1;
             throw std::runtime_error("unterminated quoted value");
         }
+
+        // Plain: up to the line end, a flow separator or a " #" comment, minus trailing spaces.
         std::size_t end = start;
         while (end < text.size() && text[end] != '\n' && text[end] != ',' && text[end] != '}' &&
                !(text[end] == '#' && end > start && text[end - 1] == ' '))
@@ -84,6 +108,7 @@ struct Source {
             --end;
         return end;
     }
+
     // The range of a scalar node, checked against its parsed value so a misplaced edit can never happen.
     std::pair<std::size_t, std::size_t> scalar(const YAML::Node &node) const {
         const auto start = offset(node.Mark());
@@ -95,6 +120,7 @@ struct Source {
             throw std::runtime_error("value '" + node.Scalar() + "' not found where the parser put it");
         return {start, end};
     }
+
     // A key's whole entry: its line through every following line indented deeper (blank lines inside kept,
     // trailing ones left for whatever follows).
     std::pair<std::size_t, std::size_t> block(const YAML::Node &key) const {
@@ -114,6 +140,8 @@ struct Source {
         return {first, last};
     }
 };
+
+// One text replacement for save(): bytes [start, end) of the original become `text` (an insert when equal).
 struct Splice {
     std::size_t start, end;
     std::string text;
@@ -127,6 +155,8 @@ YAML::Node child(const YAML::Node &map, const std::string &key) {
                 return it->second;
     return YAML::Node(YAML::NodeType::Undefined);
 }
+
+// The key node itself (for its source position), undefined when missing.
 YAML::Node keyNode(const YAML::Node &map, const std::string &key) {
     if (map.IsDefined() && map.IsMap())
         for (auto it = map.begin(); it != map.end(); ++it)
@@ -134,9 +164,13 @@ YAML::Node keyNode(const YAML::Node &map, const std::string &key) {
                 return it->first;
     return YAML::Node(YAML::NodeType::Undefined);
 }
+
+// `<ns>: ros__parameters: init_data:` (undefined when any level is missing).
 YAML::Node initData(const YAML::Node &root, const std::string &ns) {
     return child(child(child(root, ns), "ros__parameters"), "init_data");
 }
+
+// A scalar as a double; `fallback` when missing or not a number.
 double number(const YAML::Node &map, const char *key, double fallback) {
     const auto value = child(map, key);
     if (!value || !value.IsScalar())
@@ -147,6 +181,8 @@ double number(const YAML::Node &map, const char *key, double fallback) {
         return fallback;
     }
 }
+
+// A scalar as a bool; false when missing or not a bool.
 bool flag(const YAML::Node &map, const char *key) {
     const auto value = child(map, key);
     try {
@@ -195,6 +231,8 @@ bool same(const YAML::Node &a, const YAML::Node &b, std::vector<std::string> &pa
     }
     return true;
 }
+
+// Equal in every saved field, numbers compared at the file's 6-decimal precision (editor-only flags ignored).
 bool sameObject(const Object &a, const Object &b) {
     const auto near = [](double x, double y) { return std::abs(round6(x) - round6(y)) < 5e-7; };
     return a.name == b.name && a.parent == b.parent && a.cls == b.cls && a.lockOrientation == b.lockOrientation &&
@@ -202,17 +240,22 @@ bool sameObject(const Object &a, const Object &b) {
            near(a.pose.z, b.pose.z) && near(a.pose.yaw, b.pose.yaw) && near(a.covar.x, b.covar.x) &&
            near(a.covar.y, b.covar.y) && near(a.covar.z, b.covar.z) && near(a.covar.yaw, b.covar.yaw);
 }
+
 } // namespace
 
 double wrapDegrees(double degrees) {
     double a = std::fmod(std::fmod(degrees + 180.0, 360.0) + 360.0, 360.0) - 180.0;
     return a == -180.0 ? 180.0 : a;
 }
+
+// Planar transform: the child's x / y rotated by the parent's yaw, z simply added.
 Pose compose(const Pose &parent, const Pose &child) {
     const double c = std::cos(radians(parent.yaw)), s = std::sin(radians(parent.yaw));
     return {parent.x + child.x * c - child.y * s, parent.y + child.x * s + child.y * c, parent.z + child.z,
             wrapDegrees(parent.yaw + child.yaw)};
 }
+
+// Inverse of compose(): the offset rotated back by the parent's yaw.
 Pose decompose(const Pose &parent, const Pose &mapPose) {
     const double c = std::cos(radians(parent.yaw)), s = std::sin(radians(parent.yaw));
     const double dx = mapPose.x - parent.x, dy = mapPose.y - parent.y;
@@ -229,6 +272,8 @@ Document load(const std::string &text, const std::string &preferredNs) {
         throw std::runtime_error("not a riptide_mapping config: the file is not a mapping");
     Document doc;
     doc.text = text;
+
+    // Every top-level key with an init_data mapping is an editable namespace (liltank's are skipped).
     for (auto it = root.begin(); it != root.end(); ++it) {
         const auto key = it->first.Scalar();
         if (initData(root, key).IsMap() && key.find("liltank") == std::string::npos)
@@ -236,11 +281,15 @@ Document load(const std::string &text, const std::string &preferredNs) {
     }
     if (doc.namespaces.empty())
         throw std::runtime_error("no '<ns>/riptide_mapping2: ros__parameters: init_data' in the file");
+
+    // Pick the namespace: the preferred one, else the first talos one, else the first.
     const auto talos = std::find_if(doc.namespaces.begin(), doc.namespaces.end(),
                                     [](const std::string &n) { return n.find("talos") != std::string::npos; });
     doc.ns = std::find(doc.namespaces.begin(), doc.namespaces.end(), preferredNs) != doc.namespaces.end() ? preferredNs
              : talos != doc.namespaces.end() ? *talos
                                              : doc.namespaces[0];
+
+    // One Object per entry, in file order; deprecated and malformed entries are left out.
     const auto init = initData(root, doc.ns);
     for (auto it = init.begin(); it != init.end(); ++it) {
         const auto name = it->first.Scalar();
@@ -251,10 +300,13 @@ Document load(const std::string &text, const std::string &preferredNs) {
         o.name = name;
         const auto parent = child(entry, "parent");
         o.parent = parent && parent.IsScalar() ? parent.Scalar() : kMap;
+
+        // The file names frames ("<name>_frame"); objects store the bare name.
         constexpr std::string_view suffix = "_frame";
         if (o.parent != kMap && o.parent.size() > suffix.size() &&
             o.parent.compare(o.parent.size() - suffix.size(), suffix.size(), suffix) == 0)
             o.parent.resize(o.parent.size() - suffix.size());
+
         const auto pose = child(entry, "pose"), covar = child(entry, "covar");
         o.pose = {number(pose, "x", 0), number(pose, "y", 0), number(pose, "z", 0), number(pose, "yaw", 0)};
         o.covar = {number(covar, "x", 1), number(covar, "y", 1), number(covar, "z", 1), number(covar, "yaw", 1)};
@@ -269,20 +321,27 @@ Document load(const std::string &text, const std::string &preferredNs) {
     return doc;
 }
 
+// Rather than re-emitting the YAML (which would lose comments and layout), save() collects byte-range splices
+// against the original text: changed scalars are replaced in place, removed keys cut, new entries appended.
 std::string save(const Document &doc) {
     const YAML::Node root = YAML::Load(doc.text);
     const auto init = initData(root, doc.ns);
     if (!init.IsMap() || init.size() == 0 || init.Style() == YAML::EmitterStyle::Flow)
         throw std::runtime_error(doc.ns + " init_data is empty or written inline: add a first entry by hand");
     const Source src(doc.text);
+
+    // Learn the file's indentation from its first entry: the entry indent, and the step one level deeper.
     const auto firstKey = init.begin()->first;
     const auto entryLine = src.lineStart(src.offset(firstKey.Mark()));
     const std::string entryIndent(src.indent(entryLine), ' ');
     std::size_t step = 2;
     if (const auto parentKey = keyNode(init.begin()->second, "parent"))
         step = std::max<std::size_t>(1, src.indent(src.lineStart(src.offset(parentKey.Mark()))) - entryIndent.size());
+
     std::vector<Splice> splices;
-    std::vector<std::string> fresh;
+    std::vector<std::string> fresh; // full entry text for objects the file does not have yet
+
+    // The whole YAML entry for a new object, in the file's indentation.
     const auto entryText = [&](const Object &o) {
         if (!plain(o.name) || (!o.cls.empty() && !plain(o.cls)))
             throw std::runtime_error("'" + o.name + "': names and classes are letters, digits, '_', '-' or '.'");
@@ -300,6 +359,8 @@ std::string save(const Document &doc) {
              "z: " + formatFloat(o.pose.z) + "\n" + n + "yaw: " + formatFloat(o.pose.yaw) + "\n";
         return t;
     };
+
+    // Existing entries: splice only the values that changed.
     for (const auto &o : doc.objects) {
         const auto entry = child(init, o.name);
         if (!entry) {
@@ -312,6 +373,8 @@ std::string save(const Document &doc) {
         const auto parent = child(entry, "parent");
         if (!parentKey || !parent.IsScalar())
             throw std::runtime_error(o.name + " has no parent line to edit");
+
+        // The parent line.
         const std::string fieldIndent(src.indent(src.lineStart(src.offset(parentKey.Mark()))), ' ');
         const auto [parentStart, parentEnd] = src.scalar(parent);
         if (parent.Scalar() != parentText(o.parent)) {
@@ -319,6 +382,7 @@ std::string save(const Document &doc) {
                 throw std::runtime_error("parent '" + o.parent + "' cannot be written plainly");
             splices.push_back({parentStart, parentEnd, parentText(o.parent)});
         }
+
         // class and the flags: replaced in place, or inserted after the parent line, or their line removed.
         const auto insertAt = src.lineEnd(parentEnd);
         std::string inserts;
@@ -345,6 +409,8 @@ std::string save(const Document &doc) {
         setLine("point_yaw_at_parent", o.pointYawAtParent, "true");
         if (!inserts.empty())
             splices.push_back({insertAt, insertAt, inserts});
+
+        // covar and pose numbers: only those that differ at 6-decimal precision are rewritten.
         for (const auto &[group, values] :
              {std::pair<const char *, std::array<double, 4>>{"covar", {o.covar.x, o.covar.y, o.covar.z, o.covar.yaw}},
               std::pair<const char *, std::array<double, 4>>{"pose", {o.pose.x, o.pose.y, o.pose.z, o.pose.yaw}}}) {
@@ -363,6 +429,7 @@ std::string save(const Document &doc) {
             }
         }
     }
+
     // Deletions: only names the tool loaded and the operator removed.
     for (const auto &name : doc.loadedNames)
         if (!find(doc.objects, name) && !deprecated(name))
@@ -370,6 +437,8 @@ std::string save(const Document &doc) {
                 const auto [s, e] = src.block(key);
                 splices.push_back({s, e, ""});
             }
+
+    // New objects: appended after the last existing entry.
     if (!fresh.empty()) {
         // The last entry (an iterator: assigning a bound YAML::Node would overwrite the node it is bound to).
         auto last = init.begin();
@@ -381,6 +450,8 @@ std::string save(const Document &doc) {
             text += entry;
         splices.push_back({at, at, text});
     }
+
+    // Apply back to front so earlier offsets stay valid; overlapping edits would corrupt the file.
     std::sort(splices.begin(), splices.end(), [](const Splice &a, const Splice &b) {
         return a.start < b.start || (a.start == b.start && a.end < b.end);
     });
@@ -400,9 +471,13 @@ std::string save(const Document &doc) {
         if (!b || !sameObject(o, *b))
             throw std::runtime_error("the saved file would not load '" + o.name + "' back as edited; nothing written");
     }
+
+    // Everything outside this namespace's init_data must be structurally unchanged.
     std::vector<std::string> path;
     if (!same(root, YAML::Load(out), path, {doc.ns, "ros__parameters", "init_data"}))
         throw std::runtime_error("the save would change other parts of the file; nothing written");
+
+    // And the deprecated entries inside it, which load() skips, must survive untouched.
     const YAML::Node reloaded = YAML::Load(out); // kept alive: nodes found in it point into its memory
     const auto newInit = initData(reloaded, doc.ns);
     for (auto it = init.begin(); it != init.end(); ++it)
@@ -418,6 +493,7 @@ const Object *find(const std::vector<Object> &objects, const std::string &name) 
             return &o;
     return nullptr;
 }
+
 Object *find(std::vector<Object> &objects, const std::string &name) {
     for (auto &o : objects)
         if (o.name == name)
@@ -427,6 +503,8 @@ Object *find(std::vector<Object> &objects, const std::string &name) {
 
 std::map<std::string, Pose> mapPoses(const std::vector<Object> &objects) {
     std::map<std::string, Pose> memo;
+
+    // Memoised recursive walk up the parent chain; `visiting` breaks cycles by treating the pose as map-relative.
     std::function<Pose(const std::string &, std::set<std::string> &)> pose = [&](const std::string &name,
                                                                                  std::set<std::string> &visiting) {
         if (const auto found = memo.find(name); found != memo.end())
@@ -527,6 +605,8 @@ bool swapPoses(std::vector<Object> &objects, const std::string &a, const std::st
     auto *pa = find(objects, a), *pb = find(objects, b);
     if (!pa || !pb || a == b)
         return false;
+
+    // An ancestor's move would also carry the other object, so the swap would not land.
     if (descendants(objects, a).count(b) || descendants(objects, b).count(a)) {
         if (error)
             *error = "cannot swap an object with its own ancestor or descendant";
@@ -577,11 +657,14 @@ Pose mapToPool(const Pose &p, const Origin &origin) {
     return {origin.x + p.x * c - p.y * s, origin.y + p.x * s + p.y * c, origin.z + p.z,
             wrapDegrees(p.yaw + origin.yaw())};
 }
+
 Pose poolToMap(const Pose &p, const Origin &origin) {
     const double phi = radians(origin.yaw()), c = std::cos(phi), s = std::sin(phi);
     const double dx = p.x - origin.x, dy = p.y - origin.y;
     return {dx * c + dy * s, -dx * s + dy * c, p.z - origin.z, wrapDegrees(p.yaw - origin.yaw())};
 }
+
+// Only roots are re-expressed; children ride along on their parents.
 void keepInPool(std::vector<Object> &objects, const Origin &from, const Origin &to) {
     for (auto &o : objects)
         if (o.parent == kMap || !find(objects, o.parent))
@@ -590,12 +673,16 @@ void keepInPool(std::vector<Object> &objects, const Origin &from, const Origin &
 
 std::vector<TagSpot> tagSpots(double length, double width, const std::vector<Line> &lines, double minimumLength) {
     std::vector<TagSpot> spots;
+
+    // Adds a spot unless one on the same wall is within 5 cm.
     const auto add = [&](double x, double y, double phi, char wall) {
         for (const auto &s : spots)
             if (s.wall == wall && std::abs(s.x - x) < .05 && std::abs(s.y - y) < .05)
                 return;
         spots.push_back({x, y, phi, wall});
     };
+
+    // Axis-aligned lines (within a 4:1 slope) extended to both opposite walls; diagonal lines give none.
     for (const auto &l : lines) {
         const double dx = l.x1 - l.x0, dy = l.y1 - l.y0;
         if (std::hypot(dx, dy) < minimumLength)
@@ -614,6 +701,8 @@ std::vector<TagSpot> tagSpots(double length, double width, const std::vector<Lin
             }
         }
     }
+
+    // Each corner, once facing along each of its two walls.
     for (const auto &[x, y] : {std::pair{0.0, 0.0}, {length, 0.0}, {0.0, width}, {length, width}}) {
         add(x, y, x == 0 ? 0 : 180, x == 0 ? 'W' : 'E');
         add(x, y, y == 0 ? 90 : 270, y == 0 ? 'S' : 'N');
@@ -624,6 +713,8 @@ std::vector<TagSpot> tagSpots(double length, double width, const std::vector<Lin
 std::optional<TagSpot> nearestSpot(const std::vector<TagSpot> &spots, double x, double y, double reach) {
     std::optional<TagSpot> best;
     double bestDistance = 1e300;
+
+    // Breaks a tie between the two spots at one corner: distance from the point to each spot's wall.
     const auto wallDistance = [&](const TagSpot &s) {
         return s.wall == 'W' || s.wall == 'E' ? std::abs(x - s.x) : std::abs(y - s.y);
     };
@@ -639,4 +730,5 @@ std::optional<TagSpot> nearestSpot(const std::vector<TagSpot> &spots, double x, 
     }
     return best;
 }
+
 } // namespace nereus::ros_viewer::host::prior_map

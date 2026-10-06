@@ -1,4 +1,6 @@
 # nereus-viewer: the ROS 2 pool viewer host (window, scene, overlays, camera cards, panels).
+
+# Dependencies of the window, renderer and image decoding.
 find_package(ament_index_cpp REQUIRED)
 find_package(glfw3 3.3 REQUIRED)
 find_package(OpenGL REQUIRED)
@@ -20,6 +22,7 @@ target_link_libraries(nereus_viewer_host_core PUBLIC nereus_glm nereus_mesh_asse
 target_compile_features(nereus_viewer_host_core PUBLIC cxx_std_17)
 target_compile_definitions(nereus_viewer_host_core PRIVATE NEREUS_PACK_CONTENT="${PROJECT_SOURCE_DIR}/content/packs")
 
+# The GL host: ROS side, scene, overlays, window and app loop (needs a display at run time).
 add_library(nereus_viewer_host STATIC ros_side.cpp scene_model.cpp overlay_draw.cpp window.cpp app.cpp prior_map_editor.cpp
             top_down.cpp pose_command.cpp)
 target_include_directories(nereus_viewer_host PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -29,6 +32,7 @@ target_compile_definitions(nereus_viewer_host PRIVATE
   NEREUS_VIEWER_CONTENT="${PROJECT_SOURCE_DIR}/content/viewer"
   NEREUS_RENDERING_SHADERS="${PROJECT_SOURCE_DIR}/libraries/rendering/shaders")
 
+# The viewer executable, written to the build root, plus its runtime content.
 add_executable(nereus-viewer main.cpp)
 target_link_libraries(nereus-viewer PRIVATE nereus_viewer_host)
 set_target_properties(nereus-viewer PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
@@ -38,6 +42,8 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/content/viewer/ DESTINATION ${CMAKE_INST
 if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
+
+  # One GTest binary per host_<name>.cpp, all linked against the GL-free core.
   set(_host_tests viewer_input tf_tree detection_pose status_lights thruster_visuals camera_geometry jpeg scenario
       display_clock frame_profiler point_cloud mapping_markers prior_map scenario_packs)
   foreach(name ${_host_tests})
@@ -48,9 +54,12 @@ if(BUILD_TESTING)
     target_compile_options(host_${name}_test PRIVATE -UNDEBUG)
     add_test(NAME host_${name} COMMAND host_${name}_test)
   endforeach()
+
+  # Extra link/defines for the tests that need them.
   target_link_libraries(host_jpeg_test PRIVATE JPEG::JPEG Threads::Threads)
   target_compile_definitions(host_prior_map_test PRIVATE
     NEREUS_TEST_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../tests/host_prior_map_config.yaml")
+
   # The editor's pointer and keyboard handling in a headless ImGui context (no GL).
   add_executable(host_prior_map_editor_test ../tests/host_prior_map_editor.cpp prior_map_editor.cpp)
   target_link_libraries(host_prior_map_editor_test PRIVATE nereus_viewer_host_core nereus_viewer_panels nereus_imgui
@@ -59,15 +68,19 @@ if(BUILD_TESTING)
     NEREUS_TEST_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../tests/host_prior_map_config.yaml")
   target_compile_options(host_prior_map_editor_test PRIVATE -UNDEBUG)
   add_test(NAME host_prior_map_editor COMMAND host_prior_map_editor_test)
+
   # The course map's top-down images (CPU only).
   add_executable(host_top_down_test ../tests/host_top_down.cpp top_down.cpp)
   target_link_libraries(host_top_down_test PRIVATE nereus_viewer_host_core GTest::gtest_main)
   target_compile_options(host_top_down_test PRIVATE -UNDEBUG)
   add_test(NAME host_top_down COMMAND host_top_down_test)
+
+  # The pose-command gizmo math (GLM only).
   add_executable(host_pose_command_test ../tests/host_pose_command.cpp pose_command.cpp)
   target_link_libraries(host_pose_command_test PRIVATE nereus_glm GTest::gtest_main)
   target_compile_options(host_pose_command_test PRIVATE -UNDEBUG)
   add_test(NAME host_pose_command COMMAND host_pose_command_test)
+
   # Window/render smoke: needs a display; validates every ImGui frame and writes a screenshot.
   if(DEFINED ENV{DISPLAY} OR DEFINED ENV{WAYLAND_DISPLAY})
     add_test(NAME host_demo_capture COMMAND nereus-viewer --demo

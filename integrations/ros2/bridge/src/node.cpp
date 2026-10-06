@@ -1,3 +1,6 @@
+// BridgeNode: rclcpp entities, the inbox that hands ROS callbacks to the stepping thread, and the
+// real-time pacing loop.
+
 #include "node.hpp"
 
 #include <geometry_msgs/msg/transform_stamped.hpp>
@@ -18,9 +21,11 @@
 namespace nereus::ros_bridge {
 namespace {
 using Clock = std::chrono::steady_clock;
+// Post hands work to the stepping thread; Handler serves one (request, response) pair.
 using Post = std::function<void(std::function<void()>)>;
 using Handler = std::function<void(const void *, void *)>;
 
+// QoS from a pack `qos` block {depth, reliability, durability}.
 rclcpp::QoS qosFrom(const Json &config) {
     rclcpp::QoS qos(rclcpp::KeepLast(config.at("depth").get<std::size_t>()));
     const std::string reliability = config.at("reliability"), durability = config.at("durability");
@@ -35,6 +40,7 @@ rclcpp::QoS qosFrom(const Json &config) {
     return qos;
 }
 
+// ROS Time from ns, with nanosec in [0, 1e9) also for negative times.
 builtin_interfaces::msg::Time stampOf(std::int64_t ns) {
     std::int64_t sec = ns / 1000000000, rest = ns % 1000000000;
     if (rest < 0) {
@@ -62,6 +68,8 @@ geometry_msgs::msg::TransformStamped transformMessage(const Transform &item) {
     return message;
 }
 
+// Typed service server whose callback (executor thread) posts the work to the stepping thread, which
+// fills and sends the response.
 template <class Srv>
 std::shared_ptr<void> createService(rclcpp::Node &node, const std::string &name, Handler handler, Post post) {
     return node.create_service<Srv>(name, [handler, post](std::shared_ptr<rclcpp::Service<Srv>> service,
@@ -74,6 +82,8 @@ std::shared_ptr<void> createService(rclcpp::Node &node, const std::string &name,
         });
     });
 }
+
+// Service type name -> server factory, for the types supportedServiceTypes() lists.
 using ServiceCreator = std::function<std::shared_ptr<void>(rclcpp::Node &, const std::string &, Handler, Post)>;
 const std::map<std::string, ServiceCreator> &serviceCreators() {
     static const std::map<std::string, ServiceCreator> table = {
@@ -84,13 +94,19 @@ const std::map<std::string, ServiceCreator> &serviceCreators() {
 }
 } // namespace
 
+// ROS entities and the cross-thread inbox.
 struct BridgeNode::Impl {
+    // Work posted by ROS callbacks (executor thread), drained by the stepping thread.
     std::mutex inbox_mutex;
     std::deque<std::function<void()>> inbox;
+
+    // Per-stream entities, keyed by bridge stream id.
     std::map<std::string, std::shared_ptr<rclcpp::GenericPublisher>> publishers;
     std::map<std::string, std::shared_ptr<rclcpp::SerializationBase>> serializers;
     std::vector<std::shared_ptr<rclcpp::GenericSubscription>> subscriptions;
     std::vector<std::shared_ptr<void>> services;
+
+    // /clock, the TF listener behind the core's lookups, and /tf.
     std::shared_ptr<rclcpp::Publisher<rosgraph_msgs::msg::Clock>> clock;
     std::shared_ptr<tf2_ros::Buffer> buffer;
     std::shared_ptr<tf2_ros::TransformListener> listener;
@@ -102,6 +118,7 @@ struct BridgeNode::Impl {
     std::set<std::string> latched;
     bool clock_wanted = true, tf_wanted = true;
     std::map<std::string, std::int64_t> skipped;
+
     std::shared_ptr<tf2_ros::StaticTransformBroadcaster> static_broadcaster;
     rclcpp::Client<robot_localization::srv::SetPose>::SharedPtr alignment_client;
     rclcpp::SerializedMessage buffer_message; // reused by the stepping thread
@@ -110,10 +127,13 @@ struct BridgeNode::Impl {
     rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_handle;
     CameraSink *cameras{nullptr};
 
+    // Called from any thread.
     void post(std::function<void()> work) {
         std::lock_guard<std::mutex> lock(inbox_mutex);
         inbox.push_back(std::move(work));
     }
+
+    // Runs everything posted so far on the calling (stepping) thread.
     void drainInbox() {
         std::deque<std::function<void()>> work;
         {
@@ -131,6 +151,8 @@ BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras) : impl_(std::make_
     impl_->cameras = cameras;
     const Json &config = core.config();
     node_ = std::make_shared<rclcpp::Node>(config.value("node_name", "nereus_bridge"), config.value("namespace", "/"));
+
+    // TF lookups for the core (placement frames, estimator alignment): latest available transform.
     impl_->buffer = std::make_shared<tf2_ros::Buffer>(node_->get_clock());
     impl_->listener = std::make_shared<tf2_ros::TransformListener>(*impl_->buffer, node_, false);
     core.setLookup([buffer = impl_->buffer](const std::string &target,
@@ -145,6 +167,7 @@ BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras) : impl_(std::make_
         }
     });
 
+    // real_time_factor parameter; the core validates changes and stores them atomically.
     rcl_interfaces::msg::ParameterDescriptor descriptor;
     descriptor.type = rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE;
     descriptor.dynamic_typing = true;
@@ -175,6 +198,7 @@ BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras) : impl_(std::make_
             return result;
         });
 
+    // /clock, dynamic /tf (only when tf.publish is declared) and the static transforms, sent once.
     const Json &clock = config.at("clock");
     impl_->clock = node_->create_publisher<rosgraph_msgs::msg::Clock>(clock.at("topic"), qosFrom(clock.at("qos")));
     if (config.value("tf", Json::object()).contains("publish") && !config["tf"]["publish"].empty())
@@ -187,6 +211,7 @@ BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras) : impl_(std::make_
         impl_->static_broadcaster->sendTransform(messages);
     }
 
+    // Streams: generic publishers, and subscriptions that deserialize on the stepping thread.
     Impl *impl = impl_.get();
     for (const auto &stream : config.at("streams")) {
         const std::string id = stream.at("id"), topic = stream.at("topic");
@@ -211,6 +236,8 @@ BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras) : impl_(std::make_
                 }));
         }
     }
+
+    // Services, served on the stepping thread like subscriptions.
     for (const auto &service : config.value("services", Json::array())) {
         const std::string id = service.at("id"), name = service.at("service");
         const auto &entry = core.services().at(id);
@@ -221,6 +248,8 @@ BridgeNode::BridgeNode(BridgeCore &core, CameraSink *cameras) : impl_(std::make_
             *node_, name, [this, id](const void *request, void *response) { core_.call(id, request, response); },
             [impl](std::function<void()> work) { impl->post(std::move(work)); }));
     }
+
+    // Estimator alignment client (robot_localization SetPose).
     if (core.hasAlignment())
         impl->alignment_client = node_->create_client<robot_localization::srv::SetPose>(
             core.alignmentConfig().at("client").get<std::string>());
@@ -245,6 +274,7 @@ void BridgeNode::stopExecutor() {
     }
 }
 
+// Re-reads subscriber counts (see Impl::wanted).
 void BridgeNode::refreshSubscribers() {
     for (auto &[id, publisher] : impl_->publishers)
         impl_->wanted[id] = impl_->latched.count(id) || publisher->get_subscription_count() > 0;
@@ -256,6 +286,7 @@ std::map<std::string, std::int64_t> BridgeNode::skippedPublications() const {
     return impl_->skipped;
 }
 
+// Serializes and publishes the core's publications on the stepping thread (one reused buffer).
 void BridgeNode::send(const std::vector<Publication> &publications) {
     for (const auto &item : publications) {
         if (!impl_->wanted.at(item.stream)) {
@@ -277,6 +308,7 @@ void BridgeNode::publishClock(std::int64_t ns) {
     impl_->clock->publish(message);
 }
 
+// Publishes timed truth transforms on /tf.
 void BridgeNode::broadcast(const std::vector<Transform> &transforms) {
     if (transforms.empty() || !impl_->tf)
         return;
@@ -290,6 +322,8 @@ void BridgeNode::broadcast(const std::vector<Transform> &transforms) {
     impl_->tf->publish(message);
 }
 
+// One simulation tick on the stepping thread: apply posted work, step the core, publish, request camera
+// frames and send a pending estimator alignment. Each phase is timed into performance_.
 void BridgeNode::tick() {
     const auto elapsed = [](Clock::time_point &mark) {
         const auto now = Clock::now();
@@ -297,6 +331,7 @@ void BridgeNode::tick() {
         mark = now;
         return ns;
     };
+
     auto mark = Clock::now();
     impl_->drainInbox();
     performance_.drain.add(elapsed(mark));
@@ -307,11 +342,15 @@ void BridgeNode::tick() {
     send(out.publications);
     broadcast(out.transforms);
     performance_.publish.add(elapsed(mark));
+
+    // Camera frames for the new state (asynchronous; the sink's callback publishes the images).
     if (impl_->cameras != nullptr) {
         const auto snapshot = core_.session().observe();
         impl_->cameras->acquire(snapshot, core_.rosNs(snapshot.elapsed.count()));
         performance_.cameras.add(elapsed(mark));
     }
+
+    // At most one pending alignment per tick, once the estimator's service is up.
     if (impl_->alignment_client && impl_->alignment_client->service_is_ready()) {
         if (const auto alignment = core_.pendingAlignment()) {
             auto request = std::make_shared<robot_localization::srv::SetPose::Request>();
@@ -326,10 +365,13 @@ void BridgeNode::tick() {
             target.orientation.x = alignment->orientation.x();
             target.orientation.y = alignment->orientation.y();
             target.orientation.z = alignment->orientation.z();
+            // Only the diagonal of the 6x6 pose covariance (x, y, z, roll, pitch, yaw).
             for (std::size_t k = 0; k < 6; ++k)
                 stamped.pose.covariance[k * 7] = alignment->covariance_diagonal;
+
             Impl *impl = impl_.get();
             const std::string trigger = alignment->trigger;
+            // The response arrives on the executor thread; count it on the stepping thread.
             impl_->alignment_client->async_send_request(
                 request, [this, impl, trigger](rclcpp::Client<robot_localization::srv::SetPose>::SharedFuture future) {
                     bool ok = true;
@@ -350,8 +392,11 @@ void BridgeNode::tick() {
     }
 }
 
+// Real-time pacing loop: wall time x real_time_factor accumulates as owed simulated time, paid in
+// bursts of up to max_catchup_ticks per iteration; a larger backlog is dropped. Returns the ticks run.
 std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_catchup_ticks) {
     const double step_s = static_cast<double>(core_.timestepNs()) / 1e9;
+    // Startup: initial clock, startup publications (scenario description), camera output wiring.
     publishClock(core_.clockNs());
     send(core_.startupPublications());
     if (impl_->cameras != nullptr) {
@@ -361,6 +406,8 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
             impl_->publishers.at(image.stream)->publish(buffer);
         });
     }
+
+    // Subscriber counts (and camera demand) are polled every 500 ms.
     std::map<std::string, bool> demand; // camera stream -> has subscribers
     auto last_demand = Clock::now() - std::chrono::seconds(1);
     refreshSubscribers();
@@ -380,6 +427,7 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
             }
         }
     };
+
     std::int64_t ticks = 0;
     const auto run_start = Clock::now();
     double owed = 0.0;
@@ -390,6 +438,7 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
         send(core_.flush()); // operator events, also while paused
         const auto now = Clock::now();
         pollDemand(now);
+
         const double rtf = core_.realTimeFactor();
         if (rtf <= 0) {
             owed = 0.0; // paused: no stepping and no /clock; viewers still get fresh state
@@ -401,10 +450,14 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
             continue;
         }
+
+        // Owe simulated time for the wall time since the last iteration.
         owed += std::chrono::duration<double>(now - previous).count() * rtf;
         previous = now;
         performance_.max_behind_ns =
             std::max<std::int64_t>(performance_.max_behind_ns, static_cast<std::int64_t>(owed * 1e9));
+
+        // Catch up in a bounded burst; stop exactly at the requested duration.
         int steps = 0;
         while (owed >= step_s && steps < max_catchup_ticks) {
             const auto started = Clock::now();
@@ -423,12 +476,15 @@ std::int64_t BridgeNode::run(std::optional<std::int64_t> duration_ns, int max_ca
                 return ticks;
             }
         }
+
         if (steps == max_catchup_ticks && owed >= step_s) {
             RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
                                  "falling behind wall time; dropping %.4f s backlog", owed);
             owed = 0.0;
         }
         performance_.catchup_bursts += steps >= 5;
+
+        // Sleep until the next tick is due, keeping 0.1 ms slack; oversleep is recorded.
         const double remaining = (step_s - owed) / std::max(rtf, 1e-9);
         if (remaining > 2e-4) {
             const auto requested = std::chrono::duration<double>(remaining - 1e-4);

@@ -19,6 +19,7 @@ Json buildRunSnapshot(const Json &, const Json &, Json, std::int64_t, double, co
 }
 
 namespace {
+// Every payload (released or not) with its outcome and rigid-body state, as fixture JSON.
 Json payloadsJson(const Session &s) {
     Json out = Json::array();
     for (const auto &p : s.payloads())
@@ -34,6 +35,8 @@ Json payloadsJson(const Session &s) {
                        {"angular_velocity", flat(p.state.angular_velocity)}});
     return out;
 }
+
+// Full session state at one tick in the fixture layout; with tasks, also the run snapshot and indicators.
 Json checkpoint(Session &s, bool tasks) {
     Json jaws = Json::object();
     for (const auto &[k, v] : s.clawJaws())
@@ -55,6 +58,8 @@ Json checkpoint(Session &s, bool tasks) {
     return result;
 }
 
+// Replays a recorded op script against a fresh Talos session and compares each op's results, task events,
+// feed, counters and final state (plus a checkpoint every 50 ticks while advancing) with the log.
 void replay(const std::string &fixture_name, bool tasks) {
     const auto fixture = loadFixture(fixture_name);
     // The reference scripts were recorded with the run started at boot, not the pack default
@@ -70,6 +75,8 @@ void replay(const std::string &fixture_name, bool tasks) {
     EXPECT_EQ(s.timestepNs(), fixture.at("timestep_ns").get<std::int64_t>());
     const auto &ops = fixture.at("ops");
     const auto &log = fixture.at("log");
+
+    // Dispatch each recorded op to the matching Session call.
     int tick = 0;
     for (std::size_t i = 0; i < ops.size(); ++i) {
         const auto &op = ops[i];
@@ -146,6 +153,8 @@ void replay(const std::string &fixture_name, bool tasks) {
             actual["running"] = s.running();
             actual["snapshot"] = s.runSnapshot() ? *s.runSnapshot() : Json();
         }
+
+        // For other ops, record the task events of the session's last step.
         if (name != "advance")
             for (const auto &e : s.lastStep().task_events)
                 events.push_back(e);
@@ -167,6 +176,7 @@ TEST(Session, ReplaysTheRecordedScriptWithTasksAndRunControl) {
     replay("session_tasks_reference.json", true);
 }
 
+// buildRunSnapshot() reproduces the recorded run_score documents for each case.
 TEST(Session, RunSnapshotDocumentMatchesReference) {
     const auto fixture = loadFixture("session_reference.json");
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
@@ -178,6 +188,7 @@ TEST(Session, RunSnapshotDocumentMatchesReference) {
 }
 
 namespace {
+// Times `ticks` session steps with all thrusters at 3 N and prints ticks/s; only checks the clock advanced.
 void throughput(bool tasks, const char *label, std::vector<std::string> task_ids = {"gate", "torpedo", "slalom"}) {
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     const RulesRegistry rules = nereus::rules::standardRules();
@@ -237,6 +248,8 @@ TEST(Session, GraspedPropStaysInTheClawWhileCarried) {
             base_rotation(r, c) = data.at("mount_rotation").at(r).at(c).get<double>();
     const auto &place = data.at("ops").at(0).at("place");
     const Eigen::Vector3d grasp_point = Eigen::Vector3d(place[0], place[1], place[2]) + Eigen::Vector3d(0, 0, -.25);
+
+    // Run the pickup with the claw square to the token, then yawed 45 degrees.
     for (double deg : {0.0, 45.0}) {
         Session s(scenario, createRuntime(scenario, &sensors), rules, SessionOptions{&task_ids, true});
         s.setKilled(false);
@@ -250,6 +263,8 @@ TEST(Session, GraspedPropStaysInTheClawWhileCarried) {
         int tick = 0;
         std::optional<Eigen::Vector3d> attached_at;
         double drift = 0;
+        // Drive the claw mount linearly from `from` to `to` over `seconds`, placing the body kinematically each
+        // tick and tracking how far the grasped bandage drifts relative to the claw.
         auto drive = [&](const Eigen::Vector3d &from, const Eigen::Vector3d &to, double seconds) {
             const int n = static_cast<int>(seconds / dt);
             const Eigen::Vector3d v = (to - from) / seconds;
@@ -281,6 +296,8 @@ TEST(Session, GraspedPropStaysInTheClawWhileCarried) {
                 drain(s.runtime(), s.pack());
             }
         };
+
+        // Pickup path: open above, lower, close, lift, carry 0.5 m, hold.
         const Eigen::Vector3d above = grasp_point + Eigen::Vector3d(0, 0, .3);
         drive(above, above, 3);       // jaws open
         drive(above, grasp_point, 2); // lower around the bandage
@@ -296,6 +313,7 @@ TEST(Session, GraspedPropStaysInTheClawWhileCarried) {
     }
 }
 
+// Contacts with a sloped RPAC floor keep a robot dropped onto it from sinking through.
 TEST(Session, TheRobotRestsOnTheRpacSlope) {
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_RPAC);
     const RulesRegistry rules = nereus::rules::standardRules();

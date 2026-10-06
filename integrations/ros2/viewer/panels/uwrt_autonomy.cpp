@@ -1,3 +1,5 @@
+// "uwrt.autonomy" provider: lists, starts and stops riptide_autonomy behaviour trees through the ExecuteTree
+// action, and shows the running tree's node stack.
 #include "ros_runtime.hpp"
 #include <action_msgs/msg/goal_status_array.hpp>
 #include <algorithm>
@@ -11,6 +13,7 @@ namespace {
 using Execute = riptide_msgs2::action::ExecuteTree;
 using Goal = rclcpp_action::ClientGoalHandle<Execute>;
 using List = riptide_msgs2::srv::ListTrees;
+
 // The trees to offer: riptide_autonomy lists both its source trees/ and the installed copy (install/<pkg>/share),
 // so every tree twice and deleted ones still installed. Only those outside an install/ folder, unless there are
 // none (a machine with only the install).
@@ -22,6 +25,9 @@ std::vector<std::string> sourceTrees(std::vector<std::string> trees) {
     trees.erase(std::unique(trees.begin(), trees.end()), trees.end());
     return trees;
 }
+
+// Tracks both our own goal and goals from other clients (seen on the action's status topic). All state is
+// guarded by `mutex`; action and service callbacks run on the runtime's executor thread.
 class UwrtAutonomy final : public Autonomy {
   public:
     UwrtAutonomy(std::shared_ptr<RosRuntime> runtime, const YAML::Node &cfg, const Context &ctx)
@@ -37,6 +43,9 @@ class UwrtAutonomy final : public Autonomy {
                 value.stack = msg.stack;
                 stackReceived = Steady::now();
             });
+
+        // The action's goal status topic tells us when any client's tree is running (ACCEPTED, EXECUTING or
+        // CANCELING = status 1..3).
         status = runtime->node->create_subscription<action_msgs::msg::GoalStatusArray>(
             action + "/_action/status", rclcpp::QoS(1).reliable().transient_local(),
             [this](const action_msgs::msg::GoalStatusArray &msg) {
@@ -61,21 +70,27 @@ class UwrtAutonomy final : public Autonomy {
                     value.message = "Stopped";
                 }
             });
+
         timer = runtime->node->create_wall_timer(std::chrono::milliseconds(100), [this] { tick(); });
     }
+
     ~UwrtAutonomy() override {
         // Closing an observer must not cancel a tree started by another client.
         if ((goal || awaitingGoal) && rclcpp::ok())
             stop();
     }
+
     MissionState state() override {
         std::lock_guard<std::mutex> lock(mutex);
         return value;
     }
+
     void refresh() override {
         std::lock_guard<std::mutex> lock(mutex);
         refreshLocked();
     }
+
+    // Sends an ExecuteTree goal for a listed tree when nothing is running.
     void start(const std::string &tree) override {
         std::lock_guard<std::mutex> lock(mutex);
         if (value.busy || !client->action_server_is_ready() ||
@@ -91,9 +106,11 @@ class UwrtAutonomy final : public Autonomy {
         value.stack.clear();
         value.message = "Starting...";
         operationSince = Steady::now();
+
         Execute::Goal request;
         request.tree = tree;
         auto options = rclcpp_action::Client<Execute>::SendGoalOptions();
+        // On acceptance, cancel straight away if Stop was pressed while the goal was in flight.
         options.goal_response_callback = [this](Goal::SharedPtr accepted) {
             std::lock_guard<std::mutex> lock(mutex);
             awaitingGoal = false;
@@ -118,6 +135,7 @@ class UwrtAutonomy final : public Autonomy {
             value.stack = feedback->stack.stack;
             stackReceived = Steady::now();
         };
+        // Success needs a SUCCEEDED action, no error flag and returncode 2 (the tree's SUCCESS status).
         options.result_callback = [this](const Goal::WrappedResult &result) {
             std::lock_guard<std::mutex> lock(mutex);
             goal.reset();
@@ -134,6 +152,7 @@ class UwrtAutonomy final : public Autonomy {
         };
         client->async_send_goal(request, options);
     }
+
     void stop() override {
         std::lock_guard<std::mutex> lock(mutex);
         if (!client->action_server_is_ready()) {
@@ -161,6 +180,7 @@ class UwrtAutonomy final : public Autonomy {
     }
 
   private:
+    // Asks list_service for the available trees (mutex held); at most one request in flight.
     void refreshLocked() {
         if (value.refreshing)
             return;
@@ -183,6 +203,8 @@ class UwrtAutonomy final : public Autonomy {
                                              })
                         .request_id;
     }
+
+    // 10 Hz housekeeping: connection and stack staleness, request timeouts, and an automatic tree list fetch.
     void tick() {
         std::lock_guard<std::mutex> lock(mutex);
         const auto now = Steady::now();
@@ -194,8 +216,12 @@ class UwrtAutonomy final : public Autonomy {
             value.refreshing = false;
             value.message = "Tree list request timed out";
         }
+
+        // Retry the tree list every 3 s while connected and none has arrived.
         if (value.connected && value.trees.empty() && !value.refreshing && now - lastRefresh > std::chrono::seconds(3))
             refreshLocked();
+
+        // A start / stop with no answer: give up and cancel everything to be safe.
         if (value.pending && std::chrono::duration<double>(now - operationSince).count() > timeout) {
             value.pending = false;
             value.failed = true;
@@ -204,12 +230,16 @@ class UwrtAutonomy final : public Autonomy {
             if (value.connected)
                 client->async_cancel_all_goals();
         }
+
         if (!value.connected && value.busy)
             value.message = "Autonomy disconnected; execution unknown";
     }
+
     std::shared_ptr<RosRuntime> runtime;
     std::mutex mutex;
     MissionState value;
+    // externalBusy: some client's goal is active; awaitingGoal: our goal is sent but not yet accepted;
+    // externalExecution: the running tree was started by another client.
     bool externalBusy = false, awaitingGoal = false, stopping = false, externalExecution = false;
     double timeout, stackTimeout;
     uint64_t refreshEpoch = 0;
@@ -223,6 +253,8 @@ class UwrtAutonomy final : public Autonomy {
     rclcpp::TimerBase::SharedPtr timer;
 };
 } // namespace
+
+// Registers "uwrt.autonomy" (request_timeout 3 s and stack_timeout 5 s by default).
 void registerUwrtAutonomy(Registry &registry, const RuntimeFactory &runtime) {
     registry.providers.emplace(
         "uwrt.autonomy",

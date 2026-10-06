@@ -7,6 +7,7 @@ from pathlib import Path
 from nereus.packs import PackError, load_pack, resolve_scenario
 from test_packs_fixtures import BRIDGE, HOOP, POOL, ROBOT, SCENARIO, TASKS, write_generic_packs
 
+# A bridge thrusters block (format with order and scales) and the bridge line it is added after.
 THRUSTERS = "thrusters: {{order: {order}, input_scales: {scales}, reject: []}}\n"
 SENSOR_LINE = "  fields: {data: {from: reading.target_world_z}}\n"
 
@@ -28,17 +29,20 @@ class PackRejectionCase(unittest.TestCase):
         self.scenario = write_generic_packs(self.root)
 
     def edit(self, relative: str, old: str, new: str) -> Path:
+        """Apply one exact text replacement to a pack file under the root."""
         target = self.root / relative
         target.write_text(mutate(target.read_text(encoding="utf-8"), old, new), encoding="utf-8")
         return target
 
     def assert_load_rejects(self, folder: str, fragment: str) -> PackError:
+        """Loading the pack folder must fail with `fragment` in the message."""
         with self.assertRaises(PackError) as caught:
             load_pack(self.root / folder)
         self.assertIn(fragment, str(caught.exception))
         return caught.exception
 
     def assert_resolve_rejects(self, fragment: str) -> PackError:
+        """Resolving the scenario must fail with `fragment` in the message."""
         with self.assertRaises(PackError) as caught:
             resolve_scenario(self.scenario)
         self.assertIn(fragment, str(caught.exception))
@@ -46,6 +50,8 @@ class PackRejectionCase(unittest.TestCase):
 
 
 class ValidBaselineTests(PackRejectionCase):
+    """The unmutated set is valid, so each rejection below is caused by its one edit."""
+
     def test_unmutated_set_is_valid(self) -> None:
         for folder in ("robot", "pool", "tasks", "bridge", "scenario"):
             load_pack(self.root / folder)
@@ -122,6 +128,7 @@ class RobotRejectionTests(PackRejectionCase):
 
 class AssetRejectionTests(PackRejectionCase):
     def test_asset_path_escaping_pack(self) -> None:
+        """The path schema forbids `..`; the symlink case below needs the resolved-path check."""
         self.edit("tasks/tasks.yaml", "path: assets/hoop.dae", "path: ../outside.dae")
         error = self.assert_load_rejects("tasks", "/assets/0/path")
         self.assertIn("does not match", str(error))
@@ -157,6 +164,7 @@ class ScoringRulesRejectionTests(PackRejectionCase):
 
 
 class ScenarioRejectionTests(PackRejectionCase):
+    # The fixture scenario's only task placement.
     PLACEMENT = "- {task: hoop, position_m: [5, 2.5, -1], yaw_deg: 90}\n"
 
     def test_unknown_task_placement(self) -> None:
@@ -180,6 +188,7 @@ class ScenarioRejectionTests(PackRejectionCase):
         self.assert_resolve_rejects("/run/options/timed: must be a boolean")
 
     def test_run_option_number_rejected_by_schema(self) -> None:
+        """Unlike a string, a number is caught by the schema before the run-option type check."""
         self.edit("scenario/scenario.yaml", "options: {}", "options: {timed: 1}")
         self.assert_resolve_rejects("/run/options/timed: 1 is not of type")
 
@@ -196,10 +205,12 @@ class ThrusterOverrideTests(PackRejectionCase):
     """Scenario thruster_overrides: applied to the resolved robot, validated like the robot pack."""
 
     def override(self, text: str) -> None:
+        """Append a thruster_overrides block to the scenario."""
         target = self.root / "scenario" / "scenario.yaml"
         target.write_text(target.read_text(encoding="utf-8") + "thruster_overrides:\n" + text)
 
     def test_same_type_merges(self) -> None:
+        """An override with no thruster list merges into every thruster; the pack is untouched."""
         self.override("- {parameters: {delay_s: 0.2}}\n")
         thrusters = resolve_scenario(self.scenario).robot["thrusters"]
         self.assertEqual({item["parameters"]["delay_s"] for item in thrusters}, {0.2})
@@ -280,6 +291,7 @@ class BridgeRejectionTests(PackRejectionCase):
         self.assert_load_rejects("bridge", "estimate_stream: unknown stream 'nope'")
 
     def test_thruster_order_not_a_permutation(self) -> None:
+        """The bridge alone loads; only resolution against the robot catches the unknown id."""
         block = THRUSTERS.format(order="[t0, t1, t2, t9]", scales="[1, 1, 1, 1]")
         self.edit("bridge/bridge.yaml", SENSOR_LINE, SENSOR_LINE + block)
         load_pack(self.root / "bridge")
@@ -332,9 +344,11 @@ class PoolMarkingTests(PackRejectionCase):
     COLLISION = "collision_boxes:\n"
 
     def add_markings(self, markings: str) -> None:
+        """Insert a `markings:` block (body indented two spaces) before collision_boxes."""
         self.edit("pool/pool.yaml", self.COLLISION, f"markings:\n{markings}{self.COLLISION}")
 
     def test_irregular_lines_grid_and_finish_load(self) -> None:
+        """Diagonal floor lines, a lane grid, a wall line and a plain surface all load."""
         self.add_markings(
             "  width_m: 0.2\n"
             "  lane_grid: {along_x: {count: 2, spacing_m: 1.5, first_m: 0.5}, inset_m: 1, ends: t}\n"
@@ -377,6 +391,8 @@ class PoolMarkingTests(PackRejectionCase):
             "bar_length_m: 0.6, color_rgb: [0, 0, 0]}}\n"
         )
         load_pack(self.root / "pool")
+
+        # A stem reaching below the 3 m floor is rejected.
         self.edit("pool/pool.yaml", "stem_m: [-1, 0]", "stem_m: [-4, 0]")
         self.assert_load_rejects("pool", "/markings/lane_grid/targets: z -4 m is outside -3..0.3 m")
 
@@ -392,10 +408,12 @@ class PoolMarkingTests(PackRejectionCase):
 class PoolFloorProfileTests(PackRejectionCase):
     """The fixture pool is 10 m long, 3 m deep; profiled here to rise to 2 m at the far end."""
 
+    # The flat floor box a profiled pool must replace (here with a box behind the far wall).
     FLOOR_BOX = "- {id: floor, size_m: [10, 5, 1], center_m: [5, 2.5, -3.5], orientation_wxyz: [1, 0, 0, 0]}\n"
     WALL_BOX = "- {id: end_wall, size_m: [1, 5, 4], center_m: [10.5, 2.5, -1], orientation_wxyz: [1, 0, 0, 0]}\n"
 
     def profile(self, points: str = "[[0, 3], [4, 3], [7, 2], [10, 2]]", along: str = "x") -> None:
+        """Add a floor_profile of (position, depth) points and swap the floor box for WALL_BOX."""
         self.edit(
             "pool/pool.yaml",
             "current_oscillation_frequency_hz: 0}",
@@ -404,6 +422,7 @@ class PoolFloorProfileTests(PackRejectionCase):
         self.edit("pool/pool.yaml", self.FLOOR_BOX, self.WALL_BOX)
 
     def test_profiled_floor_loads_and_resolves(self) -> None:
+        """Wall lines fit the local floor depth: 3 m at x_min, 2 m at x_max, sloped along y_min."""
         self.profile()
         self.edit(
             "pool/pool.yaml",
@@ -435,6 +454,7 @@ class PoolFloorProfileTests(PackRejectionCase):
         self.assert_load_rejects("pool", "depths must be positive")
 
     def test_depth_is_the_deepest_point(self) -> None:
+        """The pool's depth_m (3) must equal the profile's maximum depth."""
         self.profile("[[0, 2.5], [10, 2]]")
         self.assert_load_rejects("pool", "3 m must be the floor's deepest point (2.5 m)")
 
@@ -453,6 +473,8 @@ class PoolFloorProfileTests(PackRejectionCase):
         self.assert_load_rejects("pool", "/markings/wall_lines/0/from: z -3 m is outside -2..0.3 m")
 
     def test_profile_list_rising_toward_two_walls(self) -> None:
+        """floor_profile may be a list (one per axis); the floor is the shallower of them."""
+        # profile() writes one mapping; the edits below turn the two into a YAML list.
         self.profile(
             "[[0, 3], [4, 3], [7, 2], [10, 2]]}, {along: y, points_m: [[0, 3], [3, 3], [5, 2.5]]"
         )
@@ -497,11 +519,13 @@ class PoolFixtureTests(PackRejectionCase):
     """The fixture pool is 10 m x 5 m x 3 m deep with a 0.3 m deck."""
 
     def add_fixtures(self, fixtures: str) -> None:
+        """Insert a `fixtures:` list before collision_boxes."""
         self.edit(
             "pool/pool.yaml", "collision_boxes:\n", f"fixtures:\n{fixtures}collision_boxes:\n"
         )
 
     def test_boxes_and_recess_load(self) -> None:
+        """Floor boxes (2D centre), a 3D-centred box, a tapered vent and a wall recess load."""
         self.add_fixtures(
             "- {id: grate, type: box, center_m: [6, 2], size_m: [1.2, 0.6, 0.03], rpy_deg: [0, 0, 90], "
             "color_rgb: [0.8, 0.8, 0.8], contact: true}\n"
@@ -514,6 +538,7 @@ class PoolFixtureTests(PackRejectionCase):
         resolve_scenario(self.scenario)
 
     def test_box_outside_the_pool(self) -> None:
+        """A 2D centre must be on the floor; a 3D one inside the pool. One error reports both."""
         self.add_fixtures(
             "- {id: grate, type: box, center_m: [10.5, 2], size_m: [1, 1, 0.1]}\n"
             "- {id: rail, type: box, center_m: [14, 2, 0], size_m: [1, 1, 0.1]}\n"
@@ -564,6 +589,8 @@ class PoolFixtureTests(PackRejectionCase):
 
 
 class FolderRejectionTests(PackRejectionCase):
+    """A pack folder must hold exactly one <kind>.yaml of the kind the scenario expects."""
+
     def test_folder_with_two_canonical_files(self) -> None:
         (self.root / "robot" / "pool.yaml").write_text(POOL, encoding="utf-8")
         self.assert_load_rejects("robot", "exactly one of")
@@ -582,6 +609,8 @@ class FolderRejectionTests(PackRejectionCase):
 
 
 class FixtureTests(PackRejectionCase):
+    """The fixture writer writes the shared texts verbatim (the edits above rely on them)."""
+
     def test_valid_set_resolves(self) -> None:
         self.assertEqual(resolve_scenario(self.scenario).robot["id"], "synth")
 

@@ -10,6 +10,8 @@ from test_packs_fixtures import write_generic_packs
 
 
 class ReviewCase(unittest.TestCase):
+    """Base: the generic pack set in a temp dir, with edit and rejection helpers."""
+
     def setUp(self) -> None:
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
@@ -17,23 +19,28 @@ class ReviewCase(unittest.TestCase):
         self.scenario = write_generic_packs(self.root)
 
     def edit(self, relative: str, old: str, new: str) -> None:
+        """Replace the single occurrence of `old` in a pack file."""
         target = self.root / relative
         text = target.read_text()
         self.assertEqual(text.count(old), 1, old)
         target.write_text(text.replace(old, new))
 
     def rejects(self, folder: str, fragment: str) -> None:
+        """Loading the pack folder must fail with `fragment` in the message."""
         with self.assertRaises(PackError) as caught:
             load_pack(self.root / folder)
         self.assertIn(fragment, str(caught.exception))
 
     def resolve_rejects(self, fragment: str) -> None:
+        """Resolving the scenario must fail with `fragment` in the message."""
         with self.assertRaises(PackError) as caught:
             resolve_scenario(self.scenario)
         self.assertIn(fragment, str(caught.exception))
 
 
 class StandaloneTasksTests(ReviewCase):
+    """A tasks pack loads and checks its included task files on its own."""
+
     def test_tasks_pack_validates_includes_without_scenario(self) -> None:
         document = load_pack(self.root / "tasks")
         self.assertEqual([item.kind for item in document.includes], ["task"])
@@ -48,10 +55,13 @@ class StandaloneTasksTests(ReviewCase):
 
 
 class FidelityTests(ReviewCase):
+    """YAML edge cases: non-string keys, aliases and CRLF line endings."""
+
     def test_non_string_keys_are_rejected(self) -> None:
+        """YAML keys that parse as int, bool or null are rejected."""
         for key in ("1", "true", "null"):
             with self.subTest(key=key):
-                self.scenario = write_generic_packs(self.root)
+                self.scenario = write_generic_packs(self.root)  # fresh packs per case
                 self.edit("robot/robot.yaml", "note: free", f"{key}: numeric, note: free")
                 self.rejects("robot", "must be a string")
 
@@ -74,6 +84,7 @@ class FidelityTests(ReviewCase):
         self.assertEqual(load_pack(self.root / "robot").plain()["metadata"]["b"], [1, 2])
 
     def test_crlf_bytes_survive_unedited_save(self) -> None:
+        """A CRLF file is saved back with CRLF line endings, byte for byte."""
         path = self.root / "pool" / "pool.yaml"
         original = path.read_bytes().replace(b"\n", b"\r\n")
         path.write_bytes(original)
@@ -83,6 +94,7 @@ class FidelityTests(ReviewCase):
 
 class SnapshotTests(ReviewCase):
     def test_changed_source_is_detected_never_mixed(self) -> None:
+        """Editing a source after resolution is reported, and dump() refuses to mix versions."""
         resolved = resolve_scenario(self.scenario)
         before = resolved.manifest()
         pool = (self.root / "pool" / "pool.yaml").resolve()
@@ -95,6 +107,8 @@ class SnapshotTests(ReviewCase):
 
 
 class PhysicalInvariantTests(ReviewCase):
+    """Python checks the same physical invariants (and tolerances) as the C++ simulator."""
+
     def test_negative_added_mass_diagonal(self) -> None:
         self.edit("robot/robot.yaml", "added_mass_matrix: [[5,", "added_mass_matrix: [[-5,")
         self.rejects("robot", "added_mass_matrix: must be positive semidefinite")
@@ -106,10 +120,12 @@ class PhysicalInvariantTests(ReviewCase):
         self.rejects("robot", "linear_damping_matrix: must be positive semidefinite")
 
     def test_impossible_principal_moments(self) -> None:
+        """Izz = 3 > Ixx + Iyy = 2.5: no rigid body has those principal moments."""
         self.edit("robot/robot.yaml", "[0.0, 0.0, 1.2]]", "[0.0, 0.0, 3.0]]")
         self.rejects("robot", "triangle inequalities")
 
     def test_near_symmetry_uses_native_threshold(self) -> None:
+        """A 1e-6 asymmetry is already over the native symmetry tolerance."""
         self.edit(
             "robot/robot.yaml", "[[1.0, 0.0, 0.0], [0.0, 1.5", "[[1.0, 0.000001, 0.0], [0.0, 1.5"
         )
@@ -122,6 +138,7 @@ class PhysicalInvariantTests(ReviewCase):
             "position_m: [-0.3, 0.2, 0], direction: [1.00000001, 0, 0]",
         )
         self.rejects("robot", "/thrusters/t0/direction: must have unit norm")
+
         self.scenario = write_generic_packs(self.root)
         self.edit(
             "robot/robot.yaml",
@@ -141,6 +158,7 @@ class PhysicalInvariantTests(ReviewCase):
 
 class InactiveMetadataTests(ReviewCase):
     def test_pose_like_inactive_data_is_not_a_runtime_pose(self) -> None:
+        """A non-unit quaternion under metadata is not validated as a pose."""
         self.edit(
             "robot/robot.yaml",
             "metadata: {author: tests,",

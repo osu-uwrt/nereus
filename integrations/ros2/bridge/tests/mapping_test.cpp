@@ -15,16 +15,21 @@
 using namespace nereus::ros_bridge;
 
 namespace {
+// Introspection type of an installed ROS message, e.g. "std_msgs/msg/Bool".
 std::shared_ptr<const MessageType> type(const char *name) {
     return MessageType::get(name);
 }
+
 SpecTree tree(std::map<std::string, SpecTree> nodes) {
     return SpecTree(std::move(nodes));
 }
+
+// Native source tree with just a `time` value (the sample.time / sim.time shape).
 SpecTree sim() {
     return tree({{"time", timeSpec()}});
 }
 
+// Runs fn and returns the MappingError message, or "" if nothing was thrown.
 template <class Fn> std::string errorOf(Fn &&fn) {
     try {
         fn();
@@ -33,12 +38,15 @@ template <class Fn> std::string errorOf(Fn &&fn) {
     }
     return "";
 }
+
+// Compiles an outbound field map for ROS type `message` (stream name "test").
 Writer writerFor(const char *message, const Json &fields, const SpecTree &sources,
                  std::optional<std::string> frame = std::nullopt) {
     return compileWriter(type(message)->members(), fields, sources, frame, "test");
 }
 } // namespace
 
+// Indexes attach to their name token ("b[2]" -> b with index 2); malformed paths throw.
 TEST(Path, ParsesDottedNamesAndIndexes) {
     const auto tokens = parsePath("a.b[2].c[1][3]");
     ASSERT_EQ(tokens.size(), 3u);
@@ -48,6 +56,7 @@ TEST(Path, ParsesDottedNamesAndIndexes) {
         EXPECT_THROW(parsePath(bad), MappingError) << bad;
 }
 
+// Source paths are typed against the spec tree: m[1][2] is a scalar (row-major, element 5), m[2] a row.
 TEST(SourceRef, ValidatesAgainstTheSpecTree) {
     const SpecTree sources =
         tree({{"reading", tree({{"m", matrix3Spec()}, {"v", vector3Spec()}, {"s", scalarSpec()}})}});
@@ -56,9 +65,12 @@ TEST(SourceRef, ValidatesAgainstTheSpecTree) {
     EXPECT_EQ(spec, scalarSpec());
     const Value value = Value::map({{"reading", Value::map({{"m", Value::array({0, 1, 2, 3, 4, 5, 6, 7, 8})}})}});
     EXPECT_EQ(element.read(value).f, 5.0);
+
     const auto row = SourceRef::compile(sources, "reading.m[2]", spec);
     EXPECT_EQ(spec, vector3Spec());
     EXPECT_EQ(row.read(value).a, (std::vector<double>{6, 7, 8}));
+
+    // Unknown fields, indexing a scalar, out-of-range indexes and whole structures are rejected.
     EXPECT_NE(errorOf([&] { SourceRef::compile(sources, "reading.x", spec); }).find("unknown native field 'reading.x'"),
               std::string::npos);
     EXPECT_NE(errorOf([&] { SourceRef::compile(sources, "reading.s[0]", spec); }).find("not indexable"),
@@ -69,6 +81,7 @@ TEST(SourceRef, ValidatesAgainstTheSpecTree) {
               std::string::npos);
 }
 
+// header.stamp comes from a native time (ns split into sec / nanosec); frame_id is the stream frame.
 TEST(Writer, StampsHeadersAndAssignsFieldsAndArrays) {
     const SpecTree sources =
         tree({{"sample", sim()}, {"reading", tree({{"cov", matrix3Spec()}, {"f", vector3Spec()}})}});
@@ -91,6 +104,7 @@ TEST(Writer, StampsHeadersAndAssignsFieldsAndArrays) {
     EXPECT_DOUBLE_EQ(imu.orientation.w, 1.0);
 }
 
+// Single fixed-array elements and deep nested fields are assignable.
 TEST(Writer, IndexedFixedArrayElementsAndNestedPaths) {
     const SpecTree sources = tree({{"sample", sim()}, {"r", tree({{"c", scalarSpec()}})}});
     const Json fields = {{"header.stamp", {{"from", "sample.time"}}},
@@ -105,16 +119,20 @@ TEST(Writer, IndexedFixedArrayElementsAndNestedPaths) {
     EXPECT_DOUBLE_EQ(twist.twist.twist.angular.z, 4.5);
 }
 
+// enum_map turns native strings into integers (an unmapped state fails when writing); native float
+// arrays fill ROS sequences.
 TEST(Writer, EnumMapConstantsAndSequences) {
     const SpecTree sources = tree({{"state", stringSpec()}, {"data", floatArray({-1})}});
     const auto writer = writerFor("std_msgs/msg/UInt8",
                                   {{"data", {{"from", "state"}, {"enum_map", {{"on", 3}, {"off", 4}}}}}}, sources);
     const auto message = writer.make(type("std_msgs/msg/UInt8"), Value::map({{"state", Value::text("off")}}));
     EXPECT_EQ(static_cast<std_msgs::msg::UInt8 *>(message->data())->data, 4);
+
     EXPECT_NE(errorOf([&] {
                   writer.make(type("std_msgs/msg/UInt8"), Value::map({{"state", Value::text("bad")}}));
               }).find("native state 'bad' has no enum_map entry"),
               std::string::npos);
+
     const auto array = writerFor("std_msgs/msg/Float32MultiArray", {{"data", {{"from", "data"}}}}, sources);
     const auto out =
         array.make(type("std_msgs/msg/Float32MultiArray"), Value::map({{"data", Value::array({1.5, 2.5, 3.5})}}));
@@ -127,6 +145,8 @@ TEST(Writer, RejectsInvalidDeclarationsWithClearMessages) {
     const auto fail = [&](const char *message, const Json &fields, std::optional<std::string> frame = std::nullopt) {
         return errorOf([&] { writerFor(message, fields, sources, frame); });
     };
+
+    // Message structure: unknown fields, whole quaternions, sequence elements.
     EXPECT_NE(fail("geometry_msgs/msg/PoseStamped",
                    {{"header.stamp", {{"from", "sample.time"}}}, {"pose.position.q", {{"from", "x"}}}}, "map")
                   .find("has no field 'q'"),
@@ -138,10 +158,14 @@ TEST(Writer, RejectsInvalidDeclarationsWithClearMessages) {
     EXPECT_NE(fail("std_msgs/msg/Float32MultiArray", {{"data[0]", {{"from", "x"}}}})
                   .find("cannot assign an element of sequence"),
               std::string::npos);
+
+    // Value types: out-of-range constants and lossy native -> ROS conversions.
     EXPECT_NE(fail("std_msgs/msg/UInt8", {{"data", {{"constant", 300}}}}).find("300 out of range for uint8"),
               std::string::npos);
     EXPECT_NE(fail("std_msgs/msg/UInt8", {{"data", {{"from", "x"}}}}).find("cannot assign native float to ROS uint8"),
               std::string::npos);
+
+    // Stamping: frame_id only on stamped types, required there, and header.stamp mapped from a time.
     EXPECT_NE(fail("std_msgs/msg/UInt8", {{"data", {{"from", "x"}}}}, "frame")
                   .find("frame_id 'frame' set on unstamped UInt8"),
               std::string::npos);
@@ -154,6 +178,8 @@ TEST(Writer, RejectsInvalidDeclarationsWithClearMessages) {
     EXPECT_NE(fail("geometry_msgs/msg/PoseStamped", {{"header.stamp", {{"from", "x"}}}}, "map")
                   .find("needs a native time source"),
               std::string::npos);
+
+    // Shapes: whole Pose, mismatched array lengths, unknown native sources.
     EXPECT_NE(fail("geometry_msgs/msg/PoseStamped",
                    {{"header.stamp", {{"from", "sample.time"}}}, {"pose", {{"from", "x"}}}}, "map")
                   .find("whole geometry_msgs/Pose assignment is not supported"),
@@ -165,6 +191,7 @@ TEST(Writer, RejectsInvalidDeclarationsWithClearMessages) {
               std::string::npos);
 }
 
+// Inbound maps produce typed native arguments; accept_if filters on message fields.
 TEST(Reader, ExtractsTypedArgumentsAndFilters) {
     const auto reader =
         compileReader(type("std_msgs/msg/Float32MultiArray")->members(), {{"forces_n", {{"from", "data"}}}},
@@ -184,6 +211,7 @@ TEST(Reader, ExtractsTypedArgumentsAndFilters) {
     EXPECT_TRUE(filtered(flag.data()).at("killed").b);
 }
 
+// Strings, Point -> vector3 and scalars; a sequence of the wrong length fails when read.
 TEST(Reader, PoseVectorsAndDimensionChecks) {
     const auto reader =
         compileReader(type("geometry_msgs/msg/PoseStamped")->members(),
@@ -202,6 +230,8 @@ TEST(Reader, PoseVectorsAndDimensionChecks) {
     EXPECT_EQ(out.at("frame").s, "map");
     EXPECT_EQ(out.at("position_m").a, (std::vector<double>{1, 2, 3}));
     EXPECT_DOUBLE_EQ(out.at("w").f, 1.0);
+
+    // A float[3] argument read from a two-element sequence.
 
     const auto fixed = compileReader(type("std_msgs/msg/Float32MultiArray")->members(), {{"v", {{"from", "data"}}}},
                                      {{"v", vector3Spec()}}, Json(), "s");
@@ -229,6 +259,7 @@ TEST(Reader, RejectsMismatchedDeclarations) {
               std::string::npos);
 }
 
+// An indexed sequence element past the received length is a read error, not a compile error.
 TEST(Reader, ShortSequencesAreMalformed) {
     const auto reader = compileReader(type("std_msgs/msg/Float32MultiArray")->members(), {{"x", {{"from", "data[2]"}}}},
                                       {{"x", scalarSpec()}}, Json(), "s");
@@ -239,6 +270,7 @@ TEST(Reader, ShortSequencesAreMalformed) {
     EXPECT_DOUBLE_EQ(reader(message.data()).at("x").f, 3.0);
 }
 
+// Uninstalled interfaces report "is not installed"; resolveField walks nested members.
 TEST(Types, MissingInterfacesAreReported) {
     EXPECT_NE(errorOf([] { MessageType::get("nonexistent_pkg/msg/Nothing"); }).find("is not installed"),
               std::string::npos);

@@ -1,3 +1,5 @@
+// Panel composition: validates the viewer's YAML composition (providers, panels, toolbar, header, overlays,
+// ownership), instantiates providers and views from the registry, and draws them each frame.
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/pins.hpp"
@@ -10,6 +12,8 @@
 #include <stdexcept>
 
 namespace nereus::ros_viewer::panels {
+
+// Throws unless `node` is a mapping whose keys are all in `allowed`, each at most once.
 void keys(const YAML::Node &node, std::initializer_list<const char *> allowed, const std::string &where) {
     if (!node || !node.IsMap())
         throw std::invalid_argument(where + ": expected a mapping");
@@ -20,16 +24,22 @@ void keys(const YAML::Node &node, std::initializer_list<const char *> allowed, c
             throw std::invalid_argument(where + ": unknown or duplicate key '" + key + "'");
     }
 }
+
+// Throws unless every listed option is present as a non-empty scalar.
 void required(const YAML::Node &node, std::initializer_list<const char *> names) {
     for (const auto *name : names)
         if (!node[name] || !node[name].IsScalar() || node[name].as<std::string>().empty())
             throw std::invalid_argument(std::string("missing/non-scalar option '") + name + "'");
 }
+
+// Throws unless the optional number at `key` (default `fallback`) is finite and in (0, maximum].
 void positive(const YAML::Node &node, const char *key, double fallback, double maximum) {
     const auto value = node[key].as<double>(fallback);
     if (!std::isfinite(value) || value <= 0 || value > maximum)
         throw std::invalid_argument(std::string("invalid range for '") + key + "'");
 }
+
+// Substitutes {namespace} and {fixed_frame}; any other brace left over is an error.
 std::string expand(std::string value, const Context &ctx) {
     for (const auto &entry :
          {std::make_pair("{namespace}", ctx.robotNamespace), std::make_pair("{fixed_frame}", ctx.fixedFrame)}) {
@@ -43,7 +53,9 @@ std::string expand(std::string value, const Context &ctx) {
         throw std::invalid_argument("unresolved substitution: " + value);
     return value;
 }
+
 namespace {
+
 // Items laid out left to right from the cursor, each placed explicitly: a SameLine before an item that then draws
 // nothing would leave the line open and shift whatever the caller draws next onto it.
 template <typename Draw> void row(Draw &&draw, std::size_t count) {
@@ -65,6 +77,8 @@ template <typename Draw> void row(Draw &&draw, std::size_t count) {
     if (open)
         ImGui::Dummy({0, 0}); // close the placement (ImGui checks a SetCursorPos is followed by an item)
 }
+
+// Runs expand() over every scalar in a provider's options so bad substitutions fail at load, not at use.
 void validateSubstitutions(const YAML::Node &node, const Context &ctx) {
     if (node.IsScalar())
         expand(node.as<std::string>(), ctx);
@@ -75,7 +89,9 @@ void validateSubstitutions(const YAML::Node &node, const Context &ctx) {
         for (const auto &item : node)
             validateSubstitutions(item.second, ctx);
 }
+
 } // namespace
+
 Dock parseDock(const std::string &name) {
     static const std::map<std::string, Dock> areas{{"left_top", Dock::LeftTop}, {"left", Dock::Left},
                                                    {"right", Dock::Right},      {"right_bottom", Dock::RightBottom},
@@ -86,14 +102,19 @@ Dock parseDock(const std::string &name) {
                                     "' (left_top, left, right, right_bottom, bottom, floating)");
     return found->second;
 }
+
 std::string panelWindowName(const std::string &id, const std::string &title) {
     return title + "###panel." + id;
 }
+
+// Validates the whole composition first, then (unless previewing) creates providers and binds every view.
 Composition::Composition(const YAML::Node &config, const Context &ctx, const Registry &registry) {
     keys(config,
          {"sidebar_width", "sidebar_width_fraction", "sidebar_visible", "providers", "panels", "toolbar", "header",
           "overlays", "ownership"},
          "composition");
+
+    // Sidebar width: an absolute pixel width or a fraction of the window, not both.
     const bool panelsShown = config["sidebar_visible"].as<bool>(true);
     if (config["sidebar_width"] && config["sidebar_width_fraction"])
         throw std::invalid_argument("choose sidebar_width or sidebar_width_fraction, not both");
@@ -104,6 +125,8 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
     sidebarWidth = config["sidebar_width"].as<float>(350);
     if (!std::isfinite(sidebarWidth) || sidebarWidth < 300 || sidebarWidth > 600)
         throw std::invalid_argument("composition.sidebar_width must be 300..600 pixels");
+
+    // Providers: check each definition and record its capability kind for the view checks below.
     const auto definitions = config["providers"];
     if (!definitions || !definitions.IsMap())
         throw std::invalid_argument("composition.providers must be a mapping ({} is valid)");
@@ -122,6 +145,7 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
             throw std::invalid_argument("providers." + id + ": " + e.what());
         }
     }
+
     // A missing key yields an invalid node that must not be assigned to; build the default separately.
     YAML::Node toolbarConfig(YAML::NodeType::Sequence);
     if (config["toolbar"])
@@ -130,6 +154,8 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
         for (const auto &item : defaultToolbar())
             if (registry.panels.count(item["type"].as<std::string>()))
                 toolbarConfig.push_back(item);
+
+    // Checks one view list (panels, toolbar, header or overlays) against its factories and the providers.
     const auto validateViews = [&](const char *name, const YAML::Node &items, const auto &factories) {
         // Header items are toolbar items drawn in the header row: same schema, ids default to the type.
         const bool isToolbar = std::string(name) == "toolbar" || std::string(name) == "header";
@@ -175,6 +201,8 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
                 }
                 if (!isToolbar && factory.toolbarOnly)
                     throw std::invalid_argument("'" + type + "' is toolbar-only and cannot be a panel window");
+
+                // Read the optional fields now so a wrongly typed value fails validation, not construction.
                 (void)item["visible"].template as<bool>(true);
                 (void)item["open"].template as<bool>(true);
                 (void)item["title"].template as<std::string>(id);
@@ -184,10 +212,13 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
             }
         }
     };
+
     validateViews("panels", config["panels"], registry.panels);
     validateViews("toolbar", toolbarConfig, registry.panels);
     validateViews("header", config["header"], registry.panels);
     validateViews("overlays", config["overlays"], registry.overlays);
+
+    // Ownership links pair a motion provider with the autonomy provider that drives it (one per motion).
     if (config["ownership"] && !config["ownership"].IsSequence())
         throw std::invalid_argument("ownership must be a sequence");
     std::set<std::string> owned;
@@ -199,6 +230,7 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
             !owned.insert(link["motion"].as<std::string>()).second)
             throw std::invalid_argument("ownership requires one autonomy provider per motion provider");
     }
+
     // No provider is instantiated until the entire composition has validated.
     if (!ctx.preview)
         for (const auto &entry : definitions)
@@ -209,6 +241,9 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
         if (!ctx.preview)
             ownership.push_back({std::dynamic_pointer_cast<Motion>(sources.at(link["motion"].as<std::string>())),
                                  std::dynamic_pointer_cast<Autonomy>(sources.at(link["autonomy"].as<std::string>()))});
+
+    // Builds what a view instance sees: its provider (none in preview), options and the host callbacks.
+    // Kill on a motion provider also stops any autonomy that owns it.
     const auto binding = [&](const YAML::Node &item) {
         Binding b;
         b.documents = ctx.documents;
@@ -234,6 +269,8 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
         };
         return b;
     };
+
+    // Instantiate the views in configuration order.
     for (const auto &item : config["panels"]) {
         const auto id = item["id"].as<std::string>();
         panelInstances.push_back({id, item["title"].as<std::string>(id), panelsShown && item["visible"].as<bool>(true),
@@ -260,6 +297,7 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
                             registry.overlays.at(item["type"].as<std::string>()).create(binding(item)),
                             item["provider"].as<std::string>()});
 }
+
 bool Composition::mayStart(const std::shared_ptr<Provider> &mission) const {
     for (const auto &link : ownership)
         if (link.mission == mission) {
@@ -269,15 +307,20 @@ bool Composition::mayStart(const std::shared_ptr<Provider> &mission) const {
         }
     return true;
 }
+
+// Blocks manual motion commands while the owning autonomy runs a tree.
 void Composition::syncOwnership() {
     for (const auto &link : ownership)
         link.motion->block(link.mission->state().busy);
 }
+
 void Composition::touch() {
     for (const auto &source : sources)
         source.second->touch();
     syncOwnership();
 }
+
+// The "panels_menu" toolbar item: a Windows button opening the host's menu (or just the panel list).
 void Composition::drawPanelMenu() {
     nereus::ros_viewer::sameLineIfFits(nereus::ros_viewer::buttonWidth("Windows"));
     if (ImGui::Button("Windows"))
@@ -290,6 +333,7 @@ void Composition::drawPanelMenu() {
         ImGui::EndPopup();
     }
 }
+
 void Composition::drawPanelMenuItems() {
     for (auto &item : panelInstances)
         if (ImGui::MenuItem(item.title.c_str(), nullptr, item.visible)) {
@@ -297,6 +341,7 @@ void Composition::drawPanelMenuItems() {
             item.focus = item.visible; // shown on top (its tab selected) when reopened
         }
 }
+
 void Composition::drawToolMenuItems() {
     for (auto *group : {&toolbarInstances, &panelInstances})
         for (auto &item : *group) {
@@ -305,29 +350,34 @@ void Composition::drawToolMenuItems() {
             ImGui::PopID();
         }
 }
+
 std::vector<Composition::ToolbarItem> Composition::toolbarItems() {
     std::vector<ToolbarItem> items;
     for (auto &item : toolbarInstances)
         items.push_back({item.id, item.type, item.configuredTitle, &item.visible});
     return items;
 }
+
 std::vector<Composition::PanelWindow> Composition::panelWindows() const {
     std::vector<PanelWindow> windows;
     for (const auto &item : panelInstances)
         windows.push_back({item.id, panelWindowName(item.id, item.title), item.dock, item.open});
     return windows;
 }
+
 std::vector<std::pair<std::string, bool *>> Composition::visibility() {
     std::vector<std::pair<std::string, bool *>> flags;
     for (auto &item : panelInstances)
         flags.emplace_back("panel." + item.id, &item.visible);
     return flags;
 }
+
 void Composition::focusPanel(const std::string &id) {
     for (auto &item : panelInstances)
         if (item.id == id)
             item.focus = item.visible = true;
 }
+
 void Composition::drawToolbar() {
     for (auto &item : toolbarInstances)
         if (item.visible) {
@@ -336,6 +386,7 @@ void Composition::drawToolbar() {
             ImGui::PopID();
         }
 }
+
 void Composition::drawHeader(float right) {
     if (headerInstances.empty())
         return;
@@ -357,18 +408,21 @@ void Composition::drawHeader(float right) {
     ImGui::EndGroup();
     headerWidth = ImGui::GetItemRectSize().x;
 }
+
 std::vector<std::string> Composition::toolbarIds() const {
     std::vector<std::string> ids;
     for (const auto &item : toolbarInstances)
         ids.push_back(item.id);
     return ids;
 }
+
 std::vector<std::string> Composition::panelIds() const {
     std::vector<std::string> ids;
     for (const auto &item : panelInstances)
         ids.push_back(item.id);
     return ids;
 }
+
 const std::vector<HostItemType> &hostItemTypes() {
     static const std::vector<HostItemType> types{
         {"scene_settings", false}, {"pool_viewer", false},  {"view", false},     {"focus", false},
@@ -379,6 +433,7 @@ const std::vector<HostItemType> &hostItemTypes() {
 
 void registerHostItem(Registry &registry, const std::string &type, std::function<void()> toolbar,
                       std::function<void()> panel) {
+    // Forwards the panel hooks to the host's drawing functions.
     struct HostPanel final : Panel {
         std::function<void()> bar, body;
         void toolbar() override {
@@ -390,6 +445,8 @@ void registerHostItem(Registry &registry, const std::string &type, std::function
                 body();
         }
     };
+
+    // Without a window form the item is toolbar-only. Replaces any earlier registration (e.g. a placeholder).
     const bool sidebar = static_cast<bool>(panel);
     registry.panels.insert_or_assign(type, ViewFactory<Panel>{Kind::Motion,
                                                               [type](const YAML::Node &n) { keys(n, {}, type); },
@@ -407,6 +464,7 @@ void registerHostPlaceholders(Registry &registry) {
         registerHostItem(registry, item.type, [] {}, item.sidebar ? std::function<void()>([] {}) : nullptr);
 }
 
+// Note: panels_menu is not a host item; it is registered with the panels themselves.
 YAML::Node defaultToolbar() {
     return YAML::Load("[{type: scene_settings}, {type: pool_viewer}, {type: panels_menu}, {type: view}, "
                       "{type: focus}, {type: follow}, {type: labels}, {type: tf}, "
@@ -414,6 +472,7 @@ YAML::Node defaultToolbar() {
 }
 
 void Composition::drawPinned() {
+    // Each panel draws its pinned controls inside its own pins scope.
     row(
         [&](std::size_t i) {
             auto &item = panelInstances[i];
@@ -425,6 +484,7 @@ void Composition::drawPinned() {
         },
         panelInstances.size());
 }
+
 void Composition::drawPanels() {
     for (auto &item : panelInstances) {
         if (!item.visible)
@@ -455,6 +515,8 @@ void Composition::drawPanels() {
             });
     syncOwnership();
 }
+
+// Tool windows the toolbar items and panels open themselves, each in its pins scope.
 void Composition::drawWindows() {
     for (auto &item : toolbarInstances) {
         ImGui::PushID(item.id.c_str());
@@ -479,6 +541,8 @@ void Composition::drawWindows() {
                 ImGui::PopID();
             });
 }
+
+// Title of a toolbar item's tool window: the configured title, else its type capitalized ("run" -> "Run tracking").
 std::string Composition::toolTitle(const PanelInstance &item) {
     if (!item.configuredTitle.empty())
         return item.configuredTitle;
@@ -487,6 +551,8 @@ std::string Composition::toolTitle(const PanelInstance &item) {
         title[0] = char(std::toupper(static_cast<unsigned char>(title[0])));
     return title == "Run" ? "Run tracking" : title;
 }
+
+// Show/hide checkboxes for the overlays bound to `provider`, drawn inside that provider's panel.
 void Composition::drawOverlayControls(const std::string &provider) {
     for (auto &item : overlays) {
         if (item.provider != provider)
@@ -499,6 +565,8 @@ void Composition::drawOverlayControls(const std::string &provider) {
         ImGui::PopID();
     }
 }
+
+// Pool-view input: overlays in order, each later one non-interactive once an earlier one consumed the event.
 bool Composition::input(const Viewport &view) {
     bool consumed = false;
     for (auto &overlay : overlays) {
@@ -509,9 +577,11 @@ bool Composition::input(const Viewport &view) {
     }
     return consumed;
 }
+
 void Composition::drawOverlays(const Viewport &view) {
     for (auto &overlay : overlays)
         if (overlay.visible)
             overlay.overlay->draw(view);
 }
+
 } // namespace nereus::ros_viewer::panels

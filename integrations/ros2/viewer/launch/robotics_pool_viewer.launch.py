@@ -13,9 +13,12 @@ from launch.substitutions import LaunchConfiguration
 
 
 def _viewer(context, *_):
+    """Builds the nereus-viewer command line from the launch arguments."""
+
     def value(name):
         return LaunchConfiguration(name).perform(context)
 
+    # Options with a value: passed only when set.
     command = [value("executable")]
     for flag, name in (
         ("--scenario", "scenario"),
@@ -31,6 +34,8 @@ def _viewer(context, *_):
             command += [flag, value(name)]
     if value("frames") != "0":
         command += ["--frames", value("frames")]
+
+    # Boolean switches: passed when the argument is "true" or "1".
     for flag, name in (
         ("--demo", "demo"),
         ("--hidden", "hidden"),
@@ -46,6 +51,7 @@ def _viewer(context, *_):
 
 
 def generate_launch_description():
+    # Launch argument -> default; empty strings leave the viewer's own default.
     arguments = {
         "executable": "nereus-viewer",
         "scenario": "",

@@ -1,3 +1,4 @@
+// parseScenario: reads the bridge's resolved scenario document into the viewer's Scenario.
 #include "scenario.hpp"
 #include <algorithm>
 #include <cctype>
@@ -10,6 +11,8 @@ namespace nereus::ros_viewer::host {
 namespace {
 namespace fs = std::filesystem;
 
+// The pack folder holding this scenario's robot / tasks / pool packs: `hint` when it has them, else a matching
+// folder under NEREUS_PACK_CONTENT/scenarios; empty when none is found.
 fs::path locatePackDirectory(const YAML::Node &doc, const fs::path &hint) {
     const auto scenario = doc["scenario"];
     auto usable = [&](const fs::path &dir) {
@@ -20,8 +23,10 @@ fs::path locatePackDirectory(const YAML::Node &doc, const fs::path &hint) {
                 return false;
         return true;
     };
+
     if (usable(hint))
         return hint;
+
 #ifdef NEREUS_PACK_CONTENT
     const fs::path root = fs::path(NEREUS_PACK_CONTENT) / "scenarios";
     if (fs::is_directory(root))
@@ -34,7 +39,8 @@ fs::path locatePackDirectory(const YAML::Node &doc, const fs::path &hint) {
     return {};
 }
 
-// pack role -> {asset id -> absolute path}
+// pack role -> {asset id -> absolute path}: the document's asset_paths when given, else the asset's path in the
+// located pack folder (searched for lazily, only when needed).
 std::map<std::string, std::map<std::string, fs::path>> resolveAssets(const YAML::Node &doc, const fs::path &hint) {
     std::map<std::string, std::map<std::string, fs::path>> result;
     const auto given = doc["asset_paths"];
@@ -59,6 +65,7 @@ std::map<std::string, std::map<std::string, fs::path>> resolveAssets(const YAML:
     return result;
 }
 
+// ASCII upper case.
 std::string upper(std::string s) {
     for (auto &c : s)
         c = char(std::toupper(static_cast<unsigned char>(c)));
@@ -71,16 +78,19 @@ std::string Scenario::absolute(const std::string &relative) const {
         return relative;
     return (ns.empty() || ns == "/" ? std::string("") : ns) + "/" + relative;
 }
+
 const SensorCamera *Scenario::camera(const std::string &name) const {
     for (const auto &c : cameras)
         if (c.id == name)
             return &c;
     return nullptr;
 }
+
 const Mechanism *Scenario::mechanism(const std::string &name) const {
     const auto it = mechanisms.find(name);
     return it == mechanisms.end() ? nullptr : &it->second;
 }
+
 std::string Scenario::rosFrame(const std::string &packFrame) const {
     const auto it = frameNames.find(packFrame);
     if (it != frameNames.end())
@@ -92,12 +102,14 @@ std::string Scenario::rosFrame(const std::string &packFrame) const {
 }
 
 Scenario parseScenario(const std::string &json, const YAML::Node &config, const fs::path &packDirHint) {
+    // Identity, namespace and frames. (JSON is valid YAML, so yaml-cpp reads the document directly.)
     Scenario s;
     s.document = YAML::Load(json);
     auto d = s.document;
     for (const char *key : {"scenario", "robot", "pool", "tasks", "task_definitions", "bridge"})
         if (!d[key])
             throw std::runtime_error(std::string("scenario document lacks '") + key + "'");
+
     s.bridge = d["bridge"];
     const auto scenario = d["scenario"], robot = d["robot"], pool = d["pool"];
     s.id = scenario["id"].as<std::string>("scenario");
@@ -118,6 +130,7 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
         }
     if (s.truthBaseFrame.empty())
         s.truthBaseFrame = "simulator/" + s.estimateBaseFrame;
+
     // Bridge thruster order (force array layout).
     for (const auto &id : s.bridge["thrusters"]["order"])
         s.thrusterOrder.push_back(id.as<std::string>());
@@ -132,6 +145,8 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
     // Frame tree of the robot pack.
     for (const auto &edge : robot["frames"]["transforms"])
         s.frames.add(edge["parent"].as<std::string>(), edge["child"].as<std::string>(), packPose(edge));
+
+    // Asset files, and the session's ResolvedScenario (rendering / scene composition) built from the same JSON.
     const auto assets = resolveAssets(d, packDirHint);
     const auto assetPath = [&](const char *role, const std::string &id) -> fs::path {
         const auto r = assets.find(role);
@@ -142,6 +157,7 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
     };
     if (assets.count("robot"))
         s.robotAssets = assets.at("robot");
+
     try {
         auto document = nlohmann::json::parse(json);
         if (!document.contains("format"))
@@ -168,6 +184,8 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
     s.waterLevel = pp["water_level_m"].as<float>(0) + poolAt.z;
     s.poolToWorld = pose({poolAt.x, poolAt.y, 0}, {0, 0, glm::radians(placement["yaw_deg"].as<float>(0))});
     s.worldToPool = glm::inverse(s.poolToWorld);
+
+    // Water optics and lighting (only when the pool pack gives both).
     if (pool["water_optics"] && pool["lighting"]) {
         const auto o = pool["water_optics"], l = pool["lighting"];
         auto &w = s.appearance.water;
@@ -229,6 +247,8 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
             ThrusterMount mount;
             mount.id = s.thrusterOrder[i];
             mount.index = i;
+
+            // Prefer the named frame; else position / direction in the body root; else leave it out.
             const auto frame = item["frame"].as<std::string>("");
             if (s.frames.has(frame)) {
                 const auto inBase = s.frames.relative(s.baseId, frame);
@@ -240,6 +260,7 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
                 mount.axis = glm::normalize(glm::vec3(bodyInBase * glm::vec4(vec3(item["direction"]), 0)));
             } else
                 break;
+
             const auto scales = s.bridge["thrusters"]["input_scales"];
             if (scales && scales.IsSequence() && i < scales.size())
                 mount.inputScale = scales[i].as<float>();
@@ -255,6 +276,7 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
                 return s.absolute(stream["topic"].as<std::string>());
         return {};
     };
+
     int index = 0;
     for (const auto &sensor : robot["sensors"]) {
         if (sensor["type"].as<std::string>() != "stereo_camera" || !sensor["enabled"].as<bool>(true))
@@ -264,6 +286,8 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
         c.mountFrame = sensor["mount_frame"].as<std::string>(sensor["frame"].as<std::string>());
         c.opticalFrame = sensor["frame"].as<std::string>();
         c.rosOpticalFrame = s.rosFrame(c.opticalFrame);
+
+        // Left-eye intrinsics and depth range; period_ns defaults to 15 Hz.
         const auto p = sensor["parameters"], left = p["intrinsics_left"];
         c.k.width = p["resolution_px"][0].as<int>();
         c.k.height = p["resolution_px"][1].as<int>();
@@ -275,11 +299,14 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
         c.minRange = p["depth"]["min_range_m"].as<double>(c.minRange);
         c.maxRange = p["depth"]["max_range_m"].as<double>(c.maxRange);
         c.periodS = sensor["period_ns"].as<double>(66666667.) * 1e-9;
+
         c.mountInBase = s.frames.relative(s.baseId, c.mountFrame);
         c.opticalInBase = s.frames.relative(s.baseId, c.opticalFrame);
         c.rgbTopic = streamFor(c.id, "rgb_left");
         c.depthTopic = streamFor(c.id, "depth_left");
         c.infoTopic = streamFor(c.id, "camera_info");
+
+        // Display names from the host config, else "NN  ID" numbered in pack order.
         const auto display = lookup(config, {"cameras", c.id.c_str()});
         char number[16];
         std::snprintf(number, sizeof(number), "%02d", ++index);
@@ -292,6 +319,8 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
     std::map<std::string, YAML::Node> definitions;
     for (const auto &def : d["task_definitions"])
         definitions[def["id"].as<std::string>()] = static_cast<const YAML::Node &>(def);
+
+    // Each placement is a landmark, as is each of its task frames; its static props add visuals.
     for (const auto &place : scenario["task_placements"]) {
         const auto task = place["task"].as<std::string>();
         const glm::vec3 at = vec3(place["position_m"]);
@@ -300,12 +329,14 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
         const auto it = definitions.find(task);
         if (it == definitions.end())
             continue;
+
         const auto &def = it->second;
         std::map<std::string, glm::mat4> frames{{"task", glm::mat4(1)}};
         for (const auto &f : def["frames"]) {
             frames[f["id"].as<std::string>()] = packPose(f);
             s.landmarks[f["id"].as<std::string>()] = {world * frames[f["id"].as<std::string>()]};
         }
+
         std::map<std::string, YAML::Node> regions;
         for (const auto &r : def["regions"])
             regions[r["id"].as<std::string>()] = static_cast<const YAML::Node &>(r);
@@ -322,6 +353,8 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
                 v.taskFromAsset = frames.at(visual["frame"].as<std::string>()) * packPose(visual);
                 v.world = world * v.taskFromAsset;
                 v.path = assetPath("tasks", v.asset);
+
+                // Cutouts: holes of a planar region (plane normal along x) repeated at each listed face.
                 if (cutouts) {
                     const auto region = regions.at(cutouts["region"].as<std::string>())["parameters"];
                     if (region["plane"]["axis"].as<std::string>() != "x")

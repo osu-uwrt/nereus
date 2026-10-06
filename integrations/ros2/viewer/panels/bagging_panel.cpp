@@ -1,3 +1,5 @@
+// Bagging panel: start/stop `ros2 bag record` on this computer or the robot, choose the bag folder, name and
+// topics, and show a BAG chip per recording machine in the header row.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/pins.hpp"
@@ -9,8 +11,11 @@
 #include <imgui_internal.h>
 #include <map>
 #include <set>
+
 namespace nereus::ros_viewer::panels {
 namespace {
+
+// Elapsed time as MM:SS, or H:MM:SS from an hour on.
 std::string clock(double seconds) {
     char text[32];
     const int total = std::max(0, int(seconds));
@@ -20,26 +25,30 @@ std::string clock(double seconds) {
         std::snprintf(text, sizeof(text), "%02d:%02d", total / 60, total % 60);
     return text;
 }
+
 // Where a bag is, for scp: host:path on another machine.
 std::string location(const BagTargetState &t, const std::string &path) {
     return t.host.empty() ? path : t.host + ":" + path;
 }
+
+// Wrapped text in the theme's muted colour.
 void muted(const std::string &text) {
     ImGui::PushStyleColor(ImGuiCol_Text, palette().muted);
     ImGui::TextWrapped("%s", text.c_str());
     ImGui::PopStyleColor();
 }
+
 // ros2 bag record on this computer or the robot (the RViz rosbag panel's recorder, with a choice of machine).
 // Header form: a red BAG chip per machine while it records.
 class BaggingPanel final : public Panel {
     std::shared_ptr<Bagging> bagging;
-    int target = 0, mode = 0; // mode 0: all topics, 1: the selected ones
-    char name[128]{}, exclude[256]{};
+    int target = 0, mode = 0;         // mode 0: all topics, 1: the selected ones
+    char name[128]{}, exclude[256]{}; // bag name prefix and the -x regex (all-topics mode only)
     bool timestamp = true;
     std::map<std::string, std::array<char, 512>> directories; // per target, from its configured directory
     std::map<std::string, std::array<char, 256>> hosts;       // per remote target: the ssh destination being edited
-    std::set<std::string> selected;
-    ImGuiTextFilter filter;
+    std::set<std::string> selected;                           // topics recorded in "Selected" mode
+    ImGuiTextFilter filter;                                   // topic list filter
 
   public:
     explicit BaggingPanel(const Binding &b)
@@ -47,6 +56,8 @@ class BaggingPanel final : public Panel {
           timestamp(b.options["timestamp"].as<bool>(true)) {
         std::snprintf(name, sizeof(name), "%s", b.options["name"].as<std::string>("bag").c_str());
         std::snprintf(exclude, sizeof(exclude), "%s", b.options["exclude"].as<std::string>("").c_str());
+
+        // Preselect the configured `target` by its ID.
         if (bagging && b.options["target"]) {
             const auto s = bagging->state();
             for (size_t i = 0; i < s.targets.size(); ++i)
@@ -54,6 +65,8 @@ class BaggingPanel final : public Panel {
                     target = int(i);
         }
     }
+
+    // One chip per machine that is recording (red, with elapsed time) or closing its bag (amber).
     void header() override {
         if (!bagging)
             return;
@@ -70,12 +83,15 @@ class BaggingPanel final : public Panel {
                 ImGui::PopID();
             }
     }
+
     void draw() override {
         const auto s = bagging ? bagging->state() : BaggingState{};
         if (s.targets.empty()) {
             emptyState("Connected, this records ROS bags on this computer or on the robot.");
             return;
         }
+
+        // Machine choice, its ssh destination and the free disk space (amber below 5 GB).
         target = std::clamp(target, 0, int(s.targets.size()) - 1);
         chooseTarget(s);
         const auto &t = s.targets[size_t(target)];
@@ -91,11 +107,13 @@ class BaggingPanel final : public Panel {
         else if (!where.empty())
             muted(where);
 
+        // Record / Stop first, then the bag settings (locked while this machine records).
         const std::string bagNameNow = bagName(name, timestamp);
         const bool nameOk = validBagName(bagNameNow);
         std::vector<std::string> topics(selected.begin(), selected.end());
         const bool ready = t.known && t.reachable && !busy && nameOk && directory[0] && (mode == 0 || !topics.empty());
         actions(t, ready, bagNameNow, directory.data(), topics);
+
         ImGui::BeginDisabled(busy);
         sectionTitle("Bag");
         ImGui::TextUnformatted(t.host.empty() ? "Folder" : "Folder on the robot");
@@ -131,6 +149,8 @@ class BaggingPanel final : public Panel {
     void actions(const BagTargetState &t, bool ready, const std::string &bagNameNow, const char *directory,
                  const std::vector<std::string> &topics) {
         pins::Scope targetScope(t.id);
+
+        // Record while idle, Stop while recording (disabled once a stop is under way).
         if (!t.recording && !t.stopping) {
             ImGui::BeginDisabled(!ready);
             if (pins::Button(("Record on " + t.label + "###record").c_str(), {-1, ui(36)})) {
@@ -153,6 +173,8 @@ class BaggingPanel final : public Panel {
                 bagging->stop(t.id);
             ImGui::EndDisabled();
         }
+
+        // Progress of the running recording; a recorder stuck closing can be killed.
         if (t.recording || t.stopping) {
             if (t.recording)
                 ImGui::TextColored(levelColor(Level::Error), "REC %s", clock(t.elapsed).c_str());
@@ -169,6 +191,8 @@ class BaggingPanel final : public Panel {
                                       "metadata.yaml (ros2 bag reindex rebuilds it).");
             }
         }
+
+        // Provider message (red on failure) and the last finished bag.
         if (!t.message.empty()) {
             if (t.failed)
                 ImGui::PushStyleColor(ImGuiCol_Text, levelColor(Level::Error));
@@ -186,6 +210,8 @@ class BaggingPanel final : public Panel {
                                                        : "host:path, for scp -r or rsync.");
         }
     }
+
+    // Machine picker: a switch for two or three targets, a combo for more (nothing for one).
     void chooseTarget(const BaggingState &s) {
         std::vector<const char *> labels;
         for (const auto &t : s.targets)
@@ -203,12 +229,15 @@ class BaggingPanel final : public Panel {
             pins::Combo("Record on##target", &target, items.c_str());
         }
     }
+
     // The robot's ssh destination (user@host), prefilled from the configuration; Enter or leaving the field connects
     // to it. Locked while a bag records there.
     void hostField(const BagTargetState &t, bool busy) {
         auto [found, inserted] = hosts.try_emplace(t.id);
         auto &buffer = found->second;
         ImGui::PushID(t.id.c_str());
+
+        // Follow the provider's host unless the operator is typing in the field.
         const bool editing = ImGui::GetActiveID() == ImGui::GetID("##host");
         if (inserted || (!editing && t.host != buffer.data()))
             std::snprintf(buffer.data(), buffer.size(), "%s", t.host.c_str());
@@ -229,13 +258,18 @@ class BaggingPanel final : public Panel {
         ImGui::EndDisabled();
         ImGui::PopID();
     }
+
+    // The editable folder buffer for a target, seeded once from its configured directory.
     std::array<char, 512> &directoryOf(const BagTargetState &t) {
         auto [found, inserted] = directories.try_emplace(t.id);
         if (inserted)
             std::snprintf(found->second.data(), found->second.size(), "%s", t.directory.c_str());
         return found->second;
     }
+
+    // Topic picker for "Selected" mode: presets, a filter, bulk select/clear and a clipped checkbox list.
     void topicList(const BaggingState &s) {
+        // A preset replaces the selection.
         if (!s.presets.empty()) {
             ImGui::SetNextItemWidth(-1);
             if (ImGui::BeginCombo("##preset", "Preset...")) {
@@ -247,6 +281,7 @@ class BaggingPanel final : public Panel {
                 ImGui::EndCombo();
             }
         }
+
         // Live topics plus selected ones not published now (they record once they appear).
         std::vector<std::pair<std::string, std::string>> rows = s.topics;
         for (const auto &topic : selected)
@@ -274,6 +309,7 @@ class BaggingPanel final : public Panel {
         std::snprintf(count, sizeof(count), "%zu selected of %zu", selected.size(), rows.size());
         muted(count);
 
+        // Only the visible rows are drawn (ImGuiListClipper).
         ImGui::BeginChild("topics", {0, std::max(ui(120), ImGui::GetContentRegionAvail().y)}, ImGuiChildFlags_Borders);
         ImGuiListClipper clipper;
         clipper.Begin(int(shown.size()));
@@ -297,7 +333,10 @@ class BaggingPanel final : public Panel {
         ImGui::EndChild();
     }
 };
+
 } // namespace
+
+// Registers the "bagging" panel type; options: name, timestamp, all, exclude, target.
 void registerBaggingPanel(Registry &r) {
     r.panels.emplace("bagging",
                      ViewFactory<Panel>{Kind::Bagging,
@@ -313,4 +352,5 @@ void registerBaggingPanel(Registry &r) {
                                         },
                                         [](const Binding &b) { return std::make_unique<BaggingPanel>(b); }});
 }
+
 } // namespace nereus::ros_viewer::panels

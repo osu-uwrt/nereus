@@ -33,11 +33,13 @@ struct InstanceOrigin {
     std::string task, prop, asset, frame; // task empty: pool, equipment or robot (texture rules without task only)
 };
 
+// Result of resolveParts: the mesh to draw and its per-submesh labels.
 struct InstanceParts {
     std::shared_ptr<const rendering::MeshAsset> mesh; // the input mesh, or its split rewrite
     std::vector<rendering::SubmeshLabel> submeshes;   // empty when the instance has no parts
     std::vector<PartInstance> parts;                  // by increasing value
     std::optional<std::size_t> rule;                  // index of the matching parts.visuals rule
+
     bool empty() const {
         return parts.empty();
     }
@@ -50,16 +52,20 @@ void validatePartMasks(const Job &);
 // Canonical diffuse texture path of a submesh (empty when untextured).
 std::filesystem::path canonicalTexture(const rendering::Submesh &);
 
+// A mesh rewritten for a `split: connected` rule: each selected submesh replaced by its connected pieces.
+struct SplitMesh {
+    std::shared_ptr<const rendering::MeshAsset> mesh;
+    std::vector<std::size_t> origin; // per rewritten submesh: the input submesh it came from
+};
+
+// Split rewrites keyed by (input mesh, parts.visuals rule index).
+using SplitCache = std::map<std::pair<const rendering::MeshAsset *, std::size_t>, SplitMesh>;
+
 // Resolves an instance's parts. Visual rules take precedence on the submeshes they select (materials listed,
 // or every submesh for `part`); remaining textured submeshes take the part map of their texture. Fixed rule
 // values are allocated after the largest declared part-map value used. Throws when two visual rules match,
 // when two part maps of one instance share a value or more than 255 values are needed. `split_cache` (optional) shares
 // split rewrites of one mesh under one rule across instances (rewrites are made once, never per sample).
-struct SplitMesh {
-    std::shared_ptr<const rendering::MeshAsset> mesh;
-    std::vector<std::size_t> origin; // per rewritten submesh: the input submesh it came from
-};
-using SplitCache = std::map<std::pair<const rendering::MeshAsset *, std::size_t>, SplitMesh>;
 InstanceParts resolveParts(const std::shared_ptr<const rendering::MeshAsset> &, const InstanceOrigin &, const Job &,
                            SplitCache *split_cache = nullptr);
 } // namespace nereus::datasets

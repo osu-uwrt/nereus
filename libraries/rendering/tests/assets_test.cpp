@@ -1,3 +1,5 @@
+// Tests for mesh asset loading (Talos visuals, glTF fixtures, limits) and perforatePanel(), which splits
+// panel-plane triangles into their own submesh with planar UVs and circular cutouts.
 #include "nereus/rendering/assets.hpp"
 #include <fstream>
 #include <functional>
@@ -6,6 +8,8 @@
 #include <sstream>
 
 using namespace nereus::rendering;
+
+// Triangle counts are pinned so a mesh or loader change that drops geometry is caught.
 TEST(MeshAssets, OriginalTalosBodyAndRotorsKeepTriangleCountsAndTransparency) {
     const std::filesystem::path root = std::filesystem::path(NEREUS_PACK_CONTENT) / "robots/talos/assets/visual";
     const auto body = loadMesh(root / "Talos3_body.glb");
@@ -25,6 +29,8 @@ TEST(MeshAssets, OriginalTalosBodyAndRotorsKeepTriangleCountsAndTransparency) {
     }
     EXPECT_EQ(rotor_triangles, 33937U);
 }
+
+// AssetLimits caps file size and vertex count; a zero limit is a usage error rather than a load failure.
 TEST(MeshAssets, RejectsMissingMalformedAndOversizedAssets) {
     EXPECT_THROW(loadMesh("/does/not/exist.glb"), std::runtime_error);
     EXPECT_THROW(loadMesh(std::filesystem::path(NEREUS_PACK_CONTENT) / "robots/talos/robot.yaml"), std::runtime_error);
@@ -39,6 +45,7 @@ TEST(MeshAssets, RejectsMissingMalformedAndOversizedAssets) {
     EXPECT_THROW(loadMesh(body, limits), std::runtime_error);
 }
 
+// The nested_mesh.gltf fixture checks node transform composition, normal transformation and UV flipping.
 TEST(MeshAssets, NestedTransformsUseAuthoredAxesAndInverseTransposeNormals) {
     const auto asset = loadMesh(std::filesystem::path(NEREUS_ASSET_FIXTURES) / "nested_mesh.gltf");
     ASSERT_EQ(asset.submeshes.size(), 2U);
@@ -63,6 +70,8 @@ TEST(MeshAssets, NestedTransformsUseAuthoredAxesAndInverseTransposeNormals) {
                  std::runtime_error);
 }
 
+// Compares every Talos submesh against legacy_mesh_assets.csv: counts, material colour, bounds, mean
+// position/normal/uv, and an FNV-1a hash of the index buffer.
 TEST(MeshAssets, EveryOriginalSubmeshKeepsOrderTopologyMaterialsAndVertexStatistics) {
     std::ifstream reference(std::filesystem::path(NEREUS_ASSET_FIXTURES) / "legacy_mesh_assets.csv");
     ASSERT_TRUE(reference);
@@ -122,12 +131,17 @@ TEST(MeshAssets, EveryOriginalSubmeshKeepsOrderTopologyMaterialsAndVertexStatist
 }
 
 namespace {
+// Vertex with a +X normal; uv (-1, -1) marks "no authored UV".
 Vertex vertex(float x, float y, float z, Eigen::Vector2f uv = {-1, -1}) {
     return {{x, y, z}, {1, 0, 0}, uv};
 }
+
+// Expected planar UV of a point on an x-facing panel of the given half size.
 Eigen::Vector2f planar(float y, float z, float half = 1) {
     return {y / (2 * half) + 0.5f, z / (2 * half) + 0.5f};
 }
+
+// Panel on the x = 0 plane, 2 m square, with two circular cutouts.
 PanelCutouts panelOptions() {
     PanelCutouts panel;
     panel.faces_x = {0.f};
@@ -135,6 +149,7 @@ PanelCutouts panelOptions() {
     panel.cutouts = {{{0.25f, 0.5f}, 0.1f}, {{0.75f, 0.5f}, 0.2f}};
     return panel;
 }
+
 // Triangle 0 lies on the panel plane, triangle 1 is 0.1 m in front of it.
 Submesh mixedSubmesh() {
     Submesh part;
@@ -144,6 +159,8 @@ Submesh mixedSubmesh() {
     part.material.base_color = {.1f, .2f, .3f, 1};
     return part;
 }
+
+// Wraps submeshes in an asset with fixed, recognizable bounds.
 MeshAsset asset(std::vector<Submesh> parts) {
     MeshAsset result;
     result.submeshes = std::move(parts);
@@ -153,6 +170,8 @@ MeshAsset asset(std::vector<Submesh> parts) {
 }
 } // namespace
 
+// Only the panel triangle is split out: other submeshes pass through, the remainder comes first, and the
+// panel copy gets planar UVs and the cutouts while the bounds stay unchanged.
 TEST(PerforatePanel, MixedSubmeshSplitsRemainderFirstAndCopiesPanelVertices) {
     Submesh other = mixedSubmesh();
     other.indices = {3, 4, 5};
@@ -184,6 +203,7 @@ TEST(PerforatePanel, MixedSubmeshSplitsRemainderFirstAndCopiesPanelVertices) {
     EXPECT_EQ(result.mesh.maximum, Eigen::Vector3f(4, 5, 6));
 }
 
+// A submesh that lies entirely on the panel is converted in place rather than split.
 TEST(PerforatePanel, UntexturedPanelSubmeshGetsPlanarUvInPlace) {
     Submesh part = mixedSubmesh();
     part.indices = {0, 1, 2};
@@ -198,6 +218,7 @@ TEST(PerforatePanel, UntexturedPanelSubmeshGetsPlanarUvInPlace) {
     EXPECT_EQ(out.vertices[3].uv, Eigen::Vector2f(-1, -1));
 }
 
+// Authored UVs are kept if they match the planar mapping within tolerance; larger mismatches throw.
 TEST(PerforatePanel, TexturedPanelKeepsAuthoredUvAndRejectsMismatch) {
     Submesh part = mixedSubmesh();
     part.indices = {0, 1, 2};
@@ -328,6 +349,7 @@ TEST(PerforatePanel, RejectsInvalidParameters) {
     EXPECT_THROW(perforatePanel(asset({broken}), panelOptions()), std::invalid_argument);
 }
 
+// Real RoboSub torpedo board: frame, two backing triangles and the textured front all come out separately.
 TEST(PerforatePanel, RobosubTorpedoSeparatesFrameBackingAndTexturedFront) {
     const auto path = std::filesystem::path(NEREUS_PACK_CONTENT) / "tasks/robosub_2026/assets/torpedo/model.dae";
     const auto source = loadMesh(path);

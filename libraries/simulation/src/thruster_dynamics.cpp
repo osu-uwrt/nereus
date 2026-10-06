@@ -1,9 +1,11 @@
+// ThrusterDynamics: delayed command queues, a command watchdog and a first-order, slew-limited force response.
 #include "detail/thruster_dynamics.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 namespace nereus::simulation::detail {
+
 void ThrusterDynamics::configure(const std::vector<ThrusterParameters> &p, double timeout) {
     if (p.size() > static_cast<std::size_t>(std::numeric_limits<Eigen::Index>::max()) || !std::isfinite(timeout) ||
         timeout < 0)
@@ -23,6 +25,7 @@ void ThrusterDynamics::configure(const std::vector<ThrusterParameters> &p, doubl
     forces_ = targets_;
     reset();
 }
+
 void ThrusterDynamics::reset() {
     time_ = 0;
     lastCommand_ = -1e9;
@@ -31,21 +34,25 @@ void ThrusterDynamics::reset() {
     targets_.setZero();
     forces_.setZero();
 }
+
 void ThrusterDynamics::stop() {
     for (auto &q : queues_)
         q.clear();
     targets_.setZero();
     lastCommand_ = -1e9;
 }
+
 void ThrusterDynamics::clear() {
     stop();
     forces_.setZero();
 }
+
 void ThrusterDynamics::command(const Eigen::VectorXd &f) {
     if (f.size() != forces_.size() || !f.allFinite())
         throw std::invalid_argument("Invalid thruster command");
     lastCommand_ = time_;
     for (Eigen::Index i = 0; i < f.size(); ++i) {
+        // Deadband, then direction-dependent scale, saturation and efficiency.
         const auto &p = parameters_[i];
         double force = std::abs(f[i]) < p.deadband ? 0 : f[i];
         force *= force >= 0 ? p.forwardScale : p.reverseScale;
@@ -60,17 +67,21 @@ void ThrusterDynamics::command(const Eigen::VectorXd &f) {
             q.push_back({due, force});
     }
 }
+
 void ThrusterDynamics::evolve(Eigen::Index i, double dt) {
     if (dt <= 0)
         return;
     const auto &p = parameters_[i];
+    // Rise time constant while the force grows toward a same-sign target; fall time constant otherwise.
     const double tau =
         (targets_[i] * forces_[i] >= 0 && std::abs(targets_[i]) > std::abs(forces_[i])) ? p.rise : p.fall;
+    // Exact first-order step (expm1 keeps small dt accurate); a zero time constant jumps to the target.
     double delta = tau > 0 ? (targets_[i] - forces_[i]) * (-std::expm1(-dt / tau)) : targets_[i] - forces_[i];
     if (p.slew > 0)
         delta = std::clamp(delta, -p.slew * dt, p.slew * dt);
     forces_[i] += delta;
 }
+
 void ThrusterDynamics::advance(double dt) {
     if (!std::isfinite(dt) || dt <= 0)
         throw std::invalid_argument("Actuator step must be finite/positive");
@@ -83,8 +94,12 @@ void ThrusterDynamics::advance(double dt) {
         advance(end - time_);
         return;
     }
+
+    // Watchdog already expired: drop queued commands and targets.
     if (timeout_ > 0 && time_ >= expiry)
         stop();
+
+    // Per thruster: evolve up to each due command, switch to its target, then evolve to the end of the step.
     for (Eigen::Index i = 0; i < forces_.size(); ++i) {
         auto &q = queues_[i];
         double cursor = time_;

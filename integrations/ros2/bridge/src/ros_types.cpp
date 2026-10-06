@@ -9,6 +9,7 @@
 
 namespace nereus::ros_bridge {
 namespace {
+// "pkg/Name" -> "pkg/<kind>/Name"; other names pass through unchanged.
 std::string threePart(const std::string &name, const char *kind) {
     std::vector<std::string> parts;
     std::size_t start = 0;
@@ -26,9 +27,11 @@ std::string threePart(const std::string &name, const char *kind) {
     return name;
 }
 
+// Guards both type caches.
 std::mutex cache_mutex;
 } // namespace
 
+// Loads (once per process) the C++ type support for (de)serialization and the introspection members.
 std::shared_ptr<const MessageType> MessageType::get(const std::string &name) {
     static std::map<std::string, std::shared_ptr<const MessageType>> cache;
     const std::string full = threePart(name, "msg");
@@ -51,6 +54,7 @@ std::shared_ptr<const MessageType> MessageType::get(const std::string &name) {
     return type;
 }
 
+// The introspection service handle comes from its generated getter symbol, looked up by name.
 std::shared_ptr<const ServiceType> ServiceType::get(const std::string &name) {
     static std::map<std::string, std::shared_ptr<const ServiceType>> cache;
     const std::string full = threePart(name, "srv");
@@ -77,11 +81,13 @@ std::shared_ptr<const ServiceType> ServiceType::get(const std::string &name) {
     return type;
 }
 
+// Allocates and default-initialises the message (16-byte aligned).
 Message::Message(std::shared_ptr<const MessageType> type) : type_(std::move(type)) {
     const auto *members = type_->members();
     data_ = ::operator new(members->size_of_, std::align_val_t{16});
     members->init_function(data_, rosidl_runtime_cpp::MessageInitialization::ALL);
 }
+
 Message::~Message() {
     if (data_) {
         type_->members()->fini_function(data_);
@@ -98,6 +104,7 @@ std::string baseName(const introspection::MessageMembers *members) {
 }
 
 namespace {
+// Type name of a primitive introspection id, as RosType::base uses it.
 const char *primitiveName(std::uint8_t id) {
     using namespace introspection;
     if (id == ROS_TYPE_FLOAT)
@@ -136,6 +143,8 @@ const char *primitiveName(std::uint8_t id) {
         return "wstring";
     return "unknown";
 }
+
+// Introspection members of a nested message field.
 const introspection::MessageMembers *nested(const introspection::MessageMember &member) {
     return static_cast<const introspection::MessageMembers *>(member.members_->data);
 }
@@ -148,6 +157,7 @@ bool isNumericId(std::uint8_t id) {
            id == ROS_TYPE_UINT32 || id == ROS_TYPE_INT32 || id == ROS_TYPE_UINT64 || id == ROS_TYPE_INT64;
 }
 
+// Fixed arrays have array_size_ > 0 and no upper bound; everything else is a sequence.
 RosType memberType(const introspection::MessageMember &member) {
     RosType type;
     type.base =
@@ -171,6 +181,8 @@ FieldPath resolveField(const introspection::MessageMembers *owner, const std::st
                 throw MappingError(repr(path) + ": " + repr(token.name) + " is below a non-message field");
             // `owner` was set from the previous hop below.
         }
+
+        // Find the member by name in the current message.
         const introspection::MessageMember *found = nullptr;
         for (std::uint32_t k = 0; k < owner->member_count_; ++k)
             if (token.name == owner->members_[k].name_)
@@ -178,7 +190,9 @@ FieldPath resolveField(const introspection::MessageMembers *owner, const std::st
         if (!found)
             throw MappingError(repr(path) + ": " + owner->message_name_ + " has no field " + repr(token.name));
         RosType type = memberType(*found);
+
         Hop hop{found, -1};
+        // At most one index per token, only on arrays; sequences cannot be written element-wise.
         if (token.indexes.size() > 1)
             throw MappingError(repr(path) + ": " + repr(token.name) + " is not an array");
         for (const int index : token.indexes) {
@@ -193,6 +207,8 @@ FieldPath resolveField(const introspection::MessageMembers *owner, const std::st
             hop.index = index;
             type = type.element();
         }
+
+        // Descend into nested messages for the next token.
         result.hops.push_back(hop);
         current = type;
         if (found->type_id_ == introspection::ROS_TYPE_MESSAGE)
@@ -202,6 +218,7 @@ FieldPath resolveField(const introspection::MessageMembers *owner, const std::st
     return result;
 }
 
+// Like locate(), but checks sequence indexes against the received size.
 const void *locateConst(const void *message, const FieldPath &path) {
     const char *base = static_cast<const char *>(message);
     const void *address = base;
@@ -216,6 +233,7 @@ const void *locateConst(const void *message, const FieldPath &path) {
     return address;
 }
 
+// Offsets through each hop; indexes are not bounds-checked (writable paths only index fixed arrays).
 void *locate(void *message, const FieldPath &path) {
     void *address = message;
     for (const auto &hop : path.hops) {
@@ -227,6 +245,7 @@ void *locate(void *message, const FieldPath &path) {
 }
 
 namespace {
+// One primitive field as JSON (null for unsupported types).
 Json scalarJson(std::uint8_t id, const void *p) {
     using namespace introspection;
     if (id == ROS_TYPE_FLOAT)
@@ -268,6 +287,7 @@ Json messageToJson(const introspection::MessageMembers *members, const void *mes
         };
         if (!member.is_array_) {
             out[member.name_] = element(field);
+            // Unbounded bool sequences are std::vector<bool>, which has no per-element address.
         } else if (member.type_id_ == introspection::ROS_TYPE_BOOLEAN && member.array_size_ == 0) {
             const auto &bits = *static_cast<const std::vector<bool> *>(field);
             Json list = Json::array();

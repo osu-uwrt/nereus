@@ -25,6 +25,7 @@ import yaml
 
 
 def _transforms(robot):
+    """The robot's frame transforms by child frame name."""
     return {t["child"]: t for t in robot["frames"]["transforms"]}
 
 
@@ -37,6 +38,7 @@ def _in_origin(transforms, child):
 
 
 def _com_in_origin(transforms):
+    """COM position in the origin frame, from the (unrotated) com -> origin transform."""
     t = transforms["origin"]
     if t["parent"] != "com" or t["orientation_wxyz"] != [1.0, 0.0, 0.0, 0.0]:
         raise ValueError("expected an unrotated com -> origin transform")
@@ -50,6 +52,7 @@ def _axis(q):
 
 
 def _same(params, key, name):
+    """The thrusters' shared value of parameter `key`; raises if any thruster differs."""
     values = {json.dumps(p["parameters"][key]) for p in params}
     if len(values) != 1:
         raise ValueError(
@@ -59,6 +62,7 @@ def _same(params, key, name):
 
 
 def vehicle(resolved, descriptions):
+    """riptide_descriptions robot YAML with mass, COM, base_link and thruster poses from the plant."""
     robot = resolved["robot"]
     tf = _transforms(robot)
     out = dict(descriptions)
@@ -66,6 +70,8 @@ def vehicle(resolved, descriptions):
     out["com"] = _com_in_origin(tf)
     if "base_link" in tf:
         out["base_link"] = _in_origin(tf, "base_link")
+
+    # Thruster poses: the descriptions and the bridge must list the thrusters in the same order.
     order = resolved["bridge"]["thrusters"]["order"]
     names = [t["name"] for t in descriptions["thrusters"]]
     if names != order:
@@ -86,6 +92,7 @@ def vehicle(resolved, descriptions):
 
 
 def hydrodynamics(resolved):
+    """riptide_mpc hydrodynamics (schema 1) from the plant body, the pool and the thrusters."""
     robot, pool = resolved["robot"], resolved["pool"]["parameters"]
     body = robot["body"]["parameters"]
     thrusters = robot["thrusters"]
@@ -97,6 +104,8 @@ def hydrodynamics(resolved):
     order = resolved["bridge"]["thrusters"]["order"]
     by_id = {t["id"]: t for t in thrusters}
     scales = resolved["bridge"]["thrusters"].get("input_scales", [1] * len(order))
+
+    # The MPC has one thruster dynamics model: every thruster must share these parameters.
     p = thrusters[0]["parameters"]
     for key in (
         "delay_s",
@@ -119,6 +128,8 @@ def hydrodynamics(resolved):
         values = [by_id[thruster]["parameters"][key] for thruster in order]
         if len(set(values)) > 1:
             per_thruster[name] = values
+
+    # Field names follow riptide_mpc's hydrodynamics schema; optional pool/body keys default to zero.
     return {
         "schema_version": 1,
         "robot": robot["id"],
@@ -152,6 +163,7 @@ def hydrodynamics(resolved):
             "reverse_max_force": p["reverse_limit_n"],
             "propeller_radius": p["propeller_radius_m"],
         },
+        # The bridge's per-thruster input scale folds into the MPC's efficiency.
         "thruster_efficiencies": [
             by_id[name]["parameters"]["efficiency"] * scale for name, scale in zip(order, scales)
         ],
@@ -165,6 +177,7 @@ def mpc_params(resolved, base):
     dvl = [s for s in resolved["robot"]["sensors"] if s["type"] == "reference_velocity"]
     if len(dvl) != 1:
         raise ValueError(f"expected one DVL (reference_velocity) sensor, found {len(dvl)}")
+    # Deep copy, then set dvl_latency under every node's parameters.
     out = json.loads(json.dumps(base))
     for node in out.values():
         node["ros__parameters"].setdefault("estimator", {})["dvl_latency"] = 0.0
@@ -187,6 +200,7 @@ def write(resolved_path, out_dir, descriptions_path, mpc_path):
 
 
 if __name__ == "__main__":
+    # Usage: the last line of the module docstring.
     if len(sys.argv) != 5:
         sys.exit(__doc__.strip().splitlines()[-1].strip())
     print("\n".join(write(*sys.argv[1:])))

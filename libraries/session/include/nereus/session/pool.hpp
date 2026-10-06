@@ -23,6 +23,7 @@ struct PoolFixtureBox {
     Eigen::Quaterniond orientation = Eigen::Quaterniond::Identity();
     bool on_floor = false, contact = false;
 };
+
 // A `mesh` fixture, placed like a box: `center` is the mesh origin (on the floor at x, y when only those are
 // given), `asset` the pool asset id.
 struct PoolFixtureMesh {
@@ -31,6 +32,7 @@ struct PoolFixtureMesh {
     Eigen::Quaterniond orientation = Eigen::Quaterniond::Identity();
     bool on_floor = false;
 };
+
 // A static contact box. `floor` marks the boxes that are the pool's floor (where a dropped prop lands "on the
 // floor"): every box generated from a floor profile, and any other box whose top face (centre z + half its z
 // size) lies within 1 mm of the flat floor at `depth_m` below the surface, which is how a flat pool's floor box
@@ -42,6 +44,7 @@ struct PoolContactBox {
     bool floor = false;
 };
 
+// The whole interpreted pool document.
 struct PoolModel {
     double surface_z = 0;  // parameters.water_level_m
     bool profiled = false; // the document has a floor_profile; otherwise `floor` is flat at depth_m

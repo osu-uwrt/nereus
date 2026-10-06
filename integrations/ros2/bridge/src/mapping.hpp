@@ -12,6 +12,7 @@
 
 namespace nereus::ros_bridge {
 
+// Compiled native -> ROS map: one step per destination field (plus header.frame_id when stamped).
 class Writer {
   public:
     // Applies every step to an initialised message of the compiled type.
@@ -21,6 +22,7 @@ class Writer {
   private:
     friend Writer compileWriter(const introspection::MessageMembers *, const Json &, const SpecTree &,
                                 const std::optional<std::string> &, const std::string &);
+    // Writes one destination field from the native values.
     struct Step {
         FieldPath path;
         std::function<void(void *target, const Value &values)> produce;
@@ -32,6 +34,7 @@ class Writer {
 Writer compileWriter(const introspection::MessageMembers *type, const Json &fields, const SpecTree &sources,
                      const std::optional<std::string> &frame_id, const std::string &where);
 
+// Compiled ROS -> native map with optional accept_if filters.
 class Reader {
   public:
     bool accepts(const void *message) const;     // may throw MappingError
@@ -40,21 +43,27 @@ class Reader {
   private:
     friend Reader compileReader(const introspection::MessageMembers *, const Json &,
                                 const std::map<std::string, Spec> &, const Json &, const std::string &);
+    // Reads one native argument from a ROS field.
     struct Step {
         std::string argument;
         FieldPath path;
         Spec spec;
         std::function<Value(const void *field)> read;
     };
+
+    // accept_if condition: the scalar field must equal `equals`.
     struct Filter {
         FieldPath path;
         Value equals;
         Dtype dtype;
     };
+
     std::vector<Step> steps_;
     std::vector<Filter> filters_;
 };
 
+// `arguments`: native argument specs the fields must provide exactly; `accept_if`: [{field, equals}] or
+// null.
 Reader compileReader(const introspection::MessageMembers *type, const Json &fields,
                      const std::map<std::string, Spec> &arguments, const Json &accept_if, const std::string &where);
 

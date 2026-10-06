@@ -6,6 +6,7 @@
 
 using namespace nereus::ros_viewer::host;
 
+// Both shipped pools (RoboSub and the RPAC dive well) are listed for Talos with their menu labels.
 TEST(ScenarioPacks, ListsEveryPoolWithItsLabel) {
     const auto packs = scenarioPacks();
     ASSERT_GE(packs.size(), 2u);
@@ -19,17 +20,20 @@ TEST(ScenarioPacks, ListsEveryPoolWithItsLabel) {
     EXPECT_TRUE(robosub && rpac);
 }
 
+// The menu label is the pool description up to its first comma, minus trailing periods; the id when empty.
 TEST(ScenarioPacks, Labels) {
     EXPECT_EQ(poolLabel("Ohio State RPAC dive well, 25 m x 56 ft.", "rpac"), "Ohio State RPAC dive well");
     EXPECT_EQ(poolLabel("RoboSub 2026 competition pool.", "robosub"), "RoboSub 2026 competition pool");
     EXPECT_EQ(poolLabel("", "plain"), "plain");
 }
 
+// Resolving a pack runs the Python pack tools and yields the scenario YAML (skipped when they aren't installed).
 TEST(ScenarioPacks, ResolvesAPack) {
     const auto packs = scenarioPacks();
     const auto rpac =
         std::find_if(packs.begin(), packs.end(), [](const auto &p) { return p.poolId == "rpac_divewell"; });
     ASSERT_NE(rpac, packs.end());
+
     std::string resolved;
     try {
         resolved = resolveScenarioPack(rpac->folder);
@@ -38,6 +42,7 @@ TEST(ScenarioPacks, ResolvesAPack) {
             GTEST_SKIP() << "the pack tools are not installed (./build.sh sets up .venv): " << error.what();
         throw;
     }
+
     const auto document = YAML::Load(resolved);
     EXPECT_EQ(document["pool"]["id"].as<std::string>(), "rpac_divewell");
     EXPECT_TRUE(document["asset_paths"]);

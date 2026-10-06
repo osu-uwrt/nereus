@@ -1,3 +1,4 @@
+// Scenario pack discovery for View > Pool, and running the Python pack resolver on one.
 #include "scenario_packs.hpp"
 #include <algorithm>
 #include <array>
@@ -13,6 +14,7 @@
 namespace nereus::ros_viewer::host {
 namespace fs = std::filesystem;
 namespace {
+// Single-quote for the shell, escaping embedded quotes as '\''.
 std::string quoted(const std::string &text) { // for /bin/sh
     std::string out = "'";
     for (const char c : text)
@@ -42,6 +44,8 @@ std::vector<ScenarioPack> scenarioPacks(const fs::path &scenarios) {
     std::error_code error;
     if (!fs::is_directory(root, error))
         return packs;
+
+    // Each subfolder with a scenario.yaml: read its pool and robot packs for the menu entry.
     for (const auto &entry : fs::directory_iterator(root, error)) {
         const auto file = entry.path() / "scenario.yaml";
         if (!fs::is_regular_file(file, error))
@@ -64,6 +68,8 @@ std::vector<ScenarioPack> scenarioPacks(const fs::path &scenarios) {
             // not a pack this viewer can offer (malformed or missing pool / robot)
         }
     }
+
+    // By pool label, then folder.
     std::sort(packs.begin(), packs.end(), [](const ScenarioPack &a, const ScenarioPack &b) {
         return a.poolLabel != b.poolLabel ? a.poolLabel < b.poolLabel : a.folder < b.folder;
     });
@@ -74,9 +80,13 @@ std::string resolveScenarioPack(const fs::path &folder) {
     const fs::path root = packContent().parent_path().parent_path(); // <source>/content/packs
     if (root.empty())
         throw std::runtime_error("this viewer was built without the pack content folder");
+
+    // The project's virtualenv Python when present.
     const fs::path venv = root / ".venv/bin/python";
     std::error_code error;
     const std::string python = fs::exists(venv, error) ? venv.string() : "python3";
+
+    // A unique temporary file for the resolver's output (mkstemp creates it; the resolver overwrites it).
     std::array<char, 64> name{};
     std::snprintf(name.data(), name.size(), "nereus_viewer_%d_XXXXXX", int(getpid()));
     const std::string pattern = (fs::temp_directory_path() / name.data()).string();
@@ -87,12 +97,16 @@ std::string resolveScenarioPack(const fs::path &folder) {
         throw std::runtime_error("cannot create a temporary file for the resolved scenario");
     close(fd);
     const fs::path out(path.data());
+
+    // cd <source> && PYTHONPATH=<source>/python/src[:existing] python -m nereus.packs resolve <folder> -o <out>
     const char *existing = std::getenv("PYTHONPATH");
     const std::string command =
         "cd " + quoted(root.string()) +
         " && PYTHONPATH=" + quoted((root / "python/src").string() + (existing ? std::string(":") + existing : "")) +
         " " + quoted(python) + " -m nereus.packs resolve " + quoted(folder.string()) + " -o " + quoted(out.string()) +
         " 2>&1";
+
+    // Run it, keeping the combined output; on failure report its last non-empty line.
     std::string output;
     if (FILE *pipe = popen(command.c_str(), "r")) {
         std::array<char, 512> buffer{};
@@ -110,6 +124,8 @@ std::string resolveScenarioPack(const fs::path &folder) {
         }
     } else
         throw std::runtime_error("cannot run the pack resolver");
+
+    // Read the resolved JSON and remove the temporary file.
     std::ifstream in(out);
     std::stringstream text;
     text << in.rdbuf();

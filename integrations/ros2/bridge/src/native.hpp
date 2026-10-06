@@ -20,6 +20,7 @@ class MappingError : public std::runtime_error {
   public:
     using std::runtime_error::runtime_error;
 };
+
 // Bridge configuration cannot run against this runtime and ROS installation.
 class BridgeError : public std::runtime_error {
   public:
@@ -42,6 +43,7 @@ struct Spec {
     }
     std::string describe() const;
 };
+// Common specs: scalars, and float arrays (vector3 [3], quaternion wxyz [4], matrix3 [3, 3]).
 Spec scalarSpec();  // float
 Spec integerSpec(); // int
 Spec booleanSpec();
@@ -79,11 +81,13 @@ struct Value {
     static Value time(std::int64_t ns);
     static Value array(std::vector<double> v);
     static Value map(std::map<std::string, Value> v);
+
     const Value &at(const std::string &key) const; // throws MappingError when absent
     double asDouble() const;                       // Float or Int
     std::int64_t asInt() const;
 };
 
+// One path segment: a name followed by zero or more [index] suffixes.
 struct PathToken {
     std::string name;
     std::vector<int> indexes;
@@ -100,6 +104,7 @@ class SourceRef {
     Value read(const Value &root) const;
 
   private:
+    // Map keys from the root, then the flat row-major slice [offset_, offset_ + count_) of an indexed array.
     std::vector<std::string> keys_;
     std::size_t offset_{0}, count_{1};
     std::vector<int> shape_; // remaining shape after indexes
@@ -107,6 +112,7 @@ class SourceRef {
     bool indexed_{false};
 };
 
+// Whether `actual` can fill `expected`: int widens to float, and -1 dimensions match any size.
 bool compatible(const Spec &expected, const Spec &actual);
 
 } // namespace nereus::ros_bridge

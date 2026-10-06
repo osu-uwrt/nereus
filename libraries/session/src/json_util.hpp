@@ -13,17 +13,21 @@
 #include <string>
 
 namespace nereus::session::detail {
+
 constexpr double kPi = 3.14159265358979323846;
+
 // CPython math.radians: x * (pi / 180).
 inline double radians(double degrees) {
     return degrees * (kPi / 180.0);
 }
 
+// Typed readers; `what` names the field in the error message.
 inline double num(const Json &value, const std::string &what) {
     if (!value.is_number())
         throw std::invalid_argument(what + " must be a number");
     return value.get<double>();
 }
+
 inline Eigen::VectorXd vec(const Json &value, std::size_t size, const std::string &what) {
     if (!value.is_array() || value.size() != size)
         throw std::invalid_argument(what + " must contain " + std::to_string(size) + " values");
@@ -32,13 +36,18 @@ inline Eigen::VectorXd vec(const Json &value, std::size_t size, const std::strin
         out[static_cast<Eigen::Index>(i)] = num(value[i], what);
     return out;
 }
+
 inline Eigen::Vector3d vec3(const Json &value, const std::string &what) {
     return vec(value, 3, what);
 }
+
+// From [w, x, y, z]; not normalised here.
 inline Eigen::Quaterniond quat(const Json &value, const std::string &what) {
     const Eigen::VectorXd q = vec(value, 4, what);
     return Eigen::Quaterniond(q[0], q[1], q[2], q[3]);
 }
+
+// An n x n matrix given as a list of rows.
 inline Eigen::MatrixXd matrix(const Json &value, std::size_t n, const std::string &what) {
     if (!value.is_array() || value.size() != n)
         throw std::invalid_argument(what + " must be a " + std::to_string(n) + "x" + std::to_string(n) + " matrix");
@@ -47,9 +56,11 @@ inline Eigen::MatrixXd matrix(const Json &value, std::size_t n, const std::strin
         out.row(static_cast<Eigen::Index>(r)) = vec(value[r], n, what).transpose();
     return out;
 }
+
 inline spatial::Pose makePose(const Json &position, const Json &orientation, const std::string &what) {
     return {vec3(position, what), quat(orientation, what)};
 }
+
 // Pose.compose of the Python binding: both operands and the result must be valid rigid poses.
 inline spatial::Pose composeChecked(const spatial::Pose &parent, const spatial::Pose &child) {
     spatial::validate(parent);
@@ -58,16 +69,20 @@ inline spatial::Pose composeChecked(const spatial::Pose &parent, const spatial::
     spatial::validate(result);
     return result;
 }
+
 inline spatial::Pose inverseChecked(const spatial::Pose &pose) {
     spatial::validate(pose);
     return spatial::inverse(pose);
 }
+
+// Rotate v by q, rejecting an invalid rotation.
 inline Eigen::Vector3d rotate(const Eigen::Quaterniond &q, const Eigen::Vector3d &v) {
     spatial::Pose pose;
     pose.rotation = q;
     spatial::validate(pose);
     return spatial::apply(pose, v);
 }
+
 // Python repr of a string, as used in the reference's error messages.
 inline std::string repr(const std::string &s) {
     return "'" + s + "'";

@@ -16,11 +16,13 @@
 
 namespace nereus::ros_bridge {
 
+// One finished camera output ready to publish.
 struct EncodedImage {
     std::string stream;               // bridge stream id (image or camera_info)
     std::shared_ptr<Message> message; // already filled; the node serializes and publishes it
 };
 
+// Camera acquisition runtime the node drives (session_camera_sink.cpp implements it).
 class CameraSink {
   public:
     virtual ~CameraSink() = default;
@@ -45,6 +47,7 @@ struct CameraSinkOptions {
     bool always{false}; // render every pack output regardless of subscribers (reproducible runs)
     int supersample{1}; // anti-aliasing factor, 1..4 (session_cameras::Options::supersample)
 };
+
 class SessionPort;
 // Builds the camera runtime for the given camera sensor ids of a scenario; nullptr when this
 // build has no camera acquisition (the bridge then requires --no-cameras). Throws

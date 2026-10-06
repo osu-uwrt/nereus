@@ -1,3 +1,6 @@
+// The operator panels against mock ROS endpoints: mapping, actuators, run tracking, simulation control, telemetry,
+// recording and electrical providers, then drawing the panels, the toolbar's Simulation window and the scorecard.
+// argv[1]: the panels config; argv[2]: where the toolbar and its providers come from (ctest passes the same file).
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panels/ros_providers.hpp"
 #include <cassert>
@@ -43,11 +46,13 @@ using Goal = rclcpp_action::ServerGoalHandle<Cal>;
 #endif
 using Target = riptide_msgs2::srv::MappingTarget;
 using Reset = std_srvs::srv::Trigger;
+
 int main(int argc, char **argv) {
     setenv("ROS_DOMAIN_ID", "184", 1);
     setenv("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp", 1);
     rclcpp::init(argc, argv);
     auto ns = "new_panels_" + std::to_string(getpid());
+    // A private ROS domain and a per-process namespace; `node` plays every robot / simulator endpoint.
     auto node = std::make_shared<rclcpp::Node>("mock", "/" + ns);
     Registry registry;
     registerPanels(registry);
@@ -82,6 +87,7 @@ int main(int argc, char **argv) {
                                                              },
                                                              true, false});
         }
+
     const auto toolsConfig = YAML::LoadFile(argv[2]);
     for (const auto &entry : toolsConfig["providers"])
         config["providers"][entry.first.as<std::string>()] = YAML::Clone(entry.second);
@@ -101,6 +107,9 @@ int main(int argc, char **argv) {
     config["toolbar"] = toolbar;
     for (auto target : config["providers"]["bags"]["options"]["targets"]) // bag targets: never ssh to the robot
         target["ssh"] = YAML::Load("[\"false\"]");
+
+    // The simulation provider talks to the mock node: real_time_factor parameter (3 is rejected), sync and reset
+    // services (reset never answers on its own).
     config["providers"]["simulation"]["options"]["node"] = "mock";
     config["providers"]["simulation"]["options"]["request_timeout"] = .75;
     node->declare_parameter<double>("real_time_factor", 1.0);
@@ -159,6 +168,8 @@ int main(int argc, char **argv) {
     mapCfg["status_timeout"] = .3;
     config["providers"]["actuators"]["options"]["status_timeout"] = .3;
     config["providers"]["run"]["options"]["status_timeout"] = .3;
+
+    // A task document with a scorecard title and run options; the run window starts open.
     Context ctx{ns, "test_world", false, false};
     ctx.documents["task"] = YAML::Load(R"(
 ui:
@@ -170,6 +181,7 @@ ui:
   manual_adjustment: true
 )");
     ctx.initialWindows = {"run"};
+
     auto composition = std::make_unique<Composition>(config, ctx, registry);
     auto mapping = std::dynamic_pointer_cast<Mapping>(composition->providers().at("mapping"));
     auto actuators = std::dynamic_pointer_cast<Actuators>(composition->providers().at("actuators"));
@@ -218,6 +230,8 @@ ui:
     auto tareServer = rclcpp_action::create_server<TareGyro>(
         node, "gyro/tare", [](const auto &, auto) { return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE; },
         [](auto) { return rclcpp_action::CancelResponse::ACCEPT; }, [&](auto accepted) { tareGoal = accepted; });
+
+    // A telemetry reading by id (asserts it exists).
     const auto reading = [&](const std::string &id) {
         for (const auto &r : telemetry->state().readings)
             if (r.id == id)
@@ -226,6 +240,8 @@ ui:
         return Reading{};
     };
     assert(reading("fog").level == Level::Stale && reading("fog").value == "--" && reading("cpu").value == "--");
+
+    // Telemetry sources: FOG status, batteries and the aggregated diagnostics with core temperatures.
     auto gyroPub = node->create_publisher<riptide_msgs2::msg::GyroStatus>("gyro/status", 10);
     auto diagPub = node->create_publisher<diagnostic_msgs::msg::DiagnosticArray>("diagnostics_agg", 10);
     riptide_msgs2::msg::GyroStatus gyroMsg;
@@ -259,6 +275,7 @@ ui:
         pair.value = value;
         core.values.push_back(pair);
     }
+
     // Recording: stop services (DFC never answers), the picture taker, and SVO start when zed_msgs exists.
     int ffcStops = 0, captures = 0;
     auto ffcStop = node->create_service<Reset>("ffc/zed_node/stop_svo_rec",
@@ -285,6 +302,9 @@ ui:
             reply->success = true;
         });
 #endif
+
+    // Mapping, actuator and run endpoints: status publishers, command subscribers, the target / reset services and
+    // (with chameleon) the tag-calibration action.
     auto mappingPub = node->create_publisher<riptide_msgs2::msg::MappingTargetInfo>("mapping_state", 10);
     auto actuatorPub =
         node->create_publisher<riptide_msgs2::msg::ActuatorStatus>("state/actuator/status", rclcpp::SensorDataQoS());
@@ -339,7 +359,9 @@ ui:
             ++calCount;
         });
 #endif
+
     ros.start();
+    // Spins the mock node for `seconds`, republishing every status message each 5 ms unless `publish` is false.
     auto spin = [&](double seconds, bool publish = true) {
         auto end = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
         while (std::chrono::steady_clock::now() < end) {
@@ -363,6 +385,7 @@ ui:
             std::this_thread::sleep_for(5ms);
         }
     };
+
     spin(1.2);
 #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
     assert(mapping->state().fresh && mapping->state().calibrationReady);
@@ -370,6 +393,7 @@ ui:
     assert(mapping->state().fresh);
 #endif
     assert(run->state().fresh && actuators->state().fresh);
+
     // FOG: temperature and the driver's flags; CPU: the hottest core value with the status level.
     assert(reading("fog").value == "41.5\u00B0C" && reading("fog").level == Level::Ok);
     assert(reading("cpu").value == "72.0\u00B0C" && reading("cpu").level == Level::Warn);
@@ -381,6 +405,7 @@ ui:
     stbdMsg.soc = 19;
     spin(.1);
     assert(reading("stbd").level == Level::Error && reading("port").value == "87%");
+
     // Both packs back to back, as the robot sends them: neither may displace the other.
     portMsg.soc = 64;
     stbdMsg.soc = 63;
@@ -391,6 +416,8 @@ ui:
     }
     assert(reading("port").value == "64%" && reading("stbd").value == "63%");
     stbdMsg.soc = 19;
+
+    // FOG warnings and errors from temperature and the driver's flags; CPU error and stale levels.
     gyroMsg.temperature = 60;
     spin(.1);
     assert(reading("fog").level == Level::Warn);
@@ -412,6 +439,7 @@ ui:
     core.level = diagnostic_msgs::msg::DiagnosticStatus::STALE;
     spin(.1);
     assert(reading("cpu").level == Level::Stale);
+
     // Recording and capture.
     auto rec = recording->state();
     assert(rec.captureReady && rec.cameras.size() == 2 && rec.cameras[0].stopReady && rec.cameras[1].stopReady);
@@ -447,6 +475,7 @@ ui:
     recording->start("ffc", "/home/test/svos/test_ffc.svo2");
     assert(!recording->state().svoSupported && !recording->state().cameras[0].pending);
 #endif
+
     // Electrical: power commands publish their configured value; power cuts are marked for confirmation.
     auto elec = electrical->state();
     assert(elec.commands.size() == 11 && elec.hasImu && elec.hasTare && elec.hasPinger && elec.hasIvc);
@@ -459,6 +488,7 @@ ui:
     electrical->command("nope");
     spin(.15);
     assert((electricalCommands == std::vector<uint8_t>{4, 9}));
+
     // The pinger enable state is re-sent every second, and at once when it changes.
     assert(pingerEnables >= 1 && lastPingerEnable);
     electrical->setPingerEnabled(false);
@@ -478,6 +508,7 @@ ui:
     spin(.15);
     elec = electrical->state();
     assert(pingerFrequencies == std::vector<int>{30} && elec.pingerSelected == 30 && elec.pingerAmplitude == .25f);
+
     // IVC: header in the top 3 bits, status / command in the low 5; out-of-range sends are dropped.
     electrical->sendIvc(1, 2);
     electrical->sendIvc(2, 17);
@@ -499,6 +530,7 @@ ui:
     assert(elec.ivcLog.size() == 4 && logged("SEND  talos_cmd_talos_status: talos_state_tank_go  (1-2)") &&
            logged("SEND  talos_cmd_fish_heading: 17") &&
            logged("RECV  tank_cmd_tank_status: talos_state_deploy_tank") && logged("ACK "));
+
     // IMU registers: the reply's register fields fill the value; VectorNav error replies are reported.
     electrical->readRegister("05");
     electrical->readRegister("06"); // one request at a time
@@ -515,6 +547,7 @@ ui:
     elec = electrical->state();
     assert(imuRequests.size() == 3 && imuRequests[1] == "$VNWRG,05,9600" && imuRequests[2] == "$VNWNV" &&
            elec.registerMessage.find("IMU error") != std::string::npos && elec.registerValue == "115200");
+
     // Mag cal: progress from the shrinking deviation; FOG tare: the goal's samples / timeout and abort reason.
     electrical->startMagCal();
     spin(.2);
@@ -541,7 +574,12 @@ ui:
     tareGoal.reset();
     spin(.15);
     assert(!electrical->state().tareRunning && electrical->state().tareMessage == "Tare aborted: drift too high");
+
+    // Nothing so far may have commanded the mapping, actuator or run endpoints.
     assert(calCount == 0 && armCount == 0 && fireCount == 0 && resetCount == 0 && runCommands.empty());
+
+    // Simulation speed: set through the real_time_factor parameter; rejected and out-of-range rates are not applied,
+    // and outside changes are picked up. Pause keeps the speed to resume at.
     assert(simulation->state().connected && simulation->state().rate == 1 && speedRequests == 0);
     simulation->setRate(0);
     spin(.7);
@@ -559,6 +597,8 @@ ui:
     node->set_parameter(rclcpp::Parameter("real_time_factor", .5));
     spin(.7);
     assert(simulation->state().rate == .5); // observe external speed changes as well
+
+    // Pause, sync while paused, resume at the last nonzero speed.
     simulation->setPaused(true);
     spin(.7);
     assert(simulation->state().rate == 0 && simulation->state().resumeRate == .5);
@@ -569,6 +609,8 @@ ui:
     simulation->setPaused(false);
     spin(.7);
     assert(simulation->state().rate == .5); // resume the last nonzero speed
+
+    // Simulation reset: one request at a time, a failure reply is shown, no reply times out (late replies ignored).
     simulation->reset();
     simulation->reset();
     spin(.1);
@@ -587,6 +629,7 @@ ui:
     resetSimService->send_response(*resetSimHeader, simResetReply);
     spin(.1);
     assert(simulation->state().operationMessage.find("timed out") != std::string::npos);
+
     // Only Run tracking subscribes to simulation feedback; Actuators does not.
     assert(lightPub->get_subscription_count() == 1 && eventPub->get_subscription_count() == 1 &&
            jointsPub->get_subscription_count() == 1);
@@ -617,17 +660,23 @@ ui:
         assert(reading.first != "test_target" && reading.first != "Jaw gap");
     for (const auto &action : actuators->state().actions)
         assert(action.id != "reset");
+
+    // A task reset event clears the run's event log.
     std_msgs::msg::String resetEvent;
     resetEvent.data = "{kind: tasks, result: reset, target: all}";
     eventPub->publish(resetEvent);
     spin(.1);
     assert(run->state().events.size() == 1);
+
+    // Mapping: setting a target only sends the request; the displayed target comes from the status topic.
     mapping->setTarget("new_target", false);
     spin(.2);
     assert(targetCount == 1 && targetRequest.target_info.target_object == "new_target" &&
            !targetRequest.target_info.lock_map);
     assert(mapping->state().target == "observed" && mapping->state().locked); // request never fabricates observed state
 #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
+
+    // Tag calibration: goal parameters and feedback, success, cancel before the goal is accepted, rejection.
     mapping->calibrate("test_world", "test_tag", 17);
     spin(.15);
     assert(goal && goal->get_goal()->samples == 17 && goal->get_goal()->monitor_child == "test_tag");
@@ -652,6 +701,8 @@ ui:
     assert(!mapping->state().calibrating && mapping->state().calibrationMessage == "Calibration rejected");
     reject = false;
 #endif
+
+    // Mapping reset: a failure reply is shown; no reply times out, and a late reply does not overwrite that.
     mapping->reset();
     spin(.1);
     assert(resetHeader);
@@ -670,6 +721,8 @@ ui:
     resetHeader.reset();
     spin(.1);
     assert(mapping->state().resetMessage.find("timed out") != std::string::npos);
+
+    // Torpedo fires only once the actuators report armed; arm toggles.
     actuators->command("torpedo");
     actuators->command("arm");
     spin(.15);
@@ -680,6 +733,8 @@ ui:
     actuators->command("arm");
     spin(.15);
     assert(fireCount == 1 && armCount == 2 && !lastArm);
+
+    // Run commands go out as JSON with the run options; a start while the run is already running is dropped.
     run->command(YAML::Load("{action: start, role: 'quoted \" role', coin: true, amount: 2.5}"));
     run->reset();
     spin(.15);
@@ -695,18 +750,24 @@ ui:
     run->command(YAML::Load("{action: stop}"));
     spin(.1);
     assert(runCommands.size() == 2);
+
+    // With the status topics silent the providers go stale and keep their last values.
     spin(.5, false);
     assert(!mapping->state().fresh && !actuators->state().fresh && !run->state().fresh);
     assert(reading("fog").level == Level::Stale && reading("fog").value == "41.0\u00B0C"); // last value, muted
     assert(reading("stbd").level == Level::Stale && reading("stbd").value == "19%");
+
+    // Stale: commands are refused.
     actuators->command("torpedo");
     run->command(YAML::Load("{action: stop}"));
     run->reset();
     spin(.1, false);
     assert(fireCount == 1 && runCommands.size() == 2 && resetCount == 1);
+
     scoreMsg.data = "{running: true}";
     spin(.1);
     assert(!run->state().fresh && run->state().message.find("Invalid run score") != std::string::npos);
+
     // Draw all panels (including empty/preview snapshots) as windows, with the toolbar in a narrow window.
     ImGui::CreateContext();
     auto &io = ImGui::GetIO();
@@ -732,6 +793,8 @@ ui:
     };
     for (int frame = 0; frame < 4; ++frame)
         draw(*composition);
+
+    // Click the Simulation toolbar button.
     const auto anchor = simulationButtonMin;
     const auto bottom = simulationButtonMax.y + ImGui::GetStyle().ItemSpacing.y;
     io.AddMousePosEvent(anchor.x + 10, anchor.y + 10);
@@ -773,6 +836,8 @@ ui:
     draw(*composition);
     draw(*composition);
     assert(!simulationWindow());
+
+    // The scorecard window is open and fully inside the display (11 px margin), even on a small display.
     auto checkScorecard = [&] {
         bool found = false;
         for (const auto *window : ImGui::GetCurrentContext()->Windows)
@@ -792,6 +857,8 @@ ui:
         draw(*composition);
     checkScorecard();
     io.DisplaySize = {1000, 900};
+
+    // A preview composition (no providers) and one without a task document draw too.
     ctx.preview = true;
     Composition preview(config, ctx, registry);
     assert(preview.providers().empty());
@@ -799,6 +866,7 @@ ui:
     ctx.documents.clear();
     Composition noProfile(config, ctx, registry);
     draw(noProfile);
+
     ImGui::DestroyContext();
     ros.stop();
     composition.reset();

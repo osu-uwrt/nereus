@@ -1,3 +1,5 @@
+// Thruster rotor animation: forces -> rpm through the propeller law, integrated against the ROS clock with a
+// receive timeout, and the per-rotor spin transform.
 #include "thruster_visuals.hpp"
 #include <gtest/gtest.h>
 #include <cmath>
@@ -8,9 +10,13 @@ namespace {
 bool near(double a, double b) {
     return std::abs(a - b) < 1e-6;
 }
+
+// Talos's force-array order (bridge thrusters.order).
 const std::vector<std::string> kOrder{"VUS", "VUP", "HUS", "HUP", "HLS", "HLP", "VLS", "VLP"};
 } // namespace
 
+// advance(now) takes the ROS clock time: angles only grow while time moves forward within .5 s of the last
+// force sample; a clock that goes backwards resets every rotor.
 TEST(HostThrusterVisuals, RpmIntegrationTimeoutAndGeometry) {
     ThrusterVisuals absent;
     ASSERT_TRUE(absent.rotors.empty() && absent.topic.empty());
@@ -18,18 +24,22 @@ TEST(HostThrusterVisuals, RpmIntegrationTimeoutAndGeometry) {
                             kOrder);
     ASSERT_TRUE(visuals.rotors.size() == 8);
     ASSERT_TRUE(visuals.rotors[3].inputIndex == 3 && visuals.rotors[3].asset == "rotor_HUP");
+
     // Recorded expectations from the T200 propeller law (K_T = a + b rpm, separate forward/reverse).
     ASSERT_TRUE(near(visuals.rpm(4), 1024.9989755045349));
     ASSERT_TRUE(near(visuals.rpm(-4), -1152.0447935214627));
     ASSERT_TRUE(near(visuals.rpm(24), 2448.8169288985055));
     ASSERT_TRUE(near(visuals.rpm(-24), -2739.711837643229));
     ASSERT_TRUE(visuals.rpm(0) == 0 && visuals.rpm(.011) >= 0 && visuals.rpm(-.011) <= 0);
+
+    // Angle = rpm * pi / 30 (rad/s) * elapsed time, wrapped to one turn.
     ASSERT_TRUE(visuals.receive(std::vector<float>(8, 4), 0));
     visuals.advance(.01);
     ASSERT_TRUE(near(visuals.rotors[1].angle, 1024.9989755045349 * glm::pi<double>() / 30. * .01));
     visuals.advance(.18); // Preserve full turns between render frames, without slowing or clamping.
     ASSERT_TRUE(near(visuals.rotors[1].angle,
                      std::remainder(1024.9989755045349 * glm::pi<double>() / 30. * .18, 2 * glm::pi<double>())));
+
     visuals.advance(-1); // Reset before testing timing with an independent symmetric fixture: rpm = sqrt(F / 3e-4),
     visuals.forwardKt = visuals.reverseKt = {1, 0}; // slow enough that no angle below wraps.
     visuals.ktScale = 3e-4;
@@ -37,6 +47,8 @@ TEST(HostThrusterVisuals, RpmIntegrationTimeoutAndGeometry) {
         return std::copysign(std::sqrt(std::abs(force) / 3e-4), force) * glm::pi<double>() / 30. * dt;
     };
     const double timedOut = std::remainder(-turn(2, .5), 2 * glm::pi<double>()); // VUS after a full .5 s window
+
+    // Each rotor spins with its own force and direction; unforced rotors stay still.
     std::vector<float> forces{2, 2, -3, 0, 0, 0, 0, 0};
     ASSERT_TRUE(visuals.receive(forces, 0));
     visuals.advance(.1);
@@ -47,6 +59,8 @@ TEST(HostThrusterVisuals, RpmIntegrationTimeoutAndGeometry) {
         ASSERT_TRUE(near(visuals.rotors[i].angle, 0));
     visuals.advance(.1); // Pausing the ROS clock freezes the animation.
     ASSERT_TRUE(near(visuals.rotors[0].angle, -turn(2, .1)));
+
+    // The same forces reversed for the same .1 s unwind every rotor back to zero.
     for (auto &f : forces)
         f = -f;
     ASSERT_TRUE(visuals.receive(forces, .1));
@@ -57,6 +71,7 @@ TEST(HostThrusterVisuals, RpmIntegrationTimeoutAndGeometry) {
     visuals.advance(.4);
     ASSERT_TRUE(near(visuals.rotors[0].angle, 0));
 
+    // Wrong-sized and non-finite packets are rejected; the last good one times out after .5 s.
     forces.assign(8, 2);
     ASSERT_TRUE(visuals.receive(forces, .4));
     ASSERT_TRUE(!visuals.receive({1, 2}, .6));
@@ -77,6 +92,7 @@ TEST(HostThrusterVisuals, RpmIntegrationTimeoutAndGeometry) {
     visuals.advance(.201);
     ASSERT_TRUE(near(visuals.rotors[0].angle, -turn(100, .001))); // No artificial display speed cap.
 
+    // transform() spins about the rotor's own pivot and axis: the shaft stays put, blades keep their radius.
     for (auto &rotor : visuals.rotors) {
         rotor.angle = .7;
         auto matrix = rotor.transform();
@@ -93,6 +109,7 @@ TEST(HostThrusterVisuals, RpmIntegrationTimeoutAndGeometry) {
     }
 }
 
+// Every rotor in the visuals document must name a thruster in the bridge order.
 TEST(HostThrusterVisuals, RotorNamingAnUnknownThrusterIsRejected) {
     const auto config = YAML::LoadFile(std::string(NEREUS_VIEWER_CONTENT) + "/talos_uwrt_thruster_visuals.yaml");
     EXPECT_THROW(ThrusterVisuals(config, {"VUS", "VUP", "HUS"}), std::invalid_argument);

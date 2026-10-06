@@ -5,8 +5,12 @@
 
 namespace nereus::simulation {
 
+// FixedAxis: translation only, orientation unchanged. Finned: also rotates under buoyancy and drag torques and
+// angular damping.
 enum class PayloadModel { FixedAxis, Finned };
 
+// A robot-pack projectile: capsule length/radius (m), mass (kg), displaced volume (m^3), added mass (kg),
+// quadratic drag coefficients, angular damping (N m s) and launch spring energy (J).
 struct PayloadParameters {
     PayloadModel model{PayloadModel::FixedAxis};
     double mass{1.0};
@@ -25,6 +29,7 @@ struct PayloadParameters {
     double spring_energy{0.0};
 };
 
+// Payload pose and velocities in the world frame.
 struct PayloadState {
     Eigen::Vector3d position{Eigen::Vector3d::Zero()};              // Mesh center, world metres.
     Eigen::Vector3d velocity{Eigen::Vector3d::Zero()};              // COM velocity, world m/s.
@@ -43,15 +48,19 @@ struct PayloadEnvironment {
 class PayloadDynamics {
   public:
     explicit PayloadDynamics(PayloadParameters parameters);
+
     const PayloadParameters &parameters() const noexcept {
         return parameters_;
     }
+
     // dt must be finite and positive. Inputs are unchanged, including on failure.
     // Finned integration resolves angular damping with up to 100000 RK4 substeps;
     // larger requests are rejected. Orientation must be unit within 1e-6.
     PayloadState advance(const PayloadState &state, const PayloadEnvironment &environment, double dt) const;
+    // Launch speed (m/s) the spring energy gives: sqrt(2E / (mass + added mass)).
     double launch_speed(const PayloadEnvironment &environment) const;
     // Axis must be unit within 1e-6. Returns world-axis capsule support distances.
+
     Eigen::Vector3d support_extent(const Eigen::Vector3d &axis) const;
 
   private:

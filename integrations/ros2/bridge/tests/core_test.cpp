@@ -18,8 +18,10 @@
 using namespace bridge_test;
 
 namespace {
+// 90 degree yaw about +z.
 const Eigen::Quaterniond kYaw90(std::sqrt(0.5), 0, 0, std::sqrt(0.5));
 
+// defaultBridge() with per-stream key overrides by stream id; a null change removes the stream.
 Json withStreams(const std::map<std::string, Json> &changes) {
     Json bridge = defaultBridge(), streams = Json::array();
     for (const auto &stream : bridge["streams"]) {
@@ -37,6 +39,8 @@ Json withStreams(const std::map<std::string, Json> &changes) {
     return bridge;
 }
 
+// robot_localization SetPose service that places the robot from the request pose. `becomes_start` makes
+// the pose the reset target; `align` also requests estimator alignment.
 Json setPoseService(bool becomes_start = true, bool align = false) {
     return {{"id", "set_pose"},
             {"service", "set_pose"},
@@ -56,6 +60,8 @@ Json setPoseService(bool becomes_start = true, bool align = false) {
               {"becomes_start_pose", becomes_start},
               {"align_estimator", align}}}};
 }
+
+// Trigger service that returns the robot to its start pose.
 Json resetService() {
     return {{"id", "reset"},
             {"service", "reset"},
@@ -64,6 +70,8 @@ Json resetService() {
             {"request", Json::object()},
             {"response", {{"success", {{"from", "accepted"}}}, {"message", {{"from", "message"}}}}}};
 }
+
+// Replaces the bridge services list.
 Json withServices(std::vector<Json> services, Json bridge = defaultBridge()) {
     bridge["services"] = Json::array();
     for (auto &service : services)
@@ -71,10 +79,12 @@ Json withServices(std::vector<Json> services, Json bridge = defaultBridge()) {
     return bridge;
 }
 
+// FakePort plus a BridgeCore over it; `selected` are the sensor ids the port reports as selected.
 struct Rig {
     session::ResolvedScenario resolved;
     FakePort port;
     std::unique_ptr<BridgeCore> core;
+
     explicit Rig(const Json &bridge = defaultBridge(), const Json &robot = defaultRobot(),
                  std::vector<std::string> selected = {"alt"}, Lookup lookup = {})
         : resolved(makeScenario(bridge, robot)) {
@@ -83,6 +93,7 @@ struct Rig {
     }
 };
 
+// Runs fn and returns the BridgeError message, or "<no error>" if nothing was thrown.
 template <class Fn> std::string bridgeError(Fn &&fn) {
     try {
         fn();
@@ -92,22 +103,30 @@ template <class Fn> std::string bridgeError(Fn &&fn) {
     return "<no error>";
 }
 
+// An introspected message of `type` (T only names the C++ type callers cast to).
 template <class T> std::shared_ptr<Message> makeMessage(const char *type) {
     return std::make_shared<Message>(MessageType::get(type));
 }
+
 std::shared_ptr<Message> boolMessage(bool value) {
     auto message = makeMessage<std_msgs::msg::Bool>("std_msgs/msg/Bool");
     static_cast<std_msgs::msg::Bool *>(message->data())->data = value;
     return message;
 }
+
+// A Float64MultiArray carrying `values`.
 std::shared_ptr<Message> floats(std::vector<double> values) {
     auto message = makeMessage<std_msgs::msg::Float64MultiArray>("std_msgs/msg/Float64MultiArray");
     static_cast<std_msgs::msg::Float64MultiArray *>(message->data())->data = std::move(values);
     return message;
 }
+
+// Delivers a message to a subscribe stream and returns what the core publishes in response.
 std::vector<Publication> receive(Rig &rig, const std::string &stream, const std::shared_ptr<Message> &message) {
     return rig.core->receive(stream, message->data());
 }
+
+// A SetPose request for position p and orientation q in `frame`.
 robot_localization::srv::SetPose::Request poseRequest(const std::string &frame, Eigen::Vector3d p,
                                                       Eigen::Quaterniond q = Eigen::Quaterniond::Identity()) {
     robot_localization::srv::SetPose::Request request;
@@ -125,15 +144,19 @@ robot_localization::srv::SetPose::Request poseRequest(const std::string &frame, 
 
 // ------------------------------------------------------------------ construction
 
+// A sensor stream rate_hz must equal the sensor rate (alt has a 20 ms period, i.e. 50 Hz).
 TEST(Construction, SensorRateMismatchRaises) {
     EXPECT_NE(bridgeError([] { Rig rig(withStreams({{"altitude", {{"rate_hz", 49}}}})); }).find("rate_hz"),
               std::string::npos);
 }
+
 TEST(Construction, UnknownNativeEndpointRaises) {
     EXPECT_NE(
         bridgeError([] { Rig rig(withStreams({{"ticker", {{"native", "state:unknown"}}}})); }).find("state:unknown"),
         std::string::npos);
 }
+
+// Sensor streams need the sensor selected on the port and declared on the robot.
 TEST(Construction, UnselectedAndUnknownSensorsRaise) {
     EXPECT_NE(bridgeError([] { Rig rig(defaultBridge(), defaultRobot(), {}); }).find("not selected"),
               std::string::npos);
@@ -142,11 +165,15 @@ TEST(Construction, UnselectedAndUnknownSensorsRaise) {
               }).find("unknown robot sensor"),
               std::string::npos);
 }
+
+// The core refuses streams that carry an `image` block.
 TEST(Construction, ImageStreamsAreNotExecuted) {
     EXPECT_NE(
         bridgeError([] { Rig rig(withStreams({{"ticker", {{"image", {{"encoding", "rgb8"}}}}}})); }).find("image"),
         std::string::npos);
 }
+
+// Timers and the clock cannot run faster than the 500 Hz physics step.
 TEST(Construction, FastTimersAndClocksRaise) {
     EXPECT_NE(bridgeError([] { Rig rig(withStreams({{"ticker", {{"rate_hz", 1000}}}})); }).find("physics step rate"),
               std::string::npos);
@@ -154,6 +181,8 @@ TEST(Construction, FastTimersAndClocksRaise) {
     bridge["clock"]["rate_hz"] = 1000;
     EXPECT_NE(bridgeError([&] { Rig rig(bridge); }).find("clock"), std::string::npos);
 }
+
+// thrusters.order must be a permutation, a partial reject list is refused, and the block is required.
 TEST(Construction, ThrusterBlockValidation) {
     Json bridge = defaultBridge();
     bridge["thrusters"]["order"] = {"c", "a", "a"};
@@ -165,16 +194,20 @@ TEST(Construction, ThrusterBlockValidation) {
     bridge.erase("thrusters");
     EXPECT_NE(bridgeError([&] { Rig rig(bridge); }).find("thrusters block"), std::string::npos);
 }
+
+// Field-map compile errors surface as BridgeError.
 TEST(Construction, InvalidFieldMapIsABridgeError) {
     EXPECT_NE(
         bridgeError([] { Rig rig(withStreams({{"altitude", {{"fields", {{"data", {{"from", "reading.nope"}}}}}}}})); }),
         "<no error>");
 }
+
 TEST(Construction, EpochAndWorldFrameComeFromConfiguration) {
     Rig rig;
     EXPECT_EQ(rig.core->worldFrame(), kWorld);
     EXPECT_EQ(rig.core->clockNs(), kEpochNs);
 }
+
 TEST(Construction, UnsupportedServiceTypeAndActionRaise) {
     Json service = resetService();
     service["id"] = "teleport";
@@ -185,6 +218,8 @@ TEST(Construction, UnsupportedServiceTypeAndActionRaise) {
     EXPECT_NE(bridgeError([&] { Rig rig(withServices({service})); }).find("not supported by this bridge"),
               std::string::npos);
 }
+
+// kill.state_stream must name a kill-event stream (altitude is a sensor stream).
 TEST(Construction, KillBindingsMustMatchEndpoints) {
     Json bridge = defaultBridge();
     bridge["streams"].push_back(publishStream("kill_dup", "std_msgs/msg/Bool", "event:robot.kill_changed",
@@ -195,6 +230,7 @@ TEST(Construction, KillBindingsMustMatchEndpoints) {
 
 // ------------------------------------------------------------------ stepping
 
+// One step yields one clock tick; samples are stamped at acquisition time and empty readings are skipped.
 TEST(Stepping, ClockPrecedesDataAndDataUsesAcquisitionTime) {
     Rig rig;
     rig.port.queue = {altSample(500'000, -1.5), altSample(1'000'000, std::nullopt), altSample(1'500'000, -2.5)};
@@ -224,6 +260,7 @@ TEST(Stepping, UnavailableSamplesAreCountedNotPublished) {
     EXPECT_EQ(rig.core->counters().published.at("altitude_stamped"), 1u);
 }
 
+// At the 500 Hz clock rate every step publishes epoch + elapsed time.
 TEST(Stepping, ClockStampFollowsElapsedTimeEveryStep) {
     Rig rig;
     std::vector<std::int64_t> stamps;
@@ -237,6 +274,7 @@ TEST(Stepping, ClockStampFollowsElapsedTimeEveryStep) {
     EXPECT_EQ(rig.core->clockNs(), kEpochNs + 5 * kStepNs);
 }
 
+// A 100 Hz clock publishes on the first step, then on every 10 ms boundary.
 TEST(Stepping, SlowClockPublishesAtItsPeriod) {
     Json bridge = defaultBridge();
     bridge["clock"]["rate_hz"] = 100;
@@ -249,6 +287,8 @@ TEST(Stepping, SlowClockPublishesAtItsPeriod) {
                                                  kEpochNs + 30'000'000, kEpochNs + 40'000'000}));
 }
 
+// Over 100 steps (0.2 s): the 10 Hz ticker publishes twice and the 100 Hz pose 20 times, stamped on
+// its period; a sensor stream with no samples publishes nothing.
 TEST(Stepping, TimerAndStatePublishAtTheirPeriods) {
     Rig rig;
     std::vector<Publication> all;
@@ -274,7 +314,9 @@ TEST(Stepping, PoseIsTheCenterOfMassPoseComposedWithTheReferenceOffset) {
     for (int k = 0; k < 5; ++k)
         for (auto &item : byStream(rig.core->step().publications, "pose"))
             published.push_back(item);
-    ASSERT_EQ(published.size(), 1u);
+    ASSERT_EQ(published.size(), 1u); // 100 Hz pose: one message in 5 steps
+
+    // Reference pose = com pose (1, 2, 3) + the yaw-rotated offset (0, 0.1, -0.05).
     const Json pose = publicationJson(published[0]);
     EXPECT_EQ(pose["header"]["frame_id"], kWorld);
     EXPECT_NEAR(pose["pose"]["position"]["x"].get<double>(), 1.0, 1e-12);
@@ -284,6 +326,7 @@ TEST(Stepping, PoseIsTheCenterOfMassPoseComposedWithTheReferenceOffset) {
     EXPECT_NEAR(pose["pose"]["orientation"]["z"].get<double>(), std::sqrt(0.5), 1e-12);
 }
 
+// tf.publish emits the reference pose at its rate (100 Hz: steps 5 and 10 of 10).
 TEST(Stepping, TransformsAreProducedOnlyWhenConfigured) {
     Json bridge = defaultBridge();
     bridge["tf"] = {
@@ -313,6 +356,8 @@ TEST(Stepping, ResetsPreserveRosTimeAndReplayTheClock) {
     Rig rig(bridge);
     for (int k = 0; k < 10; ++k)
         rig.core->step();
+
+    // Full reset through the Trigger service, then step once more.
     const auto before = rig.core->clockNs();
     std_srvs::srv::Trigger::Request request;
     std_srvs::srv::Trigger::Response response;
@@ -325,6 +370,7 @@ TEST(Stepping, ResetsPreserveRosTimeAndReplayTheClock) {
     EXPECT_EQ(out.clocks[0], before + 2 * kStepNs);
 }
 
+// Each feed event becomes one JSON message; state:task_score publishes the session task counters.
 TEST(Stepping, FeedAndStatusStreamsUseTheSessionRecords) {
     Json bridge = defaultBridge();
     bridge["streams"].push_back({{"id", "feed"},
@@ -347,6 +393,7 @@ TEST(Stepping, FeedAndStatusStreamsUseTheSessionRecords) {
                                  {"rate_hz", 100},
                                  {"frame_id", ""},
                                  {"qos", qos()}});
+
     Rig rig(bridge);
     rig.port.feed = Json::array({{{"type", "gate_pass"}}, {{"type", "torpedo_hit"}}});
     std::vector<Publication> all;
@@ -386,8 +433,9 @@ TEST(Commands, WrongLengthAndNonfiniteAreRejectedAndCounted) {
                                                                     {"thruster_cmd:nonfinite_scaled", 1}}));
 }
 
+// While killed, safety.commands_while_killed decides: zero_force sends zeros, rejected drops and counts.
 TEST(Commands, InitiallyKilledPoliciesZeroOrReject) {
-    Rig zero;
+    Rig zero; // default policy: zero_force
     receive(zero, "thruster_cmd", floats({1.0, 2.0, 3.0}));
     ASSERT_EQ(zero.port.commands.size(), 1u);
     EXPECT_EQ(zero.port.commands[0], Eigen::Vector3d::Zero());
@@ -401,6 +449,7 @@ TEST(Commands, InitiallyKilledPoliciesZeroOrReject) {
     EXPECT_EQ(rejected.core->counters().rejected_commands, (CounterTable{{"thruster_cmd:killed", 1}}));
 }
 
+// Each kill-state change publishes one kill_event; killing stops the thrusters and zeroes later commands.
 TEST(Commands, KillAndUnkillPublishOneEventEach) {
     Rig rig;
     auto events = receive(rig, "unkill_cmd", boolMessage(false));
@@ -418,6 +467,7 @@ TEST(Commands, KillAndUnkillPublishOneEventEach) {
     EXPECT_EQ(rig.port.commands.back(), Eigen::Vector3d::Zero());
 }
 
+// Messages failing accept_if are counted as filtered and leave the kill state alone.
 TEST(Commands, AcceptIfFiltersAreCountedAndIgnored) {
     Rig rig;
     receive(rig, "unkill_cmd", boolMessage(false));
@@ -428,6 +478,7 @@ TEST(Commands, AcceptIfFiltersAreCountedAndIgnored) {
     EXPECT_EQ(rig.core->counters().published, (CounterTable{{"kill_event", 1}}));
 }
 
+// Run commands arrive as JSON text; malformed ones are counted and the reason is set as the run message.
 TEST(Commands, RunCommandsStartStopAdjustAndRejectMalformedText) {
     Rig rig;
     EXPECT_TRUE(rig.core->runCommand(R"({"action": "start", "role": "b"})").accepted);
@@ -435,11 +486,15 @@ TEST(Commands, RunCommandsStartStopAdjustAndRejectMalformedText) {
     EXPECT_TRUE(rig.core->runCommand(R"({"action": "stop"})").accepted);
     EXPECT_TRUE(rig.core->runCommand(R"({"action": "adjustment", "points": 5})").accepted);
     EXPECT_EQ(rig.port.calls.back(), "run_adjust:5.000000");
+
+    // Malformed: not JSON, unknown or missing action, missing / non-numeric points, not an object.
     for (const char *bad : {"not json", R"({"action": "dance"})", R"({})", R"({"action": "adjustment"})",
                             R"({"action": "adjustment", "points": "x"})", "[1]"})
         EXPECT_FALSE(rig.core->runCommand(bad).accepted) << bad;
     const std::uint64_t rejected = rig.core->counters().rejected_commands.at("run_command");
     EXPECT_EQ(rejected, 6u);
+
+    // Rejections, by the core or by the session, are shown in the run message.
     const auto unknown = rig.core->runCommand("{\"action\": \"dance\"}");
     EXPECT_EQ(unknown.message, "Unknown run command");
     EXPECT_EQ(rig.port.run_message, "Command rejected: Unknown run command"); // surfaced in run_score
@@ -448,6 +503,7 @@ TEST(Commands, RunCommandsStartStopAdjustAndRejectMalformedText) {
     EXPECT_EQ(rig.port.run_message, "Command rejected: Stop the current run first");
 }
 
+// 0 pauses; negative and non-finite factors are refused and keep the previous value.
 TEST(RealTimeFactor, ValidatesAndAppliesSpeed) {
     Rig rig;
     EXPECT_EQ(rig.core->realTimeFactor(), 1.0);
@@ -462,6 +518,8 @@ TEST(RealTimeFactor, ValidatesAndAppliesSpeed) {
 
 // ------------------------------------------------------------------ placement
 
+// A world-frame (empty frame_id) request is a reference pose: the center of mass goes to the pose minus
+// the com -> base offset, and actuators are cleared.
 TEST(Placement, WorldFrameRequestPlacesCenterOfMassFromReferencePose) {
     Rig rig(withServices({setPoseService(), resetService()}));
     auto request = poseRequest("", {2.0, 3.0, -1.0});
@@ -474,6 +532,7 @@ TEST(Placement, WorldFrameRequestPlacesCenterOfMassFromReferencePose) {
     EXPECT_EQ(rig.core->counters().service_calls, (CounterTable{{"set_pose", 1}}));
 }
 
+// Yaw 90 rotates the (0.1, 0, -0.05) offset to (0, 0.1, -0.05) before it is subtracted.
 TEST(Placement, RotatedRequestRotatesTheOffset) {
     Rig rig(withServices({setPoseService()}));
     auto request = poseRequest(kWorld, {2.0, 3.0, -1.0}, kYaw90);
@@ -484,6 +543,7 @@ TEST(Placement, RotatedRequestRotatesTheOffset) {
     EXPECT_TRUE(rig.port.placed[0].orientation.isApprox(kYaw90));
 }
 
+// Other frames go through the lookup (world <- map, here a 10 m x shift).
 TEST(Placement, NonWorldFramesUseTheInjectedLookup) {
     std::vector<std::pair<std::string, std::string>> calls;
     Rig rig(withServices({setPoseService()}), defaultRobot(), {"alt"},
@@ -509,6 +569,7 @@ TEST(Placement, MissingTransformZeroQuaternionAndNonfinitePositionAreRefused) {
     none.core->call("set_pose", &request, &response);
     EXPECT_TRUE(none.port.placed.empty());
 
+    // Zero quaternion, NaN position, and a non-world frame with no lookup installed.
     Rig rig(withServices({setPoseService()}));
     auto zero = poseRequest("", {0, 0, 0});
     zero.pose.pose.pose.orientation.w = 0;
@@ -520,6 +581,7 @@ TEST(Placement, MissingTransformZeroQuaternionAndNonfinitePositionAreRefused) {
     EXPECT_TRUE(rig.port.placed.empty());
 }
 
+// With becomes_start_pose, reset_to_start returns to the last placed pose.
 TEST(Placement, ResetReturnsToThePlacedStartPose) {
     Rig rig(withServices({setPoseService(), resetService()}));
     robot_localization::srv::SetPose::Response set_response;
@@ -537,6 +599,7 @@ TEST(Placement, ResetReturnsToThePlacedStartPose) {
 }
 
 TEST(Placement, ResetWithoutPlacementReturnsToTheInitialStateAndNonStartPlacementKeepsIt) {
+    // No placement yet: reset goes to the port start state (1, 2, 3).
     Rig initial(withServices({resetService()}));
     std_srvs::srv::Trigger::Request trigger;
     std_srvs::srv::Trigger::Response response;
@@ -544,6 +607,7 @@ TEST(Placement, ResetWithoutPlacementReturnsToTheInitialStateAndNonStartPlacemen
     ASSERT_EQ(initial.port.placed.size(), 1u);
     EXPECT_TRUE(initial.port.placed[0].position.isApprox(Eigen::Vector3d(1.0, 2.0, 3.0)));
 
+    // A placement that does not become the start pose leaves the reset target unchanged.
     Rig kept(withServices({setPoseService(false), resetService()}));
     auto request = poseRequest("", {2.0, 3.0, -1.0});
     robot_localization::srv::SetPose::Response set_response;
@@ -552,6 +616,7 @@ TEST(Placement, ResetWithoutPlacementReturnsToTheInitialStateAndNonStartPlacemen
     EXPECT_TRUE(kept.port.placed[1].position.isApprox(Eigen::Vector3d(1.0, 2.0, 3.0)));
 }
 
+// A std::invalid_argument from SessionPort::place is caught by the core.
 TEST(Placement, InvalidPlacementFromTheSessionIsRefusedNotThrown) {
     struct Throwing : FakePort {
         simulation::Snapshot place(const simulation::BodyState &, bool) override {
@@ -567,6 +632,7 @@ TEST(Placement, InvalidPlacementFromTheSessionIsRefusedNotThrown) {
     SUCCEED();
 }
 
+// SetBool arm service: the session CommandResult is copied into success / message.
 TEST(Placement, MalformedRequestIsRejectedWithoutPlacing) {
     Json service = resetService();
     service["id"] = "arm";
@@ -580,6 +646,7 @@ TEST(Placement, MalformedRequestIsRejectedWithoutPlacing) {
     rig.core->call("arm", &request, &response);
     EXPECT_TRUE(response.success);
     EXPECT_EQ(rig.port.calls.back(), "set_armed:1");
+
     rig.port.next_result = {false, "rejected while killed"};
     rig.core->call("arm", &request, &response);
     EXPECT_FALSE(response.success);
@@ -588,6 +655,7 @@ TEST(Placement, MalformedRequestIsRejectedWithoutPlacing) {
 
 // ------------------------------------------------------------------ mechanism topics and replies
 
+// Topic-form mechanism commands publish their result on reply_stream; fire events reach the run record.
 TEST(Mechanisms, TopicCommandsReplyOnTheDeclaredStream) {
     Json robot = defaultRobot();
     robot["mechanisms"] = Json::array({{{"id", "claw"}, {"type", "claw"}, {"parameters", Json::object()}},
@@ -603,6 +671,8 @@ TEST(Mechanisms, TopicCommandsReplyOnTheDeclaredStream) {
                         {{"signed_duration_s", {{"from", "data"}}}}, {{"reply_stream", "cmd_status"}}));
     bridge["streams"].push_back(subscribeStream("claw_topic", "std_msgs/msg/Bool", "command:mechanisms.claw.command",
                                                 {{"open", {{"from", "data"}}}}, {{"reply_stream", "cmd_status"}}));
+
+    // Fire: replies true on cmd_status.
     Rig rig(bridge, robot);
     rig.port.fire_events = {{{"type", "release"}}};
     auto replies = receive(rig, "torpedo_topic", makeMessage<std_msgs::msg::Empty>("std_msgs/msg/Empty"));
@@ -610,14 +680,18 @@ TEST(Mechanisms, TopicCommandsReplyOnTheDeclaredStream) {
     EXPECT_EQ(replies[0].stream, "cmd_status");
     EXPECT_EQ(publicationJson(replies[0]).at("data"), true);
     EXPECT_EQ(rig.core->taskEvents().size(), 1u); // release events land in the run record
+
+    // Timed claw move: the session refusal is replied as false.
     auto move = makeMessage<std_msgs::msg::Float32>("std_msgs/msg/Float32");
     static_cast<std_msgs::msg::Float32 *>(move->data())->data = 1.5f;
     rig.port.next_result = {false, "disarmed"};
     replies = receive(rig, "claw_move", move);
     EXPECT_EQ(publicationJson(replies.at(0)).at("data"), false);
     EXPECT_EQ(rig.port.calls.back(), "move_claw:claw:1.500000");
+
     receive(rig, "claw_topic", boolMessage(true));
     EXPECT_EQ(rig.port.calls.back(), "claw:claw:open");
+
     // Wrong mechanism kinds fail at construction.
     bridge["streams"].push_back(
         subscribeStream("bad", "std_msgs/msg/Empty", "command:mechanisms.claw.fire", Json::object()));
@@ -627,6 +701,8 @@ TEST(Mechanisms, TopicCommandsReplyOnTheDeclaredStream) {
 
 // ------------------------------------------------------------------ static TF and alignment
 
+// Static edges take their transform from the robot frame tree (com -> base); duplicates, cycles,
+// never_publish names, unknown frames, renamed frames and non-world truth parents are refused.
 TEST(StaticTf, StaticEdgesComeFromTheFrameTreeAndAreValidated) {
     Json bridge = defaultBridge();
     bridge["tf"] = {
@@ -637,6 +713,7 @@ TEST(StaticTf, StaticEdgesComeFromTheFrameTreeAndAreValidated) {
     EXPECT_EQ(rig.core->staticTransforms()[0].parent, "rig");
     EXPECT_TRUE(rig.core->staticTransforms()[0].translation.isApprox(kOffset));
 
+    // Invalid variants of the same block.
     Json duplicate = bridge;
     duplicate["tf"]["static"].push_back(duplicate["tf"]["static"][0]);
     EXPECT_NE(bridgeError([&] { Rig r(duplicate); }).find("duplicate child/owner 'cam'"), std::string::npos);
@@ -662,6 +739,7 @@ TEST(StaticTf, StaticEdgesComeFromTheFrameTreeAndAreValidated) {
     EXPECT_NE(bridgeError([&] { Rig r(truth); }).find("truth transforms must have parent"), std::string::npos);
 }
 
+// Static edges marked truth hang under a tf.publish frame and may reuse a robot frame under another name.
 TEST(StaticTf, TruthEdgesMirrorFramesUnderAPublishedTruthFrame) {
     Json bridge = defaultBridge();
     bridge["frame_names"]["base"] = "vehicle/mount";
@@ -678,12 +756,14 @@ TEST(StaticTf, TruthEdgesMirrorFramesUnderAPublishedTruthFrame) {
     ASSERT_EQ(rig.core->staticTransforms().size(), 1u);
     EXPECT_EQ(rig.core->staticTransforms()[0].child, "sim/mount");
     EXPECT_TRUE(rig.core->staticTransforms()[0].translation.isApprox(kOffset));
+
     Json detached = bridge;
     detached["tf"]["static"][0]["parent"] = "elsewhere";
     EXPECT_NE(bridgeError([&] { Rig r(detached); }).find("must descend from a tf.publish frame"), std::string::npos);
 }
 
 namespace {
+// Adds an Odometry estimate subscription and estimator alignment on every trigger; set_pose aligns.
 Json alignmentBridge() {
     Json bridge = defaultBridge();
     bridge["streams"].push_back(subscribeStream("estimate", "nav_msgs/msg/Odometry", "estimate:latest",
@@ -704,6 +784,8 @@ Json alignmentBridge() {
 }
 } // namespace
 
+// Alignment waits for the first estimate (its frame_id); a placement replaces the unsent startup request,
+// and each request is handed out once.
 TEST(Alignment, PlacementSupersedesUnsentStartupAndUsesTheLatestPose) {
     Rig rig(alignmentBridge(), defaultRobot(), {"alt"},
             [](const std::string &, const std::string &) { return std::optional<spatial::Pose>(spatial::Pose{}); });
@@ -712,6 +794,8 @@ TEST(Alignment, PlacementSupersedesUnsentStartupAndUsesTheLatestPose) {
     robot_localization::srv::SetPose::Response response;
     rig.core->call("set_pose", &request, &response);
     EXPECT_EQ(rig.core->counters().alignments_superseded, (CounterTable{{"startup", 1}}));
+
+    // The first estimate supplies the frame; the pending request is the placement pose.
     auto estimate = makeMessage<nav_msgs::msg::Odometry>("nav_msgs/msg/Odometry");
     auto &odometry = *static_cast<nav_msgs::msg::Odometry *>(estimate->data());
     odometry.header.frame_id = "odom";
@@ -728,12 +812,15 @@ TEST(Alignment, PlacementSupersedesUnsentStartupAndUsesTheLatestPose) {
     EXPECT_FALSE(rig.core->pendingAlignment().has_value()); // never resends an old pose
 }
 
+// A reset supersedes the pending startup alignment; bad triggers, estimate streams and service types
+// are refused.
 TEST(Alignment, ResetAndFullResetRequestAlignmentAndBadDeclarationsRaise) {
     Rig rig(alignmentBridge());
     std_srvs::srv::Trigger::Request trigger;
     std_srvs::srv::Trigger::Response response;
     rig.core->call("reset", &trigger, &response);
     EXPECT_EQ(rig.core->counters().alignments_superseded, (CounterTable{{"startup", 1}}));
+
     Json bad = alignmentBridge();
     bad["placement"]["estimator_alignment"]["triggers"] = Json::array({"whenever"});
     EXPECT_NE(bridgeError([&] { Rig r(bad); }).find("unknown trigger"), std::string::npos);

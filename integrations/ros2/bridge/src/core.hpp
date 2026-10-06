@@ -1,5 +1,5 @@
 #pragma once
-// Bridge semantics without middleware: one owner steps the session and maps data both ways
+// Bridge semantics without middleware: one owner steps the session and maps data both ways.
 // Everything here is deterministic in integer simulation ticks and fully
 // validated against the ROS types and native endpoints before the first step. Unknown
 // endpoints and unsupported actions fail at construction. Not thread safe except for
@@ -19,11 +19,13 @@ namespace nereus::ros_bridge {
 
 struct VisualContext;
 
+// One outbound message for the node to publish on `stream`.
 struct Publication {
     std::string stream;
     std::shared_ptr<Message> message;
 };
 
+// One TF edge parent_T_child stamped at `stamp_ns` (ROS time).
 struct Transform {
     std::string parent, child;
     std::int64_t stamp_ns{0};
@@ -41,15 +43,18 @@ struct Alignment {
 };
 
 using CounterTable = std::map<std::string, std::uint64_t>;
+// Per-key event counts, written to summary.json by records.cpp.
 struct Counters {
     CounterTable published, unavailable_samples, rejected_commands, filtered_messages, service_calls, alignments,
         alignments_superseded, alignments_acknowledged, alignments_failed;
+
     static void bump(CounterTable &table, const std::string &key) {
         ++table[key];
     }
     Json toJson() const;
 };
 
+// Everything one step() produced, in send order: clock stamps first, then data and transforms.
 struct StepOutput {
     std::vector<std::int64_t> clocks;
     std::vector<Publication> publications;
@@ -62,12 +67,14 @@ using Lookup = std::function<std::optional<spatial::Pose>(const std::string &, c
 // Service types the node can serve (no generic service server exists in Humble).
 const std::vector<std::string> &supportedServiceTypes();
 
+// Owns the bridge semantics over a SessionPort; the rclcpp node (node.cpp) only moves messages.
 class BridgeCore {
   public:
     // `resolved` and `session` must outlive the core. Throws BridgeError.
     BridgeCore(const session::ResolvedScenario &resolved, SessionPort &session, std::int64_t epoch_ns,
                Lookup lookup = {}, CameraSink *cameras = nullptr);
 
+    // Configuration and state accessors.
     const Json &config() const {
         return config_;
     }
@@ -89,6 +96,7 @@ class BridgeCore {
     double realTimeFactor() const {
         return real_time_factor_.load();
     }
+
     // Returns the rejection reason or nullopt (0 pauses).
     std::optional<std::string> setRealTimeFactor(double value);
     static std::optional<std::string> checkRealTimeFactor(double value);
@@ -98,6 +106,7 @@ class BridgeCore {
     bool killed() const {
         return session_.killed();
     }
+
     // Cumulative wall time inside step(): session advance, sensor mapping, timed streams.
     struct Timing {
         std::int64_t advance_ns{0}, sensors_ns{0}, timed_ns{0};
@@ -105,6 +114,7 @@ class BridgeCore {
     const Timing &timing() const {
         return timing_;
     }
+
     const Counters &counters() const {
         return counters_;
     }
@@ -122,7 +132,9 @@ class BridgeCore {
     const std::map<std::string, std::shared_ptr<const MessageType>> &streamTypes() const {
         return stream_types_;
     }
+
     struct ServiceEntry {
+        // A served service: compiled request reader, response writer, and placement options plus the action.
         std::shared_ptr<const ServiceType> type;
         Reader reader;
         Writer writer;
@@ -169,15 +181,19 @@ class BridgeCore {
     ~BridgeCore();
 
   private:
+    // Fixed-period schedule in native ns.
     struct Timed {
         std::int64_t period_ns, next_ns;
     };
+
+    // How a publish stream is encoded: field-mapped from Values (encode) or built whole (state).
     struct PublisherEntry {
         std::shared_ptr<const MessageType> type;
         std::function<std::shared_ptr<Message>(const Value &)> encode;
         std::function<std::shared_ptr<Message>()> state; // timed format streams
     };
 
+    // Construction-time compilation and validation.
     std::pair<std::string, std::string> mechanism(const std::string &endpoint, const std::string &where) const;
     SpecTree mechanismSpec() const;
     SpecTree clawSpec() const;
@@ -192,6 +208,8 @@ class BridgeCore {
     void compileStaticTf();
     void compileAlignment();
     void checkBindings();
+
+    // Stepping and inbound helpers.
     void observeGeneration(const simulation::Snapshot &snapshot, bool coordinated = false);
     Publication publish(const std::string &stream, const Value &values);
     Publication publishMessage(const std::string &stream, std::shared_ptr<Message> message);
@@ -209,6 +227,7 @@ class BridgeCore {
     void requestAlignment(const std::string &trigger);
     bool hasEstimateStream() const;
 
+    // Configuration, borrowed collaborators (scenario, session, cameras) and statistics.
     const session::ResolvedScenario &resolved_;
     SessionPort &session_;
     Json config_;
@@ -216,21 +235,28 @@ class BridgeCore {
     Lookup lookup_;
     Counters counters_;
     Timing timing_;
+
+    // Time, reset and safety state.
     std::int64_t timestep_ns_;
     std::atomic<double> real_time_factor_;
     std::int64_t epoch_ns_;
     std::string reset_policy_, world_frame_, reference_frame_;
     Timed clock_{0, 0};
+    // Body root -> robot reference frame (fixed).
     spatial::Pose root_to_reference_;
+    // Last seen snapshot generation; it changes when the plant is reset.
     std::uint64_t generation_{0};
+    // ROS time = epoch + offset + native time; the offset moves only on resets that preserve ROS time.
     std::int64_t offset_ns_{0}, last_ros_ns_{0};
     simulation::BodyState start_state_;
     bool kill_stops_thrusters_{false};
     std::string commands_while_killed_;
+    // ROS position -> native thruster index (thrusters.order).
     std::optional<std::vector<std::size_t>> thruster_index_;
     std::map<std::string, std::string> mechanism_types_;
     Json task_events_ = Json::array();
 
+    // Compiled endpoints by stream/service id.
     std::map<std::string, PublisherEntry> publishers_;
     std::map<std::string, Reader> readers_;
     std::map<std::string, Json> stream_config_;
@@ -243,9 +269,12 @@ class BridgeCore {
     std::vector<std::pair<Json, std::int64_t>> tf_publish_; // entry, period
     std::vector<Timed> tf_timed_;
     std::vector<Transform> static_transforms_;
+
+    // Estimator alignment: config, pending trigger, last estimate:latest message.
     std::optional<Json> alignment_;
     std::optional<std::string> alignment_pending_;
     std::optional<Value> latest_estimate_;
+
     std::map<std::string, std::string> sensor_types_;
     std::unique_ptr<VisualContext> visual_;
 };

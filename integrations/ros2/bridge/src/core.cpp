@@ -1,3 +1,6 @@
+// BridgeCore: compiles the bridge pack (streams, services, TF, estimator alignment) against the
+// resolved scenario, then steps the session one tick at a time and maps data both ways.
+
 #include "core.hpp"
 
 #include "visual.hpp"
@@ -15,17 +18,22 @@ namespace nereus::ros_bridge {
 namespace {
 using session::CommandResult;
 
+// Argument-free actions; reset_to_start is served only as a service (topics reject it).
 const std::set<std::string> kSimpleActions = {"command:mechanisms.reload_all", "command:tasks.reset",
                                               "command:scenario.reset", "command:robot.reset_to_start"};
+// Valid placement.estimator_alignment triggers.
 const std::set<std::string> kAlignmentTriggers = {"startup", "placement", "reset_to_start", "full_reset"};
 
+// Spec-tree helpers for the field-map compiler.
 SpecTree tree(std::map<std::string, SpecTree> nodes) {
     return SpecTree(std::move(nodes));
 }
+
 SpecTree simTime() {
     return tree({{"time", timeSpec()}});
 }
 
+// Request arguments of a pose placement (robot.place from a request, estimate:latest).
 const std::map<std::string, Spec> &poseArguments() {
     static const std::map<std::string, Spec> arguments = {
         {"frame", stringSpec()},         {"position_m", vector3Spec()},   {"orientation_w", scalarSpec()},
@@ -33,15 +41,18 @@ const std::map<std::string, Spec> &poseArguments() {
     return arguments;
 }
 
+// Sources of command/service result messages, and their values at `ros_ns`.
 SpecTree resultSources() {
     return tree({{"sim", simTime()}, {"accepted", booleanSpec()}, {"message", stringSpec()}});
 }
+
 Value resultValue(std::int64_t ros_ns, const CommandResult &result) {
     return Value::map({{"sim", Value::map({{"time", Value::time(ros_ns)}})},
                        {"accepted", Value::boolean(result.accepted)},
                        {"message", Value::text(result.message)}});
 }
 
+// A JSON number for error messages: strings verbatim, anything else dumped.
 std::string numberText(const Json &value) {
     return value.is_string() ? value.get<std::string>() : value.dump();
 }
@@ -50,16 +61,20 @@ Spec fixedFloat(int n) {
     return floatArray({n});
 }
 
+// Native value helpers; quaternions are packed w, x, y, z.
 Eigen::Vector3d rotateBy(const spatial::Pose &pose, const Eigen::Vector3d &v) {
     return pose.rotation * v;
 }
+
 Value vec3(const Eigen::Vector3d &v) {
     return Value::array({v.x(), v.y(), v.z()});
 }
+
 Value quat4(const Eigen::Quaterniond &q) {
     return Value::array({q.w(), q.x(), q.y(), q.z()});
 }
 
+// The `field` string of every object in `array`, in order.
 std::vector<std::string> keysOf(const Json &array, const char *field) {
     std::vector<std::string> out;
     for (const auto &item : array)
@@ -94,6 +109,7 @@ Json Counters::toJson() const {
     return out;
 }
 
+// One branch per native sensor type; fog sizes its arrays by the configured axes.
 SpecTree readingSpec(const Json &sensor) {
     const auto imu = [] {
         return tree({{"specific_force", vector3Spec()},
@@ -145,6 +161,7 @@ std::optional<std::string> BridgeCore::setRealTimeFactor(double value) {
     return std::nullopt;
 }
 
+// Publication period of a rate in integer ns; rejects rates faster than the physics step.
 std::int64_t BridgeCore::steppedPeriod(double rate_hz, const std::string &where) const {
     if (!(rate_hz > 0))
         throw BridgeError(where + ": rate_hz " + std::to_string(rate_hz) + " is too high");
@@ -162,6 +179,8 @@ BridgeCore::BridgeCore(const session::ResolvedScenario &resolved, SessionPort &s
     if (resolved.bridge.is_null())
         throw BridgeError("scenario selects no bridge pack");
     config_ = resolved.bridge;
+
+    // Clock policy and frames.
     timestep_ns_ = session_.timestepNs();
     const Json &clock = config_.at("clock");
     real_time_factor_ = clock.at("real_time_factor").get<double>();
@@ -172,15 +191,20 @@ BridgeCore::BridgeCore(const session::ResolvedScenario &resolved, SessionPort &s
     world_frame_ = names.value("world", resolved.scenario.at("world_frame").get<std::string>());
     reference_frame_ = resolved.robot.at("reference_frame");
     root_to_reference_ = session_.frames()->fromRoot(reference_frame_);
+
+    // Start in step with the session's current tick and generation.
     const auto snapshot = session_.observe();
     generation_ = snapshot.generation;
     last_ros_ns_ = rosNs(snapshot.elapsed.count());
     start_state_ = session_.startState();
+
+    // Native mechanism and sensor types by id, for validating endpoints.
     for (const auto &item : resolved.robot.value("mechanisms", Json::array()))
         mechanism_types_[item.at("id")] = item.at("type").get<std::string>();
     for (const auto &item : resolved.robot.at("sensors"))
         sensor_types_[item.at("id")] = item.at("type").get<std::string>();
 
+    // Safety policy and the ROS -> native thruster order.
     const Json &safety = resolved.robot.at("safety");
     kill_stops_thrusters_ = safety.at("kill_stops_thrusters");
     commands_while_killed_ = safety.at("commands_while_killed");
@@ -188,11 +212,16 @@ BridgeCore::BridgeCore(const session::ResolvedScenario &resolved, SessionPort &s
     if (auto permutation = thrusterPermutation(); !permutation.empty())
         thruster_index_ = std::move(permutation);
 
+    // Index the stream declarations by id.
     for (const auto &stream : config_.at("streams"))
         stream_config_[stream.at("id")] = stream;
+
+    // Context the format streams (markers, viewer JSON) render from.
     visual_ = std::make_unique<VisualContext>(VisualContext{
         session_, resolved_, world_frame_, [this] { return clockNs(); },
         [this](const simulation::BodyState &body) { return referencePose(body); }, [this] { return scenarioJson(); }});
+
+    // Compile every declared endpoint; any problem throws BridgeError before the first step.
     compileStreams();
     compileServices();
     compileTf();
@@ -207,6 +236,7 @@ spatial::Pose BridgeCore::referencePose(const simulation::BodyState &body) const
     return session_.referencePose(body);
 }
 
+// ROS position k -> native thruster index, from thrusters.order; empty without a thrusters block.
 std::vector<std::size_t> BridgeCore::thrusterPermutation() {
     if (!config_.contains("thrusters"))
         return {};
@@ -224,6 +254,7 @@ std::vector<std::size_t> BridgeCore::thrusterPermutation() {
     if (reject != std::set<std::string>{"wrong_length", "nonfinite"})
         throw BridgeError("thrusters.reject must list wrong_length and nonfinite: the native plant "
                           "accepts neither");
+
     std::vector<std::size_t> index;
     for (const auto &name : order)
         index.push_back(
@@ -231,6 +262,7 @@ std::vector<std::size_t> BridgeCore::thrusterPermutation() {
     return index;
 }
 
+// Splits a command:mechanisms.<id>.<operation> endpoint after checking the mechanism supports it.
 std::pair<std::string, std::string> BridgeCore::mechanism(const std::string &endpoint, const std::string &where) const {
     static const std::regex pattern("^command:mechanisms\\.([A-Za-z0-9_]+)\\.(timed_move|fire|command)$");
     std::smatch match;
@@ -247,6 +279,7 @@ std::pair<std::string, std::string> BridgeCore::mechanism(const std::string &end
     return {identifier, operation};
 }
 
+// Sources of state:mechanisms: arm state plus one entry per launcher/dropper/claw.
 SpecTree BridgeCore::mechanismSpec() const {
     std::map<std::string, SpecTree> spec = {{"sim", simTime()}, {"armed", booleanSpec()}, {"any_busy", booleanSpec()}};
     for (const auto &[identifier, kind] : mechanism_types_) {
@@ -258,6 +291,7 @@ SpecTree BridgeCore::mechanismSpec() const {
     return tree(spec);
 }
 
+// Sources of state:claws: jaw positions per claw.
 SpecTree BridgeCore::clawSpec() const {
     std::map<std::string, SpecTree> spec = {{"sim", simTime()}};
     for (const auto &[identifier, kind] : mechanism_types_)
@@ -266,6 +300,7 @@ SpecTree BridgeCore::clawSpec() const {
     return tree(spec);
 }
 
+// The robot sensor declaration `name`, which the session must also execute.
 Json BridgeCore::sensorJson(const std::string &name, const std::string &where) const {
     for (const auto &item : resolved_.robot.at("sensors"))
         if (item.at("id") == name) {
@@ -277,6 +312,7 @@ Json BridgeCore::sensorJson(const std::string &name, const std::string &where) c
     throw BridgeError(where + ": unknown robot sensor " + repr(name));
 }
 
+// Registers a format stream (compiled in visual.cpp); timed formats need a rate, event formats rate 0.
 void BridgeCore::compileFormatStream(const Json &stream, const std::shared_ptr<const MessageType> &type,
                                      const std::string &where) {
     FormatStream format = compileFormat(*visual_, stream, type, where);
@@ -289,18 +325,23 @@ void BridgeCore::compileFormatStream(const Json &stream, const std::shared_ptr<c
     }
     entry.state = format.state;
     publishers_[id] = entry;
+
     if (format.timed) {
         const auto period = steppedPeriod(stream.at("rate_hz").get<double>(), where);
         timed_.push_back({id, Timed{period, period}});
     } else if (stream.at("rate_hz").get<double>() != 0) {
         throw BridgeError(where + ": event streams have rate_hz 0");
     }
+
+    // Event formats driven by the session (task feed, scenario description).
     if (endpoint == "event:tasks.feed")
         feed_streams_.push_back(id);
     else if (endpoint == "event:scenario.description")
         startup_streams_.push_back(id);
 }
 
+// Compiles every stream: subscriptions get a Reader, publications a Writer or a format encoder.
+// MappingErrors are rethrown as BridgeError.
 void BridgeCore::compileStreams() {
     for (const auto &stream : config_.at("streams")) {
         const std::string id = stream.at("id"), where = "streams/" + id, endpoint = stream.at("native");
@@ -313,6 +354,8 @@ void BridgeCore::compileStreams() {
             stream_types_[id] = type;
             if (camera_owned)
                 continue; // the camera sink compiled these mappings
+
+            // Subscriptions: pick the native arguments of the command endpoint, then compile a Reader.
             const std::string direction = stream.at("direction");
             if (direction == "subscribe") {
                 if (stream.contains("format") || stream.contains("options"))
@@ -343,12 +386,16 @@ void BridgeCore::compileStreams() {
                                                    stream.value("accept_if", Json()), where));
                 continue;
             }
+
+            // Publications: format streams, else a field-mapped Writer over the endpoint's sources.
             if (stream.contains("image"))
                 throw BridgeError(where + ": image streams are not executed by this bridge");
             if (stream.contains("format") || stream.contains("options")) {
                 compileFormatStream(stream, type, where);
                 continue;
             }
+
+            // Native sources by endpoint kind: sensor samples, timed state, or events.
             SpecTree sources;
             if (endpoint.rfind("sensor:", 0) == 0) {
                 const std::string rest = endpoint.substr(7);
@@ -358,6 +405,7 @@ void BridgeCore::compileStreams() {
                 const Json sensor = sensorJson(name, where);
                 if (!output.empty())
                     throw BridgeError(where + ": sensor output " + repr(output) + " is not executed");
+                // The stream rate must match the sensor period (relative tolerance 1e-6).
                 const double expected = 1e9 / sensor.at("period_ns").get<double>();
                 const double rate = stream.at("rate_hz").get<double>();
                 if (!(std::fabs(rate - expected) <= 1e-6 * std::max(std::fabs(rate), std::fabs(expected)))) {
@@ -397,6 +445,7 @@ void BridgeCore::compileStreams() {
             } else {
                 throw BridgeError(where + ": unsupported native endpoint " + repr(endpoint));
             }
+
             const std::string frame_id = stream.value("frame_id", "");
             Writer writer = compileWriter(type->members(), stream.at("fields"), sources, frame_id, where);
             PublisherEntry entry;
@@ -407,6 +456,8 @@ void BridgeCore::compileStreams() {
             throw BridgeError(error.what());
         }
     }
+
+    // A command stream's reply_stream must name a command_result event stream.
     for (const auto &stream : config_.at("streams")) {
         if (!stream.contains("reply_stream") || stream["reply_stream"].is_null())
             continue;
@@ -425,6 +476,8 @@ bool BridgeCore::hasEstimateStream() const {
     return false;
 }
 
+// Compiles each service's request Reader and response Writer; the placement options and action are
+// kept in ServiceEntry::options for call().
 void BridgeCore::compileServices() {
     for (const auto &service : config_.value("services", Json::array())) {
         const std::string id = service.at("id"), where = "services/" + id, action = service.at("action");
@@ -446,8 +499,10 @@ void BridgeCore::compileServices() {
             if (operation == "command")
                 arguments = {{"open", booleanSpec()}};
         }
+
         if (options.value("pose_source", "") == "estimate" && !hasEstimateStream())
             throw BridgeError(where + ": pose_source estimate needs an estimate:latest stream");
+
         try {
             const std::string type_name = service.at("service_type");
             const auto &supported = supportedServiceTypes();
@@ -473,6 +528,7 @@ void BridgeCore::compileServices() {
     }
 }
 
+// Timed truth transforms (world -> robot reference pose).
 void BridgeCore::compileTf() {
     for (const auto &entry : config_.value("tf", Json::object()).value("publish", Json::array())) {
         if (entry.at("native") != "state:robot.reference_pose")
@@ -485,6 +541,8 @@ void BridgeCore::compileTf() {
     }
 }
 
+// Validates the whole TF tree (unique children, no cycles, frame_names agreement) and resolves the
+// static robot transforms from the session's fixed frames.
 void BridgeCore::compileStaticTf() {
     const Json tf = config_.value("tf", Json::object());
     std::map<std::string, std::string> parents;
@@ -495,6 +553,8 @@ void BridgeCore::compileStaticTf() {
                 throw BridgeError("tf: duplicate child/owner " + repr(child));
             parents[child] = edge.at("parent").get<std::string>();
         }
+
+    // Reject cycles by walking each child up its parents.
     for (const auto &[child, parent] : parents) {
         std::set<std::string> seen;
         std::string current = child;
@@ -505,6 +565,8 @@ void BridgeCore::compileStaticTf() {
         if (seen.count(current))
             throw BridgeError("tf: cycle at " + repr(current));
     }
+
+    // Static edges: check naming and resolve the transform.
     const Json names = config_.value("frame_names", Json::object());
     std::set<std::string> truth_roots;
     for (const auto &edge : tf.value("publish", Json::array()))
@@ -537,6 +599,7 @@ void BridgeCore::compileStaticTf() {
     }
 }
 
+// Optional placement.estimator_alignment: SetPose requests to the external estimator after triggers.
 void BridgeCore::compileAlignment() {
     const Json placement = config_.value("placement", Json::object());
     if (!placement.contains("estimator_alignment") || placement["estimator_alignment"].is_null())
@@ -548,6 +611,7 @@ void BridgeCore::compileAlignment() {
     const auto stream = stream_config_.find(alignment_->at("estimate_stream"));
     if (stream == stream_config_.end() || stream->second.at("native") != "estimate:latest")
         throw BridgeError("estimator_alignment: estimate_stream must be an estimate:latest subscription");
+
     try {
         const std::string type_name = alignment_->at("service_type");
         if (type_name != "robot_localization/srv/SetPose")
@@ -560,11 +624,14 @@ void BridgeCore::compileAlignment() {
     } catch (const MappingError &error) {
         throw BridgeError(error.what());
     }
+
+    // A startup trigger is pending from the start.
     for (const auto &trigger : alignment_->at("triggers"))
         if (trigger == "startup")
             alignment_pending_ = "startup";
 }
 
+// Cross-checks between blocks: kill/reset/placement references, sensor frame_ids, never_publish TF.
 void BridgeCore::checkBindings() {
     std::size_t converters = config_.value("converters", Json::array()).size();
     for (const auto &stream : config_.at("streams"))
@@ -574,6 +641,7 @@ void BridgeCore::checkBindings() {
     if (converters)
         throw BridgeError("compiled converters are declared but none is implemented here");
 
+    // kill, reset and placement must reference streams/services of the right kind.
     std::map<std::string, Json> services;
     for (const auto &item : config_.value("services", Json::array()))
         services[item.at("id")] = item;
@@ -614,6 +682,8 @@ void BridgeCore::checkBindings() {
                     service.value("placement", Json::object()).value("pose_source", "") == source,
                 std::string("a command:robot.place service with pose_source ") + source);
     }
+
+    // Sensor streams' frame_id must agree with frame_names of the sensor frame.
     const Json names = config_.value("frame_names", Json::object());
     for (const auto &stream : config_.at("streams")) {
         const std::string id = stream.at("id");
@@ -636,6 +706,8 @@ void BridgeCore::checkBindings() {
                             repr(sensor.at("frame").get<std::string>()) + ")");
             }
     }
+
+    // No published TF child may match tf.never_publish.
     std::vector<std::string> children;
     for (const auto &[entry, period] : tf_publish_)
         children.push_back(entry.at("child"));
@@ -649,6 +721,9 @@ void BridgeCore::checkBindings() {
 
 // ------------------------------------------------------------------ time and stepping
 
+// A new snapshot generation means the plant was reset: restart the timers and, under
+// preserve_ros_epoch_and_time, keep ROS time monotonic by offsetting past the last stamp. With cameras
+// only a coordinated full reset (which invalidates them first) is allowed.
 void BridgeCore::observeGeneration(const simulation::Snapshot &snapshot, bool coordinated) {
     if (snapshot.generation == generation_)
         return;
@@ -666,6 +741,7 @@ void BridgeCore::observeGeneration(const simulation::Snapshot &snapshot, bool co
         timed.next_ns = timed.period_ns;
 }
 
+// Encodes `values` for a publish stream and counts it.
 Publication BridgeCore::publish(const std::string &stream, const Value &values) {
     Counters::bump(counters_.published, stream);
     const auto &entry = publishers_.at(stream);
@@ -677,6 +753,8 @@ Publication BridgeCore::publishMessage(const std::string &stream, std::shared_pt
     return Publication{stream, std::move(message)};
 }
 
+// state:robot sources: world pose of the reference frame, plus the reference point's velocity and the
+// body rates, both expressed in the reference frame.
 Value BridgeCore::robotState(const simulation::Snapshot &snapshot) const {
     const auto &body = snapshot.body;
     const spatial::Pose world_reference = referencePose(body);
@@ -691,6 +769,7 @@ Value BridgeCore::robotState(const simulation::Snapshot &snapshot) const {
                        {"body_angular_velocity", vec3(rotateBy(to_reference, omega))}});
 }
 
+// Native forces back in ROS order, divided by the input scales (0 for a zero scale).
 Value BridgeCore::thrusterValues() const {
     const auto &scales = config_.at("thrusters").at("input_scales");
     const Eigen::VectorXd native = session_.thrusterForces();
@@ -703,6 +782,7 @@ Value BridgeCore::thrusterValues() const {
         {{"sim", Value::map({{"time", Value::time(last_ros_ns_)}})}, {"forces_n", Value::array(std::move(forces))}});
 }
 
+// Jaw positions per claw; zeros for a claw the session does not report.
 Value BridgeCore::clawValues() const {
     const auto jaws = session_.clawJaws();
     std::map<std::string, Value> values = {{"sim", Value::map({{"time", Value::time(last_ros_ns_)}})}};
@@ -715,6 +795,7 @@ Value BridgeCore::clawValues() const {
     return Value::map(std::move(values));
 }
 
+// Releases (launchers/droppers) and claws from the session's mechanism state.
 Value BridgeCore::mechanismValues() const {
     const auto state = session_.mechanismState();
     std::map<std::string, Value> values = {{"sim", Value::map({{"time", Value::time(last_ros_ns_)}})},
@@ -733,28 +814,35 @@ Value BridgeCore::mechanismValues() const {
 }
 
 namespace {
+// Monotonic wall time for the step timing counters.
 std::int64_t nowNs() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
         .count();
 }
 } // namespace
 
+// Advances one tick and collects everything due: clock, sensor samples, timed streams, TF, feed events.
 StepOutput BridgeCore::step() {
     const std::int64_t t0 = nowNs();
     StepResult result = session_.advance();
     const std::int64_t t1 = nowNs();
     timing_.advance_ns += t1 - t0;
+
     const auto &snapshot = result.snapshot;
     for (auto &event : result.task_events)
         task_events_.push_back(event);
     observeGeneration(snapshot);
     const std::int64_t now = snapshot.elapsed.count();
     last_ros_ns_ = rosNs(now);
+
     StepOutput out;
+    // Clock: the next tick lands on the next period boundary.
     if (now >= clock_.next_ns) {
         out.clocks.push_back(last_ros_ns_);
         clock_.next_ns = now - now % clock_.period_ns + clock_.period_ns;
     }
+
+    // Sensor samples drained this tick, stamped at acquisition time.
     for (auto &sample : session_.drainSensors()) {
         const auto streams = sensor_streams_.find(sample.sensor); // unbridged sensors still drain
         if (!sample.reading) {
@@ -768,8 +856,10 @@ StepOutput BridgeCore::step() {
         for (const auto &stream : streams->second)
             out.publications.push_back(publish(stream, values));
     }
+
     const std::int64_t t2 = nowNs();
     timing_.sensors_ns += t2 - t1;
+    // Timed state streams; the robot state is computed at most once per tick.
     std::optional<Value> state;
     const auto robot = [&]() -> const Value & {
         if (!state)
@@ -792,6 +882,8 @@ StepOutput BridgeCore::step() {
             out.publications.push_back(publish(stream, robot()));
         timed.next_ns += timed.period_ns;
     }
+
+    // Truth TF at its own rates.
     for (std::size_t k = 0; k < tf_publish_.size(); ++k) {
         auto &timed = tf_timed_[k];
         if (now < timed.next_ns)
@@ -803,12 +895,15 @@ StepOutput BridgeCore::step() {
                                   Eigen::Vector3d(p[0], p[1], p[2]), Eigen::Quaterniond(q[0], q[1], q[2], q[3])});
         timed.next_ns += timed.period_ns;
     }
+
+    // Task feed events of this tick.
     for (auto &publication : flush())
         out.publications.push_back(std::move(publication));
     timing_.timed_ns += nowNs() - t2;
     return out;
 }
 
+// Task feed items as JSON publications on every tasks.feed stream.
 std::vector<Publication> BridgeCore::flush() {
     std::vector<Publication> publications;
     const Json feed = session_.takeFeed();
@@ -820,6 +915,7 @@ std::vector<Publication> BridgeCore::flush() {
     return publications;
 }
 
+// Republishes non-robot state streams so the viewer stays current while stepping is paused.
 std::vector<Publication> BridgeCore::refresh() {
     std::vector<Publication> publications;
     for (const auto &[stream, timed] : timed_) {
@@ -838,6 +934,7 @@ std::vector<Publication> BridgeCore::refresh() {
     return publications;
 }
 
+// Scenario description, published once at startup.
 std::vector<Publication> BridgeCore::startupPublications() {
     std::vector<Publication> publications;
     for (const auto &stream : startup_streams_)
@@ -852,6 +949,8 @@ std::string BridgeCore::scenarioJson() const {
 
 // ------------------------------------------------------------------ inbound
 
+// Handles one inbound message: filter, read the arguments, dispatch by endpoint. Returns the event
+// publications it caused (kill state, command replies).
 std::vector<Publication> BridgeCore::receive(const std::string &stream, const void *message) {
     const Reader &reader = readers_.at(stream);
     Value arguments;
@@ -865,6 +964,7 @@ std::vector<Publication> BridgeCore::receive(const std::string &stream, const vo
         Counters::bump(counters_.rejected_commands, stream + ":malformed");
         return {};
     }
+
     const std::string endpoint = stream_config_.at(stream).at("native");
     if (endpoint == "command:thrusters.set_forces") {
         command(stream, arguments.at("forces_n").a);
@@ -880,6 +980,7 @@ std::vector<Publication> BridgeCore::receive(const std::string &stream, const vo
         runCommand(arguments.at("command_json").s);
         return {};
     }
+
     CommandResult result;
     if (endpoint == "command:scenario.reset") {
         const auto [accepted, text] = fullReset();
@@ -894,6 +995,8 @@ std::vector<Publication> BridgeCore::receive(const std::string &stream, const vo
     return {publish(config["reply_stream"], resultValue(last_ros_ns_, result))};
 }
 
+// Run control from a JSON command {"action": "start" | "stop" | "adjustment", ...}; rejections are
+// counted and shown on the viewer's scorecard.
 CommandResult BridgeCore::runCommand(const std::string &text) {
     CommandResult result;
     try {
@@ -925,6 +1028,7 @@ CommandResult BridgeCore::runCommand(const std::string &text) {
     } catch (const Json::exception &error) {
         result = CommandResult{false, error.what()};
     }
+
     if (!result.accepted) {
         Counters::bump(counters_.rejected_commands, "run_command");
         session_.setRunMessage("Command rejected: " + result.message); // shown by the viewer's scorecard
@@ -932,6 +1036,7 @@ CommandResult BridgeCore::runCommand(const std::string &text) {
     return result;
 }
 
+// Thruster forces in ROS order: validate, reject or zero while killed, then scale and permute to native.
 void BridgeCore::command(const std::string &stream, const std::vector<double> &forces_in) {
     const Json &block = config_.at("thrusters");
     if (forces_in.size() != thruster_index_->size()) {
@@ -942,6 +1047,7 @@ void BridgeCore::command(const std::string &stream, const std::vector<double> &f
         Counters::bump(counters_.rejected_commands, stream + ":nonfinite");
         return;
     }
+
     std::vector<double> forces = forces_in;
     if (session_.killed()) {
         if (commands_while_killed_ == "rejected") {
@@ -950,6 +1056,7 @@ void BridgeCore::command(const std::string &stream, const std::vector<double> &f
         }
         std::fill(forces.begin(), forces.end(), 0.0);
     }
+
     Eigen::VectorXd native = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(thruster_index_->size()));
     for (std::size_t position = 0; position < thruster_index_->size(); ++position)
         native[static_cast<Eigen::Index>((*thruster_index_)[position])] =
@@ -961,6 +1068,7 @@ void BridgeCore::command(const std::string &stream, const std::vector<double> &f
     session_.commandThrusters(native);
 }
 
+// Applies the kill switch and publishes the resulting state on the kill_changed event streams.
 std::vector<Publication> BridgeCore::setKilled(bool killed) {
     session_.setKilled(killed);
     std::vector<Publication> out;
@@ -976,6 +1084,8 @@ std::vector<Publication> BridgeCore::setKilled(bool killed) {
 
 // ------------------------------------------------------------------ services
 
+// Serves one request: placement and resets go through placeState/fullReset, everything else through
+// mechanismAction. Accepted resets, and placements with align_estimator, queue an estimator alignment.
 void BridgeCore::call(const std::string &service, const void *request, void *response) {
     ServiceEntry &entry = services_.at(service);
     Counters::bump(counters_.service_calls, service);
@@ -987,6 +1097,7 @@ void BridgeCore::call(const std::string &service, const void *request, void *res
         entry.writer.apply(response, resultValue(last_ros_ns_, CommandResult{false, error.what()}));
         return;
     }
+
     const std::string action = entry.options.at("action");
     std::optional<std::string> trigger;
     bool accepted = false;
@@ -1011,12 +1122,14 @@ void BridgeCore::call(const std::string &service, const void *request, void *res
         std::tie(accepted, message) = placeReference(arguments, entry.options);
         trigger = "placement";
     }
+
     if (accepted && trigger &&
         (*trigger == "reset_to_start" || *trigger == "full_reset" || entry.options.value("align_estimator", false)))
         requestAlignment(*trigger);
     entry.writer.apply(response, resultValue(last_ros_ns_, CommandResult{accepted, message}));
 }
 
+// Mechanism and task commands; fire's task events are appended to task_events_.
 CommandResult BridgeCore::mechanismAction(const std::string &action, const Value &arguments) {
     if (action == "command:mechanisms.set_armed")
         return session_.setArmed(arguments.at("armed").b);
@@ -1037,6 +1150,7 @@ CommandResult BridgeCore::mechanismAction(const std::string &action, const Value
     return session_.commandClaw(identifier, arguments.at("open").b);
 }
 
+// Resets the whole scenario; cameras drop pending work and take the session seed first.
 std::pair<bool, std::string> BridgeCore::fullReset() {
     if (cameras_ != nullptr)
         cameras_->invalidate(session_.seed());
@@ -1046,12 +1160,14 @@ std::pair<bool, std::string> BridgeCore::fullReset() {
     return {true, "Scenario reset: plant, sensors, mechanisms, payloads, tasks and scores"};
 }
 
+// target_T_source through the node's TF lookup; identity for the same frame.
 std::optional<spatial::Pose> BridgeCore::transform(const std::string &target, const std::string &source) const {
     if (target == source)
         return spatial::Pose{};
     return lookup_ ? lookup_(target, source) : std::nullopt;
 }
 
+// Places the robot so its reference frame lands at `pose` (given in pose.frame, default the world).
 std::pair<bool, std::string> BridgeCore::placeReference(const Value &pose, const Json &options) {
     Eigen::Quaterniond raw(pose.at("orientation_w").asDouble(), pose.at("orientation_x").asDouble(),
                            pose.at("orientation_y").asDouble(), pose.at("orientation_z").asDouble());
@@ -1060,6 +1176,7 @@ std::pair<bool, std::string> BridgeCore::placeReference(const Value &pose, const
     const double norm = raw.norm();
     if (!(position.allFinite() && std::isfinite(norm) && norm > 1e-10))
         return {false, "pose must be finite with a nonzero quaternion"};
+
     const std::string frame = pose.at("frame").s.empty() ? world_frame_ : pose.at("frame").s;
     const auto world_to_frame = transform(world_frame_, frame);
     if (!world_to_frame)
@@ -1067,6 +1184,8 @@ std::pair<bool, std::string> BridgeCore::placeReference(const Value &pose, const
     raw.coeffs() /= norm;
     const spatial::Pose world_reference = spatial::compose(*world_to_frame, spatial::Pose{position, raw});
     const spatial::Pose com = spatial::compose(world_reference, spatial::inverse(root_to_reference_));
+
+    // Reference pose -> body (root) state for the session.
     simulation::BodyState state;
     state.position = com.translation;
     state.orientation = com.rotation;
@@ -1079,6 +1198,7 @@ std::pair<bool, std::string> BridgeCore::placeReference(const Value &pose, const
     return placeState(state, keep, options.at("becomes_start_pose"));
 }
 
+// Places the session at `state` (velocities zeroed unless kept) and reports the reference position.
 std::pair<bool, std::string> BridgeCore::placeState(const simulation::BodyState &state, bool keep_velocity,
                                                     bool becomes_start) {
     simulation::BodyState target;
@@ -1107,6 +1227,7 @@ std::pair<bool, std::string> BridgeCore::placeState(const simulation::BodyState 
 
 // ------------------------------------------------------------------ estimator alignment
 
+// Queues an alignment for a configured trigger; a newer trigger supersedes the pending one.
 void BridgeCore::requestAlignment(const std::string &trigger) {
     if (!alignment_)
         return;
@@ -1119,6 +1240,8 @@ void BridgeCore::requestAlignment(const std::string &trigger) {
         }
 }
 
+// The queued alignment as the truth reference pose in the estimate's frame, once an estimate and a
+// transform exist.
 std::optional<Alignment> BridgeCore::pendingAlignment() {
     if (!alignment_pending_ || !latest_estimate_)
         return std::nullopt;

@@ -8,6 +8,7 @@
 
 namespace nereus::ros_viewer::host {
 namespace {
+// Wrap to (-180, 180].
 float wrapDegrees(float degrees) {
     degrees = std::fmod(degrees, 360.f);
     if (degrees <= -180)
@@ -16,6 +17,7 @@ float wrapDegrees(float degrees) {
         degrees -= 360;
     return degrees;
 }
+
 // A number, with any unit after it ("0.5m", "30deg", "30°"); false if the word does not start with one.
 bool number(const std::string &word, float &value) {
     const char *start = word.c_str();
@@ -26,6 +28,8 @@ bool number(const std::string &word, float &value) {
     const std::string unit(end);
     return unit.empty() || unit == "m" || unit == "deg" || unit == "°";
 }
+
+// printf one float into a short string.
 std::string format(const char *pattern, float value) {
     char text[48];
     std::snprintf(text, sizeof(text), pattern, double(value));
@@ -52,6 +56,7 @@ std::string describe(const PoseTarget &target) {
 }
 
 ParsedMove parseMove(const std::string &text, const PoseTarget &from) {
+    // Lower-case and split on spaces and commas.
     std::vector<std::string> words;
     {
         std::string spaced = text;
@@ -61,6 +66,8 @@ ParsedMove parseMove(const std::string &text, const PoseTarget &from) {
         for (std::string word; in >> word;)
             words.push_back(word);
     }
+
+    // Word classes: relative moves along the heading, absolute axes, and every move keyword.
     const auto along = [](const std::string &w) {
         return w == "forward" || w == "fwd" || w == "ahead" || w == "back" || w == "backward" || w == "backwards" ||
                w == "left" || w == "right" || w == "up" || w == "down";
@@ -71,13 +78,18 @@ ParsedMove parseMove(const std::string &text, const PoseTarget &from) {
     const auto moveWord = [&](const std::string &w) {
         return along(w) || absolute(w) || w == "turn" || w == "go" || w == "goto" || w == "level";
     };
+
+    // Not a move at all unless the first word is one; the palette treats it as something else.
     ParsedMove parsed;
     if (words.empty() || !moveWord(words[0]))
         return parsed;
     parsed.isMove = true;
+
+    // Apply each move word in order to a running target; `said` collects the read-back.
     PoseTarget target = from;
     std::vector<std::string> said;
     std::size_t i = 0;
+    // Consume the next word if it is a number.
     const auto next = [&](float &value) { return i < words.size() && number(words[i], value) ? (++i, true) : false; };
     while (i < words.size()) {
         const std::string word = words[i++];
@@ -88,6 +100,7 @@ ParsedMove parseMove(const std::string &text, const PoseTarget &from) {
                            "roll / pitch / yaw, go, level";
             return parsed;
         }
+
         if (along(word)) {
             if (!next(value)) {
                 parsed.error = word + " needs a distance in metres, e.g. " + word + " 0.5";
@@ -121,6 +134,8 @@ ParsedMove parseMove(const std::string &text, const PoseTarget &from) {
                                               : " 2");
                 return parsed;
             }
+
+            // x / y / z index position components 0 / 1 / 2.
             if (word == "x" || word == "y" || word == "z")
                 target.position[word[0] - 'x'] = value;
             else if (word == "roll")
@@ -131,6 +146,7 @@ ParsedMove parseMove(const std::string &text, const PoseTarget &from) {
                 target.degrees.z = wrapDegrees(value);
             said.push_back((word == "heading" ? "yaw" : word) + format(angle ? " %g°" : " %g m", value));
         } else if (word == "go" || word == "goto") {
+            // go x y z, go x y z yaw, or go x y z roll pitch yaw.
             float v[6];
             int count = 0;
             while (count < 6 && next(v[count]))
@@ -150,6 +166,8 @@ ParsedMove parseMove(const std::string &text, const PoseTarget &from) {
             said.push_back("level");
         }
     }
+
+    // Join the read-back parts into the summary.
     PoseCommand command{target, {}};
     for (const auto &part : said)
         command.summary += (command.summary.empty() ? "" : ", ") + part;

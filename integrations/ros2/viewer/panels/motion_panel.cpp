@@ -1,3 +1,5 @@
+// Motion panel: Enable / KILL (also in the toolbar and the pinned command bar), the controller mode, a pose table
+// (actual, commanded, error, editable target) and the Current / Command / Dive / Zero roll & pitch actions.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panels/pose_math.hpp"
@@ -9,6 +11,7 @@
 
 namespace nereus::ros_viewer::panels {
 namespace {
+
 // Numeric displays align to the right edge of their column. Editable values use
 // normal text editing while active and the same right alignment at rest.
 void numericText(const char *text, bool available = true) {
@@ -20,11 +23,16 @@ void numericText(const char *text, bool available = true) {
     else
         ImGui::TextDisabled("%s", text);
 }
+
+// A value to two decimals, or "--" when unavailable (the name argument is unused).
 void numericValue(const char *, float value, bool available) {
     char text[64];
     std::snprintf(text, sizeof(text), "%.2f", value);
     numericText(available ? text : "--", available);
 }
+
+// An InputFloat that edits normally while active; at rest its own text is made transparent and the value is drawn
+// right-aligned over it. Returns true when the value changed.
 bool targetInput(float *value) {
     const bool editing = ImGui::GetActiveID() == ImGui::GetID("##target");
     const auto color = ImGui::GetColorU32(ImGuiCol_Text);
@@ -45,16 +53,21 @@ bool targetInput(float *value) {
     }
     return changed;
 }
+
 class MotionPanel final : public Panel {
     std::shared_ptr<Motion> motion;
-    std::function<void()> kill, drawOverlayControls;
+    std::function<void()> kill, drawOverlayControls; // from the composition's Binding
     std::function<bool()> keyboardDriving;
     std::function<void(bool)> setKeyboardDriving;
+
+    // The editable target: position in metres, roll/pitch/yaw in degrees.
     glm::vec3 position{0}, degrees{0};
-    bool initialized = false, dirty = false, hasDive;
-    Mode selected = Mode::Position;
-    float diveZ;
-    uint64_t revision = 0;
+    bool initialized = false, dirty = false, hasDive; // dirty: target edited and not yet sent
+    Mode selected = Mode::Position;                   // the mode the next Command uses
+    float diveZ;                                      // option dive_z: depth for "Dive in place"
+    uint64_t revision = 0;                            // last command revision copied into the target
+
+    // Loads a pose into the target fields.
     void copy(const Pose &p) {
         position = glm::vec3(p[3]);
         degrees = glm::degrees(glm::eulerAngles(glm::quat_cast(p)));
@@ -67,6 +80,8 @@ class MotionPanel final : public Panel {
           drawOverlayControls(b.drawOverlayControls), keyboardDriving(b.keyboardDriving),
           setKeyboardDriving(b.setKeyboardDriving), hasDive(bool(b.options["dive_z"])),
           diveZ(b.options["dive_z"].as<float>(0)) {}
+
+    // The Enable / KILL key, shared by the toolbar, the command bar and the panel.
     void enableKillButton(ImVec2 size) {
         const auto s = motion ? motion->state() : MotionState{};
         // Always switchable once connected; a robot seen enabled, or another operator on the switch, offers KILL.
@@ -96,6 +111,7 @@ class MotionPanel final : public Panel {
         ImGui::EndDisabled();
         ImGui::PopStyleVar();
     }
+
     // "Robot: enabled" etc., coloured by the robot's reported kill state.
     const char *stateText(const MotionState &s, ImVec4 &tint) const {
         const auto &p = palette();
@@ -104,10 +120,12 @@ class MotionPanel final : public Panel {
                : s.observedKilled ? (*s.observedKilled ? "Robot: killed" : "Robot: enabled")
                                   : "Robot: state unknown";
     }
+
     void toolbar() override {
         nereus::ros_viewer::sameLineIfFits(ui(90));
         enableKillButton({90, ImGui::GetFrameHeight()});
     }
+
     // Command bar: always visible whatever the window layout, so KILL is never behind a closed or tabbed window.
     void pinned() override {
         const auto s = motion ? motion->state() : MotionState{};
@@ -124,6 +142,7 @@ class MotionPanel final : public Panel {
         ImGui::GetWindowDrawList()->AddText({at.x, at.y + (height - ImGui::GetFontSize()) * .5f},
                                             ImGui::GetColorU32(tint), text);
     }
+
     void draw() override {
         const auto s = motion ? motion->state() : MotionState{};
         // Enable / KILL here too (also pinned in the command bar), full width with the robot's state under it.
@@ -132,6 +151,9 @@ class MotionPanel final : public Panel {
         const char *state = stateText(s, tint);
         ImGui::TextColored(tint, "%s", state);
         ImGui::Separator();
+
+        // Keep the target in sync: follow the actual pose until a command exists, then each new command, unless the
+        // operator has unsent edits.
         if (s.fresh && (!initialized || (!dirty && !s.hasCommand)))
             copy(s.actual);
         if (s.revision != revision) {
@@ -142,6 +164,8 @@ class MotionPanel final : public Panel {
         if (!s.pending)
             selected = s.mode == Mode::Feedforward ? Mode::Feedforward : Mode::Position;
         ImGui::TextWrapped("%s", s.message.c_str());
+
+        // Commands need a connected, enabled, fresh robot that nothing else holds.
         const bool unavailable = !motion || !s.enabled || !s.fresh || s.pending || s.blocked || s.competing;
         ImGui::BeginDisabled(unavailable);
         // the controller's mode as a switch (Feedforward greyed when the controller has none)
@@ -157,6 +181,8 @@ class MotionPanel final : public Panel {
         if (s.mode == Mode::Feedforward)
             ImGui::TextWrapped("Feedforward controller mode; pose feedback is disabled.");
         ImGui::EndDisabled();
+
+        // Pose table.
         ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ui(ImVec2(2, 2)));
         // denser rows at a large interface scale, so the six axes fit a short panel
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
@@ -165,6 +191,7 @@ class MotionPanel final : public Panel {
         // The table scrolls on its own when the panel is short, so the actions below it stay in view.
         const float rowHeight = ImGui::GetFrameHeight() + ui(4);
         const float buttonRow = std::max(ui(40), ImGui::GetFrameHeight()) + ImGui::GetStyle().ItemSpacing.y;
+        // Whether the three action buttons fit one row: their labels plus 4 px frame padding on both sides of each.
         const bool oneRow = !hasDive || ImGui::CalcTextSize("CurrentCommandDive in place").x + 6 * 4 +
                                                 2 * ImGui::GetStyle().ItemSpacing.x <=
                                             ImGui::GetContentRegionAvail().x;
@@ -213,6 +240,8 @@ class MotionPanel final : public Panel {
             if (typeRamp().strong && ruledTheme())
                 ImGui::PopFont();
             ruleUnderHeaders();
+
+            // One row per axis: X, Y, Z in metres, then roll, pitch, yaw in degrees.
             const auto actualAngles = glm::degrees(glm::eulerAngles(glm::quat_cast(s.actual)));
             const auto sentAngles = glm::degrees(glm::eulerAngles(glm::quat_cast(s.commanded)));
             const char *names[] = {"X", "Y", "Z", "Roll", "Pitch", "Yaw"};
@@ -241,6 +270,8 @@ class MotionPanel final : public Panel {
             ImGui::EndTable();
         }
         ImGui::PopStyleVar(2);
+
+        // Action buttons, widened evenly to fill the row.
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, ImGui::GetStyle().FramePadding.y));
         const float actionsWidth = ImGui::CalcTextSize("Current").x + ImGui::CalcTextSize("Command").x +
                                    4 * ImGui::GetStyle().FramePadding.x + ImGui::GetStyle().ItemSpacing.x +
@@ -252,6 +283,8 @@ class MotionPanel final : public Panel {
             return ImVec2(ImGui::CalcTextSize(label).x + 2 * ImGui::GetStyle().FramePadding.x + extraWidth,
                           std::max(ui(40), ImGui::GetFrameHeight()));
         };
+
+        // Current: load the actual pose into the target without sending it.
         ImGui::BeginDisabled(!motion || !s.fresh || s.pending || s.blocked);
         if (pins::Button("Current", actionSize("Current"))) {
             copy(s.actual);
@@ -259,6 +292,8 @@ class MotionPanel final : public Panel {
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
+
+        // Command sends the edited target; Dive in place keeps the actual x, y and yaw, moves to z = dive_z, levels.
         ImGui::BeginDisabled(unavailable);
         const bool finite = std::isfinite(position.x + position.y + position.z + degrees.x + degrees.y + degrees.z);
         ImGui::BeginDisabled(!finite);
@@ -279,9 +314,12 @@ class MotionPanel final : public Panel {
         }
         ImGui::EndDisabled();
         ImGui::PopStyleVar();
+
         // the drag hint gives way on a short panel (the table already scrolls); an unsent target always shows
         if (dirty || tableHeight >= 7 * rowHeight)
             ImGui::TextDisabled("%s", dirty ? "Target edited / not sent" : "Drag an axis or ring in the pool view");
+
+        // Overlay toggles for this provider, then the extra actions flowing on the same lines.
         if (drawOverlayControls)
             drawOverlayControls();
         // Level: hold the current position and heading with roll and pitch commanded to zero
@@ -317,7 +355,10 @@ class MotionPanel final : public Panel {
         }
     }
 };
+
 } // namespace
+
+// Registers the "motion" panel type; options: dive_z (enables Dive in place), dive_max_depth_z (needs dive_z).
 void registerMotionPanel(Registry &r) {
     r.panels.emplace("motion", ViewFactory<Panel>{Kind::Motion,
                                                   [](const YAML::Node &n) {
@@ -330,4 +371,5 @@ void registerMotionPanel(Registry &r) {
                                                   },
                                                   [](const Binding &b) { return std::make_unique<MotionPanel>(b); }});
 }
+
 } // namespace nereus::ros_viewer::panels

@@ -15,6 +15,7 @@
 #include <vector>
 
 namespace nereus::datasets {
+// Renderer knobs that are not part of the job document.
 struct GeneratorOptions {
     std::filesystem::path shader_directory; // empty: $NEREUS_SHADER_DIR, then the build tree's shaders
     // Prefilter label pass resolution as a fraction of the output (A9; 1 = no prefilter). It only rejects views
@@ -33,27 +34,34 @@ struct SceneEntry {
     std::uint32_t label_id = 0; // composed scene index + 1 when it has parts, else 0
 };
 
+// Owns the offscreen GL context and the per-scenario scenes; render() is the per-sample entry point.
 class Generator {
   public:
     Generator(Job, GeneratorOptions = {});
     ~Generator();
+
     const Job &job() const {
         return job_;
     }
+
     // Every scene instance of the first scenario: source, submesh materials / diffuse textures / parts.
     Json describe();
     // Renders sample k (if not already present) and returns its log line: status accepted | skipped | existing,
     // attempts, rejection reason counts, timings.
     Json render(std::int64_t k);
+
+    // GL_RENDERER string of the offscreen context (printed by the CLI, recorded by describe()).
     const std::string &device() const;
 
   private:
+    // Per-scenario state (scene, labels, task frames), built lazily by scenario().
     struct Scenario;
+
     Job job_;
     GeneratorOptions options_;
     std::unique_ptr<rendering::OffscreenRenderer> host_;
     std::vector<std::unique_ptr<Scenario>> scenarios_;
-    SplitCache split_cache_;
+    SplitCache split_cache_; // split rewrites shared by every scenario's instances
 
     Scenario &scenario(std::size_t index);
 };

@@ -16,8 +16,10 @@
 #include <vector>
 
 namespace {
+
 namespace ds = nereus::datasets;
 
+// Prints the usage (after `what`, if given) and returns the exit status 2.
 int usage(const char *what = nullptr) {
     if (what)
         std::cerr << "nereus-dataset-render: " << what << "\n";
@@ -43,6 +45,7 @@ void removeStaleTemporaries(const std::filesystem::path &output) {
 double seconds(std::chrono::steady_clock::time_point start) {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 }
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -50,6 +53,8 @@ int main(int argc, char **argv) {
     long long shard = 0, shards = 1, limit = -1;
     bool describe = false;
     ds::GeneratorOptions options;
+
+    // Command line.
     try {
         for (int i = 1; i < argc; ++i) {
             const std::string arg = argv[i];
@@ -100,6 +105,8 @@ int main(int argc, char **argv) {
             std::cout << generator.describe().dump(1) << "\n";
             return 0;
         }
+
+        // Output folders, stale temporaries, and this shard's append-only JSONL log.
         const auto &job = generator.job();
         for (const char *folder : {"images", "ids", "records", "logs"})
             std::filesystem::create_directories(job.output / folder);
@@ -110,6 +117,7 @@ int main(int argc, char **argv) {
         if (!log)
             throw std::runtime_error("cannot open " + logPath.string());
 
+        // Progress lines on stderr: counts, throughput and the share of pose attempts accepted.
         const auto total = job.sampleCount();
         std::cerr << "nereus-dataset-render: " << job.dataset << ", " << total << " samples, shard " << shard << "/"
                   << shards << ", device " << generator.device() << "\n";
@@ -123,6 +131,7 @@ int main(int argc, char **argv) {
                          prefix, done, accepted, skipped, existing, rendered / std::max(elapsed, 1e-9),
                          rendered > 0 ? elapsed / rendered : 0.0, attempts ? 100.0 * accepted / attempts : 0.0);
         };
+
         // This shard's samples grouped by scenario (k % scenarios), then by k: one scenario's meshes stay resident
         // instead of alternating every sample. Each sample's output depends only on k.
         const auto scenarios = static_cast<long long>(job.scenarios.size());
@@ -131,6 +140,8 @@ int main(int argc, char **argv) {
             order.push_back(k);
         std::stable_sort(order.begin(), order.end(),
                          [&](long long a, long long b) { return a % scenarios < b % scenarios; });
+
+        // Render; --limit counts rendered samples (accepted or skipped), not existing ones.
         for (const long long k : order) {
             if (limit >= 0 && accepted + skipped >= limit)
                 break;

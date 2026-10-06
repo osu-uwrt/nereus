@@ -13,6 +13,7 @@ from typing import IO
 
 from nereus.packs import PackError
 
+# Environment variable naming the renderer executable (second in the lookup order)
 RENDERER_ENV = "NEREUS_DATASET_RENDERER"
 # Source checkout: python/src/nereus/datasets/render.py -> repository root.
 REPOSITORY = Path(__file__).resolve().parents[4]
@@ -25,6 +26,7 @@ BUILT = tuple(
 
 def find_renderer(explicit: Path | None = None) -> Path:
     """``--renderer``, then ``$NEREUS_DATASET_RENDERER``, then the datasets / ros-viewer builds."""
+    # An explicitly given renderer must work; never fall back past it
     given = [
         (explicit, "--renderer"),
         (Path(os.environ[RENDERER_ENV]) if os.environ.get(RENDERER_ENV) else None, RENDERER_ENV),
@@ -35,6 +37,7 @@ def find_renderer(explicit: Path | None = None) -> Path:
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return candidate.resolve()
         raise PackError(f"{candidate}: renderer from {origin} is not an executable file")
+
     for built in BUILT:
         candidate = REPOSITORY / built
         if candidate.is_file() and os.access(candidate, os.X_OK):
@@ -45,6 +48,7 @@ def find_renderer(explicit: Path | None = None) -> Path:
 
 
 def _pump(stream: IO[str], prefix: str, lock: threading.Lock) -> None:
+    """Copy a shard's output to stdout line by line; the lock keeps lines from interleaving."""
     for line in stream:
         with lock:
             sys.stdout.write(f"{prefix}{line}" if line.endswith("\n") else f"{prefix}{line}\n")
@@ -52,6 +56,7 @@ def _pump(stream: IO[str], prefix: str, lock: threading.Lock) -> None:
 
 
 def _interrupt(signum: int, frame: FrameType | None) -> None:
+    """SIGTERM handler: unwind like Ctrl-C so ``render`` terminates its shards."""
     raise KeyboardInterrupt(f"signal {signum}")
 
 
@@ -61,6 +66,7 @@ def render(folder: Path, *, workers: int = 2, renderer: Path | None = None) -> N
     if not job.is_file():
         raise PackError(f"{job}: no job (run 'nereus-dataset plan' first)")
     binary = find_renderer(renderer)
+
     workers = max(1, workers)
     lock = threading.Lock()
     processes: list[subprocess.Popen[str]] = []
@@ -69,6 +75,7 @@ def render(folder: Path, *, workers: int = 2, renderer: Path | None = None) -> N
     handle_term = threading.current_thread() is threading.main_thread()
     previous = signal.signal(signal.SIGTERM, _interrupt) if handle_term else None
     try:
+        # One process per shard ("--shard i/n"), each with a thread streaming its output
         for index in range(workers):
             command = [str(binary), str(job), "--shard", f"{index}/{workers}"]
             process = subprocess.Popen(
@@ -88,6 +95,7 @@ def render(folder: Path, *, workers: int = 2, renderer: Path | None = None) -> N
             threads.append(thread)
         codes = [process.wait() for process in processes]
     except BaseException:
+        # Interrupted or failed to start: stop every shard still running, then re-raise
         for process in processes:
             if process.poll() is None:
                 process.terminate()
@@ -97,6 +105,8 @@ def render(folder: Path, *, workers: int = 2, renderer: Path | None = None) -> N
     finally:
         if handle_term:
             signal.signal(signal.SIGTERM, previous)
+
+    # Drain the remaining output before reporting failed shards
     for thread in threads:
         thread.join()
     failed = [f"shard {index}/{workers} exit {code}" for index, code in enumerate(codes) if code]

@@ -17,6 +17,7 @@ Pose = tuple[Vector, Vector]  # (position_m, orientation_wxyz): child coordinate
 
 
 def _rotate(q: Vector, v: Vector) -> Vector:
+    """Rotate ``v`` by the unit quaternion ``q`` (wxyz) via its rotation matrix."""
     w, x, y, z = q
     rows = (
         (1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)),
@@ -27,6 +28,7 @@ def _rotate(q: Vector, v: Vector) -> Vector:
 
 
 def _multiply(a: Vector, b: Vector) -> Vector:
+    """Hamilton product ``a * b`` of wxyz quaternions (``b`` applied first)."""
     aw, ax, ay, az = a
     bw, bx, by, bz = b
     return [
@@ -44,17 +46,20 @@ def _unit(vector: Vector) -> Vector:
 
 
 def _pose(item: dict[str, Any]) -> Pose:
+    """Pose of a pack transform entry (``position_m`` + ``orientation_wxyz``)."""
     return [float(value) for value in item["position_m"]], _unit(
         [float(value) for value in item["orientation_wxyz"]]
     )
 
 
 def _compose(parent: Pose, child: Pose) -> Pose:
+    """Chain poses: ``child`` is expressed in ``parent``'s frame; result is in parent's parent."""
     position = [a + b for a, b in zip(parent[0], _rotate(parent[1], child[0]))]
     return position, _unit(_multiply(parent[1], child[1]))
 
 
 def _inverse(pose: Pose) -> Pose:
+    """Inverse transform: parent coordinates into the child."""
     w, x, y, z = pose[1]
     conjugate = [w, -x + 0.0, -y + 0.0, -z + 0.0]
     return _rotate(conjugate, [-value for value in pose[0]]), conjugate
@@ -69,6 +74,8 @@ def express_in_body(robot: dict[str, Any]) -> None:
     """
     frames = robot["frames"]
     body = frames.pop("body", frames["root"])
+
+    # Walk from the body frame up to the authored root, collecting the edges on that path
     edges = {item["child"]: item for item in frames["transforms"]}
     path, node = [], body
     while node != frames["root"]:
@@ -84,6 +91,8 @@ def express_in_body(robot: dict[str, Any]) -> None:
             orientation_wxyz=orientation,
         )
     frames["root"] = body
+
+    # Body-frame pose of every frame, resolved lazily through the re-rooted tree
     edges = {item["child"]: item for item in frames["transforms"]}
     resolved: dict[str, Pose] = {body: ([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])}
 
@@ -93,11 +102,14 @@ def express_in_body(robot: dict[str, Any]) -> None:
             resolved[name] = _compose(from_body(edge["parent"]), _pose(edge))
         return resolved[name]
 
+    # Thrusters placed by frame: position plus thrust along the frame's +X
     for thruster in robot["thrusters"]:
         if "frame" in thruster:
             position, orientation = from_body(thruster.pop("frame"))
             thruster["position_m"] = position
             thruster["direction"] = _unit(_rotate(orientation, [1.0, 0.0, 0.0]))
+
+    # Collision boxes authored in a named frame
     for box in robot["collision_boxes"]:
         if "frame" in box:
             local = (
@@ -105,6 +117,8 @@ def express_in_body(robot: dict[str, Any]) -> None:
                 _unit([float(value) for value in box["orientation_wxyz"]]),
             )
             box["center_m"], box["orientation_wxyz"] = _compose(from_body(box.pop("frame")), local)
+
+    # Altitude sensors reporting a named frame's altitude get that frame's body position
     for sensor in robot["sensors"]:
         if "target_frame" in sensor["parameters"]:
             target = from_body(sensor["parameters"].pop("target_frame"))

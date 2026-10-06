@@ -14,6 +14,8 @@ TEST(Mechanisms, ReplaysTheRecordedScript) {
     const auto fixture = loadFixture("mechanisms_reference.json");
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     Mechanisms m(scenario.robot);
+
+    // Fixed vehicle pose and velocity used for every fire op; the kill switch starts engaged.
     const auto &p = fixture.at("pose");
     Pose pose{Eigen::Vector3d(p.at("translation")[0], p.at("translation")[1], p.at("translation")[2]),
               Eigen::Quaterniond(p.at("orientation")[0], p.at("orientation")[1], p.at("orientation")[2],
@@ -22,8 +24,11 @@ TEST(Mechanisms, ReplaysTheRecordedScript) {
     const Eigen::Vector3d lin = vec(fixture.at("linear")), ang = vec(fixture.at("angular"));
     const std::int64_t dt = fixture.at("dt_ns");
     bool killed = true;
+
     const auto &ops = fixture.at("ops");
     const auto &log = fixture.at("log");
+
+    // Replay each op and compare its result plus the full mechanism snapshot with the logged entry.
     for (std::size_t i = 0; i < ops.size(); ++i) {
         const auto &op = ops[i];
         const std::string name = op[0];
@@ -60,6 +65,8 @@ TEST(Mechanisms, ReplaysTheRecordedScript) {
         actual["state"] = mechJson(m.snapshot(killed));
         ASSERT_EQ(diff(log[i], actual, "$.log[" + std::to_string(i) + "] " + op.dump()), "");
     }
+
+    // Payload slot mounts match the recorded poses.
     for (const auto &[id, expected] : fixture.at("mounts").items()) {
         ASSERT_EQ(m.slotCount(id), static_cast<int>(expected.size()));
         for (int k = 0; k < m.slotCount(id); ++k) {
@@ -68,11 +75,14 @@ TEST(Mechanisms, ReplaysTheRecordedScript) {
             EXPECT_EQ(diff(expected[static_cast<std::size_t>(k)], actual, "$.mounts." + id), "");
         }
     }
+
     EXPECT_EQ(m.type("claw"), "claw");
     EXPECT_EQ(m.type("torpedo_launcher"), "launcher");
     EXPECT_EQ(m.ids().size(), 4u);
 }
 
+// Mismatched launcher capacity, inverted claw gap limits, unknown arming targets and an actuated magnet (only
+// passive magnets are supported) are rejected, as is a negative advance step.
 TEST(Mechanisms, RejectsInvalidData) {
     auto robot = loadResolvedScenario(NEREUS_RESOLVED_TALOS).robot;
     auto broken = robot;

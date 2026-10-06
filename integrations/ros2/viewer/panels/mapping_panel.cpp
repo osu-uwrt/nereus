@@ -1,16 +1,20 @@
+// Mapping panel: tag frame calibration (parent/tag frames, sample count), the mapping target and map lock,
+// and a mapping reset, all through the bound Mapping provider.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/pins.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <imgui.h>
+
 namespace nereus::ros_viewer::panels {
 namespace {
+
 class MappingPanel final : public Panel {
     std::shared_ptr<Mapping> mapping;
-    char parent[256]{}, child[256]{}, target[256]{};
+    char parent[256]{}, child[256]{}, target[256]{}; // calibration frames; mapping target being edited
     int samples = 10;
-    bool locked = false, initialized = false;
+    bool locked = false, initialized = false; // target/lock seeded once from the first fresh mapping status
 
   public:
     explicit MappingPanel(const Binding &b) : mapping(std::dynamic_pointer_cast<Mapping>(b.provider)) {
@@ -18,8 +22,11 @@ class MappingPanel final : public Panel {
         std::snprintf(child, sizeof(child), "%s", b.options["tag_frame"].as<std::string>("").c_str());
         samples = b.options["samples"].as<int>(10);
     }
+
     void draw() override {
         auto s = mapping ? mapping->state() : MappingState{};
+
+        // Tag calibration: inputs locked while calibrating; Calibrate needs two distinct frames and 1..65535 samples.
         sectionTitle("Tag calibration");
         ImGui::BeginDisabled(s.calibrating);
         ImGui::TextUnformatted("Parent frame");
@@ -48,6 +55,8 @@ class MappingPanel final : public Panel {
         }
         if (mapping && !s.calibrationMessage.empty())
             ImGui::TextWrapped("%s", s.calibrationMessage.c_str());
+
+        // Mapping target and lock, then reset.
         sectionTitle("Mapping target");
         if (s.fresh) {
             ImGui::TextWrapped("Current: %s", s.target.empty() ? "Automatic" : s.target.c_str());
@@ -77,7 +86,10 @@ class MappingPanel final : public Panel {
             ImGui::TextWrapped("%s", s.resetMessage.c_str());
     }
 };
+
 } // namespace
+
+// Registers the "mapping" panel type; options: parent_frame, tag_frame, samples.
 void registerMappingPanel(Registry &r) {
     r.panels.emplace("mapping", ViewFactory<Panel>{Kind::Mapping,
                                                    [](const YAML::Node &n) {
@@ -88,4 +100,5 @@ void registerMappingPanel(Registry &r) {
                                                    },
                                                    [](const Binding &b) { return std::make_unique<MappingPanel>(b); }});
 }
+
 } // namespace nereus::ros_viewer::panels

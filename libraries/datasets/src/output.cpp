@@ -1,3 +1,4 @@
+// Sample outputs: atomic writes, label-capture analysis, id maps and image encoding (OpenCV).
 #include <nereus/datasets/output.hpp>
 
 #include <opencv2/core.hpp>
@@ -15,11 +16,14 @@
 #include <unistd.h>
 
 namespace nereus::datasets {
+
 void writeAtomic(const std::filesystem::path &path, const void *data, std::size_t size, bool sync_directory) {
     const auto temporary = path.string() + ".tmp." + std::to_string(::getpid());
     const int fd = ::open(temporary.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
     if (fd < 0)
         throw std::runtime_error("cannot create " + temporary + ": " + std::strerror(errno));
+
+    // Write everything (retrying on EINTR), fsync, close; on any failure remove the temporary.
     const auto *bytes = static_cast<const char *>(data);
     std::size_t written = 0;
     bool ok = true;
@@ -38,6 +42,8 @@ void writeAtomic(const std::filesystem::path &path, const void *data, std::size_
         ::unlink(temporary.c_str());
         throw std::runtime_error("cannot write " + temporary + ": " + std::strerror(error));
     }
+
+    // Publish under the final name (atomic on one filesystem).
     if (::rename(temporary.c_str(), path.c_str()) != 0) {
         const int renameError = errno;
         ::unlink(temporary.c_str());
@@ -62,6 +68,7 @@ bool nonEmptyFile(const std::filesystem::path &path) {
     return std::filesystem::is_regular_file(path, error) && std::filesystem::file_size(path, error) > 0 && !error;
 }
 
+// Inverts the OpenGL perspective depth mapping: window z in [0, 1] -> NDC [-1, 1] -> eye distance.
 float linearDepth(float z, float near, float far) {
     if (!(z < 1.f))
         return std::numeric_limits<float>::infinity();
@@ -101,6 +108,8 @@ void measureComponents(const rendering::LabelCapture &capture, LabelStats &stats
             for (int x = 0; x < bw; ++x)
                 out[x] = row[item.min_x + x] == key ? 1 : 0;
         }
+
+        // 8-connected components; label 0 is the background.
         cv::Mat labels, sizes, centroids;
         const int count = cv::connectedComponentsWithStats(mask, labels, sizes, centroids, 8, CV_32S);
         for (int c = 1; c < count; ++c)
@@ -118,9 +127,11 @@ LabelStats analyzeLabels(const rendering::LabelCapture &capture, float near_plan
     // Nonlinear depth of near_m: compare in nonlinear space (monotonic) and convert only labelled pixels.
     const float nearZ = ((far_plane + near_plane) - 2 * near_plane * far_plane / near_m) / (far_plane - near_plane);
     const float nearThreshold = (nearZ + 1) / 2;
+
+    // One pass over the bottom-up capture: near counts on every non-excluded pixel, key stats on labelled ones.
     LabelStats stats;
     std::uint32_t lastKey = 0;
-    KeyStats *last = nullptr;
+    KeyStats *last = nullptr; // cached map entry: neighbouring pixels usually share a key
     for (int row = 0; row < h; ++row) {
         const int y = h - 1 - row; // top-down
         for (int x = 0; x < w; ++x) {
@@ -133,7 +144,7 @@ LabelStats analyzeLabels(const rendering::LabelCapture &capture, float near_plan
             }
             const auto key = capture.ids[i];
             if ((key & 0xffu) == 0)
-                continue;
+                continue; // part 0: unlabelled
             if (!last || key != lastKey) {
                 last = &stats.keys[key];
                 lastKey = key;
@@ -157,7 +168,7 @@ std::vector<std::uint16_t> idMap(const rendering::LabelCapture &capture,
                                  const std::map<std::uint32_t, std::uint16_t> &table) {
     const int w = capture.width, h = capture.height;
     std::vector<std::uint16_t> out(static_cast<std::size_t>(w) * static_cast<std::size_t>(h), 0);
-    std::uint32_t lastKey = 0;
+    std::uint32_t lastKey = 0; // last looked-up key (0 never reaches the lookup, so the cache starts empty)
     std::uint16_t lastId = 0;
     for (int row = 0; row < h; ++row) {
         const auto *source = capture.ids.data() + static_cast<std::size_t>(row) * w;
@@ -181,10 +192,11 @@ void postProcess(std::vector<std::uint8_t> &rgb, int width, int height, double b
                  std::uint64_t noise_seed) {
     if (rgb.size() != static_cast<std::size_t>(width) * height * 3)
         throw std::invalid_argument("RGB buffer does not match its size");
-    cv::Mat image(height, width, CV_8UC3, rgb.data());
+    cv::Mat image(height, width, CV_8UC3, rgb.data()); // wraps `rgb`: edits happen in place
     if (blur_sigma > 1e-3)
         cv::GaussianBlur(image, image, cv::Size(0, 0), blur_sigma, blur_sigma, cv::BORDER_REFLECT_101);
     if (noise_sigma > 1e-3) {
+        // Signed 16-bit noise so negative offsets survive the add; converting back saturates to [0, 255].
         cv::Mat noise(height, width, CV_16SC3);
         cv::RNG random(noise_seed);
         random.fill(noise, cv::RNG::NORMAL, cv::Scalar::all(0), cv::Scalar::all(noise_sigma));
@@ -194,6 +206,7 @@ void postProcess(std::vector<std::uint8_t> &rgb, int width, int height, double b
     }
 }
 
+// PNG compression level 1: fast, the files are written once per sample.
 std::vector<std::uint8_t> encodePngRgb(const std::vector<std::uint8_t> &rgb, int width, int height) {
     const cv::Mat image(height, width, CV_8UC3, const_cast<std::uint8_t *>(rgb.data()));
     cv::Mat bgr;
@@ -223,4 +236,5 @@ std::vector<std::uint16_t> decodePng16(const std::filesystem::path &path, int &w
         std::copy_n(image.ptr<std::uint16_t>(y), width, out.data() + static_cast<std::size_t>(y) * width);
     return out;
 }
+
 } // namespace nereus::datasets

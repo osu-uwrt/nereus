@@ -27,6 +27,7 @@ from nereus.packs import PackError
 
 HAS_CV2 = importlib.util.find_spec("cv2") is not None
 
+# One randomization environment: [low, high] lists are ranges, everything else is a fixed value.
 ENVIRONMENT: dict[str, Any] = {
     "id": "murky",
     "weight": 2.0,
@@ -38,6 +39,7 @@ ENVIRONMENT: dict[str, Any] = {
 
 
 def _record(name: str, scenario: int = 0, frame: str | None = "task") -> dict[str, Any]:
+    """A minimal render record: the robot pose and target frame a comparison view reuses."""
     pose = {"position_m": [1.0, 2.0, -1.0], "orientation_wxyz": [1.0, 0.0, 0.0, 0.0]}
     return {
         "name": name,
@@ -49,6 +51,7 @@ def _record(name: str, scenario: int = 0, frame: str | None = "task") -> dict[st
 
 class VariantTests(unittest.TestCase):
     def test_min_mid_max(self) -> None:
+        """variant() pins every range to its low, middle or high end; fixed values pass through."""
         low, mid, high = (variant(ENVIRONMENT, which) for which in ("min", "mid", "max"))
         self.assertEqual(
             [item["water"]["scattering_scale"] for item in (low, mid, high)], [1.3, 1.55, 1.8]
@@ -61,12 +64,15 @@ class VariantTests(unittest.TestCase):
             self.assertEqual(item["time_s"], 300.0)  # always its middle
             self.assertEqual(item["weight"], 1.0)
         self.assertEqual((low["id"], high["id"]), ("murky:min", "murky:max"))
+
+        # A pair of vectors is a range too: its middle is the element-wise mean.
         pair = dict(ENVIRONMENT, water={"tint_rgb": [[0.0, 0.1, 0.2], [0.2, 0.3, 0.4]]})
         np.testing.assert_allclose(variant(pair, "mid")["water"]["tint_rgb"], [0.1, 0.2, 0.3])
         with self.assertRaises(PackError):
             variant(ENVIRONMENT, "high")
 
     def test_set_values(self) -> None:
+        """--set parses group.key=VALUE (JSON or a bare word) and overrides a copy of the env."""
         self.assertEqual(parse_setting("water.scattering=0.6"), ("water.scattering", 0.6))
         self.assertEqual(
             parse_setting("lighting.exposure=[0.7, 0.9]"), ("lighting.exposure", [0.7, 0.9])
@@ -76,6 +82,8 @@ class VariantTests(unittest.TestCase):
         for bad in ("scattering=1", "water=1", "sky.blue=1", "water.scattering"):
             with self.assertRaises(PackError, msg=bad):
                 parse_setting(bad)
+
+        # Applying settings: overrides merge into a copy; invalid results are rejected.
         changed = apply_settings(
             ENVIRONMENT, [parse_setting("water.scattering=0.6"), parse_setting("image.blur_px=1")]
         )
@@ -90,6 +98,7 @@ class VariantTests(unittest.TestCase):
 
 class JobTests(unittest.TestCase):
     def test_views_split_the_range_near_to_far(self) -> None:
+        """Each task block becomes N one-sample views over equal slices of its range/altitude."""
         job: dict[str, Any] = {
             "samples": [
                 {"task": "torpedo", "count": 9, "sampler": {"type": "approach", "range_m": [1, 4]}},
@@ -112,6 +121,7 @@ class JobTests(unittest.TestCase):
         self.assertEqual(job["samples"][0]["sampler"]["range_m"], [1, 4])  # spec untouched
 
     def test_grid_job_fixes_poses_and_forces_environments(self) -> None:
+        """The stage-2 job re-renders one scenario's view poses under every variant, no jitter."""
         base: dict[str, Any] = {
             "output": "/old",
             "scenarios": [{"id": "a", "resolved": "/a.json"}, {"id": "b", "resolved": "/b.json"}],
@@ -130,6 +140,8 @@ class JobTests(unittest.TestCase):
         ]
         variants = [variant(ENVIRONMENT, "min"), variant(ENVIRONMENT, "max")]
         job, layout = grid_job(base, views, variants, 0, Path("/out/grid"))
+
+        # Only scenario 0, the variants as weighted environments, and placement jitter off.
         self.assertEqual(job["output"], "/out/grid")
         self.assertEqual(job["scenarios"], [{"id": "a", "resolved": "/a.json"}])
         self.assertEqual(job["randomize"]["environments"], variants)
@@ -137,6 +149,8 @@ class JobTests(unittest.TestCase):
         placement = job["randomize"]["placement"]
         self.assertEqual((placement["task_yaw_deg"], placement["task_offset_m"]), (0, 0))
         self.assertEqual(job["randomize"]["indicators"]["latched_probability"], 0)
+
+        # One fixed-pose sample per (view, variant); a view without a target frame omits it.
         self.assertEqual(len(job["samples"]), 4)  # two views of scenario 0 x two variants
         first, _, third, _ = job["samples"]
         self.assertEqual(
@@ -153,6 +167,7 @@ class JobTests(unittest.TestCase):
         self.assertEqual(base["randomize"]["placement"]["task_yaw_deg"], 10)  # base untouched
 
     def test_out_folder_guard(self) -> None:
+        """The output folder is reused only for the same spec (or --force), never a foreign one."""
         with tempfile.TemporaryDirectory() as directory:
             out = Path(directory) / "cmp"
             _prepare(out, Path("/a/dataset.yaml"), force=False)
@@ -171,6 +186,7 @@ class JobTests(unittest.TestCase):
 
 class SettingsTests(unittest.TestCase):
     def test_lines_and_pool_multiples(self) -> None:
+        """Sheet setting lines show each value and, where the pool has one, its multiple of it."""
         randomization = {
             "water": {
                 "scattering": 0.687,
@@ -201,6 +217,7 @@ class SettingsTests(unittest.TestCase):
 @unittest.skipUnless(HAS_CV2, "OpenCV (nereus[datasets]) not installed")
 class SheetTests(unittest.TestCase):
     def test_layout(self) -> None:
+        """Sheet size follows settings column + tiles + gaps; skipped cells show as None."""
         from nereus.datasets._mapping import ClassMap
         from nereus.packs._document import plain
         from ruamel.yaml import YAML
@@ -215,6 +232,8 @@ class SheetTests(unittest.TestCase):
                 View("torpedo", 0, {"type": "approach", "range_m": [1, 2]}, record),
                 View("torpedo", 1, {"type": "approach", "range_m": [2, 3]}, record),
             ]
+
+            # Two environments: murky (min, max) and clear (mid); murky:min's second view skipped.
             log = {"status": "skipped", "reasons": {"too_far": 1}}
             rows = [
                 Row(
@@ -229,6 +248,8 @@ class SheetTests(unittest.TestCase):
                 Row("clear", "mid", [Cell(render, record["name"], record, None)] * 2),
             ]
             image, summary = sheet("torpedo", views, rows, classes, labels=True)
+
+            # The fixture render is 40x20 px, so tiles keep that 2:1 aspect.
             tile_height = round(TILE_WIDTH * 20 / 40)
             self.assertEqual(image.shape[1], SETTINGS_WIDTH + 2 * (TILE_WIDTH + 6) + 6)
             # header + 3 rows (each with a gap) + one separator between environments

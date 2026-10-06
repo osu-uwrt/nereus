@@ -14,33 +14,42 @@ namespace {
 using namespace detail;
 using simulation::BoxProxy;
 
+// JSON access: `at` throws on a missing key, `getOr` falls back, the assign* helpers leave the C++ default in
+// place when the key is absent.
 bool has(const Json &object, const char *key) {
     return object.is_object() && object.contains(key);
 }
+
 const Json &at(const Json &object, const char *key) {
     if (!object.is_object() || !object.contains(key))
         throw std::invalid_argument(std::string("missing field '") + key + "'");
     return object.at(key);
 }
+
 const Json &getOr(const Json &object, const char *key, const Json &fallback) {
     return has(object, key) ? object.at(key) : fallback;
 }
+
 const Json kEmpty = Json::object();
 
 void assignNumber(double &target, const Json &values, const char *key) {
     if (has(values, key))
         target = num(values.at(key), key);
 }
+
 void assignVec3(Eigen::Vector3d &target, const Json &values, const char *key) {
     if (has(values, key))
         target = vec3(values.at(key), key);
 }
+
+// Absent or null -> nullopt.
 std::optional<Eigen::Vector3d> optionalVec3(const Json &values, const char *key) {
     if (!has(values, key) || values.at(key).is_null())
         return std::nullopt;
     return vec3(values.at(key), key);
 }
 
+// The robot's fixed frame tree from its `frames` document.
 spatial::FixedFrames makeFrames(const Json &config) {
     std::vector<spatial::FixedFrame> edges;
     for (const auto &entry : at(config, "transforms")) {
@@ -64,6 +73,8 @@ BoxProxy makeBox(std::string id, const Eigen::Vector3d &size, const spatial::Pos
     box.orientation = pose.rotation;
     return box;
 }
+
+// A pack collision box (`id`, `size_m`, `center_m`, optional `orientation_wxyz`).
 BoxProxy makeBox(const Json &config, const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation) {
     return makeBox(at(config, "id").get<std::string>(), vec3(at(config, "size_m"), "size_m"),
                    {vec3(at(config, "center_m"), "center_m"),
@@ -71,10 +82,13 @@ BoxProxy makeBox(const Json &config, const Eigen::Vector3d &position, const Eige
                                                     : Eigen::Quaterniond::Identity()},
                    position, orientation);
 }
+
 BoxProxy makeBox(const PoolContactBox &config, const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation) {
     return makeBox(config.id, config.size, {config.center, config.orientation}, position, orientation);
 }
 
+// Sensor model parameters from pack JSON. With noise disabled (scenario sensor_noise: false) the noise and
+// drift terms keep their defaults.
 sensors::NoiseParameters makeNoise(const Json &config, bool enabled) {
     sensors::NoiseParameters result;
     if (enabled) {
@@ -84,6 +98,7 @@ sensors::NoiseParameters makeNoise(const Json &config, bool enabled) {
     }
     return result;
 }
+
 sensors::ScalarNoiseParameters makeScalarNoise(const Json &config, bool enabled) {
     sensors::ScalarNoiseParameters result;
     if (enabled) {
@@ -93,6 +108,7 @@ sensors::ScalarNoiseParameters makeScalarNoise(const Json &config, bool enabled)
     }
     return result;
 }
+
 sensors::ImuReporting makeReporting(const Json &config) {
     sensors::ImuReporting result;
     if (has(config, "gravity_magnitude_m_s2"))
@@ -103,6 +119,7 @@ sensors::ImuReporting makeReporting(const Json &config) {
         result.angular_variance = vec3(config.at("angular_variance"), "angular_variance");
     return result;
 }
+
 sensors::AttitudeParameters makeAttitude(const Json &config, bool noise) {
     sensors::AttitudeParameters result;
     assignVec3(result.heading_axis_world, config, "heading_axis_world");
@@ -118,6 +135,7 @@ sensors::AttitudeParameters makeAttitude(const Json &config, bool noise) {
 // Adds one sensor to the runtime and returns its type-erased handle name check.
 void addSensor(sensors::Runtime &runtime, const Json &config, const spatial::FixedFrames &frames,
                const simulation::Pool &pool, double surface_pressure, bool noise) {
+    // Mount: the sensor's mount frame in the frame-tree root (COM).
     const auto &mount_pose = frames.fromRoot(at(config, "mount_frame").get<std::string>());
     sensors::Mount mount;
     mount.position_body = mount_pose.translation;
@@ -125,6 +143,7 @@ void addSensor(sensors::Runtime &runtime, const Json &config, const spatial::Fix
     const Json &p = at(config, "parameters");
     const std::string kind = at(config, "type").get<std::string>();
 
+    // Sampling: period, latency and output queue (64 samples, fail on overflow by default).
     sensors::Device device;
     device.id = at(config, "id").get<std::string>();
     device.frame = at(config, "frame").get<std::string>();
@@ -139,6 +158,7 @@ void addSensor(sensors::Runtime &runtime, const Json &config, const spatial::Fix
     else
         throw std::invalid_argument("sensor " + repr(device.id) + ": unknown overflow policy");
 
+    // The physics model for the pack sensor type.
     if (kind == "imu") {
         runtime.add(device, sensors::Imu(mount, makeNoise(getOr(p, "acceleration_noise", kEmpty), noise),
                                          makeNoise(getOr(p, "gyro_noise", kEmpty), noise),
@@ -211,6 +231,8 @@ void addSensor(sensors::Runtime &runtime, const Json &config, const spatial::Fix
 
 PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<std::string> *sensor_ids) {
     const Json &robot = resolved.robot, &world = resolved.pool, &scenario = resolved.scenario;
+
+    // Rigid-body plant from robot.body; omitted fields keep the PlantParameters defaults.
     simulation::PlantParameters parameters;
     const Json &body = at(at(robot, "body"), "parameters");
     auto &b = parameters.body;
@@ -230,6 +252,8 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
     parameters.command_timeout = num(at(body, "command_timeout_s"), "command_timeout_s");
     parameters.timestep = std::chrono::nanoseconds(at(scenario, "timestep_ns").get<std::int64_t>());
 
+    // Pool water and floor, moved into the world by the scenario's pool placement (yaw + offset; the water level
+    // rises with the placement z).
     const PoolModel pool_model = poolModel(world);
     simulation::Pool pool;
     const Json &wp = at(world, "parameters");
@@ -250,6 +274,7 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
     pool.water_level += placement_position[2];
     parameters.pool = pool;
 
+    // Thrusters, in pack order (the native command order).
     for (const auto &entry : at(robot, "thrusters")) {
         const Json &tp = at(entry, "parameters");
         // {**entry, **entry["parameters"]}: parameters win.
@@ -287,6 +312,8 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
         parameters.thrusters.push_back(std::move(t));
     }
 
+    // Robot contacts: the robot's collision boxes against the pool's contact boxes and every placed static_body
+    // prop's boxes (ids prefixed task/prop/). Rigid props belong to the task's PropWorld instead.
     simulation::ContactParameters contacts;
     const Json &cm = at(scenario, "contacts");
     const std::string model = at(cm, "model").get<std::string>();
@@ -327,6 +354,7 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
     }
     parameters.contacts = contacts;
 
+    // Initial state, given in any robot frame and converted to the root (COM) frame.
     auto frames = std::make_shared<const spatial::FixedFrames>(makeFrames(at(robot, "frames")));
     simulation::BodyState initial;
     const Json &start = at(scenario, "initial");
@@ -343,6 +371,7 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
         initial.orientation = com_pose.rotation;
     }
 
+    // Sensors: the explicit selection, or every enabled non-camera sensor; the rest are reported as deferred.
     PackRuntime result;
     result.runtime = std::make_unique<sensors::Runtime>(parameters, initial, at(scenario, "seed").get<std::uint64_t>());
     std::map<std::string, const Json *> configured;
@@ -369,6 +398,7 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
         known = known && configured.count(id);
     if (!known)
         throw std::invalid_argument("selected sensors must have unique ids from the robot pack");
+
     const double surface_pressure = num(at(wp, "surface_pressure_pa"), "surface_pressure_pa");
     const bool noise = at(scenario, "sensor_noise").get<bool>();
     for (const auto &id : selected) {
@@ -378,6 +408,7 @@ PackRuntime createRuntime(const ResolvedScenario &resolved, const std::vector<st
         addSensor(*result.runtime, config, *frames, pool, surface_pressure, noise);
         result.sensor_types[id] = at(config, "type").get<std::string>();
     }
+
     result.sensor_ids = selected;
     for (const auto &id : order)
         if (!unique.count(id))

@@ -1,3 +1,4 @@
+// Status lights: the robot's LED emitters, driven by LED commands with target masks, modes and flash pulses.
 #include "status_lights.hpp"
 #include <gtest/gtest.h>
 #include <limits>
@@ -9,9 +10,13 @@ bool equal(glm::vec3 a, glm::vec3 b) {
 }
 } // namespace
 
+// command(rgb, mode, target mask, ROS time): Talos's lights only answer their own target bit, each mode has its
+// RViz-matching period, and a Flash pulse briefly overrides the steady colour.
 TEST(HostStatusLights, ModesTargetsAndPulses) {
     StatusLights absent;
     ASSERT_TRUE(absent.lights.empty() && absent.input.empty() && absent.topic.empty());
+
+    // The shipped Talos document: three emitters, dark until commanded.
     StatusLights lights(YAML::LoadFile(std::string(NEREUS_VIEWER_CONTENT) + "/talos_uwrt_status_lights.yaml"));
     ASSERT_TRUE(lights.lights.size() == 3);
     ASSERT_TRUE(lights.topic == "command/led");
@@ -21,12 +26,16 @@ TEST(HostStatusLights, ModesTargetsAndPulses) {
         ASSERT_TRUE(equal(light.state.color(0), glm::vec3(0)));
     }
     auto color = [&](double t) { return lights.lights.front().state.color(t); };
+
+    // Target masks.
     lights.command({1, 0, 1}, LightMode::Solid, 0, 0);
     ASSERT_TRUE(equal(color(0), glm::vec3(0))); // TARGET_NONE
     lights.command({1, 0, 1}, LightMode::Solid, 1, 0);
     ASSERT_TRUE(equal(color(0), glm::vec3(0))); // CCB must not change ALU lights
     lights.command({1, 0, 1}, LightMode::Solid, 2, 0);
     ASSERT_TRUE(equal(color(0), {1, 0, 1}));
+
+    // Modes: slow flash (2 s period), fast flash (0.5 s) and breath (3 s sine), dark in the first half.
     lights.command({0, 1, 0}, LightMode::SlowFlash, 3, 0);
     ASSERT_TRUE(equal(color(.5), glm::vec3(0)));
     ASSERT_TRUE(equal(color(1.5), {0, 1, 0}));
@@ -37,12 +46,15 @@ TEST(HostStatusLights, ModesTargetsAndPulses) {
     ASSERT_TRUE(equal(color(0), {.5f, 0, 0}));
     ASSERT_TRUE(equal(color(.75), {1, 0, 0}));
     ASSERT_TRUE(equal(color(2.25), glm::vec3(0)));
+
     // A detection pulse temporarily overlays, then restores the status command.
     lights.command({0, 0, 1}, LightMode::Solid, 3, 0);
     lights.command({1, 1, 1}, LightMode::Flash, 2, 10);
     ASSERT_TRUE(equal(color(10.05), glm::vec3(1)));
     ASSERT_TRUE(equal(color(10.2), {0, 0, 1}));
     ASSERT_TRUE(equal(color(0), {0, 0, 1})); // reset clock cannot extend old pulses
+
+    // Non-finite colours are ignored; out-of-range channels are clamped to [0, 1].
     lights.command({std::numeric_limits<float>::quiet_NaN(), 0, 0}, LightMode::Solid, 3, 11);
     ASSERT_TRUE(equal(color(11), {0, 0, 1}));
     lights.command({-1, 2, .5f}, LightMode::Solid, UINT32_MAX, 11);
@@ -50,6 +62,7 @@ TEST(HostStatusLights, ModesTargetsAndPulses) {
     lights.command({0, 0, 0}, LightMode::Solid, 3, 12);
     for (const auto &light : lights.lights)
         ASSERT_TRUE(equal(light.state.color(12), glm::vec3(0)));
+
     // A robot can independently route commands to multiple groups of emitters.
     lights.lights.front().targets = 1;
     lights.command({1, 0, 0}, LightMode::Solid, 1, 13);
@@ -58,6 +71,7 @@ TEST(HostStatusLights, ModesTargetsAndPulses) {
     ASSERT_TRUE(equal(lights.lights.back().state.color(13), {0, 1, 0}));
 }
 
+// Unsupported input types, an empty light list and non-positive emitter sizes are rejected.
 TEST(HostStatusLights, RejectsInvalidDocuments) {
     EXPECT_THROW(StatusLights(YAML::Load("input: {type: other/msg/Type, topic: x}\nlights: []")),
                  std::invalid_argument);

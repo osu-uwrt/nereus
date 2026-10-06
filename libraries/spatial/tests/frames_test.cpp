@@ -1,8 +1,10 @@
+// Tests for fixed-frame resolution, lookups and pose validation.
 #include <gtest/gtest.h>
 #include <limits>
 #include <nereus/spatial/frames.hpp>
 
 using namespace nereus::spatial;
+
 TEST(FixedFrames, ResolvesUnorderedMountsAndRelativeRotatedFrames) {
     const Pose tool{{.4, -.2, .1}, Eigen::Quaterniond(Eigen::AngleAxisd(.7, Eigen::Vector3d::UnitZ()))};
     const Pose sensor{{.2, 0, -.1}, Eigen::Quaterniond(Eigen::AngleAxisd(-.4, Eigen::Vector3d::UnitY()))};
@@ -16,6 +18,7 @@ TEST(FixedFrames, ResolvesUnorderedMountsAndRelativeRotatedFrames) {
     EXPECT_EQ(frames.edges().front().child, "sensor"); // Original declarative order retained.
     EXPECT_THROW(frames.fromRoot("missing"), std::invalid_argument);
 }
+
 TEST(FixedFrames, RejectsCyclesDisconnectedOrAmbiguousFramesAndBadPoses) {
     EXPECT_THROW((FixedFrames("", {})), std::invalid_argument);
     EXPECT_THROW((FixedFrames("root", {{"other", "a", {}}})), std::invalid_argument);
@@ -31,6 +34,7 @@ TEST(FixedFrames, RejectsCyclesDisconnectedOrAmbiguousFramesAndBadPoses) {
     bad.translation.x() = 6e11;
     EXPECT_THROW((FixedFrames("root", {{"root", "a", bad}, {"a", "b", bad}})), std::invalid_argument);
 }
+
 TEST(FixedFrames, NormalizesAcceptedRoundingWithoutMutatingInputs) {
     Pose almost_unit;
     almost_unit.rotation.w() = 1 + 5e-9;

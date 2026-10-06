@@ -1,4 +1,5 @@
 #pragma once
+// Sloped pool floors: depth profiles, ray queries and the contact boxes built from them.
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
@@ -16,6 +17,7 @@ class FloorProfile {
     enum class Axis { X, Y };
 
     FloorProfile() = default; // Empty: no profile, the owner falls back to a flat floor.
+    // Level floor at `depth` over [0, extent].
     static FloorProfile flat(double depth, double extent, Axis axis = Axis::X);
     // Positions strictly increasing from 0 to the pool extent along `axis`; depths positive.
     // `step` is the sampling pitch; collinear samples within `tolerance` are merged.
@@ -47,6 +49,7 @@ class FloorProfile {
     double depthAt(const Eigen::Vector2d &pool_xy) const {
         return depthAt(along(pool_xy));
     }
+    // Position along this profile's axis of a pool-local point.
     double along(const Eigen::Vector2d &pool_xy) const {
         return axis_ == Axis::X ? pool_xy.x() : pool_xy.y();
     }
@@ -69,6 +72,7 @@ class PoolFloor {
   public:
     PoolFloor() = default; // Empty: no profile, the owner falls back to a flat floor.
     explicit PoolFloor(std::vector<FloorProfile> profiles);
+    // A single flat profile along X.
     static PoolFloor flat(double depth, double length);
 
     bool empty() const {

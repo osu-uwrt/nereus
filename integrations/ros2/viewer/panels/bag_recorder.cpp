@@ -1,3 +1,5 @@
+// Detached `ros2 bag record` control: the shell scripts that start, poll and stop a recording (locally or over
+// ssh), the parser for their NEREUS_BAG reports, and a poll-based process runner with a timeout.
 #include "nereus/ros_viewer/panels/bag_recorder.hpp"
 #include <algorithm>
 #include <cctype>
@@ -21,6 +23,7 @@ extern char **environ;
 
 namespace nereus::ros_viewer::panels {
 namespace {
+
 // Shared by every script. `active` describes the running recording, `last` the most recent one that ended,
 // `stopping` marks a recorder told to finish. Values are reported one per line, newlines flattened.
 constexpr const char *preamble = R"SH(
@@ -79,9 +82,11 @@ conclude() {
 fail() { report state error; report error "$1"; report_last; exit 0; }
 )SH";
 
+// Every script starts with the (quoted) bag directory followed by the shared shell functions.
 std::string header(const BagHost &host) {
     return "directory=" + shellQuote(host.directory) + "\n" + preamble;
 }
+
 } // namespace
 
 double BagReport::number(const std::string &key, double fallback) const {
@@ -93,6 +98,7 @@ double BagReport::number(const std::string &key, double fallback) const {
     return end && *end == '\0' && std::isfinite(value) ? value : fallback;
 }
 
+// Keeps only the "NEREUS_BAG <key> <value>" lines; a key with no value maps to "".
 BagReport parseBagReport(const std::string &output) {
     BagReport report;
     std::istringstream lines(output);
@@ -119,6 +125,7 @@ std::string shellQuote(const std::string &value) {
 }
 
 std::string bagStartScript(const BagHost &host, const BagRequest &request) {
+    // The record command line, every argument quoted.
     std::string record = "ros2 bag record -o \"$bag\"";
     for (const auto &arg : host.recordArgs)
         record += " " + shellQuote(arg);
@@ -129,6 +136,8 @@ std::string bagStartScript(const BagHost &host, const BagRequest &request) {
     else
         for (const auto &topic : request.topics)
             record += " " + shellQuote(topic);
+
+    // Clear a stale active record, resolve the bag path and refuse to overwrite an existing bag.
     std::string script = header(host);
     script += "name=" + shellQuote(request.name) + "\n";
     script += R"SH(
@@ -145,6 +154,7 @@ bag="$dir/$name"
 {
 :
 )SH";
+    // The host's setup lines go inside the { ... } group opened above; its stderr goes to setup.log.
     script += host.setup;
     script += R"SH(
 } >/dev/null 2>"$state_dir/setup.log" </dev/null
@@ -156,6 +166,8 @@ log="$state_dir/record.log"
 setsid python3 -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execvp(sys.argv[1], sys.argv[1:])' \
 )SH";
     script += "  " + record + " </dev/null >\"$log\" 2>&1 &\n";
+
+    // Record the recorder in the active file, then give it ~1.5 s to show it did not exit at once.
     script += R"SH(pid=$!
 start=$(date +%s)
 printf 'pid=%s\nbag=%s\nstart=%s\nlog=%s\n' "$pid" "$bag" "$start" "$log" > "$active.tmp" && mv -f "$active.tmp" "$active"
@@ -175,6 +187,7 @@ std::string bagStatusScript(const BagHost &host) {
 }
 
 std::string bagStopScript(const BagHost &host, double waitSeconds, bool kill) {
+    // The scripts poll every 0.1 s, so `steps` is the wait in tenths of a second (at least one).
     std::string script = header(host);
     script += "steps=" + std::to_string(std::max(1, int(std::lround(waitSeconds * 10)))) + "\n";
     if (kill)
@@ -202,6 +215,8 @@ std::vector<std::string> bagCommand(const BagHost &host, const std::string &scri
     if (host.host.empty())
         return {"bash", "-c", script};
     std::vector<std::string> argv = host.ssh;
+
+    // Never prompt, give up fast on a dead link, and reuse one master connection for the frequent status polls.
     for (const char *option : {"BatchMode=yes", "ConnectTimeout=5", "ServerAliveInterval=2", "ServerAliveCountMax=2",
                                "StrictHostKeyChecking=accept-new", "ControlMaster=auto", "ControlPath=~/.ssh/nereus-%C",
                                "ControlPersist=60"}) {
@@ -250,6 +265,8 @@ ProcessResult runProcess(const std::vector<std::string> &argv, double timeoutSec
     ProcessResult result;
     if (argv.empty())
         return result;
+
+    // One pipe takes both stdout and stderr; stdin is /dev/null.
     int out[2];
     if (pipe2(out, O_CLOEXEC) != 0) {
         result.output = std::string("pipe: ") + std::strerror(errno);
@@ -282,15 +299,19 @@ ProcessResult runProcess(const std::vector<std::string> &argv, double timeoutSec
     const int spawned = posix_spawnp(&pid, args[0], &actions, &attributes, args.data(), environ);
     posix_spawn_file_actions_destroy(&actions);
     posix_spawnattr_destroy(&attributes);
-    close(out[1]);
+    close(out[1]); // the child holds the only write end now
     if (spawned != 0) {
         close(out[0]);
         result.output = argv[0] + ": " + std::strerror(spawned);
         return result;
     }
+
+    // Wait loop: poll the pipe (50 ms) and reap the child, killing its group on timeout or cancel.
     fcntl(out[0], F_SETFL, O_NONBLOCK);
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::duration<double>(timeoutSeconds);
-    bool open = true;
+    bool open = true; // the pipe has not reached EOF
+
+    // Reads whatever is available (output capped at 1 MiB); stops at EOF, EAGAIN or an error.
     auto drain = [&] {
         char buffer[4096];
         for (;;) {
@@ -306,6 +327,7 @@ ProcessResult runProcess(const std::vector<std::string> &argv, double timeoutSec
                 return;
         }
     };
+
     int status = 0;
     for (;;) {
         if (open) {
@@ -332,4 +354,5 @@ ProcessResult runProcess(const std::vector<std::string> &argv, double timeoutSec
     close(out[0]);
     return result;
 }
+
 } // namespace nereus::ros_viewer::panels

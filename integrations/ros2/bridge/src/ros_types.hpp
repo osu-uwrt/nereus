@@ -35,6 +35,7 @@ struct RosType {
     }
 };
 
+// Loaded C++ (serialization) and introspection type support of one message type.
 class MessageType {
   public:
     // "pkg/msg/Name" or "pkg/Name"; cached for the process lifetime. Throws MappingError.
@@ -56,6 +57,7 @@ class MessageType {
     const introspection::MessageMembers *members_{nullptr};
 };
 
+// Introspection members of a service's request and response.
 struct ServiceType {
     std::string name;
     std::shared_ptr<rcpputils::SharedLibrary> library;
@@ -90,6 +92,7 @@ class Message {
 };
 
 std::string baseName(const introspection::MessageMembers *members); // "pkg/Name"
+// RosType of one message member.
 RosType memberType(const introspection::MessageMember &member);
 
 // One resolved field path: hops through nested messages, then the addressed field.
@@ -108,6 +111,7 @@ struct FieldPath {
     }
     std::string path;
 };
+
 // mapping.ros_field: throws MappingError with the same messages.
 FieldPath resolveField(const introspection::MessageMembers *owner, const std::string &path, bool writable = false);
 // Address of the addressed field (or indexed element) inside `message`. When `readonly` a

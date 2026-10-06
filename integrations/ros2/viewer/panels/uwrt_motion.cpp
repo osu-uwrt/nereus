@@ -1,3 +1,5 @@
+// "uwrt.motion" provider: manual control of the UWRT (riptide) controller through ControllerCommand
+// linear/angular topics and a KillSwitchReport-based software enable switch.
 #include "ros_runtime.hpp"
 #include <atomic>
 #include <riptide_msgs2/msg/controller_command.hpp>
@@ -10,6 +12,7 @@ namespace nereus::ros_viewer::panels {
 namespace {
 using Command = riptide_msgs2::msg::ControllerCommand;
 using Kill = riptide_msgs2::msg::KillSwitchReport;
+
 class UwrtMotion final : public RosMotion {
   public:
     UwrtMotion(std::shared_ptr<RosRuntime> rt, const YAML::Node &cfg, const Context &ctx) : RosMotion(rt, cfg, ctx) {
@@ -20,12 +23,16 @@ class UwrtMotion final : public RosMotion {
         killPub = node->create_publisher<Kill>(endpoint("kill_topic"), rclcpp::SystemDefaultsQoS());
         modeClient = node->create_client<std_srvs::srv::SetBool>(endpoint("mode_service"));
         switchId = cfg["kill_switch_id"].as<int>();
+
+        // Unique sender ID (prefix_host_pid_instance) so our own kill reports can be told from others'.
         static std::atomic<unsigned> instances{0};
         char host[256]{};
         gethostname(host, sizeof(host) - 1);
         sender = cfg["sender_prefix"].as<std::string>("viewer") + "_" + host + "_" + std::to_string(getpid()) + "_" +
                  std::to_string(++instances);
         value.supportsFeedforward = true;
+
+        // Any other sender on our switch ID is a competing operator; yield by killing our enable.
         killSub = node->create_subscription<Kill>(endpoint("kill_topic"), rclcpp::SystemDefaultsQoS(),
                                                   [this](const Kill &msg) {
                                                       if (msg.kill_switch_id != switchId || msg.sender_id == sender)
@@ -36,6 +43,7 @@ class UwrtMotion final : public RosMotion {
                                                       if (value.enabled)
                                                           killLocked("Another operator owns the enable switch");
                                                   });
+        // Robot-reported kill state, shown in the motion panel ("Robot: killed/enabled").
         stateSub = node->create_subscription<std_msgs::msg::Bool>(endpoint("kill_state_topic"), rclcpp::SensorDataQoS(),
                                                                   [this](const std_msgs::msg::Bool &msg) {
                                                                       std::lock_guard<std::mutex> lock(mutex);
@@ -51,6 +59,8 @@ class UwrtMotion final : public RosMotion {
     }
 
   private:
+    // Folds an observed POSITION command (linear or angular half) into value.commanded, so the gizmo
+    // follows setpoints from autonomy as well as our own.
     void observe(const Command &msg, bool lin) {
         if (msg.mode != Command::POSITION)
             return;
@@ -70,6 +80,8 @@ class UwrtMotion final : public RosMotion {
         value.hasCommand = true;
         ++value.revision;
     }
+
+    // Publishes the pose as a linear (position) + angular (quaternion) command pair in the command frame.
     void send(const Pose &pose, Mode mode) override {
         Command lin, ang;
         lin.mode = ang.mode = mode == Mode::Position      ? Command::POSITION
@@ -87,6 +99,8 @@ class UwrtMotion final : public RosMotion {
         linear->publish(lin);
         angular->publish(ang);
     }
+
+    // Heartbeat on the kill topic: asserts kill whenever the viewer's switch is not enabled.
     void report() override {
         Kill msg;
         msg.kill_switch_id = switchId;
@@ -95,9 +109,12 @@ class UwrtMotion final : public RosMotion {
         msg.switch_needs_update = false; // enable latches (RViz "Req Kill" off): untethered runs continue
         killPub->publish(msg);
     }
+
     bool modeReady() override {
         return modeClient->service_is_ready();
     }
+
+    // Calls mode_service (setTeleop in the Talos config) with data=false; the reply completes the request.
     void requestMode(uint64_t epoch, Mode mode, const Pose &pose) override {
         auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
         request->data = false;
@@ -109,11 +126,13 @@ class UwrtMotion final : public RosMotion {
                             })
                         .request_id;
     }
+
     void cancelRequest() override {
         if (requestId)
             modeClient->remove_pending_request(requestId);
         requestId = 0;
     }
+
     int switchId;
     std::string sender;
     int64_t requestId = 0;
@@ -125,6 +144,8 @@ class UwrtMotion final : public RosMotion {
     rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr modeClient;
 };
 } // namespace
+
+// Registers "uwrt.motion" with config validation (kill_switch_id 1..255, timeouts in seconds).
 void registerUwrtMotion(Registry &registry, const RuntimeFactory &runtime) {
     registry.providers.emplace(
         "uwrt.motion",

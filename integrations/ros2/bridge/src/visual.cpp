@@ -1,3 +1,5 @@
+// Format streams (json and marker_array) for the viewer: option validation and the encoders.
+
 #include "visual.hpp"
 
 #include <builtin_interfaces/msg/time.hpp>
@@ -12,6 +14,7 @@ namespace {
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
 
+// "['a', 'b']" for error messages.
 std::string listRepr(const std::set<std::string> &items) {
     std::string out = "[";
     bool first = true;
@@ -22,6 +25,7 @@ std::string listRepr(const std::set<std::string> &items) {
     return out + "]";
 }
 
+// Throws unless `options` has every required key and nothing beyond required + optional.
 void checkOptions(const Json &options, const std::string &where, const std::set<std::string> &required,
                   const std::set<std::string> &optional = {}) {
     std::set<std::string> unknown, missing;
@@ -37,6 +41,7 @@ void checkOptions(const Json &options, const std::string &where, const std::set<
                           ")");
 }
 
+// Exactly `count` finite numbers (booleans rejected).
 std::vector<double> numbers(const Json &value, std::size_t count, const std::string &where) {
     std::vector<double> out;
     bool ok = value.is_array() && value.size() == count;
@@ -53,6 +58,8 @@ std::vector<double> numbers(const Json &value, std::size_t count, const std::str
     return out;
 }
 
+// One marker to emit: a sphere or a mesh, or a DELETEALL when `delete_all` is set. Orientation is
+// w, x, y, z; color r, g, b, a.
 struct Item {
     bool delete_all{false};
     std::string ns, frame_id, mesh;
@@ -62,6 +69,7 @@ struct Item {
     std::array<double, 4> orientation{1, 0, 0, 0}, color{};
 };
 
+// MarkerArray of `items`, all stamped `stamp` (ROS ns).
 std::shared_ptr<Message> encodeMarkers(const std::shared_ptr<const MessageType> &type, std::int64_t stamp,
                                        const std::vector<Item> &items) {
     auto message = std::make_shared<Message>(type);
@@ -73,12 +81,15 @@ std::shared_ptr<Message> encodeMarkers(const std::shared_ptr<const MessageType> 
             array.markers.push_back(marker);
             continue;
         }
+
         marker.header.frame_id = item.frame_id;
+        // Split ns into sec/nanosec with nanosec in [0, 1e9).
         std::int64_t sec = stamp / 1000000000, rest = stamp % 1000000000;
         if (rest < 0) {
             rest += 1000000000;
             --sec;
         }
+
         marker.header.stamp.sec = static_cast<std::int32_t>(sec);
         marker.header.stamp.nanosec = static_cast<std::uint32_t>(rest);
         marker.ns = item.ns;
@@ -99,6 +110,7 @@ std::shared_ptr<Message> encodeMarkers(const std::shared_ptr<const MessageType> 
         marker.color.g = static_cast<float>(item.color[1]);
         marker.color.b = static_cast<float>(item.color[2]);
         marker.color.a = static_cast<float>(item.color[3]);
+
         if (item.mesh_type) {
             marker.mesh_resource = item.mesh;
             marker.mesh_use_embedded_materials = item.embedded_materials;
@@ -108,24 +120,31 @@ std::shared_ptr<Message> encodeMarkers(const std::shared_ptr<const MessageType> 
     return message;
 }
 
+// Fixed-size arrays from validated vectors/JSON; quaternions are w, x, y, z.
 std::array<double, 3> triple(const std::vector<double> &v) {
     return {v[0], v[1], v[2]};
 }
+
 std::array<double, 4> quad(const std::vector<double> &v) {
     return {v[0], v[1], v[2], v[3]};
 }
+
 std::array<double, 4> wxyz(const Eigen::Quaterniond &q) {
     return {q.w(), q.x(), q.y(), q.z()};
 }
+
 std::array<double, 4> jsonQuad(const Json &j) {
     return {j.at(0).get<double>(), j.at(1).get<double>(), j.at(2).get<double>(), j.at(3).get<double>()};
 }
+
 std::array<double, 3> jsonTriple(const Json &j) {
     return {j.at(0).get<double>(), j.at(1).get<double>(), j.at(2).get<double>()};
 }
 
+// Produces the current marker items when a timed stream fires.
 using ItemSource = std::function<std::vector<Item>()>;
 
+// file:// URI of an asset of the given pack role ("robot", "tasks").
 std::string assetUri(VisualContext &context, const std::string &role, const std::string &asset,
                      const std::string &where) {
     const auto pack = context.resolved.asset_paths.find(role);
@@ -137,6 +156,8 @@ std::string assetUri(VisualContext &context, const std::string &role, const std:
     throw BridgeError(where + ": asset " + repr(asset) + " is not present in the " + role + " pack");
 }
 
+// Task indicator spheres, colored by their latched or initial state from options.colors (every color an
+// indicator can take is checked up front).
 ItemSource indicatorItems(VisualContext &context, const Json &options, const std::string &frame_id,
                           const std::string &where) {
     checkOptions(options, where, {"shape", "scale_m", "colors"});
@@ -156,6 +177,7 @@ ItemSource indicatorItems(VisualContext &context, const Json &options, const std
             throw BridgeError(where + "/options/colors: no color for " + listRepr(missing) + " of indicator " +
                               repr(item.at("region").get<std::string>()));
     }
+
     SessionPort *session = &context.session;
     return [session, scale, colors, frame_id]() {
         std::vector<Item> result;
@@ -176,6 +198,8 @@ ItemSource indicatorItems(VisualContext &context, const Json &options, const std
     };
 }
 
+// Task prop meshes in the world frame; held props are drawn relative to the robot reference pose in
+// held_frame_id so they follow the robot.
 ItemSource propItems(VisualContext &context, const Json &options, const std::string &frame_id,
                      const std::string &where) {
     checkOptions(options, where, {"held_frame_id"}, {"scale_m", "color"});
@@ -184,6 +208,8 @@ ItemSource propItems(VisualContext &context, const Json &options, const std::str
     const std::string held_frame = options["held_frame_id"];
     const auto scale = triple(numbers(options.value("scale_m", Json::array({1, 1, 1})), 3, where + "/options/scale_m"));
     const auto color = quad(numbers(options.value("color", Json::array({0, 0, 0, 1})), 4, where + "/options/color"));
+
+    // Mesh URI per (task, prop) for rigid-body props with a visual asset; other props are not drawn.
     auto uris = std::make_shared<std::map<std::pair<std::string, std::string>, std::string>>();
     for (const auto &task : context.resolved.task_definitions)
         for (const auto &prop : task.at("props")) {
@@ -196,6 +222,7 @@ ItemSource propItems(VisualContext &context, const Json &options, const std::str
                 assetUri(context, "tasks", parameters["visual_asset"].get<std::string>(),
                          where + ": prop " + repr(prop.at("id").get<std::string>()));
         }
+
     VisualContext *ctx = &context;
     return [ctx, uris, scale, color, frame_id, held_frame]() {
         std::vector<Item> result;
@@ -230,9 +257,12 @@ ItemSource propItems(VisualContext &context, const Json &options, const std::str
     };
 }
 
+// Payload meshes scaled to length x diameter x diameter, with `loaded_suffix` on the namespace of
+// payloads still in their slot; with delete_all a DELETEALL first clears stale payload markers.
 ItemSource payloadItems(VisualContext &context, const Json &options, const std::string &frame_id,
                         const std::string &where) {
     checkOptions(options, where, {"namespaces", "loaded_suffix", "mesh_asset", "color"}, {"delete_all"});
+    // Every launcher/dropper mechanism type needs a marker namespace.
     std::map<std::string, std::string> namespaces;
     for (const auto &[kind, name] : options["namespaces"].items())
         namespaces[kind] = name.get<std::string>();
@@ -244,6 +274,7 @@ ItemSource payloadItems(VisualContext &context, const Json &options, const std::
     }
     if (!missing.empty())
         throw BridgeError(where + "/options/namespaces: no namespace for mechanism types " + listRepr(missing));
+
     if (!options["loaded_suffix"].is_string())
         throw BridgeError(where + "/options/loaded_suffix: must be a string");
     const std::string suffix = options["loaded_suffix"];
@@ -251,6 +282,7 @@ ItemSource payloadItems(VisualContext &context, const Json &options, const std::
     const std::string uri =
         assetUri(context, "robot", options["mesh_asset"].get<std::string>(), where + "/options/mesh_asset");
     const bool delete_all = options.value("delete_all", false);
+
     SessionPort *session = &context.session;
     return [=]() {
         std::vector<Item> result;
@@ -277,6 +309,7 @@ ItemSource payloadItems(VisualContext &context, const Json &options, const std::
     };
 }
 
+// A json-format message: `text` in its string `data` field.
 std::shared_ptr<Message> encodeJson(const std::shared_ptr<const MessageType> &type, const std::string &text) {
     auto message = std::make_shared<Message>(type);
     const auto path = resolveField(type->members(), "data");
@@ -312,9 +345,11 @@ FormatStream compileFormat(VisualContext &context, const Json &stream, const std
     const Json options = stream.value("options", Json::object());
     if (stream.at("direction") != "publish")
         throw BridgeError(where + ": format streams publish");
+
     FormatStream result;
     result.timed = known->mode == "timed";
     const std::string frame_id = stream.value("frame_id", "");
+    // json: unstamped text in a string `data` field.
     if (encoding == "json") {
         checkOptions(options, where, {});
         if (!frame_id.empty())
@@ -338,6 +373,8 @@ FormatStream compileFormat(VisualContext &context, const Json &stream, const std
         }
         return result;
     }
+
+    // marker_array: stamped in the world frame, items from the endpoint's source.
     if (frame_id != context.world_frame)
         throw BridgeError(where + ": marker frame_id must be the world frame " + repr(context.world_frame));
     const auto *members = type->members();

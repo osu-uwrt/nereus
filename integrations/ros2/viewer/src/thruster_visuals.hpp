@@ -10,11 +10,12 @@
 #include <vector>
 
 namespace nereus::ros_viewer::host {
+// One spinning propeller mesh (a robot-pack asset) tied to one entry of the force array.
 struct ThrusterRotor {
     std::string id, asset, frame;
-    size_t inputIndex = 0;
-    glm::vec3 pivot{0}, axis{1, 0, 0};
-    double direction = 1, angle = 0;
+    size_t inputIndex = 0;             // index into the force array
+    glm::vec3 pivot{0}, axis{1, 0, 0}; // in the visual's authoring frame; axis normalized
+    double direction = 1, angle = 0;   // spin sense (+-1) and current angle (radians)
 
     // Spin about the pivot; mesh vertices and pivot share the visual's authoring frame.
     glm::mat4 transform() const {
@@ -23,10 +24,11 @@ struct ThrusterRotor {
     }
 };
 
+// All rotors plus the force input and the propeller thrust law used to turn force into rotor speed.
 struct ThrusterVisuals {
     std::string topic;
     std::vector<ThrusterRotor> rotors;
-    double timeout = .5, deadband = .01, speedScale = 1;
+    double timeout = .5, deadband = .01, speedScale = 1; // seconds a sample drives the rotors; N; display factor
     // Propeller law |F| = K_T rho D^4 (rpm/60)^2 with K_T = a + b rpm per direction ([a > 0, b >= 0]).
     std::array<double, 2> forwardKt{}, reverseKt{};
     double ktScale = 0; // rho D^4 / 3600: newtons per (K_T rpm^2)
@@ -36,6 +38,8 @@ struct ThrusterVisuals {
     ThrusterVisuals(const YAML::Node &config, const std::vector<std::string> &thrusterOrder) {
         if (!config || config.IsNull())
             return;
+
+        // Input topic and timing.
         topic = config["topic"].as<std::string>();
         if (topic.empty() || thrusterOrder.empty())
             throw std::invalid_argument("Thruster visuals need a topic and vehicle thrusters");
@@ -47,6 +51,8 @@ struct ThrusterVisuals {
                 throw std::invalid_argument("Thruster visual timing/speed settings must be positive and finite");
         if (!std::isfinite(deadband) || deadband < 0)
             throw std::invalid_argument("Thruster visual deadband must be finite and nonnegative");
+
+        // Propeller law constants.
         const auto propeller = config["propeller"];
         const double diameter = propeller["diameter_m"].as<double>(0.), rho = propeller["water_density"].as<double>(0.);
         if (!std::isfinite(diameter) || diameter <= 0 || !std::isfinite(rho) || rho <= 0)
@@ -61,6 +67,8 @@ struct ThrusterVisuals {
             if (!std::isfinite(kt[0]) || !std::isfinite(kt[1]) || kt[0] <= 0 || kt[1] < 0)
                 throw std::invalid_argument("Thruster thrust coefficients need a > 0 and b >= 0");
         }
+
+        // Rotors: unique ids, each tied to a thruster of the force array by id (default: the rotor id).
         const auto entries = config["rotors"];
         if (!entries.IsSequence() || entries.size() == 0 || entries.size() > 256)
             throw std::invalid_argument("Thruster visuals must contain 1 to 256 rotors");
@@ -75,6 +83,7 @@ struct ThrusterVisuals {
             if (found == thrusterOrder.end())
                 throw std::invalid_argument("Thruster rotor '" + rotor.id + "' names unknown thruster " + thruster);
             rotor.inputIndex = size_t(found - thrusterOrder.begin());
+
             for (const auto &key : {"pivot", "axis"}) {
                 const auto vector = entry[key];
                 if (!vector.IsSequence() || vector.size() != 3)
@@ -83,11 +92,13 @@ struct ThrusterVisuals {
                     if (!std::isfinite(value.as<float>()))
                         throw std::invalid_argument("Thruster rotor geometry must be finite");
             }
+
             rotor.pivot = vec3(entry["pivot"]);
             rotor.axis = vec3(entry["axis"]);
             if (glm::length(rotor.axis) < 1e-6f)
                 throw std::invalid_argument("Thruster rotor axis must be nonzero");
             rotor.axis = glm::normalize(rotor.axis);
+
             rotor.direction = entry["direction"].as<double>(1.);
             if (rotor.direction != 1 && rotor.direction != -1)
                 throw std::invalid_argument("Thruster rotor direction must be 1 or -1");
@@ -97,6 +108,7 @@ struct ThrusterVisuals {
             rotor.frame = entry["frame"].as<std::string>("");
             rotors.push_back(rotor);
         }
+
         forces.assign(thrusterOrder.size(), 0.f);
     }
 
@@ -118,6 +130,7 @@ struct ThrusterVisuals {
         return std::copysign(r, force);
     }
 
+    // A new force sample (bridge order, newtons) at `now`; rejected when sized wrong or non-finite.
     bool receive(const std::vector<float> &values, double now) {
         if (values.size() != forces.size() || !std::isfinite(now))
             return false;
@@ -131,9 +144,12 @@ struct ThrusterVisuals {
         return true;
     }
 
+    // Turn the rotors from the last step to `now` at the speed of the latest sample, until it times out.
     void advance(double now) {
         if (!std::isfinite(now))
             return;
+
+        // First call, or time went backwards (sim restart): reset angles and forces.
         if (!std::isfinite(lastStep) || now < lastStep) {
             if (std::isfinite(lastStep)) {
                 for (auto &rotor : rotors)
@@ -144,6 +160,8 @@ struct ThrusterVisuals {
             lastStep = now;
             return;
         }
+
+        // Only the part of the step inside [receivedAt, receivedAt + timeout] spins the rotors.
         if (std::isfinite(receivedAt)) {
             const double dt = std::max(0., std::min(now, receivedAt + timeout) - std::max(lastStep, receivedAt));
             for (auto &rotor : rotors) {
@@ -158,7 +176,7 @@ struct ThrusterVisuals {
     }
 
   private:
-    std::vector<float> forces;
+    std::vector<float> forces; // latest sample, zeroed after the timeout
     double receivedAt = std::numeric_limits<double>::quiet_NaN();
     double lastStep = std::numeric_limits<double>::quiet_NaN();
 };

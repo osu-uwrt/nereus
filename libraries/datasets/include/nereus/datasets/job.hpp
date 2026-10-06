@@ -26,6 +26,7 @@ struct Range {
     double lo = 0, hi = 0;
 };
 
+// How robot poses are drawn for a sample block (geometry in sampling.cpp). Angles in degrees, lengths in metres.
 struct Sampler {
     std::string type;                        // approach | overhead | free | fixed
     std::vector<std::string> frames{"task"}; // one picked uniformly per attempt
@@ -39,6 +40,7 @@ struct Sampler {
     std::optional<std::string> target_frame;
 };
 
+// `count` consecutive samples of one task (or background) drawn with one sampler.
 struct SampleBlock {
     std::optional<std::string> task; // empty: background
     std::int64_t count = 0;
@@ -46,8 +48,9 @@ struct SampleBlock {
     std::optional<std::size_t> environment; // forces randomize.environments[i] (no draw consumed)
 };
 
+// Output camera: a stereo_camera sensor of the robot pack (its left eye) and the image encoding.
 struct CameraSpec {
-    std::string sensor;
+    std::string sensor;        // sensor id in the resolved robot
     int width = 0, height = 0; // 0: the sensor's native resolution
     std::string crop = "center", format = "jpg";
     int jpeg_quality = 92;
@@ -55,11 +58,14 @@ struct CameraSpec {
     int supersample = 1; // RGB anti-aliasing (rendering::Appearance::supersample), 1..4; labels never
 };
 
+// parts.textures rule: a part-map PNG aligned with a diffuse texture; mask pixel values name parts.
 struct TexturePart {
     std::filesystem::path texture, mask; // canonical
     std::optional<std::string> task;
     std::map<int, std::string> values; // mask value -> part
 };
+
+// parts.visuals rule: a task/prop asset whose submeshes (by material, or all of them) carry fixed parts.
 struct VisualPart {
     std::string task, asset;
     std::optional<std::string> prop, frame, part, indicator;
@@ -67,6 +73,7 @@ struct VisualPart {
     bool split = false;                           // split: connected
 };
 
+// Label-pass acceptance thresholds for a drawn view (§3.2). Pixel counts are at the output resolution.
 struct Acceptance {
     double max_range_m = 5, near_m = .2, max_near_fraction = .02;
     std::int64_t min_target_px = 150, max_attempts = 200, background_max_labelled_px = 0;
@@ -91,6 +98,7 @@ struct Environment {
     std::optional<Range> time_s, noise_sigma, blur_px;
 };
 
+// Per-sample randomization: appearance environments, task placement jitter, indicator states.
 struct Randomize {
     std::vector<Environment> environments{Environment{}}; // >= 1
     bool sweep = false; // environment_mode: weighted (first draw of the sample's stream) | sweep (cycle per block)
@@ -98,9 +106,10 @@ struct Randomize {
     // Tasks that move together: one drawn yaw/offset per group, about the group's first task's origin (e.g. the
     // table under the octagon). Tasks in no group move alone.
     std::vector<std::vector<std::string>> placement_groups;
-    double latched_probability = 0;
+    double latched_probability = 0; // per indicator region, chance of drawing its latched state
 };
 
+// The parsed job. Global sample k uses scenario k mod scenarios.size() and the stream Stream(seed, k).
 struct Job {
     std::string dataset;
     std::uint64_t seed = 0;
@@ -114,7 +123,7 @@ struct Job {
     std::vector<SampleBlock> samples;
     Randomize randomize;
 
-    std::int64_t sampleCount() const;
+    std::int64_t sampleCount() const; // sum of the block counts
     // Block of global sample k (blocks are contiguous in document order).
     const SampleBlock &block(std::int64_t k) const;
     std::int64_t blockStart(std::int64_t k) const; // global index of the first sample of k's block
@@ -122,6 +131,7 @@ struct Job {
     std::string name(std::int64_t k) const;
 };
 
+// Throws std::runtime_error naming the offending JSON path on any invalid field.
 Job parseJob(const Json &document);
 Job loadJob(const std::filesystem::path &path);
 } // namespace nereus::datasets

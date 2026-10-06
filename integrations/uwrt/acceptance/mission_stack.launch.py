@@ -20,6 +20,7 @@ from launch.launch_description_sources import AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration as LC
 from launch_ros.actions import PushRosNamespace, SetParameter
 
+# Launch arguments forwarded to bringup when non-empty, with their descriptions.
 PASSTHROUGH = {
     "active_control_model": "controller: 'mpc' runs riptide_mpc, anything else complete_controller",
     "active_control_enabled": "launch the active controller (True/False)",
@@ -33,6 +34,7 @@ PASSTHROUGH = {
 
 
 def _stack(context):
+    """Bringup (hardware:=none) plus the AprilTag detector, with only the explicitly set arguments."""
     arguments = {"hardware": "none", "robot": "talos"}
     arguments.update({k: v for k in PASSTHROUGH if (v := LC(k).perform(context))})
     # forwarding=False: the stack sees only `arguments`, never the caller's launch configurations. An
@@ -50,6 +52,7 @@ def _stack(context):
                     ),
                     launch_arguments=arguments.items(),
                 ),
+                # The AprilTag detector, under the robot namespace like hardware.launch.py runs it.
                 GroupAction(
                     [
                         PushRosNamespace("talos"),

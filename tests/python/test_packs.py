@@ -28,6 +28,8 @@ TALOS = Path(__file__).resolve().parents[2] / "content" / "packs"
 
 
 class DocumentTests(unittest.TestCase):
+    """Loading and saving single pack documents of the generic set."""
+
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
         self.root = Path(self.directory.name)
@@ -44,15 +46,18 @@ class DocumentTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), original, path.name)
 
     def test_folder_selects_canonical_file(self) -> None:
+        """Loading a folder picks <kind>.yaml inside it."""
         document = load_pack(self.root / "robot")
         self.assertEqual(document.kind, "robot")
         self.assertEqual(document.path.name, "robot.yaml")
 
     def test_edit_preserves_comments_order_and_metadata(self) -> None:
+        """An edited save keeps the header comment, key order and free-form metadata."""
         document = load_pack(self.root / "robot")
         order = list(document.data)
         document.data["body"]["parameters"]["mass_kg"] = 21.5
         document.save()
+
         text = (self.root / "robot" / "robot.yaml").read_text()
         self.assertTrue(text.startswith("# Synthetic four-thruster robot;"))
         reloaded = load_pack(self.root / "robot")
@@ -66,6 +71,7 @@ class DocumentTests(unittest.TestCase):
         self.assertEqual(before, load_pack(self.root / "pool").plain())
 
     def test_invalid_edit_is_rejected_on_reload(self) -> None:
+        """save() does not validate; the next load does."""
         document = load_pack(self.root / "robot")
         document.data["body"]["parameters"]["unexpected"] = 1
         document.save()
@@ -74,6 +80,8 @@ class DocumentTests(unittest.TestCase):
 
 
 class ScenarioTests(unittest.TestCase):
+    """Scenario resolution and the resolved-scenario manifest."""
+
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
         self.root = Path(self.directory.name)
@@ -82,6 +90,7 @@ class ScenarioTests(unittest.TestCase):
         self.directory.cleanup()
 
     def test_generic_sensor_only_scenario(self) -> None:
+        """The generic set resolves: no bridge thrusters, one task, run option defaults."""
         resolved = resolve_scenario(write_generic_packs(self.root))
         self.assertEqual(resolved.robot["id"], "synth")
         assert resolved.bridge is not None
@@ -95,6 +104,7 @@ class ScenarioTests(unittest.TestCase):
         self.assertIsNone(resolved.bridge)
 
     def test_dump_is_reproducible_and_location_independent(self) -> None:
+        """Dumps are byte-identical across runs and after moving the packs; hashes check out."""
         first = write_generic_packs(self.root / "a")
         one = resolve_scenario(first).dump(self.root / "one.json").read_bytes()
         two = resolve_scenario(first).dump(self.root / "two.json").read_bytes()
@@ -102,6 +112,8 @@ class ScenarioTests(unittest.TestCase):
         shutil.copytree(self.root / "a", self.root / "moved")
         moved = resolve_scenario(self.root / "moved" / "scenario")
         self.assertEqual(moved.dump(self.root / "three.json").read_bytes(), one)
+
+        # content_sha256 is the hash of the canonical JSON of the rest; each source is hashed too.
         manifest = json.loads(one)
         claimed = manifest.pop("content_sha256")
         canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
@@ -111,6 +123,7 @@ class ScenarioTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), source["sha256"])
 
     def test_any_source_change_changes_manifest_identity(self) -> None:
+        """Even a comment-only edit to a source file changes content_sha256."""
         scenario = write_generic_packs(self.root)
         before = resolve_scenario(scenario).manifest()["content_sha256"]
         pool = self.root / "pool" / "pool.yaml"
@@ -119,6 +132,7 @@ class ScenarioTests(unittest.TestCase):
         self.assertNotEqual(after["content_sha256"], before)
 
     def test_talos_packs_resolve_and_round_trip(self) -> None:
+        """The shipped Talos scenario resolves, and every shipped pack re-dumps byte-exact."""
         resolved = resolve_scenario(TALOS / "scenarios" / "talos_uwrt")
         self.assertEqual(resolved.run_options["role"], "repair")
         for path in sorted(TALOS.rglob("*.yaml")):
@@ -128,7 +142,10 @@ class ScenarioTests(unittest.TestCase):
 
 
 class DefinitionTests(unittest.TestCase):
+    """The type registry, the per-kind JSON schemas and the type catalog agree."""
+
     def test_registry_results_cannot_mutate_loader_definitions(self) -> None:
+        """registry() hands out copies: clearing one leaves the loader's definitions intact."""
         original = registry()
         edited = registry()
         category = next(iter(edited))
@@ -136,6 +153,7 @@ class DefinitionTests(unittest.TestCase):
         self.assertEqual(registry(), original)
 
     def test_document_schemas_are_valid_and_self_contained(self) -> None:
+        """Every kind's schema is valid 2020-12, with no file $refs or x-typed markers left."""
         for kind in DOCUMENT_KINDS:
             document = schema(kind)
             Draft202012Validator.check_schema(document)
@@ -144,8 +162,10 @@ class DefinitionTests(unittest.TestCase):
             self.assertNotIn("x-typed", text)
 
     def test_registry_matches_every_typed_schema_enum(self) -> None:
+        """Every typed node's `type` enum (type + parameters + allOf) is a registry category."""
         seen: dict[str, list[str]] = {}
 
+        # Walk the schema tree, recording which registry category each typed enum matches.
         def visit(node: object) -> None:
             if isinstance(node, dict):
                 properties = node.get("properties", {})
@@ -166,6 +186,7 @@ class DefinitionTests(unittest.TestCase):
         self.assertEqual(sorted(seen), sorted(registry()))
 
     def test_type_catalog_resolves_every_type(self) -> None:
+        """The catalog lists the registry's types in order, each with a $defs entry."""
         catalog = type_catalog()
         Draft202012Validator.check_schema(catalog)
         for category, types in catalog["categories"].items():
@@ -177,12 +198,14 @@ class DefinitionTests(unittest.TestCase):
 
 class CommandLineTests(unittest.TestCase):
     def run_cli(self, *arguments: str) -> tuple[int, str, str]:
+        """Run the packs CLI in-process and return (exit code, stdout, stderr)."""
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = main(list(arguments))
         return code, out.getvalue(), err.getvalue()
 
     def test_validate_schema_and_types(self) -> None:
+        """validate (with --dump, then with a missing asset), schema and types --json."""
         with tempfile.TemporaryDirectory() as directory:
             scenario = write_generic_packs(Path(directory))
             dump = Path(directory) / "resolved.json"
@@ -190,10 +213,13 @@ class CommandLineTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertIn("OK scenario", out)
             self.assertEqual(json.loads(dump.read_text())["format"], "nereus.resolved_scenario")
+
+            # A missing asset file fails validation and names the asset.
             (Path(directory) / "tasks" / "assets" / "hoop.dae").unlink()
             code, _, err = self.run_cli("validate", str(scenario))
             self.assertEqual(code, 1)
             self.assertIn("hoop_mesh", err)
+
         code, out, _ = self.run_cli("schema", "robot")
         self.assertEqual(json.loads(out)["properties"]["kind"], {"const": "robot"})
         code, out, _ = self.run_cli("types", "--json")

@@ -10,12 +10,14 @@ namespace nereus::datasets {
 // ((k - block start) / scenarios) mod n, no draw. Call first on a fresh stream.
 std::size_t selectEnvironment(const Job &, std::int64_t k, Stream &);
 
+// One sample's drawn environment: the appearance to render with plus the image post-processing it asks for.
 struct EnvironmentDraw {
     rendering::Appearance appearance;
-    float time = 0;
-    double noise_sigma = 0, blur_px = 0;
-    Json record; // water, lighting, time_s, image: the values drawn
+    float time = 0;                      // render time passed to capture(), seconds
+    double noise_sigma = 0, blur_px = 0; // postProcess() inputs: RGB noise (8-bit units), Gaussian blur sigma (px)
+    Json record;                         // water, lighting, time_s, image: the values drawn
 };
+
 // Draws an environment's values on top of the pool pack's appearance: water scales (tint per channel, absorption,
 // scattering, distance scale) unless absolute overrides are given; lighting absolute values and scales; profile.
 EnvironmentDraw drawEnvironment(const Environment &, const rendering::Appearance &pool, Stream &);

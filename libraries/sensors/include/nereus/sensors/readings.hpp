@@ -1,3 +1,4 @@
+// Plain measurement structs produced by the sensor models (one per sensor kind).
 #pragma once
 
 #include <Eigen/Core>
@@ -15,6 +16,7 @@ struct AttitudeReading {
     Eigen::Quaterniond sensor_to_world;
     Eigen::Matrix3d covariance; // Sensor-axis small-angle uncertainty, rad^2.
 };
+
 struct AhrsReading {
     ImuReading inertial;
     AttitudeReading attitude; // Acquired with inertial at the same state/time.
@@ -30,15 +32,18 @@ struct DvlReading {
     Eigen::Matrix3d covariance;
     double bottom_distance; // Ideal slant range along bottom_axis; not noisy altitude.
 };
+
 struct VelocityReading {
     Eigen::Vector3d reference_relative_velocity; // Sensor frame, m/s; no range observation.
     Eigen::Matrix3d covariance;
 };
+
 struct AltitudeReading {
     double mounted_world_z; // m, measured altitude of the configured sensor point.
     double target_world_z;  // m, corrected to the configured body-fixed target at acquisition.
     double variance;        // m^2, shared by both perfectly correlated scalar observations.
 };
+
 struct PressureReading {
     double absolute_pressure; // Pa, including surface atmospheric pressure.
     double pressure_variance; // Pa^2.

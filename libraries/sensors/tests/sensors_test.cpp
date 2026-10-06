@@ -1,3 +1,5 @@
+// Unit tests for the sensor models (IMU, attitude, FOG, DVL, pressure, reference sensors) and the scheduling
+// runtime. The default plant tick is 2 ms; the default pool floor is 5 m below the surface.
 #include "nereus/sensors/models.hpp"
 #include "nereus/sensors/runtime.hpp"
 #include <algorithm>
@@ -10,19 +12,26 @@ using namespace nereus::sensors;
 namespace sim = nereus::simulation;
 using namespace std::chrono_literals;
 namespace {
+// Vehicle 2 m underwater in the default pool, 3 m above the floor.
 sim::BodyState initial() {
     sim::BodyState state;
     state.position = {5, 5, -2};
     return state;
 }
+
+// Motion sample of the vehicle at rest at initial().
 sim::MotionSample motion() {
     sim::MotionSample result;
     result.state.body = initial();
     return result;
 }
+
+// 5 ms period, 3 ms latency, 64-deep queues.
 Device device(std::string id = "imu") {
     return {std::move(id), "sensor", 5ms, 3ms, 64};
 }
+
+// Bias, white and random-walk noise on every axis.
 NoiseParameters noisy() {
     NoiseParameters parameters;
     parameters.bias = {0.1, -0.2, 0.3};
@@ -30,6 +39,8 @@ NoiseParameters noisy() {
     parameters.walk_stddev.setConstant(0.01);
     return parameters;
 }
+
+// Asserts two IMU sample sequences match in timing, sequence numbers and values.
 void same(const std::vector<Sample<ImuReading>> &left, const std::vector<Sample<ImuReading>> &right) {
     ASSERT_EQ(left.size(), right.size());
     for (std::size_t i = 0; i < left.size(); ++i) {
@@ -43,6 +54,7 @@ void same(const std::vector<Sample<ImuReading>> &left, const std::vector<Sample<
         EXPECT_EQ(left[i].measurement.value->force_covariance, right[i].measurement.value->force_covariance);
     }
 }
+
 // A model-owned payload verifies extension without modifying a core enum or hierarchy.
 struct Probe {
     using Reading = double;
@@ -53,6 +65,7 @@ struct Probe {
 };
 } // namespace
 
+// At rest the IMU reads +g (specific force points up); in free fall it reads zero.
 TEST(Imu, SpecificForceAtRestAndFreeFall) {
     Imu imu;
     auto input = motion();
@@ -65,6 +78,8 @@ TEST(Imu, SpecificForceAtRestAndFreeFall) {
     EXPECT_EQ(imu.sample(input, 0.01).value->specific_force, Eigen::Vector3d::Zero());
 }
 
+// place() keeps time and generation: buffered samples are dropped, later samples match an unplaced twin's
+// (same phase and noise), and a rejected NaN placement leaves the stream untouched.
 TEST(Runtime, PlacementDiscardsOldReadingsAndPreservesSensorPhaseAndNoise) {
     Runtime runtime({}, initial(), 42), reference({}, initial(), 42);
     const auto a = runtime.add(device(), Imu({}, noisy(), noisy()));
@@ -117,6 +132,8 @@ TEST(Imu, RotatedMountIncludesTangentialAndCentripetalAcceleration) {
     EXPECT_TRUE(sample.angular_velocity.isApprox(Eigen::Vector3d(-3, 0, 0), 1e-12));
 }
 
+// An unavailable (contact) acquisition still advances the noise streams, so later samples match an
+// uninterrupted IMU.
 TEST(Imu, ContactIsUnavailableWithoutFreezingNoiseHistory) {
     Imu interrupted({}, noisy()), continuous({}, noisy());
     interrupted.reset(1, "imu");
@@ -131,6 +148,8 @@ TEST(Imu, ContactIsUnavailableWithoutFreezingNoiseHistory) {
               continuous.sample(motion(), 0.1).value->specific_force);
 }
 
+// Gravity calibration only rescales the gravity term: at rest the IMU reads the calibrated g, and the
+// difference from the physical model is exactly the rotated gravity correction.
 TEST(Imu, ReportedGravityPreservesInertialAccelerationAndMountGeometry) {
     ImuReporting reporting;
     reporting.gravity_magnitude = 9.755455;
@@ -159,6 +178,7 @@ TEST(Imu, ReportedGravityPreservesInertialAccelerationAndMountGeometry) {
     EXPECT_EQ(upright.sample(input, .01).value->specific_force, Eigen::Vector3d(9.755455, 0, 0));
 }
 
+// Fixed reported variances replace the published covariance without perturbing generated noise or replay.
 TEST(Imu, ReportedVariancesDoNotChangeNoiseHistoryOrReset) {
     ImuReporting reporting;
     reporting.force_variance = Eigen::Vector3d(.01, .02, .03);
@@ -214,6 +234,8 @@ TEST(Imu, RejectsInvalidReportingAndUndefinedGravityDirection) {
     EXPECT_EQ(physical.sample(input, .01).value->specific_force, Eigen::Vector3d::Zero());
 }
 
+// Output = heading drift (rate * absolute elapsed time) * noise rotation * body orientation * mount;
+// reset replays the same noise.
 TEST(Attitude, UsesAbsoluteTimeAndOriginalWorldNoiseMountOrder) {
     Mount mount;
     mount.sensor_to_body = Eigen::AngleAxisd(.7, Eigen::Vector3d::UnitX());
@@ -243,6 +265,7 @@ TEST(Attitude, UsesAbsoluteTimeAndOriginalWorldNoiseMountOrder) {
     EXPECT_EQ(model.sample(input, .04).value->sensor_to_world.coeffs(), actual.sensor_to_world.coeffs());
 }
 
+// Monte Carlo check that the noise is a Gaussian angle about a random axis, with per-axis variance s^2/3.
 TEST(Attitude, IsotropicAngleNoiseHasDeclaredSmallAngleCovariance) {
     AttitudeParameters parameters;
     parameters.angle_stddev = .01;
@@ -269,6 +292,8 @@ TEST(Attitude, IsotropicAngleNoiseHasDeclaredSmallAngleCovariance) {
     EXPECT_LT((second - Eigen::Matrix3d::Identity() * (.0001 / 3)).norm(), .000004);
 }
 
+// AHRS output equals separately sampled IMU + attitude models, including across an unavailable (contact)
+// tick and after reset.
 TEST(Ahrs, CompositionKeepsIndependentNoiseAcrossUnavailableAcquisitionsAndReset) {
     AhrsParameters parameters;
     parameters.acceleration_noise = noisy();
@@ -334,6 +359,7 @@ TEST(Attitude, RejectsInvalidParametersAndTimeOverflow) {
     EXPECT_THROW(model.sample(motion(), 0), std::invalid_argument);
 }
 
+// A 90 deg yaw mount maps body rates into the sensor frame; covariance is projected as A * C * A^T.
 TEST(Fog, ProjectsSignedRatesAndCovarianceOntoConfiguredAxes) {
     Mount mount;
     mount.sensor_to_body = Eigen::AngleAxisd(std::acos(-1.0) / 2, Eigen::Vector3d::UnitZ());
@@ -351,6 +377,7 @@ TEST(Fog, ProjectsSignedRatesAndCovarianceOntoConfiguredAxes) {
     EXPECT_NEAR(covariance(0, 1), std::sqrt(0.5), 1e-12);
 }
 
+// Bottom velocity = body velocity + w x r lever arm - bottom velocity, rotated into the sensor frame.
 TEST(Dvl, BottomVelocityUsesMountLeverArmAndSensorFrame) {
     DvlParameters parameters;
     parameters.mount.position_body.x() = 1;
@@ -369,6 +396,8 @@ TEST(Dvl, BottomVelocityUsesMountLeverArmAndSensorFrame) {
     EXPECT_DOUBLE_EQ(result.bottom_distance, 3);
 }
 
+// Range gating, plus misses for upward rays, origins above water, below the floor, outside the footprint,
+// and rays that would hit outside it.
 TEST(Dvl, FinitePoolRangeAndMissingBottomHaveExplicitLockLoss) {
     PoolBottom bottom(sim::Pool{});
     DvlParameters parameters;
@@ -392,6 +421,8 @@ TEST(Dvl, FinitePoolRangeAndMissingBottomHaveExplicitLockLoss) {
     EXPECT_THROW(invalid.sample(motion(), 0.01), std::runtime_error);
 }
 
+// Noise streams are keyed by (seed, id, component); length framing makes "gyr"+"orate" differ from
+// "gyro"+"rate". Covariance = white^2 + walk^2 * total elapsed.
 TEST(Noise, SeedIdentityResetAndCovarianceAreExplicit) {
     Noise3 a(noisy()), b(noisy()), other(noisy());
     a.reset(42, "gyro", "rate");
@@ -431,6 +462,8 @@ TEST(Sensors, RejectInvalidConfiguration) {
     EXPECT_THROW(Imu{}.sample(input, 0.01), std::invalid_argument);
 }
 
+// 5 ms period on a 2 ms tick: acquisitions land on the first tick at/after each due time without accumulating
+// drift, and the 3 ms latency is measured from the acquisition time.
 TEST(Scheduler, NonIntegralPeriodsDoNotDriftAndLatencyIsSeparate) {
     Runtime runtime({}, initial());
     auto stream = runtime.add(device(), Probe{});
@@ -452,6 +485,7 @@ TEST(Scheduler, NonIntegralPeriodsDoNotDriftAndLatencyIsSeparate) {
     EXPECT_TRUE(stream->drain().empty());
 }
 
+// One batch advance vs tick-by-tick advancing with polling, plus an extra device, yields identical IMU samples.
 TEST(Scheduler, BatchPartitionPollingAndOtherDevicesCannotChangeNoise) {
     Runtime a({}, initial(), 42), b({}, initial(), 42);
     auto left = a.add(device(), Imu({}, noisy(), noisy()));
@@ -473,6 +507,7 @@ TEST(Scheduler, BatchPartitionPollingAndOtherDevicesCannotChangeNoise) {
     same(left->drain(), right_samples);
 }
 
+// reset() bumps the generation, clears buffered data, replays the same seed, and keeps registration closed.
 TEST(Scheduler, ResetClearsPendingAndReadyDataAndRestartsSeed) {
     Runtime runtime({}, initial(), 42);
     auto stream = runtime.add(device(), Imu({}, noisy(), noisy()));
@@ -492,6 +527,7 @@ TEST(Scheduler, ResetClearsPendingAndReadyDataAndRestartsSeed) {
     EXPECT_THROW(runtime.add(device("late"), Imu{}), std::logic_error);
 }
 
+// With OverflowPolicy::Fail and capacity 1, an undrained ready queue faults the runtime until reset.
 TEST(Scheduler, QueueOverflowFaultsAndInvalidatesUntilReset) {
     Runtime runtime({}, initial());
     auto config = device();
@@ -513,6 +549,7 @@ TEST(Scheduler, QueueOverflowFaultsAndInvalidatesUntilReset) {
     EXPECT_TRUE(stream->latest());
 }
 
+// DropOldest keeps only the newest sample and counts drops on both the ready and the pending queue.
 TEST(Scheduler, ExplicitDropOldestCountsBothQueueTypes) {
     Runtime runtime({}, initial());
     auto config = device();
@@ -531,6 +568,8 @@ TEST(Scheduler, ExplicitDropOldestCountsBothQueueTypes) {
     EXPECT_FALSE(pending->latest());
 }
 
+// Registration rejects periods below the 2 ms tick, negative latency, zero capacity and duplicate ids;
+// an overflowing advance throws without faulting.
 TEST(Scheduler, ValidatesRegistrationAndEmptyRuntime) {
     Runtime runtime({}, initial());
     EXPECT_EQ(runtime.advance(0).tick, 0U);
@@ -552,6 +591,7 @@ TEST(Scheduler, ValidatesRegistrationAndEmptyRuntime) {
     EXPECT_EQ(empty.advance(10).tick, 10U);
 }
 
+// Streams outlive the runtime (inactive and empty), and latest() returns a copy rather than a reference.
 TEST(Scheduler, HandlesOutliveRuntimeAndSamplesAreIndependentCopies) {
     std::shared_ptr<SensorStream<ImuReading>> stream;
     {
@@ -568,6 +608,7 @@ TEST(Scheduler, HandlesOutliveRuntimeAndSamplesAreIndependentCopies) {
     EXPECT_TRUE(stream->drain().empty());
 }
 
+// Out-of-range DVL samples are delivered as unavailable; a model returning neither value nor reason faults.
 TEST(Scheduler, ReportsUnavailableSamplesAndRejectsBrokenExtensionResults) {
     Runtime runtime({}, initial());
     DvlParameters parameters;
@@ -590,6 +631,7 @@ TEST(Scheduler, ReportsUnavailableSamplesAndRejectsBrokenExtensionResults) {
     EXPECT_TRUE(broken.faulted());
 }
 
+// A rejected reset leaves state untouched; a pending-queue overflow (long latency, capacity 1) still faults.
 TEST(Scheduler, PendingOverflowAndInvalidResetPreserveDefinedLifecycle) {
     Runtime runtime({}, initial());
     auto config = device();
@@ -612,6 +654,8 @@ TEST(Scheduler, PendingOverflowAndInvalidResetPreserveDefinedLifecycle) {
     EXPECT_EQ(stream->stats().acquired, 0U);
 }
 
+// A model reset that throws faults the runtime and invalidates every stream; a later reset recovers
+// (generation 2 because the failed reset had already reset the plant).
 TEST(Scheduler, ExtensionResetFailureInvalidatesEveryStreamAndCanRecover) {
     struct ThrowOnSeed {
         using Reading = double;
@@ -640,6 +684,7 @@ TEST(Scheduler, ExtensionResetFailureInvalidatesEveryStreamAndCanRecover) {
     EXPECT_EQ(custom->latest()->header.generation, 2U);
 }
 
+// A latency that would overflow the delivery timestamp faults before anything is published.
 TEST(Scheduler, DeliveryTimeOverflowFaultsBeforePublishingInvalidTimestamps) {
     Runtime runtime({}, initial());
     auto config = device();
@@ -650,6 +695,7 @@ TEST(Scheduler, DeliveryTimeOverflowFaultsBeforePublishingInvalidTimestamps) {
     EXPECT_FALSE(stream->latest());
 }
 
+// A mount and axis within the 1e-9 unit-length tolerance are normalized, so the slant range is exact.
 TEST(Dvl, AcceptedMountRoundoffDoesNotInvalidateBottomQuery) {
     DvlParameters parameters;
     parameters.mount.sensor_to_body = Eigen::AngleAxisd(0.5, Eigen::Vector3d::UnitX());
@@ -661,6 +707,8 @@ TEST(Dvl, AcceptedMountRoundoffDoesNotInvalidateBottomQuery) {
     EXPECT_NEAR(result.value->bottom_distance, 3.0 / std::cos(0.5), 1e-12);
 }
 
+// Depth uses the mount point (rotated 0.5 m lever arm -> 3.5 m below the water line) and the measured
+// pressure, so bias and calibration density change the reported depth.
 TEST(Pressure, HydrostaticDepthUsesMountedPositionAndMeasuredPressure) {
     PressureParameters parameters;
     parameters.mount.position_body.x() = 0.5;
@@ -679,6 +727,7 @@ TEST(Pressure, HydrostaticDepthUsesMountedPositionAndMeasuredPressure) {
     EXPECT_NEAR(calibrated.sample(input, 0.1).value->depth, 2.25, 1e-12);
 }
 
+// Above the surface pressure stays atmospheric; depth is relative to reference_pressure and may be negative.
 TEST(Pressure, SurfaceAndAirReturnAtmosphericPressureWithoutClampingEstimatedDepth) {
     PressureParameters parameters;
     parameters.reference_pressure = 102325;
@@ -692,6 +741,7 @@ TEST(Pressure, SurfaceAndAirReturnAtmosphericPressureWithoutClampingEstimatedDep
     }
 }
 
+// Variance = white^2 + walk^2 * elapsed (first acquisition at 6 ms); reset replays the same sample.
 TEST(Pressure, NoiseVarianceAndRuntimeResetAreReproducible) {
     PressureParameters parameters;
     parameters.noise = {2, 3, 4};
@@ -710,6 +760,7 @@ TEST(Pressure, NoiseVarianceAndRuntimeResetAreReproducible) {
     EXPECT_EQ(stream->latest()->header.generation, 1U);
 }
 
+// Out-of-range and missing-environment samples are unavailable; an invalid provider result throws.
 TEST(Pressure, MissingEnvironmentRangeAndInvalidProviderAreDistinct) {
     PressureParameters parameters;
     parameters.maximum_pressure = 110000;
@@ -725,6 +776,8 @@ TEST(Pressure, MissingEnvironmentRangeAndInvalidProviderAreDistinct) {
     EXPECT_THROW((HydrostaticPressure{0, -1}), std::invalid_argument);
 }
 
+// stopThrusters() coasts thrust down without changing time, generation or the sensor schedule, and the
+// queued reverse command never takes effect.
 TEST(Scheduler, StopCoastsPropulsionWithoutResettingClockOrSensorSchedule) {
     sim::PlantParameters parameters;
     sim::Thruster thruster;
@@ -758,6 +811,7 @@ TEST(Scheduler, StopCoastsPropulsionWithoutResettingClockOrSensorSchedule) {
     EXPECT_EQ(stream->latest()->header.generation, before.generation);
 }
 
+// A translated, yawed and raised pool gives the same ray hits and pressure as the local pool, in its frame.
 TEST(Dvl, PlacedPoolPreservesFiniteRayQueriesAndWaterLevel) {
     sim::Pool local, placed;
     placed.origin_xy_world = {-10, -12};
@@ -786,6 +840,7 @@ TEST(Dvl, PlacedPoolPreservesFiniteRayQueriesAndWaterLevel) {
     EXPECT_THROW((PoolBottom(placed)), std::invalid_argument);
 }
 
+// Rotated pools accept origins and hits exactly on the boundary (roundoff tolerance) but not just outside.
 TEST(Dvl, PlacedFloorIncludesBoundaryOriginsAndHitsWithoutExtendingItsFootprint) {
     for (double yaw : {.3, .7, 1.1}) {
         sim::Pool pool;
@@ -804,6 +859,7 @@ TEST(Dvl, PlacedFloorIncludesBoundaryOriginsAndHitsWithoutExtendingItsFootprint)
     }
 }
 
+// Reported FOG variances are projected onto the axes like generated ones and do not change the noise stream.
 TEST(Fog, IndependentReportedVariancePreservesProjectionAndNoise) {
     const std::vector<Eigen::Vector3d> axes{Eigen::Vector3d::UnitX(), Eigen::Vector3d(1, 1, 0).normalized()};
     Fog derived({}, axes, noisy()), reported({}, axes, noisy(), Eigen::Vector3d(4, 9, 16));
@@ -822,6 +878,7 @@ TEST(Fog, IndependentReportedVariancePreservesProjectionAndNoise) {
         EXPECT_THROW((Fog({}, axes, {}, Eigen::Vector3d(0, invalid, 0))), std::invalid_argument);
 }
 
+// Velocity relative to a moving reference, including the lever arm; works anywhere, unlike the DVL.
 TEST(ReferenceVelocity, MovingReferenceIncludesMountLeverArmWithoutBottomAvailability) {
     ReferenceVelocityParameters p;
     p.mount.position_body = {0, 2, 0};
@@ -842,6 +899,7 @@ TEST(ReferenceVelocity, MovingReferenceIncludesMountLeverArmWithoutBottomAvailab
     EXPECT_FALSE(bottom.sample(input, .01).value);
 }
 
+// The inclination gate makes a sample unavailable without skipping its noise draw, and supports custom axes.
 TEST(ReferenceVelocity, InclinationGatePreservesNoiseHistoryAndReset) {
     ReferenceVelocityParameters p;
     p.noise = noisy();
@@ -892,6 +950,7 @@ TEST(ReferenceVelocity, RejectsInvalidReferenceCovarianceAndInclination) {
     EXPECT_THROW((ReferenceVelocity(p)), std::invalid_argument);
 }
 
+// The gate accepts exact alignment under rotated mounts and rejects angles just beyond the limit.
 TEST(ReferenceVelocity, InclinationAcceptsRotatedAlignmentAndRejectsExteriorAngles) {
     ReferenceVelocityParameters p;
     p.mount.sensor_to_body = Eigen::AngleAxisd(.06, Eigen::Vector3d(3, 1, 2).normalized());
@@ -916,6 +975,7 @@ TEST(ReferenceVelocity, InclinationAcceptsRotatedAlignmentAndRejectsExteriorAngl
     EXPECT_FALSE(boundary.sample(input, .01).value);
 }
 
+// The target height is corrected with the same pose as the mount reading; no target means target == mount.
 TEST(ReferenceAltitude, CorrectsMountedHeightUsingTheSameAcquisitionPose) {
     ReferenceAltitudeParameters parameters;
     parameters.mount.position_body = {1, 2, 3};
@@ -940,6 +1000,7 @@ TEST(ReferenceAltitude, CorrectsMountedHeightUsingTheSameAcquisitionPose) {
     EXPECT_EQ(same.target_world_z, same.mounted_world_z);
 }
 
+// Mount and target share one noise draw; a reported variance overrides the published value, not the noise.
 TEST(ReferenceAltitude, NoiseIsSharedAndReportedVarianceDoesNotChangeReplay) {
     ReferenceAltitudeParameters parameters;
     parameters.mount.position_body.z() = 1;
@@ -968,6 +1029,7 @@ TEST(ReferenceAltitude, NoiseIsSharedAndReportedVarianceDoesNotChangeReplay) {
     }
 }
 
+// Reference altitude reports any world Z, while hydrostatic pressure saturates at the surface.
 TEST(ReferenceAltitude, UnboundedWorldHeightIsDistinctFromHydrostaticPressure) {
     ReferenceAltitude altitude;
     Pressure pressure({}, HydrostaticPressure(0));

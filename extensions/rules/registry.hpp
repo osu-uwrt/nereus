@@ -4,5 +4,6 @@
 #include <nereus/session/tasks.hpp>
 
 namespace nereus::rules {
+// A fresh registry of every built-in rules module (name -> factory).
 session::RulesRegistry standardRules();
 } // namespace nereus::rules

@@ -17,6 +17,7 @@ int main(int argc, char **argv) {
         return 2;
     }
     try {
+        // Always-mode capture of only the requested sensor.
         const auto resolved = nereus::session::loadResolvedScenario(argv[1]);
         sc::Options options;
         options.always = true;
@@ -24,12 +25,16 @@ int main(int argc, char **argv) {
         if (argc > 13)
             options.supersample = std::stoi(argv[13]);
         sc::SessionCameras cameras(resolved, options);
+
+        // Robot root pose in the world (wxyz quaternion order, matching the usage line).
         nereus::spatial::Pose pose;
         pose.translation = {std::stod(argv[3]), std::stod(argv[4]), std::stod(argv[5])};
         pose.rotation =
             Eigen::Quaterniond(std::stod(argv[6]), std::stod(argv[7]), std::stod(argv[8]), std::stod(argv[9]));
         const double time = std::stod(argv[10]);
         const int repeat = argc > 12 ? std::stoi(argv[12]) : 1;
+
+        // Collect delivered products on the worker thread and wake the request loop.
         std::mutex mutex;
         std::condition_variable condition;
         std::vector<sc::Products> products;
@@ -38,6 +43,9 @@ int main(int argc, char **argv) {
             products.push_back(std::move(p));
             condition.notify_all();
         });
+
+        // Each repeat advances snapshot time by 1 s so every request lands on a new schedule slot;
+        // timings are averaged over the repeats.
         double render = 0, process = 0, wall = 0;
         for (int i = 0; i < repeat; ++i) {
             const auto start = std::chrono::steady_clock::now();
@@ -48,6 +56,8 @@ int main(int argc, char **argv) {
             render += products.back().render_ms;
             process += products.back().process_ms;
         }
+
+        // Only the first capture's left eye is written out.
         cameras.close();
         const auto &first = products.front();
         const std::string prefix = argv[11];

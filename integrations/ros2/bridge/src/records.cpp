@@ -4,6 +4,7 @@
 
 namespace nereus::ros_bridge {
 namespace {
+// `keys` of `object`, null where absent.
 Json pick(const Json &object, const std::vector<std::string> &keys) {
     Json out = Json::object();
     for (const auto &key : keys)
@@ -19,10 +20,12 @@ void writeJson(const std::filesystem::path &path, const Json &document) {
     out << document.dump(2) << "\n";
 }
 
+// execution.json: what this run executes (clock, streams, services, TF, cameras) and what it ignores.
 Json executionRecord(const session::ResolvedScenario &resolved, const BridgeCore &core,
                      const std::vector<std::string> &sensors, const std::vector<std::string> &deferred,
                      std::optional<std::int64_t> duration_ns, const CameraSink *cameras) {
     const Json &config = core.config();
+    // Selected sensors that no stream bridges.
     Json without_stream = Json::array();
     for (const auto &name : sensors) {
         bool bridged = false;
@@ -36,6 +39,8 @@ Json executionRecord(const session::ResolvedScenario &resolved, const BridgeCore
         if (!bridged)
             without_stream.push_back(name);
     }
+
+    // Declared streams and services, trimmed to the identifying keys.
     Json streams = Json::array();
     for (const auto &stream : config.at("streams"))
         streams.push_back(
@@ -43,6 +48,7 @@ Json executionRecord(const session::ResolvedScenario &resolved, const BridgeCore
     Json services = Json::array();
     for (const auto &service : config.value("services", Json::array()))
         services.push_back(pick(service, {"id", "service", "service_type", "action"}));
+
     return Json{
         {"format", "nereus.execution"},
         {"version", 1},
@@ -73,6 +79,7 @@ Json executionRecord(const session::ResolvedScenario &resolved, const BridgeCore
     };
 }
 
+// tasks.json: final scores per row, the run snapshot, task counters and every task event.
 Json tasksRecord(BridgeCore &core) {
     SessionPort &session = core.session();
     const auto run = session.runSnapshot();
@@ -88,6 +95,7 @@ Json tasksRecord(BridgeCore &core) {
                 {"events", core.taskEvents()}};
 }
 
+// summary.json: why the run stopped, final tick/time, bridge counters and sensor/camera stream stats.
 Json summaryRecord(BridgeCore &core, const std::string &reason, const CameraSink *cameras) {
     const auto snapshot = core.session().observe();
     Json stats = Json::object();

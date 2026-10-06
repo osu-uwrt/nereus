@@ -1,3 +1,5 @@
+// SessionCameras: pack camera configuration, per-tick capture scheduling, and the per-camera workers that
+// render on the shared EGL host, process frames and deliver products.
 #include <nereus/session_cameras/session_cameras.hpp>
 
 #include <algorithm>
@@ -9,15 +11,18 @@
 namespace nereus::session_cameras {
 namespace {
 using Json = session::Json;
+
 constexpr double kNearPlaneM = 0.05; // camera clipping planes
 constexpr double kFarPlaneM = 100.0;
 constexpr int kDefaultJpegQuality = 93;
 const char *const kEyes[2] = {"left", "right"};
 
+// Monotonic wall clock, for render/process timings only.
 std::int64_t nowNs() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
         .count();
 }
+
 double ms(std::int64_t ns) {
     return static_cast<double>(ns) / 1e6;
 }
@@ -29,6 +34,8 @@ struct Sha256 {
     static std::uint32_t rotr(std::uint32_t x, int n) {
         return (x >> n) | (x << (32 - n));
     }
+
+    // Compresses one 64-byte block into h.
     void block(const std::uint8_t *p) {
         static const std::uint32_t k[64] = {
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -39,6 +46,7 @@ struct Sha256 {
             0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
             0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
             0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
+        // Message schedule.
         std::uint32_t w[64];
         for (int i = 0; i < 16; ++i)
             w[i] = std::uint32_t(p[4 * i]) << 24 | std::uint32_t(p[4 * i + 1]) << 16 |
@@ -48,6 +56,8 @@ struct Sha256 {
             const auto s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >> 10);
             w[i] = w[i - 16] + s0 + w[i - 7] + s1;
         }
+
+        // 64 compression rounds, then add into the running state.
         auto a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
         for (int i = 0; i < 64; ++i) {
             const auto t1 = hh + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + k[i] + w[i];
@@ -58,6 +68,7 @@ struct Sha256 {
     }
 };
 
+// Shader directory: the explicit option, then $NEREUS_SHADER_DIR, then the source tree baked in at build time.
 std::filesystem::path defaultShaders(const std::filesystem::path &given) {
     if (!given.empty())
         return given;
@@ -70,6 +81,7 @@ std::filesystem::path defaultShaders(const std::filesystem::path &given) {
 #endif
 }
 
+// ROS-style rectified K and P (row-major) for one eye; the right eye's P carries Tx = -fx * baseline.
 CameraInfo makeInfo(const cameras::Intrinsics &k, bool right, double baseline) {
     CameraInfo info;
     info.width = k.width;
@@ -104,13 +116,17 @@ std::array<std::uint8_t, 32> sha256(const std::string &text) {
     Sha256 state;
     std::string data = text;
     const std::uint64_t bits = std::uint64_t(text.size()) * 8;
+    // Pad: a 0x80 byte, zeros up to 56 mod 64, then the message length in bits, big-endian.
     data.push_back(char(0x80));
     while (data.size() % 64 != 56)
         data.push_back(0);
     for (int i = 7; i >= 0; --i)
         data.push_back(char((bits >> (8 * i)) & 0xff));
+
+    // Compress every block, then emit the state words big-endian.
     for (std::size_t i = 0; i < data.size(); i += 64)
         state.block(reinterpret_cast<const std::uint8_t *>(data.data()) + i);
+
     std::array<std::uint8_t, 32> digest{};
     for (int i = 0; i < 8; ++i)
         for (int j = 0; j < 4; ++j)
@@ -133,6 +149,7 @@ std::uint32_t deriveSeed(std::uint64_t seed, const std::string &sensor_id, const
 SessionCameras::SessionCameras(const session::ResolvedScenario &resolved, Options options,
                                std::shared_ptr<const pack_scene::PackScene> scene)
     : scene_(std::move(scene)), options_(std::move(options)), always_(options_.always) {
+    // Scenario-level settings: the scenario's sensor_noise wins over the option; seed defaults to 0.
     const auto &scenarioJson = resolved.scenario;
     sensor_noise_ = scenarioJson.value("sensor_noise", options_.sensor_noise);
     if (options_.supersample < 1 || options_.supersample > 4)
@@ -141,12 +158,15 @@ SessionCameras::SessionCameras(const session::ResolvedScenario &resolved, Option
     if (!scene_)
         scene_ = std::make_shared<pack_scene::PackScene>(resolved);
 
+    // Index the robot's sensors by id, remembering pack order.
     std::map<std::string, const Json *> sensors;
     std::vector<std::string> order;
     for (const auto &item : resolved.robot.at("sensors")) {
         sensors[item.at("id").get<std::string>()] = &item;
         order.push_back(item.at("id").get<std::string>());
     }
+
+    // Select cameras: every enabled stereo_camera in pack order, or the requested ids (deduplicated).
     std::vector<std::string> chosen;
     if (options_.sensor_ids.empty()) {
         for (const auto &id : order)
@@ -159,6 +179,8 @@ SessionCameras::SessionCameras(const session::ResolvedScenario &resolved, Option
     }
     if (chosen.empty())
         throw std::runtime_error("no enabled stereo_camera sensors selected");
+
+    // Validate each selected sensor and build its Camera.
     for (const auto &id : chosen) {
         const auto found = sensors.find(id);
         if (found == sensors.end())
@@ -183,6 +205,8 @@ SessionCameras::SessionCameras(const session::ResolvedScenario &resolved, Option
             throw std::runtime_error("camera '" + id + "': period_ns must be positive");
         camera->capacity = item.value("capacity", 1);
         camera->fail_on_overflow = overflow == "fail";
+
+        // Per-eye pinhole intrinsics; both eyes share one resolution.
         const auto &parameters = item.at("parameters");
         const int width = parameters.at("resolution_px").at(0).get<int>();
         const int height = parameters.at("resolution_px").at(1).get<int>();
@@ -199,6 +223,8 @@ SessionCameras::SessionCameras(const session::ResolvedScenario &resolved, Option
             k.far_plane = kFarPlaneM;
             k.projection(); // validates against the calibration invariants
         }
+
+        // Depth noise model (disabled when sensor noise is off).
         const auto &depth = parameters.at("depth");
         auto &noise = camera->noise;
         const auto &n = depth.at("noise");
@@ -216,6 +242,8 @@ SessionCameras::SessionCameras(const session::ResolvedScenario &resolved, Option
         noise.correlation = n.at("correlation").get<double>();
         noise.patch_size = n.at("patch_size_px").get<int>();
         noise.validate();
+
+        // Stereo geometry and outputs; output names this library doesn't know are ignored.
         camera->baseline_m = parameters.at("baseline_m").get<double>();
         for (const auto &output : parameters.at("outputs"))
             if (const auto known = outputFromName(output.get<std::string>()))
@@ -224,14 +252,20 @@ SessionCameras::SessionCameras(const session::ResolvedScenario &resolved, Option
             camera->right_frame = parameters.at("right_frame").get<std::string>();
         else if (camera->outputs.count(Output::RgbRight))
             throw std::runtime_error("sensor '" + id + "': rgb_right requires right_frame");
+
+        // Eye poses relative to the robot frame root; without a right frame the right eye sits on the left.
         camera->left_eye = scene_->frames().fromRoot(camera->frame);
         camera->right_eye =
             camera->right_frame.empty() ? camera->left_eye : scene_->frames().fromRoot(camera->right_frame);
+
+        // Per-sensor JPEG quality from the options (absent: colour stays raw).
         const auto quality = options_.jpeg_quality.find(id);
         if (quality != options_.jpeg_quality.end())
             camera->jpeg_quality = quality->second;
         cameras_[id] = std::move(camera);
     }
+
+    // One offscreen GL host for every camera, then seed each eye's processor from the scenario seed.
     host_ = std::make_unique<rendering::OffscreenRenderer>(defaultShaders(options_.shader_directory));
     reseedAll(seed_);
 }
@@ -250,6 +284,7 @@ SessionCameras::Camera &SessionCameras::camera(const std::string &id) const {
     return *found->second;
 }
 
+// Re-derives every eye's seed and resets its processor's random state.
 void SessionCameras::reseedAll(std::uint64_t seed) {
     for (auto &[id, camera] : cameras_)
         for (std::size_t eye = 0; eye < 2; ++eye) {
@@ -315,6 +350,7 @@ void SessionCameras::start(Callback deliver) {
         threads_.emplace_back([this, c = camera.get()] { run(*c); });
 }
 
+// Rethrows the first worker failure with context (caller holds mutex_).
 void SessionCameras::raiseFailure() const {
     if (failure_) {
         try {
@@ -330,18 +366,23 @@ void SessionCameras::request(std::int64_t snapshot_time_ns, std::int64_t ros_sta
                              const std::vector<pack_scene::RobotOverride> &overrides,
                              const std::map<std::string, bool> &latched) {
     spatial::validate(world_from_root);
+    // Dynamic instances and overrides are copied at most once and shared by every camera queued this tick.
     std::shared_ptr<const std::vector<rendering::Instance>> sharedDynamic;
     std::shared_ptr<const std::vector<pack_scene::RobotOverride>> sharedOverrides;
     std::lock_guard<std::mutex> lock(mutex_);
     raiseFailure();
     if (stopping_)
         throw std::runtime_error("camera worker is closed");
+
     for (auto &[id, holder] : cameras_) {
         auto &c = *holder;
+        // Skip cameras whose next slot hasn't come; the next slot is the following period boundary.
         if (snapshot_time_ns < c.next_ns)
             continue;
         c.next_ns = (snapshot_time_ns / c.period_ns + 1) * c.period_ns;
         ++c.stats.requested;
+
+        // An output is rendered if it is configured and either always-on or wanted by some consumer.
         const auto wanted = [&](Output output) {
             if (!c.outputs.count(output))
                 return false;
@@ -358,6 +399,7 @@ void SessionCameras::request(std::int64_t snapshot_time_ns, std::int64_t ros_sta
             ++c.stats.skipped_no_demand;
             continue;
         }
+
         if (!sharedDynamic) {
             sharedDynamic = std::make_shared<const std::vector<rendering::Instance>>(dynamic);
             sharedOverrides = std::make_shared<const std::vector<pack_scene::RobotOverride>>(overrides);
@@ -370,6 +412,8 @@ void SessionCameras::request(std::int64_t snapshot_time_ns, std::int64_t ros_sta
         job.overrides = sharedOverrides;
         job.latched = latched;
         job.jpeg_quality = c.jpeg_quality;
+
+        // Bounded pending queue: fail, or drop the oldest job.
         if (c.pending.size() >= c.capacity) {
             if (c.fail_on_overflow)
                 throw std::runtime_error("camera '" + id + "' pending queue is full");
@@ -389,10 +433,13 @@ void SessionCameras::discardPending() {
 }
 
 void SessionCameras::invalidate(std::optional<std::uint64_t> seed) {
+    // Holding publication_mutex_ waits out an in-flight delivery, so nothing stale is delivered after return.
     std::lock_guard<std::mutex> publication(publication_mutex_);
     std::lock_guard<std::mutex> lock(mutex_);
     ++revision_;
     discardPending();
+
+    // A seeded reset restarts every schedule; a worker reseeds once no capture is in flight.
     if (seed) {
         reset_seed_ = seed;
         for (auto &[id, camera] : cameras_)
@@ -402,6 +449,7 @@ void SessionCameras::invalidate(std::optional<std::uint64_t> seed) {
 }
 
 void SessionCameras::close() {
+    // Mark stopping and take the threads under the lock, but join outside it (workers need mutex_ to exit).
     std::vector<std::thread> threads;
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -414,6 +462,8 @@ void SessionCameras::close() {
     for (auto &thread : threads)
         if (thread.joinable())
             thread.join();
+
+    // Surface a worker failure to the caller.
     std::lock_guard<std::mutex> lock(mutex_);
     raiseFailure();
 }
@@ -476,6 +526,7 @@ Products SessionCameras::capture(Camera &c, const Job &job) {
     products.left_info = makeInfo(c.intrinsics[0], false, c.baseline_m);
     products.right_info = makeInfo(c.intrinsics[1], true, c.baseline_m);
 
+    // Compose the world scene and the per-eye views.
     const auto root = pack_scene::toMatrix(job.root);
     const auto scene = scene_->compose(root, *job.dynamic, *job.overrides, job.latched);
     const auto viewFor = [&](int eye) {
@@ -486,6 +537,8 @@ Products SessionCameras::capture(Camera &c, const Job &job) {
         view.eye = worldEye.translation.cast<float>();
         return view;
     };
+
+    // Which eyes and buffers to render: colour per eye, depth from the left eye only.
     const float time = static_cast<float>(static_cast<double>(job.native_ns) / 1e9);
     std::array<rendering::ImageCapture, 2> raw;
     const bool wantEye[2] = {job.rgb_left || job.depth_left, job.rgb_right};
@@ -497,6 +550,8 @@ Products SessionCameras::capture(Camera &c, const Job &job) {
     for (int eye = 0; eye < 2; ++eye)
         if (wantEye[eye])
             views[eye] = viewFor(eye); // validates before rendering
+
+    // GL capture, serialized across cameras on the shared host.
     const auto renderStart = nowNs();
     {
         std::lock_guard<std::mutex> gl(gl_mutex_);
@@ -508,6 +563,7 @@ Products SessionCameras::capture(Camera &c, const Job &job) {
             }
     }
     const auto renderNs = nowNs() - renderStart;
+
     // The right eye has no depth and so no random state; processing the left eye last keeps a failed
     // call from consuming the left eye's noise stream.
     const auto processStart = nowNs();
@@ -520,6 +576,7 @@ Products SessionCameras::capture(Camera &c, const Job &job) {
                                                             jpeg, job.jpeg_quality.value_or(kDefaultJpegQuality));
         (eye ? products.right : products.left) = std::move(frame);
     }
+
     products.render_ms = ms(renderNs);
     products.process_ms = ms(nowNs() - processStart);
     return products;
@@ -529,6 +586,7 @@ void SessionCameras::run(Camera &c) {
     try {
         while (true) {
             Job job;
+            // Wait for a job, a pending reseed (once nothing is in flight), or shutdown.
             {
                 std::unique_lock<std::mutex> lock(mutex_);
                 condition_.wait(lock, [&] {
@@ -536,6 +594,8 @@ void SessionCameras::run(Camera &c) {
                 });
                 if (stopping_)
                     return;
+
+                // One worker performs the reseed while the others wait on resetting_.
                 if (reset_seed_) {
                     const auto seed = *reset_seed_;
                     reset_seed_.reset();
@@ -547,10 +607,14 @@ void SessionCameras::run(Camera &c) {
                     condition_.notify_all();
                     continue;
                 }
+
+                // Take the oldest job.
                 job = std::move(c.pending.front());
                 c.pending.pop_front();
                 ++active_;
             }
+
+            // Capture outside the lock; keep active_ balanced if it throws.
             const auto started = nowNs();
             Products products;
             try {
@@ -560,6 +624,8 @@ void SessionCameras::run(Camera &c) {
                 --active_;
                 throw;
             }
+
+            // Account the capture and wake anyone waiting for active_ to reach zero.
             {
                 std::lock_guard<std::mutex> lock(mutex_);
                 --active_;
@@ -569,6 +635,9 @@ void SessionCameras::run(Camera &c) {
                 c.stats.capture_wall_ns += static_cast<std::uint64_t>(nowNs() - started);
                 condition_.notify_all();
             }
+
+            // Deliver unless invalidated or closed meanwhile; publication_mutex_ orders this against
+            // invalidate() and serializes callbacks across cameras.
             std::lock_guard<std::mutex> publication(publication_mutex_);
             bool stale;
             Callback deliver;
@@ -586,6 +655,7 @@ void SessionCameras::run(Camera &c) {
             }
         }
     } catch (...) {
+        // A failing worker stops all workers; the error resurfaces from request() or close().
         std::lock_guard<std::mutex> lock(mutex_);
         if (!failure_)
             failure_ = std::current_exception();

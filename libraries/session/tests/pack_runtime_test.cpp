@@ -8,17 +8,21 @@ using namespace nereus::session;
 using namespace nereus::session::testing;
 
 namespace {
+// Box proxy as fixture JSON.
 Json boxJson(const nereus::simulation::BoxProxy &b) {
     return {{"id", b.id}, {"size", flat(b.size)}, {"center", flat(b.center)}, {"orientation", quat(b.orientation)}};
 }
 } // namespace
 
+// Derived plant parameters, frames, initial state and sensor selection must match the recording, then 1500
+// ticks of dynamics and sensors are compared every 100 ticks.
 TEST(PackRuntime, MatchesReferencePlantParametersFramesAndDynamics) {
     const auto fixture = loadFixture("pack_runtime_reference.json");
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     auto pack = createRuntime(scenario);
     const auto &p = pack.parameters;
 
+    // Serialize the derived plant parameters in the fixture's layout.
     Json thrusters = Json::array(), body_boxes = Json::array(), world_boxes = Json::array();
     for (const auto &t : p.thrusters)
         thrusters.push_back({{"id", t.id},
@@ -87,6 +91,7 @@ TEST(PackRuntime, MatchesReferencePlantParametersFramesAndDynamics) {
     std::size_t next = 0;
     const auto &checkpoints = fixture.at("checkpoints");
     for (int tick = 1; tick <= 1500; ++tick) {
+        // A new force vector from the fixture at ticks 1, 501 and 1001.
         if (tick == 1 || tick == 501 || tick == 1001) {
             Eigen::VectorXd f(8);
             for (int i = 0; i < 8; ++i)
@@ -94,6 +99,8 @@ TEST(PackRuntime, MatchesReferencePlantParametersFramesAndDynamics) {
             pack.runtime->command(f);
         }
         const auto snapshot = pack.runtime->advance(1);
+
+        // Checkpoint every 100 ticks.
         if (tick % 100 == 0) {
             const auto &expected = checkpoints[next++];
             Json actual = {{"tick", tick},
@@ -103,11 +110,13 @@ TEST(PackRuntime, MatchesReferencePlantParametersFramesAndDynamics) {
                            {"sensors", sensorsJson(*pack.runtime, pack)}};
             ASSERT_EQ(diff(expected, actual, "$.checkpoint[" + std::to_string(next - 1) + "]"), "");
         }
+        // Keep the sensor queues from filling between checkpoints.
         drain(*pack.runtime, pack);
     }
     EXPECT_EQ(next, checkpoints.size());
 }
 
+// Duplicate, unknown and camera sensors are rejected; unselected sensors are reported as deferred.
 TEST(PackRuntime, RejectsBadSensorSelections) {
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     std::vector<std::string> duplicate{"imu", "imu"}, unknown{"nope"}, camera{"ffc"};

@@ -46,6 +46,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration as LC
 
+# Sibling modules (sim_supervisor, mpc_sim_model) are imported straight from this directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sim_supervisor  # noqa: E402  (resolving and the pool table, shared with the supervisor)
 
@@ -67,6 +68,7 @@ POOLS = sim_supervisor.POOLS
 
 
 def _scenario(context):
+    """Absolute path of the scenario pack folder chosen by scenario:= or pool:= (default robosub)."""
     scenario, pool = LC("scenario").perform(context), LC("pool").perform(context)
     if scenario and pool:
         raise RuntimeError("pass pool:= or scenario:=, not both")
@@ -95,6 +97,8 @@ def _mpc_sim_model(context, resolved, output):
         context
     ) not in ("", "sim"):
         return []
+
+    # Base files from the installed riptide packages, rewritten for the plant into <output>.mpc/.
     from ament_index_python.packages import get_package_share_directory as share
     import mpc_sim_model
 
@@ -114,6 +118,7 @@ def _mpc_sim_model(context, resolved, output):
 
 
 def _processes(context):
+    """Resolves the scenario, then starts the supervised simulator, the UWRT stack and the viewer."""
     rmw = LC("rmw").perform(context)
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
     # The resolver and simulator run in the repository root: relative paths mean the caller's directory.
@@ -121,6 +126,8 @@ def _processes(context):
         LC("output").perform(context) or f"/tmp/nereus_sim/{time.strftime('%Y%m%d-%H%M%S')}"
     )
     Path(output).parent.mkdir(parents=True, exist_ok=True)
+
+    # Resolve the pack now (and generate the MPC model files) so every process starts from the same JSON.
     scenario = _scenario(context)
     binary = LC("bridge_binary").perform(context)
     resolved = f"{output}.resolved.json"
@@ -150,6 +157,8 @@ def _processes(context):
             cmd=command, cwd=str(ROOT), output="screen", sigterm_timeout="20", name="simulator"
         )
     )
+
+    # The UWRT stack (bringup without a simulator), with the controller arguments.
     actions.append(
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(str(STACK)),
@@ -157,6 +166,8 @@ def _processes(context):
             condition=IfCondition(LC("stack")),
         )
     )
+
+    # The viewer takes its scene from the simulator's latched scenario topic, so it needs no arguments.
     # Closing the viewer ends the whole launch (as Ctrl-C: the simulator writes its records), unless
     # close_with_viewer:=false keeps the simulator and stack running for a viewer reopened by hand.
     close = LC("close_with_viewer").perform(context).lower() not in ("false", "0", "no")

@@ -1,3 +1,5 @@
+// Spec/Value helpers, field-path parsing and compiled native reads (SourceRef).
+
 #include "native.hpp"
 
 #include <cctype>
@@ -22,6 +24,8 @@ std::string Spec::describe() const {
     }
     return result;
 }
+
+// Common specs.
 Spec scalarSpec() {
     return {Dtype::Float, {}};
 }
@@ -56,48 +60,57 @@ Value Value::real(double v) {
     r.f = v;
     return r;
 }
+
 Value Value::integer(std::int64_t v) {
     Value r;
     r.kind = Kind::Int;
     r.i = v;
     return r;
 }
+
 Value Value::boolean(bool v) {
     Value r;
     r.kind = Kind::Bool;
     r.b = v;
     return r;
 }
+
 Value Value::text(std::string v) {
     Value r;
     r.kind = Kind::String;
     r.s = std::move(v);
     return r;
 }
+
 Value Value::time(std::int64_t ns) {
     Value r;
     r.kind = Kind::Time;
     r.i = ns;
     return r;
 }
+
 Value Value::array(std::vector<double> v) {
     Value r;
     r.kind = Kind::Array;
     r.a = std::move(v);
     return r;
 }
+
 Value Value::map(std::map<std::string, Value> v) {
     Value r;
     r.kind = Kind::Map;
     r.m = std::move(v);
     return r;
 }
+
 const Value &Value::at(const std::string &key) const {
     const auto found = m.find(key);
     if (kind != Kind::Map || found == m.end())
         throw MappingError("native value has no field " + repr(key));
     return found->second;
 }
+
+// Numeric view: Float, Int/Time, and Bool as 0/1.
 double Value::asDouble() const {
     if (kind == Kind::Float)
         return f;
@@ -107,6 +120,8 @@ double Value::asDouble() const {
         return b ? 1.0 : 0.0;
     throw MappingError("native value is not a number");
 }
+
+// Integer view; floats truncate toward zero.
 std::int64_t Value::asInt() const {
     if (kind == Kind::Int || kind == Kind::Time)
         return i;
@@ -118,9 +133,11 @@ std::int64_t Value::asInt() const {
 }
 
 namespace {
+// Identifier characters of a field path (C-style names).
 bool identStart(char c) {
     return std::isalpha(static_cast<unsigned char>(c)) || c == '_';
 }
+
 bool identChar(char c) {
     return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
 }
@@ -138,6 +155,8 @@ std::vector<PathToken> parsePath(const std::string &path) {
         while (pos < path.size() && identChar(path[pos]))
             ++pos;
         token.name = path.substr(start, pos - start);
+
+        // Any number of [index] suffixes (at most 9 digits each).
         while (pos < path.size() && path[pos] == '[') {
             ++pos;
             const auto digits = pos;
@@ -148,6 +167,7 @@ std::vector<PathToken> parsePath(const std::string &path) {
             token.indexes.push_back(std::stoi(path.substr(digits, pos - digits)));
             ++pos;
         }
+
         tokens.push_back(std::move(token));
         if (pos == path.size())
             return tokens;
@@ -157,6 +177,8 @@ std::vector<PathToken> parsePath(const std::string &path) {
     }
 }
 
+// Walks `path` through the spec tree. An indexed token must end the path; it selects a flat
+// row-major [offset_, offset_ + count_) slice of the array leaf.
 SourceRef SourceRef::compile(const SpecTree &tree, const std::string &path, Spec &out_spec) {
     SourceRef ref;
     const SpecTree *node = &tree;
@@ -172,6 +194,8 @@ SourceRef SourceRef::compile(const SpecTree &tree, const std::string &path, Spec
             continue;
         if (!node->leaf || node->leaf->shape.empty())
             throw MappingError("native field " + repr(path) + " is not indexable");
+
+        // Row-major offset of the indexed sub-array and the element count it spans.
         const auto &shape = node->leaf->shape;
         Spec current = *node->leaf;
         std::size_t offset = 0, rest = 1;
@@ -184,6 +208,7 @@ SourceRef SourceRef::compile(const SpecTree &tree, const std::string &path, Spec
             offset = offset * static_cast<std::size_t>(size < 0 ? 0 : size) + static_cast<std::size_t>(index);
             current.shape.erase(current.shape.begin());
         }
+
         for (std::size_t d = token.indexes.size(); d < shape.size(); ++d)
             rest *= static_cast<std::size_t>(shape[d] < 0 ? 0 : shape[d]);
         ref.indexed_ = true;
@@ -194,6 +219,8 @@ SourceRef SourceRef::compile(const SpecTree &tree, const std::string &path, Spec
         out_spec = current;
         node = nullptr; // an index ends the path
     }
+
+    // An unindexed path must end on a leaf.
     if (!ref.indexed_) {
         if (!node->leaf)
             throw MappingError("native field " + repr(path) + " is a structure, not a value");
@@ -204,6 +231,7 @@ SourceRef SourceRef::compile(const SpecTree &tree, const std::string &path, Spec
     return ref;
 }
 
+// Reads the compiled field out of a native value tree; scalar slices come back as Int or Float.
 Value SourceRef::read(const Value &root) const {
     const Value *node = &root;
     for (const auto &key : keys_)
@@ -220,6 +248,7 @@ Value SourceRef::read(const Value &root) const {
                                             node->a.begin() + static_cast<std::ptrdiff_t>(offset_ + count_)));
 }
 
+// Whether `actual` can fill `expected`: int widens to float, and -1 dimensions match any size.
 bool compatible(const Spec &expected, const Spec &actual) {
     if (expected.dtype == Dtype::Float && actual.dtype != Dtype::Float && actual.dtype != Dtype::Int)
         return false;

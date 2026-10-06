@@ -1,5 +1,6 @@
 # nereus_session_cameras: scheduled, on-demand stereo camera acquisition for a running session (EGL offscreen
 # rendering of nereus_pack_scene scenes, nereus_cameras processing, bounded per-camera workers). No ROS.
+
 find_package(Threads REQUIRED)
 add_library(nereus_session_cameras src/session_cameras.cpp)
 add_library(Nereus::session_cameras ALIAS nereus_session_cameras)
@@ -9,9 +10,12 @@ target_include_directories(nereus_session_cameras PUBLIC
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(nereus_session_cameras PUBLIC nereus_pack_scene nereus_cameras nereus_offscreen_rendering nereus_session
                       PRIVATE Threads::Threads)
+# The shader directory is baked in as a fallback for when NEREUS_SHADER_DIR is unset.
 target_compile_definitions(nereus_session_cameras PRIVATE
   NEREUS_RENDERING_SHADERS="${PROJECT_SOURCE_DIR}/libraries/rendering/shaders")
+
 nereus_project_options(nereus_session_cameras)
+# Tests: GTest suite against the Talos resolved fixture, plus a standalone capture tool.
 if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
@@ -21,6 +25,7 @@ if(BUILD_TESTING)
   target_compile_definitions(session_cameras_tests PRIVATE NEREUS_RESOLVED_TALOS="${nereus_resolved_talos}"
     NEREUS_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
   nereus_project_options(session_cameras_tests)
+# Standalone tool that dumps one capture as raw files for pixel comparison; built with the tests, not run as one.
   add_executable(session_cameras_capture tests/capture_tool.cpp)
   target_link_libraries(session_cameras_capture PRIVATE nereus_session_cameras)
   nereus_project_options(session_cameras_capture)

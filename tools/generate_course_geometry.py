@@ -23,13 +23,18 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+# Relative to the repository root, which the script must be run from.
 PACK = Path("content/packs/tasks/robosub_2026")
+
+# Material base colours (glTF baseColorFactor, RGBA).
 NAVY = (0.025, 0.055, 0.13, 1.0)
 WHITE_LINER = (0.92, 0.94, 0.91, 1.0)
 PVC = (0.94, 0.95, 0.91, 1.0)
 
 
 class Mesh:
+    """A single-material triangle mesh built up as position, normal and index lists."""
+
     def __init__(self, color):
         self.color = color
         self.positions: list = []
@@ -37,6 +42,7 @@ class Mesh:
         self.indices: list = []
 
     def quad(self, corners, normal):
+        """Append a quad (corners in winding order) as two triangles sharing `normal`."""
         base = len(self.positions)
         self.positions += [np.asarray(c, float) for c in corners]
         self.normals += [np.asarray(normal, float)] * 4
@@ -60,11 +66,16 @@ class Mesh:
                 self.quad(corners, n)
 
     def tube(self, a, b, radius, segments=16):
+        """Open cylinder from a to b with smooth radial normals (no end caps)."""
         a, b = np.asarray(a, float), np.asarray(b, float)
+
+        # u, v: unit vectors perpendicular to the axis, from a helper axis not parallel to it.
         axis = (b - a) / np.linalg.norm(b - a)
         u = np.cross(axis, (0, 0, 1) if abs(axis[2]) < 0.9 else (0, 1, 0))
         u /= np.linalg.norm(u)
         v = np.cross(axis, u)
+
+        # One vertex pair (a end, b end) per angle step; consecutive pairs form a quad.
         base = len(self.positions)
         for i in range(segments + 1):
             angle = 2 * math.pi * i / segments
@@ -77,9 +88,11 @@ class Mesh:
 
 
 def write_glb(path: Path, meshes: dict[str, Mesh]) -> None:
+    """Write a glTF 2.0 binary with one node and one primitive (and material) per mesh."""
     blob = bytearray()
     views, accessors, primitives, materials = [], [], [], []
 
+    # Append data to the BIN chunk (4-byte aligned) as a new buffer view; returns its index.
     def add(data: bytes, target: int) -> int:
         while len(blob) % 4:
             blob.append(0)
@@ -94,6 +107,8 @@ def write_glb(path: Path, meshes: dict[str, Mesh]) -> None:
         nor = np.asarray(mesh.normals, np.float32)
         idx = np.asarray(mesh.indices, np.uint32)
         first = len(accessors)
+
+        # glTF enums: 34962/34963 = vertex/index buffer targets, 5126 = float, 5125 = uint32.
         accessors += [
             {
                 "bufferView": add(pos.tobytes(), 34962),
@@ -127,6 +142,7 @@ def write_glb(path: Path, meshes: dict[str, Mesh]) -> None:
                 },
             }
         )
+        # mode 4 = triangle list.
         primitives.append(
             {
                 "attributes": {"POSITION": first, "NORMAL": first + 1},
@@ -135,6 +151,7 @@ def write_glb(path: Path, meshes: dict[str, Mesh]) -> None:
                 "mode": 4,
             }
         )
+
     document = {
         "asset": {"version": "2.0", "generator": "tools/generate_course_geometry.py"},
         "scene": 0,
@@ -146,6 +163,8 @@ def write_glb(path: Path, meshes: dict[str, Mesh]) -> None:
         "bufferViews": views,
         "buffers": [{"byteLength": len(blob)}],
     }
+
+    # GLB container: 12-byte header, then the JSON chunk (space-padded) and BIN chunk (zero-padded).
     text = json.dumps(document, separators=(",", ":")).encode()
     text += b" " * (-len(text) % 4)
     while len(blob) % 4:
@@ -169,11 +188,14 @@ def crate(params: dict) -> tuple[Mesh, Mesh]:
     liner = params["liner_thickness_m"]
     liner_h = height * params["liner_height_fraction"]
     lattice, lining = Mesh(NAVY), Mesh(WHITE_LINER)
+
+    # Base slab below the interior floor, then the four walls (two axes x two sides).
     lattice.box((0, 0, -base / 2 - 0.0005), (outer, outer, base))
     for axis in range(2):
         for sign in (-1, 1):
 
             def wall(mesh, across, along, z, thick, length, h):
+                """Box at `across` on this axis: `thick` deep, `length` along the wall, `h` tall."""
                 p, size = [0.0, 0.0, z], [thick, thick, h]
                 p[axis], p[1 - axis], size[1 - axis] = across, along, length
                 mesh.box(p, size)
@@ -191,7 +213,9 @@ def crate(params: dict) -> tuple[Mesh, Mesh]:
                 )
             for bar in range(6):
                 wall(lattice, edge, 0, 0.01 + bar * (height - 0.02) / 5, 0.012, outer, 0.012)
-            wall(lattice, edge, 0, height - 0.008, 0.016, outer, 0.016)
+            wall(lattice, edge, 0, height - 0.008, 0.016, outer, 0.016)  # top rail
+
+            # The white liner panel just inside the inner width.
             wall(lining, sign * (inner / 2 - liner / 2), 0, liner_h / 2, liner, inner, liner_h)
     return lattice, lining
 
@@ -201,6 +225,8 @@ def octagon_ring(region: dict, frames: dict, ring: str) -> Mesh:
     apothem, radius = region["apothem_m"], region["pipe_radius_m"]
     outer = apothem / math.cos(math.pi / 8)
     mesh = Mesh(PVC)
+
+    # Eight pipe segments between the octagon's vertices (outer = circumradius).
     for i in range(8):
         a, b = (i + 0.5) * math.pi / 4, (i + 1.5) * math.pi / 4
         mesh.tube(
@@ -220,6 +246,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--hashes", action="store_true")
     args = parser.parse_args()
+
+    # Dimensions come from the pack's own region and frame definitions.
     bins = yaml.safe_load((PACK / "bins.yaml").read_text())
     surface = yaml.safe_load((PACK / "surface.yaml").read_text())
     crate_region = next(r for r in bins["regions"] if r["type"] == "open_crate")["parameters"]
@@ -233,6 +261,7 @@ def main() -> None:
             "pvc": octagon_ring(octagon, frames, "octagon_ring")
         },
     }
+
     for path, meshes in outputs.items():
         write_glb(path, meshes)
         if args.hashes:

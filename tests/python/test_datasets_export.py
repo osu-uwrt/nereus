@@ -28,6 +28,8 @@ from nereus.packs import PackError
 HAS_CV2 = importlib.util.find_spec("cv2") is not None
 cv2: Any = cv2_module() if HAS_CV2 else None
 
+# A label pack exercising each rule: per-model class lists, an outer-shape class, part globs,
+# an indicator condition and the export filters (min visible px, fragment policy).
 LABELS = """\
 kind: labels
 id: test_labels
@@ -47,11 +49,13 @@ export:
   min_fragment_px: 10
 """
 
+# Every fixture image is WIDTH x HEIGHT px.
 WIDTH, HEIGHT = 40, 20
 SCENARIO = Path(__file__).resolve().parents[2] / "content/packs/scenarios/talos_uwrt"
 
 
 def _instance(ident: int, task: str, part: str, **extra: Any) -> dict[str, Any]:
+    """A renderer instance record with neutral defaults; keyword arguments override fields."""
     instance = {
         "id": ident,
         "task": task,
@@ -73,6 +77,8 @@ def write_render(root: Path, model: str = "ffc", folder: str = "render") -> Path
     render = root / folder
     for folder in ("images", "ids", "records", "job"):
         (render / folder).mkdir(parents=True)
+
+    # The export settings the renderer would have saved alongside the job.
     (root / "labels.yaml").write_text(LABELS)
     settings = {
         "labels": str(root / "labels.yaml"),
@@ -130,6 +136,7 @@ def write_render(root: Path, model: str = "ffc", folder: str = "render") -> Path
         [_instance(1, "torpedo", "icon_fire", depth_m=far)],
     )
 
+    # Write the samples in order; k also picks the environment.
     for k, (name, (task, ids, instances)) in enumerate(samples.items()):
         write_sample(render, model, k, name, task, ids, instances)
     return render
@@ -144,6 +151,7 @@ def write_sample(
     ids: Any,
     instances: list[dict[str, Any]],
 ) -> None:
+    """Write one sample: a flat grey image, its id mask and its record (environment by k)."""
     image = np.full((HEIGHT, WIDTH, 3), 90, np.uint8)
     cv2.imwrite(str(render / "images" / f"{name}.png"), image)
     cv2.imwrite(str(render / "ids" / f"{name}.png"), ids)
@@ -168,12 +176,15 @@ def write_sample(
 
 
 def _labels(out: Path, name: str) -> list[list[float]]:
+    """The parsed YOLO label rows an export wrote for one train image."""
     path = out / "labels" / "train" / f"{name}.txt"
     return [[float(value) for value in line.split()] for line in path.read_text().splitlines()]
 
 
 @unittest.skipUnless(HAS_CV2, "OpenCV (nereus[datasets]) not installed")
 class GeometryTests(unittest.TestCase):
+    """Mask-to-YOLO-line conversion on the torpedo sample's id layout (minus the sliver)."""
+
     def setUp(self) -> None:
         self.ids = np.zeros((HEIGHT, WIDTH), np.uint16)
         self.ids[2:12, 2:12] = 1
@@ -183,6 +194,7 @@ class GeometryTests(unittest.TestCase):
         self.ids[10:20, 34:40] = 3
 
     def assertLine(self, line: str | None, expected: list[float]) -> None:
+        """Compare a YOLO label line to expected values to 6 decimal places."""
         assert line is not None
         values = [float(value) for value in line.split()]
         self.assertEqual(len(values), len(expected), line)
@@ -190,6 +202,7 @@ class GeometryTests(unittest.TestCase):
             self.assertAlmostEqual(value, want, places=6, msg=line)
 
     def test_ring_with_hole(self) -> None:
+        """A ring's polygon is its outer contour only; fill_holes closes the hole."""
         ring = self.ids == 1
         self.assertLine(bbox_line(ring, 1), [1, 0.175, 0.35, 0.25, 0.5])
         # Only the outer contour: the hole never appears in the polygon.
@@ -199,6 +212,7 @@ class GeometryTests(unittest.TestCase):
         self.assertEqual(int(fill_holes(ring).sum()), 100)
 
     def test_split_mask_joins_like_ultralytics(self) -> None:
+        """A mask cut in two becomes one polygon bridged between pieces, as Ultralytics does."""
         split = self.ids == 2
         self.assertLine(bbox_line(split, 2), [2, 0.5, 0.25, 0.25, 0.3])
         # Left piece from its exit corner (18, 7), bridge to (21, 7), right piece, closed.
@@ -210,12 +224,14 @@ class GeometryTests(unittest.TestCase):
         self.assertLine(obb_line(split, 2), [2, 0.375, 0.1, 0.625, 0.1, 0.625, 0.4, 0.375, 0.4])
 
     def test_truncated_mask_reaches_the_border(self) -> None:
+        """A mask touching the image edge gets boxes and polygons that reach coordinate 1.0."""
         edge = self.ids == 3
         self.assertLine(bbox_line(edge, 0), [0, 0.925, 0.75, 0.15, 0.5])
         self.assertLine(obb_line(edge, 0), [0, 0.85, 0.5, 1.0, 0.5, 1.0, 1.0, 0.85, 1.0])
         self.assertLine(seg_line(edge, 0), [0, 0.85, 0.5, 0.85, 0.95, 0.975, 0.95, 0.975, 0.5])
 
     def test_three_segments_walk_back_through_the_middle(self) -> None:
+        """merge_multi_segment walks out through each piece and back via the middle one."""
         a = np.array([[2, 2], [2, 5], [5, 5], [5, 2]], dtype=np.float64)
         b = np.asarray(a + [8, 0], dtype=np.float64)
         c = np.asarray(a + [18, 0], dtype=np.float64)
@@ -236,6 +252,7 @@ class GeometryTests(unittest.TestCase):
         self.assertLine(bbox_line(line, 0), [0, 0.1375, 0.35, 0.025, 0.5])
 
     def test_rotated_obb(self) -> None:
+        """A 40x20 box rotated 30 deg: right centre and sides, starting at the top corner."""
         mask = np.zeros((100, 100), np.uint8)
         corners = cv2.boxPoints(((50, 50), (40, 20), 30)).astype(np.int32)
         cv2.fillPoly(mask, [corners], 1)
@@ -250,6 +267,7 @@ class GeometryTests(unittest.TestCase):
 
 class SplitTests(unittest.TestCase):
     def test_split_is_stable_and_proportional(self) -> None:
+        """split_of is deterministic per name and hits the requested fractions within 3 %."""
         fractions = {"train": 0.7, "val": 0.2, "test": 0.1}
         names = [f"torpedo_{k:06d}" for k in range(4000)]
         splits = [split_of(name, fractions) for name in names]
@@ -272,6 +290,8 @@ class ExportTests(unittest.TestCase):
     def test_seg_applies_the_label_pack(self) -> None:
         out = self.root / "seg"
         summary = export(self.render, "yolo-seg", out)
+
+        # Per-image labels.
         torpedo = _labels(out, "torpedo_000000")
         # ring -> circle (1), split fire (2) and truncated blood (0); sliver and white pole dropped.
         self.assertEqual([int(line[0]) for line in torpedo], [1, 2, 0])
@@ -280,6 +300,8 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(bins, [[3, 0.0, 0.0, 0.0, 0.45, 0.225, 0.45, 0.225, 0.0]])
         self.assertEqual((out / "labels/train/background_000002.txt").read_text(), "")
         self.assertFalse((out / "labels/train/torpedo_000003.txt").exists())
+
+        # Summary counters.
         self.assertEqual(summary.skipped_far, ["torpedo_000003"])
         self.assertEqual(summary.dropped_small, 1)
         self.assertEqual(summary.backgrounds, 1)
@@ -288,6 +310,7 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(summary.environments, {"nominal": 2, "murky": 1})
 
     def test_bbox_obb_and_layout(self) -> None:
+        """bbox labels, images hard-linked from the render, data.yaml, and the obb format."""
         out = self.root / "bbox"
         export(self.render, "yolo-bbox", out)
         torpedo = _labels(out, "torpedo_000000")
@@ -297,6 +320,8 @@ class ExportTests(unittest.TestCase):
             [0, 0.925, 0.75, 0.15, 0.5],
         ]
         np.testing.assert_allclose(torpedo, expected, atol=1e-6)
+
+        # Images are hard links into the render (same inode), not copies.
         image = out / "images/train/torpedo_000000.png"
         self.assertEqual(
             image.stat().st_ino, (self.render / "images/torpedo_000000.png").stat().st_ino
@@ -306,18 +331,21 @@ class ExportTests(unittest.TestCase):
             "train: images/train\nval: images/val\nnc: 4\n"
             'names: ["blood", "circle", "fire", "magnet"]\n',
         )
+
         obb = self.root / "obb"
         export(self.render, "yolo-obb", obb)
         ring = _labels(obb, "torpedo_000000")[0]
         np.testing.assert_allclose(ring, [1, 0.05, 0.1, 0.3, 0.1, 0.3, 0.6, 0.05, 0.6], atol=1e-6)
 
     def test_class_missing_from_model_and_balance_warning(self) -> None:
+        """Classes come from the chosen model; a lopsided class count raises a WARNING."""
         out = self.root / "dfc"
         summary = export(write_render(self.root, "dfc", "render_dfc"), "yolo-bbox", out)
         # dfc has pill and fire: the pill is labelled, the torpedo fire too (range 3 m > 1.2 m).
         self.assertEqual(_labels(out, "bins_000001")[0][0], 0)
         self.assertEqual(summary.counts, [1, 1])
         self.assertEqual(summary.unbalanced(), [])
+
         uneven = export(self.render, "yolo-bbox", self.root / "ffc")
         self.assertEqual(uneven.unbalanced(), [])
         uneven.counts = [10, 1, 1, 1]
@@ -325,6 +353,7 @@ class ExportTests(unittest.TestCase):
         self.assertTrue(any(line.startswith("WARNING") for line in uneven.report()))
 
     def test_fragment_policies(self) -> None:
+        """merge / keep_largest label a split instance; reject skips the image."""
         # One fire emoji in three pieces: 100 px, 30 px and a 9 px crumb.
         ids = np.zeros((HEIGHT, WIDTH), np.uint16)
         ids[2:12, 2:12] = 1
@@ -340,6 +369,8 @@ class ExportTests(unittest.TestCase):
             ids,
             [_instance(1, "torpedo", "icon_fire")],
         )
+
+        # Pieces under min_fragment_px (25 here) are crumbs: dropped, not counted as fragments.
         for policy, expected in [
             ("merge", [2, 0.35, 0.35, 0.6, 0.5]),  # both pieces, never the crumb
             ("keep_largest", [2, 0.175, 0.35, 0.25, 0.5]),
@@ -352,6 +383,7 @@ class ExportTests(unittest.TestCase):
             np.testing.assert_allclose(_labels(out, "torpedo_000004"), [expected], atol=1e-6)
             self.assertGreaterEqual(summary.crumbs, 1)
             self.assertEqual(summary.skipped_fragmented, [])
+
         labels = self.root / "reject.yaml"
         labels.write_text(LABELS.replace("fragments: merge", "fragments: reject"))
         summary = export(render, "yolo-seg", self.root / "reject", labels=labels)
@@ -366,6 +398,7 @@ class ExportTests(unittest.TestCase):
         self.assertIn("rendered by camera 'ffc', but model 'dfc'", caught.exception.problems[0])
 
     def test_label_override_is_checked_against_the_course(self) -> None:
+        """A --labels override is validated against the real scenario's task parts."""
         settings = self.render / "job" / "export.json"
         data = json.loads(settings.read_text())
         data["scenarios"] = [str(SCENARIO / "scenario.yaml")]
@@ -379,12 +412,14 @@ class ExportTests(unittest.TestCase):
         self.assertIn("'icon_fyre' matches no part of task 'torpedo'", caught.exception.problems[0])
 
     def test_reexport_replaces_and_refuses_foreign_folders(self) -> None:
+        """Re-exporting clears stale files; a folder with unrelated content makes the CLI fail."""
         out = self.root / "again"
         export(self.render, "yolo-bbox", out)
         stale = out / "labels/train/stale.txt"
         stale.write_text("0 0 0 0 0\n")
         export(self.render, "yolo-bbox", out)
         self.assertFalse(stale.exists())
+
         foreign = self.root / "foreign"
         foreign.mkdir()
         (foreign / "notes.txt").write_text("keep")
@@ -393,6 +428,7 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(code, 1)
 
     def test_cli_export_and_preview(self) -> None:
+        """The CLI defaults: export into <render>/<format>, preview.jpg of 480 px tiles."""
         with contextlib.redirect_stdout(io.StringIO()) as stdout:
             self.assertEqual(main(["export", str(self.render), "--format", "yolo-obb"]), 0)
             self.assertEqual(main(["preview", str(self.render), "--count", "3"]), 0)

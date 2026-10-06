@@ -10,6 +10,7 @@
 namespace nereus::session {
 namespace {
 using namespace detail;
+
 // Several contact worlds: resolved in order within one plant step.
 class ResolverChain final : public simulation::ContactResolver {
   public:
@@ -25,6 +26,7 @@ class ResolverChain final : public simulation::ContactResolver {
     std::vector<std::shared_ptr<simulation::ContactResolver>> resolvers_;
 };
 
+// Payload dynamics parameters from a robot-pack projectile; the centre offsets and angular damping default to 0.
 simulation::PayloadParameters payloadParameters(const Json &projectile) {
     simulation::PayloadParameters p;
     const std::string model = projectile.at("model").get<std::string>();
@@ -52,34 +54,40 @@ simulation::PayloadParameters payloadParameters(const Json &projectile) {
     return p;
 }
 
+// A payload's long axis (its body +x) in the world.
 Eigen::Vector3d axisOf(const Eigen::Quaterniond &orientation) {
     return rotate(orientation, Eigen::Vector3d::UnitX());
 }
 
+// Per-payload bookkeeping kept beside the public Payload (same index in `extras`).
 struct PayloadExtra {
-    std::int64_t max_age_ns{0};
-    int slot{0};
+    std::int64_t max_age_ns{0}; // the payload times out after this long in flight
+    int slot{0};                // slot index it was fired from
 };
 } // namespace
 
 struct Session::Impl {
+    // Configuration, fixed after construction.
     ResolvedScenario scenario;
     PackRuntime pack;
-    const Json *task_pack;
+    const Json *task_pack; // scenario.tasks
     Json robot_safety;
-    std::string reference_frame;
-    spatial::Pose root_to_reference;
+    std::string reference_frame;     // robot.reference_frame: the frame tasks observe and payloads fire from
+    spatial::Pose root_to_reference; // reference frame in the frame-tree root (COM)
     std::int64_t timestep_ns;
-    std::unique_ptr<Mechanisms> mechanisms;
-    std::map<std::string, std::string> mechanism_types;
-    std::map<std::string, Json> projectiles;
-    std::map<std::string, simulation::PayloadDynamics> dynamics;
-    std::unique_ptr<TaskRuntime> tasks;
-    std::vector<std::unique_ptr<PropWorld>> prop_worlds;
+    std::unique_ptr<Mechanisms> mechanisms;                      // null when the robot has none
+    std::map<std::string, std::string> mechanism_types;          // mechanism id -> type
+    std::map<std::string, Json> projectiles;                     // launcher/dropper id -> projectile parameters
+    std::map<std::string, simulation::PayloadDynamics> dynamics; // launcher/dropper id -> payload model
+    std::unique_ptr<TaskRuntime> tasks;                          // null without tasks
+    std::vector<std::unique_ptr<PropWorld>> prop_worlds;         // one per selected contact_world task
+
+    // Water seen by payloads (copied from the pool parameters when there are launchers/droppers).
     bool has_environment{false};
     double density{0}, level{0}, frequency{0};
     Eigen::Vector3d current, amplitude;
 
+    // Run state, reset by resetOwnedState().
     simulation::BodyState start_state;
     std::uint64_t seed{0};
     bool killed{false};
@@ -89,17 +97,21 @@ struct Session::Impl {
     Step last_step;
     double run_adjustment{0};
     std::string run_message;
-    Json counters = Json::object();
-    Json feed_queue = Json::array();
+    Json counters = Json::object();  // outcome counter name -> count (task_score document)
+    Json feed_queue = Json::array(); // task_events records not yet taken by takeFeed()
 
     Impl(const ResolvedScenario &s, PackRuntime p) : scenario(s), pack(std::move(p)) {}
 
     std::int64_t timeNs() const {
         return last_step.snapshot.elapsed.count();
     }
+
+    // World pose of the reference frame for a COM body state.
     spatial::Pose referencePose(const simulation::BodyState &body) const {
         return composeChecked({body.position, body.orientation}, root_to_reference);
     }
+
+    // Payload water at time_s: steady current plus a sinusoidal oscillation.
     simulation::PayloadEnvironment waterAt(double time_s) const {
         simulation::PayloadEnvironment water;
         water.water_density = density;
@@ -107,6 +119,8 @@ struct Session::Impl {
         water.water_velocity = current + amplitude * std::sin(2 * kPi * frequency * time_s);
         return water;
     }
+
+    // Everything the session itself owns back to the start of a run (not the plant, tasks or prop worlds).
     void resetOwnedState() {
         killed = scenario.robot.at("safety").at("initially_killed").get<bool>();
         if (mechanisms)
@@ -123,6 +137,8 @@ struct Session::Impl {
                 counters[name.get<std::string>()] = 0;
         feed_queue = Json::array();
     }
+
+    // Operator message from the task pack's run_messages, or the fallback.
     std::string message(const char *key, const char *fallback) const {
         if (task_pack->contains("run_messages") && task_pack->at("run_messages").contains(key)) {
             const Json &value = task_pack->at("run_messages").at(key);
@@ -130,9 +146,13 @@ struct Session::Impl {
         }
         return fallback;
     }
+
+    // The task_events record announcing a reset.
     Json resetEvent() const {
         return {{"kind", "tasks"}, {"result", "reset"}, {"target", ""}, {"time", static_cast<double>(timeNs()) / 1e9}};
     }
+
+    // Turn task events into task_events feed records (via the rules) and count their outcomes.
     void ingest(const Events &events) {
         if (events.empty() || !tasks)
             return;
@@ -148,16 +168,21 @@ struct Session::Impl {
             feed_queue.push_back(item);
         }
     }
+
+    // Append events produced outside advance() (a command) to the last step, and feed them.
     void record(const Events &events) {
         if (events.empty())
             return;
         last_step.task_events.insert(last_step.task_events.end(), events.begin(), events.end());
         ingest(events);
     }
+
     bool running() const {
         return tasks && tasks->snapshot().at("run").at("running").get<bool>();
     }
 
+    // One timestep of a payload in flight: integrate it, time it out, then let the tasks judge the swept segment
+    // (they may move it, stop it, or report hits).
     Events propagate(std::size_t index, std::int64_t now, const simulation::PayloadEnvironment &water) {
         auto &payload = payloads[index];
         const simulation::PayloadState old = payload.state;
@@ -185,6 +210,8 @@ struct Session::Impl {
         return step.events;
     }
 
+    // Step every prop world with the robot's pose and world-axis velocities, the claw jaws and the pool water;
+    // the claws only act while armed and not killed.
     Events stepProps(const simulation::BodyState &body, std::int64_t now) {
         const spatial::Pose root{body.position, body.orientation};
         const Eigen::Vector3d velocity = rotate(root.rotation, body.linear_velocity);
@@ -209,6 +236,7 @@ struct Session::Impl {
         }
         return events;
     }
+
     // Body-axis COM velocities -> velocity at the reference origin in reference axes.
     std::pair<Eigen::Vector3d, Eigen::Vector3d> referenceVelocities(const simulation::BodyState &body) const {
         const Eigen::Vector3d velocity =
@@ -216,6 +244,8 @@ struct Session::Impl {
         const auto rotation = inverseChecked(root_to_reference).rotation;
         return {rotate(rotation, velocity), rotate(rotation, body.angular_velocity)};
     }
+
+    // Empty when `id` is a mechanism of type `kind`, else the error message.
     std::string mechanismTypeError(const std::string &id, const char *kind) const {
         const auto found = mechanism_types.find(id);
         return found != mechanism_types.end() && found->second == kind
@@ -227,6 +257,8 @@ struct Session::Impl {
 Session::Session(const ResolvedScenario &scenario, PackRuntime pack, const RulesRegistry &rules, SessionOptions options)
     : impl_(std::make_unique<Impl>(scenario, std::move(pack))) {
     auto &s = *impl_;
+
+    // Robot reference frame and mechanisms; launchers/droppers also get a payload model.
     s.task_pack = &s.scenario.tasks;
     s.timestep_ns = s.pack.parameters.timestep.count();
     s.reference_frame = s.scenario.robot.at("reference_frame").get<std::string>();
@@ -243,6 +275,8 @@ Session::Session(const ResolvedScenario &scenario, PackRuntime pack, const Rules
             s.dynamics.emplace(id, simulation::PayloadDynamics(payloadParameters(s.projectiles[id])));
         }
     }
+
+    // Task observers, plus a prop world for every selected task with a contact_world prop.
     if (options.tasks && !s.scenario.task_definitions.empty()) {
         s.tasks = std::make_unique<TaskRuntime>(s.scenario, rules, options.task_ids);
         for (const auto &task : s.scenario.task_definitions) {
@@ -267,6 +301,8 @@ Session::Session(const ResolvedScenario &scenario, PackRuntime pack, const Rules
         else if (!resolvers.empty())
             s.pack.runtime->setContactResolver(std::make_shared<ResolverChain>(std::move(resolvers)));
     }
+
+    // Water for payloads.
     if (!s.dynamics.empty()) {
         const auto &pool = s.pack.parameters.pool;
         s.has_environment = true;
@@ -276,12 +312,15 @@ Session::Session(const ResolvedScenario &scenario, PackRuntime pack, const Rules
         s.amplitude = pool.current_oscillation_amplitude;
         s.frequency = pool.current_oscillation_frequency;
     }
+
     s.start_state = s.pack.initial;
     s.seed = s.scenario.scenario.at("seed").get<std::uint64_t>();
     s.resetOwnedState();
 }
+
 Session::~Session() = default;
 
+// The fixed tick order from the header: plant, mechanisms, payloads, prop worlds, robot task observation.
 Step Session::advance() {
     auto &s = *impl_;
     auto snapshot = s.pack.runtime->advance(1);
@@ -314,18 +353,23 @@ Step Session::advance() {
 const Step &Session::lastStep() const {
     return impl_->last_step;
 }
+
 std::int64_t Session::timeNs() const {
     return impl_->timeNs();
 }
+
 std::int64_t Session::timestepNs() const {
     return impl_->timestep_ns;
 }
+
 sensors::Runtime &Session::runtime() {
     return *impl_->pack.runtime;
 }
+
 const PackRuntime &Session::pack() const {
     return impl_->pack;
 }
+
 spatial::Pose Session::referencePose(const simulation::BodyState &body) const {
     return impl_->referencePose(body);
 }
@@ -333,25 +377,30 @@ spatial::Pose Session::referencePose(const simulation::BodyState &body) const {
 void Session::commandThrusters(const Eigen::VectorXd &forces) {
     impl_->pack.runtime->command(forces);
 }
+
 void Session::setKilled(bool killed) {
     auto &s = *impl_;
     s.killed = killed;
     if (killed && s.scenario.robot.at("safety").at("kill_stops_thrusters").get<bool>())
         s.pack.runtime->stopThrusters();
     if (s.mechanisms)
-        s.mechanisms->advance(0, killed);
+        s.mechanisms->advance(0, killed); // a zero step just applies the kill to the mechanisms
 }
+
 bool Session::killed() const {
     return impl_->killed;
 }
+
 CommandResult Session::setArmed(bool armed) {
     auto &s = *impl_;
     return s.mechanisms ? s.mechanisms->setArmed(armed, s.killed) : CommandResult{false, "robot has no mechanisms"};
 }
+
 CommandResult Session::reloadAll() {
     auto &s = *impl_;
     return s.mechanisms ? s.mechanisms->reloadAll(s.killed) : CommandResult{false, "robot has no mechanisms"};
 }
+
 CommandResult Session::commandClaw(const std::string &id, bool open) {
     auto &s = *impl_;
     const auto error = s.mechanismTypeError(id, "claw");
@@ -359,6 +408,7 @@ CommandResult Session::commandClaw(const std::string &id, bool open) {
         return {false, error.empty() ? "robot has no mechanisms" : error};
     return s.mechanisms->commandClaw(id, open, s.killed);
 }
+
 CommandResult Session::moveClaw(const std::string &id, double signed_duration_s) {
     auto &s = *impl_;
     const auto error = s.mechanismTypeError(id, "claw");
@@ -367,10 +417,12 @@ CommandResult Session::moveClaw(const std::string &id, double signed_duration_s)
     return s.mechanisms->moveClaw(id, signed_duration_s, s.killed);
 }
 
+// Fire from the robot's state at the last step; an accepted release becomes a new payload in flight.
 CommandResult Session::fire(const std::string &id) {
     auto &s = *impl_;
     if (!s.dynamics.count(id) || !s.mechanisms)
         return {false, "unknown release mechanism " + repr(id)};
+
     const auto &body = s.last_step.snapshot.body;
     const auto [velocity, omega] = s.referenceVelocities(body);
     const std::int64_t now = s.timeNs();
@@ -379,6 +431,8 @@ CommandResult Session::fire(const std::string &id) {
         s.mechanisms->fire(id, s.referencePose(body), velocity, omega, s.reference_frame, s.density, s.killed, release);
     if (!result.accepted)
         return result;
+
+    // Track the payload; it times out after max_age_s (default 30 s).
     Payload payload;
     payload.id = s.next_payload++;
     payload.mechanism_id = id;
@@ -392,6 +446,8 @@ CommandResult Session::fire(const std::string &id) {
     const double max_age_s = projectile.contains("max_age_s") ? projectile.at("max_age_s").get<double>() : 30.0;
     s.payloads.push_back(payload);
     s.extras.push_back({static_cast<std::int64_t>(std::nearbyint(max_age_s * 1e9)), release.slot_index});
+
+    // Tasks see the release at the payload's leading tip.
     if (s.tasks) {
         const double length = projectile.at("length_m").get<double>();
         const Eigen::Vector3d tip = payload.state.position + axisOf(payload.state.orientation) * (length / 2);
@@ -407,12 +463,14 @@ std::optional<MechanismState> Session::mechanismState() const {
     return impl_->mechanisms->snapshot(impl_->killed);
 }
 
+// Teleport the robot (COM state); the step's task events are dropped.
 simulation::Snapshot Session::place(const simulation::BodyState &com_state, bool clear_actuators) {
     auto &s = *impl_;
     auto snapshot = s.pack.runtime->place(com_state, clear_actuators);
     s.last_step = Step{snapshot, {}};
     return snapshot;
 }
+
 const simulation::BodyState &Session::startState() const {
     return impl_->start_state;
 }
@@ -437,6 +495,7 @@ CommandResult Session::resetTasks() {
     return {true, "All tasks reset; ammunition reloaded and actuators disarmed"};
 }
 
+// Reset the plant and sensors (optionally with a new seed) and everything above them.
 simulation::Snapshot Session::fullReset(std::optional<std::uint64_t> seed) {
     auto &s = *impl_;
     if (seed)
@@ -452,6 +511,7 @@ simulation::Snapshot Session::fullReset(std::optional<std::uint64_t> seed) {
     s.feed_queue.push_back(s.resetEvent());
     return snapshot;
 }
+
 std::uint64_t Session::seed() const {
     return impl_->seed;
 }
@@ -466,6 +526,8 @@ CommandResult Session::runStart(const Json &options) {
         return {false, "Course scoring is not configured"};
     if (s.running())
         return {false, "Stop the current run first"};
+
+    // Validate the options against the task pack's declared run_options.
     std::map<std::string, const Json *> declared;
     for (const auto &item : s.task_pack->at("run_options"))
         declared[item.at("key").get<std::string>()] = &item;
@@ -490,6 +552,8 @@ CommandResult Session::runStart(const Json &options) {
             }
             chosen[key] = value;
         }
+
+    // Every run starts from fresh tasks.
     resetTasks();
     s.tasks->start(s.timeNs(), chosen);
     s.run_message = s.message("start", "Run started");
@@ -533,13 +597,16 @@ Json Session::takeFeed() {
     impl_->feed_queue = Json::array();
     return items;
 }
+
 Json Session::taskCounters() const {
     return impl_->counters;
 }
+
 Eigen::VectorXd Session::thrusterForces() const {
     return impl_->last_step.snapshot.thruster_forces;
 }
 
+// Mechanism jaw positions, overridden by the prop world's physical jaws where a claw takes part in one.
 std::map<std::string, std::array<double, 2>> Session::clawJaws() const {
     std::map<std::string, std::array<double, 2>> jaws;
     if (const auto state = mechanismState())
@@ -549,15 +616,18 @@ std::map<std::string, std::array<double, 2>> Session::clawJaws() const {
         jaws[world->mechanismId()] = {world->jawPosition(), world->jawPosition()};
     return jaws;
 }
+
 const std::vector<Payload> &Session::payloads() const {
     return impl_->payloads;
 }
+
 std::map<std::string, std::map<std::string, PropState>> Session::props() const {
     std::map<std::string, std::map<std::string, PropState>> result;
     for (const auto &world : impl_->prop_worlds)
         result[world->task()] = world->props();
     return result;
 }
+
 Json Session::indicators() const {
     return impl_->tasks ? impl_->tasks->indicators() : Json::array();
 }

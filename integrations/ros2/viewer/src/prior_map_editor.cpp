@@ -1,3 +1,5 @@
+// The prior-map editor: file open / save and per-file editor state, undo, pointer gestures in the pool view, the
+// overlay (origin, badges, labels, handles) and the Objects / Inspector windows. See prior_map_editor.hpp.
 #include "prior_map_editor.hpp"
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/pins.hpp"
@@ -19,23 +21,30 @@ namespace nereus::ros_viewer::host {
 namespace fs = std::filesystem;
 namespace pm = prior_map;
 namespace {
+
 constexpr double kPi = 3.14159265358979323846;
 constexpr std::size_t kUndoDepth = 200;
 const glm::vec3 kBox(.45f, .45f, .12f); // a stand-alone prop with no mesh
 
+// Expands a leading '~' to $HOME.
 fs::path expandHome(const std::string &path) {
     if (!path.empty() && path[0] == '~')
         if (const char *home = std::getenv("HOME"))
             return fs::path(home) / path.substr(path.size() > 1 && path[1] == '/' ? 2 : 1);
     return path;
 }
+
+// A pose (m, yaw in degrees about +Z) as a 4x4 transform.
 glm::mat4 poseMatrix(double x, double y, double z, double yawDegrees) {
     return glm::rotate(glm::translate(glm::mat4(1), glm::vec3(x, y, z)), float(yawDegrees * kPi / 180),
                        glm::vec3(0, 0, 1));
 }
+
+// Yaw (deg) of a transform's x axis about +Z.
 double yawOf(const glm::mat4 &m) {
     return std::atan2(m[0].y, m[0].x) * 180 / kPi;
 }
+
 // A stable colour per name (the fallback box of a prop without a mesh).
 glm::vec4 colorFor(const std::string &name) {
     unsigned h = 0;
@@ -51,6 +60,8 @@ glm::vec4 colorFor(const std::string &name) {
                                     : glm::vec3(c, 0, x);
     return {rgb + m, 1};
 }
+
+// World point to view pixels; false when behind the camera or well outside the view (20 % margin).
 bool project(const glm::mat4 &vp, const glm::vec2 &origin, const glm::vec2 &size, const glm::vec3 &point,
              ImVec2 &pixel) {
     const auto clip = vp * glm::vec4(point, 1);
@@ -59,6 +70,7 @@ bool project(const glm::mat4 &vp, const glm::vec2 &origin, const glm::vec2 &size
     pixel = {origin.x + (clip.x / clip.w * .5f + .5f) * size.x, origin.y + (.5f - clip.y / clip.w * .5f) * size.y};
     return std::abs(clip.x) <= clip.w * 1.2f && std::abs(clip.y) <= clip.w * 1.2f;
 }
+
 // Screen pixels per metre at `center`: the longest of the projected unit axes (from straight above the height
 // axis projects to nothing).
 float pixelsPerMetre(const glm::mat4 &vp, const glm::vec2 &origin, const glm::vec2 &size, const glm::vec3 &center) {
@@ -73,20 +85,25 @@ float pixelsPerMetre(const glm::mat4 &vp, const glm::vec2 &origin, const glm::ve
     }
     return best;
 }
+
+// A path made safe as a file name (names the per-config state file).
 std::string sanitized(const fs::path &path) {
     std::string out;
     for (const char c : path.string())
         out += std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '-' ? c : '_';
     return out;
 }
-// Where a prop's label box starts: centred under it in 2D (as Dead Reckoning), up and to the right in 3D.
+
 // A label chip: the prop's colour swatch, then its name.
 float labelWidth(ImVec2 text) {
     return text.x + ui(22);
 }
+
+// Where a prop's label box starts: centred under it in 2D (as Dead Reckoning), up and to the right in 3D.
 ImVec2 labelCorner(ImVec2 at, ImVec2 text, bool plan) {
     return plan ? ImVec2(at.x - labelWidth(text) * .5f, at.y + ui(11)) : ImVec2(at.x + ui(8), at.y - ui(22));
 }
+
 // An arrow from `from` to `tip` with a filled head.
 void arrow(ImDrawList *d, ImVec2 from, ImVec2 tip, ImU32 color, float width) {
     glm::vec2 along(tip.x - from.x, tip.y - from.y);
@@ -99,9 +116,12 @@ void arrow(ImDrawList *d, ImVec2 from, ImVec2 tip, ImU32 color, float width) {
     d->AddTriangleFilled(tip, {base.x + side.x * ui(6), base.y + side.y * ui(6)},
                          {base.x - side.x * ui(6), base.y - side.y * ui(6)}, color);
 }
+
+// An ImGui colour from a glm RGBA, its alpha scaled.
 ImU32 colorU32(const glm::vec4 &c, float alpha = 1) {
     return ImGui::GetColorU32(ImVec4(c.x, c.y, c.z, c.w * alpha));
 }
+
 // A lock or eye toggle drawn as an icon (Dead Reckoning's object list): bright when on, faint when off.
 enum class Icon { Lock, Eye };
 bool iconToggle(const char *id, bool &on, Icon icon, ImVec4 onColor) {
@@ -114,10 +134,14 @@ bool iconToggle(const char *id, bool &on, Icon icon, ImVec4 onColor) {
     auto *d = ImGui::GetWindowDrawList();
     if (hovered)
         d->AddRectFilled(at, {at.x + s, at.y + s}, ImGui::GetColorU32(ImGuiCol_FrameBgHovered), ui(3));
+
+    // Ink: the on colour, else muted (brighter when hovered).
     const ImVec4 off = palette().muted;
     const ImU32 ink = ImGui::GetColorU32(on ? onColor : ImVec4(off.x, off.y, off.z, hovered ? 1.f : .75f));
     const ImVec2 c(at.x + s * .5f, at.y + s * .5f);
     const float k = s * .5f, w = std::max(1.f, ui(1.6f));
+
+    // Lock: a body and a shackle; eye: an almond and a pupil.
     if (icon == Icon::Lock) {
         const float lift = on ? 0 : k * .16f; // an open lock's shackle rides up
         d->AddRectFilled({c.x - k * .42f, c.y - k * .02f}, {c.x + k * .42f, c.y + k * .52f}, ink, ui(1.5f));
@@ -141,12 +165,16 @@ bool iconToggle(const char *id, bool &on, Icon icon, ImVec4 onColor) {
     }
     return clicked;
 }
+
+// A compact number field (90 px unless `width` is given).
 bool inputNumber(const char *label, double &value, const char *format = "%.3f", float width = 0) {
     ImGui::SetNextItemWidth(width > 0 ? width : ui(90));
     return ImGui::InputDouble(label, &value, 0, 0, format);
 }
+
 } // namespace
 
+// Opens the default config at start when it exists.
 PriorMapEditor::PriorMapEditor(fs::path stateDirectory, fs::path defaultConfig)
     : stateDirectory_(std::move(stateDirectory)) {
     const auto path = expandHome(defaultConfig.string());
@@ -186,6 +214,7 @@ void PriorMapEditor::setMeshes(std::vector<MappingMarker> markers) {
 
 // ------------------------------------------------------------------ files
 
+// Loads a config and its editor state, resetting the selection and undo history; errors go to the status line.
 void PriorMapEditor::openFile(const fs::path &path) {
     try {
         std::ifstream in(path);
@@ -194,6 +223,7 @@ void PriorMapEditor::openFile(const fs::path &path) {
         std::stringstream text;
         text << in.rdbuf();
         doc_ = pm::load(text.str());
+
         configPath_ = path;
         std::snprintf(pathField_, sizeof(pathField_), "%s", path.c_str());
         selected_.clear();
@@ -209,6 +239,7 @@ void PriorMapEditor::openFile(const fs::path &path) {
     }
 }
 
+// Writes the file through prior_map::save (which checks the result), then reloads from the written text.
 void PriorMapEditor::saveFile() {
     if (!loaded())
         return;
@@ -220,6 +251,8 @@ void PriorMapEditor::saveFile() {
             if (!out)
                 throw std::runtime_error("cannot write " + configPath_.string());
         }
+
+        // Reload what was written, so doc_.text matches the file for the next save.
         auto reloaded = pm::load(text, doc_.ns);
         for (auto &o : reloaded.objects) // the editor's own flags survive the reload
             if (const auto *before = pm::find(doc_.objects, o.name)) {
@@ -237,6 +270,7 @@ void PriorMapEditor::saveFile() {
     }
 }
 
+// The per-config state file in the state directory, named after the config's full path.
 fs::path PriorMapEditor::statePath() const {
     return stateDirectory_ / (sanitized(configPath_) + ".yaml");
 }
@@ -248,6 +282,8 @@ void PriorMapEditor::loadState() {
         return;
     try {
         const auto state = YAML::LoadFile(statePath().string());
+
+        // Origins by pool id, plus "<pool>/robot" and "<pool>/tag": the last origin of each kind.
         origins_.clear();
         for (const auto &entry : state["origins"]) {
             const auto &o = entry.second;
@@ -262,10 +298,14 @@ void PriorMapEditor::loadState() {
             origins_[entry.first.as<std::string>()] = origin;
         }
         useOrigin();
+
+        // Display options.
         poolLock_ = state["pool_lock"].as<bool>(poolLock_);
         labels_ = state["labels"].as<int>(labels_);
         poseColumns_ = state["pose_columns"].as<bool>(poseColumns_);
         hideCourse_ = state["hide_course"].as<bool>(hideCourse_);
+
+        // Lock and hide flags by object name (without a "locked" list, load()'s defaults stay).
         const auto names = [&](const char *key) {
             std::set<std::string> out;
             for (const auto &n : state[key])
@@ -285,12 +325,14 @@ void PriorMapEditor::loadState() {
     }
 }
 
+// Writes what loadState() reads; called after each change.
 void PriorMapEditor::saveState() const {
     if (stateDirectory_.empty() || configPath_.empty())
         return;
     YAML::Node state;
     state["config"] = configPath_.string();
     state["namespace"] = doc_.ns;
+
     for (const auto &[pool, origin] : origins_) {
         auto o = state["origins"][pool];
         o["x"] = origin.x;
@@ -301,6 +343,7 @@ void PriorMapEditor::saveState() const {
         o["wall"] = std::string(1, origin.wall);
         o["robot"] = origin.robot;
     }
+
     state["pool_lock"] = poolLock_;
     state["labels"] = labels_;
     state["pose_columns"] = poseColumns_;
@@ -313,6 +356,7 @@ void PriorMapEditor::saveState() const {
         if (o.hidden)
             state["hidden"].push_back(o.name);
     }
+
     std::error_code error;
     fs::create_directories(stateDirectory_, error);
     std::ofstream(statePath()) << state << '\n';
@@ -320,12 +364,14 @@ void PriorMapEditor::saveState() const {
 
 // ------------------------------------------------------------------ edits
 
+// Pushes the objects and origin as an undo step (at most kUndoDepth kept) and clears the redo stack.
 void PriorMapEditor::record() {
     undo_.push_back({doc_.objects, origin_});
     if (undo_.size() > kUndoDepth)
         undo_.erase(undo_.begin());
     redo_.clear();
 }
+
 void PriorMapEditor::undo() {
     if (undo_.empty())
         return;
@@ -335,6 +381,7 @@ void PriorMapEditor::undo() {
     undo_.pop_back();
     changed();
 }
+
 void PriorMapEditor::redo() {
     if (redo_.empty())
         return;
@@ -344,6 +391,9 @@ void PriorMapEditor::redo() {
     redo_.pop_back();
     changed();
 }
+
+// After any edit: marks the file dirty, remembers the origin, drops a selection that no longer exists and saves
+// the editor state.
 void PriorMapEditor::changed() {
     dirty_ = true;
     if (!pool_.id.empty())
@@ -353,6 +403,7 @@ void PriorMapEditor::changed() {
     saveState();
 }
 
+// startObjects_ is the baseline originMoved() compares against to tell whether the file changed.
 void PriorMapEditor::setOrigin(const pm::Origin &next) {
     record();
     startObjects_ = doc_.objects;
@@ -387,6 +438,7 @@ bool PriorMapEditor::onRobotOrigin(const View &view, const glm::vec2 &mouse) con
     if (project(view.viewProjection, view.origin, view.size, at, pixel) &&
         glm::length(glm::vec2(pixel.x, pixel.y) - mouse) < ui(9))
         return true;
+
     if (!view.pointer)
         return false;
     // on the robot's hull: about Talos' size around base_link
@@ -394,6 +446,7 @@ bool PriorMapEditor::onRobotOrigin(const View &view, const glm::vec2 &mouse) con
     return std::abs(local.x) < .45f && std::abs(local.y) < .4f && (view.plan || std::abs(local.z) < .3f);
 }
 
+// The selected robot-frame origin's turning ring (72 segments) within 8 px of the pointer.
 bool PriorMapEditor::onOriginRing(const View &view, const glm::vec2 &mouse) const {
     if (!origin_.robot || !originSelected_)
         return false;
@@ -457,18 +510,24 @@ void PriorMapEditor::moveSelected(double dx, double dy, double dz, double dyaw) 
 
 // ------------------------------------------------------------------ geometry
 
+// Map frame to world: the pool's transform, then the origin's pose in the pool.
 glm::mat4 PriorMapEditor::worldFromMap() const {
     return pool_.poolToWorld * poseMatrix(origin_.x, origin_.y, origin_.z, origin_.yaw());
 }
+
+// A map-frame pose in the world.
 glm::mat4 PriorMapEditor::worldOf(const pm::Pose &p) const {
     return worldFromMap() * poseMatrix(p.x, p.y, p.z, p.yaw);
 }
+
+// A world point and world yaw (deg) back to a map pose.
 pm::Pose PriorMapEditor::mapFromWorld(const glm::vec3 &world, double yawWorld) const {
     const auto map = glm::inverse(worldFromMap());
     const glm::vec3 p(map * glm::vec4(world, 1));
     return {p.x, p.y, p.z, pm::wrapDegrees(yawWorld - yawOf(worldFromMap()))};
 }
 
+// The props for the pool view's renderer: meshes, and boxes for mesh-less stand-alone props in 3D.
 void PriorMapEditor::addMarkers(std::vector<MarkerDraw> &markers) const {
     if (!active())
         return;
@@ -477,6 +536,7 @@ void PriorMapEditor::addMarkers(std::vector<MarkerDraw> &markers) const {
         const auto found = meshes_.find(name + "_frame");
         return found != meshes_.end() && found->second.visible;
     };
+
     // A mesh-less frame on a meshed assembly (the bin's targets, the torpedo's holes) is part of that mesh.
     const auto onMesh = [&](const pm::Object &o) {
         std::set<std::string> seen;
@@ -486,6 +546,7 @@ void PriorMapEditor::addMarkers(std::vector<MarkerDraw> &markers) const {
                 return true;
         return false;
     };
+
     for (const auto &o : doc_.objects) {
         if (o.hidden)
             continue;
@@ -507,6 +568,7 @@ void PriorMapEditor::addMarkers(std::vector<MarkerDraw> &markers) const {
     }
 }
 
+// Asks the camera to look at a prop (read once through takeFocus()).
 void PriorMapEditor::focusOn(const std::string &name) {
     if (pm::find(doc_.objects, name))
         focus_ = glm::vec3(worldOf(pm::mapPoses(doc_.objects).at(name))[3]);
@@ -527,6 +589,7 @@ PriorMapEditor::Look PriorMapEditor::lookOf(const pm::Object &o) const {
     return Look::Bare;
 }
 
+// The labels setting: none, map roots, or all; the selection always.
 bool PriorMapEditor::labelShown(const pm::Object &o) const {
     return !o.hidden && (o.name == selected_ || labels_ == 2 || (labels_ == 1 && o.parent == pm::kMap));
 }
@@ -560,6 +623,8 @@ std::string PriorMapEditor::pick(const View &view, const glm::vec2 &mouse) const
                                                                 mouse.x >= label.min.x && mouse.x <= label.max.x &&
                                                                 mouse.y >= label.min.y && mouse.y <= label.max.y)
             return label.name;
+
+    // Else the nearest origin dot / badge within a few pixels.
     float bestPixels = ui(view.plan ? 9.f : 7.f); // the origin dot / badge
     for (const auto &o : doc_.objects) {
         if (o.hidden || o.locked)
@@ -573,8 +638,11 @@ std::string PriorMapEditor::pick(const View &view, const glm::vec2 &mouse) const
             best = o.name;
         }
     }
+
     if (!best.empty() || !view.pointer)
         return best;
+
+    // Else the smallest extent holding the scene point under the pointer.
     constexpr float margin = .03f;
     float smallest = 1e30f;
     for (const auto &o : doc_.objects) {
@@ -599,12 +667,15 @@ std::string PriorMapEditor::pick(const View &view, const glm::vec2 &mouse) const
     return best;
 }
 
+// One frame of pointer input, in priority order: placing the origin, a gesture in progress, double-click focus,
+// the selected prop's handles, the robot-frame origin, a 2D press-drag, then click-to-select.
 bool PriorMapEditor::input(const View &view) {
     if (!active())
         return false;
     auto &io = ImGui::GetIO();
     const glm::vec2 mouse(io.MousePos.x, io.MousePos.y);
     const auto ray = screenRay(view.viewProjection, mouse - view.origin, view.size);
+
     // Placing the origin: a click picks the AprilTag spot (or the free point) under the pointer.
     if (placing_) {
         if (!view.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left))
@@ -646,6 +717,7 @@ bool PriorMapEditor::input(const View &view) {
         }
         return true;
     }
+
     auto *selected = pm::find(doc_.objects, selected_);
     const bool movable = selected && !selected->locked && !selected->hidden;
     // Dragging the robot-frame origin (the robot): across the pool, along one map axis by its arrow, or turning it
@@ -665,6 +737,8 @@ bool PriorMapEditor::input(const View &view) {
             originMoved();
             return true;
         }
+
+        // Follow the pointer on the horizontal plane through the origin's start.
         const glm::vec3 center(pool_.poolToWorld *
                                glm::vec4(float(startOrigin_.x), float(startOrigin_.y), float(startOrigin_.z), 1));
         auto next = startOrigin_;
@@ -687,12 +761,15 @@ bool PriorMapEditor::input(const View &view) {
                 next.yawOffset = pm::wrapDegrees(startOrigin_.yawOffset + turn);
             }
         }
+
+        // Re-applied from the gesture's start each frame (pinned props re-expressed under the new origin).
         doc_.objects = startObjects_;
         if (poolLock_)
             pm::keepInPool(doc_.objects, startOrigin_, next);
         origin_ = next;
         return true;
     }
+
     // A gesture in progress follows the pointer until the button comes up (Esc puts it back).
     if (drag_ != Handle::None) {
         if (ImGui::IsKeyPressed(ImGuiKey_Escape)) { // put it back; no undo step
@@ -706,6 +783,8 @@ bool PriorMapEditor::input(const View &view) {
             drag_ = Handle::None;
             return true;
         }
+
+        // Follow the pointer from the gesture's start: across the plane, along an axis, or around the ring.
         const auto start = worldOf(startMap_);
         const glm::vec3 center(start[3]);
         auto pose = startMap_;
@@ -732,12 +811,15 @@ bool PriorMapEditor::input(const View &view) {
                 turn = std::round(turn / 15) * 15; // Shift: 15 degree steps
             pose.yaw = pm::wrapDegrees(startMap_.yaw + turn);
         }
+
         pm::setMapPose(doc_.objects, selected_, pose);
         dirty_ = true;
         return true;
     }
+
     if (!view.hovered)
         return false;
+
     // A double-click on a prop looks at it.
     if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
         const auto hit = pick(view, mouse);
@@ -747,6 +829,7 @@ bool PriorMapEditor::input(const View &view) {
             return true;
         }
     }
+
     // Handles of the selected prop: X / Y / Z arrows and the yaw ring.
     if (movable && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         const auto poses = pm::mapPoses(doc_.objects);
@@ -771,6 +854,8 @@ bool PriorMapEditor::input(const View &view) {
                     hit = names[i];
                 }
             }
+
+            // Else the yaw ring (72 segments).
             for (int step = 0; step < 72 && hit == Handle::None; ++step) {
                 const float a0 = float(step) * 2 * float(kPi) / 72, a1 = float(step + 1) * 2 * float(kPi) / 72;
                 ImVec2 p0, p1;
@@ -783,8 +868,11 @@ bool PriorMapEditor::input(const View &view) {
                 if (segmentDistance(mouse, {p0.x, p0.y}, {p1.x, p1.y}, fraction) < ui(8))
                     hit = Handle::Yaw;
             }
+
             if (hit == Handle::None && pick(view, mouse) == selected_)
                 hit = Handle::Body; // the prop itself (closer than a select): drag it across the pool
+
+            // Start the gesture, remembering the grab: a plane point, an angle, or a distance along the axis.
             if (hit != Handle::None) {
                 record();
                 drag_ = hit;
@@ -808,6 +896,7 @@ bool PriorMapEditor::input(const View &view) {
             }
         }
     }
+
     // The robot-frame origin (the robot): its ring turns it; the robot itself drags it (in 3D once selected, as props).
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && origin_.robot) {
         const bool ring = onOriginRing(view, mouse);
@@ -831,6 +920,7 @@ bool PriorMapEditor::input(const View &view) {
             }
         }
     }
+
     // 2D: pressing on any (unlocked) prop drags it at once, as in Dead Reckoning.
     if (view.plan && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         const auto grabbed = pick(view, mouse);
@@ -850,6 +940,7 @@ bool PriorMapEditor::input(const View &view) {
             }
         }
     }
+
     // A click (not a camera drag) selects; on empty space it clears the selection.
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         pressed_ = true;
@@ -868,6 +959,8 @@ bool PriorMapEditor::input(const View &view) {
     return false;
 }
 
+// The editor's 2D layer over the pool view: the origin, tag spots, footprints, badges, labels, handles and a hint.
+// Also records the label boxes pick() tests next frame.
 void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
     if (!active())
         return;
@@ -877,12 +970,14 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
     if (view.plan)
         taken.push_back({{view.origin.x + view.size.x - ui(200), view.origin.y},
                          {view.origin.x + view.size.x, view.origin.y + ui(70)}});
+
     auto *d = ImGui::GetWindowDrawList();
     const auto &p = palette();
     const auto proj = [&](const glm::vec3 &point, ImVec2 &pixel) {
         return project(view.viewProjection, view.origin, view.size, point, pixel);
     };
     d->PushClipRect({view.origin.x, view.origin.y}, {view.origin.x + view.size.x, view.origin.y + view.size.y}, true);
+
     // The map origin: its axes (red x, green y, blue z) and, for an AprilTag, the tag on the wall.
     const auto map = worldFromMap();
     const glm::vec3 o(map[3]);
@@ -898,9 +993,13 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
                 arrow(d, po, tip, colors[i], (view.plan ? ui(3.5f) : ui(3)) * (dragged ? 1.6f : 1.f));
             }
         }
+
+        // The AprilTag: a square on the origin.
         if (!origin_.robot)
             d->AddRect({po.x - ui(7), po.y - ui(7)}, {po.x + ui(7), po.y + ui(7)}, IM_COL32(255, 255, 255, 230), 0, 0,
                        ui(2));
+
+        // The origin's name chip, below it.
         const char *name = origin_.robot ? "map \u00b7 robot start" : "map \u00b7 AprilTag";
         const ImVec2 text = small->CalcTextSizeA(small->FontSize, 1e9f, 0, name);
         const ImVec2 chip(po.x - text.x * .5f - ui(6), po.y + ui(12));
@@ -908,6 +1007,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
                          ui(3));
         taken.push_back({chip, {chip.x + text.x + ui(12), chip.y + text.y + ui(6)}});
         d->AddText(small, small->FontSize, {chip.x + ui(6), chip.y + ui(3)}, IM_COL32(14, 18, 24, 255), name);
+
         // the selected robot-frame origin: its turning ring
         const bool turning = drag_ == Handle::OriginYaw, moving = drag_ == Handle::OriginBody;
         if (origin_.robot && (originSelected_ || turning || moving)) {
@@ -925,6 +1025,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
             }
         }
     }
+
     // While placing: the AprilTag spots.
     if (placing_ && !origin_.robot)
         for (const auto &spot : pm::tagSpots(pool_.length, pool_.width, pool_.lines)) {
@@ -932,7 +1033,9 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
             if (proj(glm::vec3(pool_.poolToWorld * glm::vec4(spot.x, spot.y, origin_.z, 1)), s))
                 d->AddCircleFilled(s, ui(4), ImGui::GetColorU32(p.accent));
         }
+
     const auto poses = pm::mapPoses(doc_.objects);
+
     // 2D: each meshed prop's footprint (its mesh bounds from above) outlined in its colour, with a notch on the +X
     // side for its heading.
     if (view.plan)
@@ -953,6 +1056,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
                 ok = proj(glm::vec3(pose * glm::vec4(xy[i], z, 1)), corners[i]);
             if (!ok)
                 continue;
+
             const auto color = colorFor(obj.name);
             const bool chosen = obj.name == selected_;
             const float fade = obj.locked ? .45f : 1;
@@ -972,6 +1076,8 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
                     }
                 }
             }
+
+            // The heading notch on the +X edge.
             ImVec2 mid, ahead;
             if (proj(glm::vec3(pose * glm::vec4(hi.x, (lo.y + hi.y) * .5f, z, 1)), mid) &&
                 proj(glm::vec3(pose * glm::vec4(hi.x + 1, (lo.y + hi.y) * .5f, z, 1)), ahead)) {
@@ -984,6 +1090,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
                 }
             }
         }
+
     // Markers in each prop's colour: a frame on a meshed assembly is a small dot; in 2D a stand-alone prop without a
     // mesh is a badge with a triangle along its heading (3D draws it as a box). A meshed prop is its mesh.
     for (const auto &obj : doc_.objects) {
@@ -1004,6 +1111,8 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
             d->AddCircle(at, ui(3.5f), IM_COL32(8, 22, 29, 200), 0, ui(1));
             continue;
         }
+
+        // A stand-alone prop in 2D: a badge with its heading.
         const float half = ui(8);
         d->AddRectFilled({at.x - half, at.y - half}, {at.x + half, at.y + half}, colorU32(color * .8f, fade), ui(3));
         d->AddRect({at.x - half, at.y - half}, {at.x + half, at.y + half},
@@ -1021,6 +1130,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
             }
         }
     }
+
     // Labels: map roots, everything, or nothing; the selected one always. Each takes the first free spot around its
     // prop (the selection first), clear of other labels, the props' badges and the chips; a label with no free spot
     // is left out (its prop still shows, and hovering the list names it).
@@ -1043,6 +1153,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
             return a.x < r.second.x && b.x > r.first.x && a.y < r.second.y && b.y > r.first.y;
         });
     };
+
     labelBoxes_.clear();
     for (const auto &[obj, at] : wanted) {
         const bool chosen = obj->name == selected_;
@@ -1054,6 +1165,8 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
             view.plan ? ImVec2(at.x - box.x * .5f, at.y - ui(11) - box.y) : ImVec2(at.x - ui(8) - box.x, at.y - ui(22)),
             view.plan ? ImVec2(at.x + ui(12), at.y - box.y * .5f) : ImVec2(at.x + ui(8), at.y + ui(8)),
             view.plan ? ImVec2(at.x - ui(12) - box.x, at.y - box.y * .5f) : ImVec2(at.x - ui(8) - box.x, at.y + ui(8))};
+
+        // The first free spot; the selected label takes the first one even when none is free.
         const ImVec2 *spot = nullptr;
         for (const auto &candidate : spots)
             if (!overlaps(candidate, {candidate.x + box.x, candidate.y + box.y})) {
@@ -1065,6 +1178,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
         const ImVec2 min = spot ? *spot : spots[0], max{min.x + box.x, min.y + box.y};
         taken.push_back({min, max});
         labelBoxes_.push_back({obj->name, min, max});
+
         // the theme's window colour and text (a light chart gets light chips) edged in the prop's colour; locked
         // props quieter
         const ImVec4 chip = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
@@ -1081,6 +1195,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
                                                     : p.text),
                    obj->name.c_str());
     }
+
     // The selected prop's handles: X / Y / Z arrows and the yaw ring, sized to the screen.
     const auto *sel = pm::find(doc_.objects, selected_);
     if (sel && !sel->hidden) {
@@ -1110,6 +1225,8 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
                 d->AddTriangleFilled(tip, {base.x + across.x * half, base.y + across.y * half},
                                      {base.x - across.x * half, base.y - across.y * half}, colors[i]);
             }
+
+            // The yaw ring.
             ImVec2 previous;
             bool havePrevious = false;
             for (int step = 0; step <= 72; ++step) {
@@ -1121,6 +1238,8 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
                 previous = point;
                 havePrevious = ok;
             }
+
+            // A readout of its map pose under it.
             const auto &mp = poses.at(selected_);
             char readout[160];
             std::snprintf(readout, sizeof(readout), "%s%s  map x %.2f  y %.2f  z %.2f  yaw %.1f", selected_.c_str(),
@@ -1131,6 +1250,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
             d->AddText(small, small->FontSize, {box.x + ui(6), box.y + ui(4)}, IM_COL32(230, 240, 245, 255), readout);
         }
     }
+
     // What the pointer does now.
     const char *hint =
         placing_          ? (origin_.robot ? "Click in the pool to place the map origin  (Esc cancels)"
@@ -1152,6 +1272,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
     d->PopClipRect();
 }
 
+// Keyboard shortcuts while the pool view is hovered or an editor window is focused (no text field active).
 void PriorMapEditor::shortcuts(bool viewHovered) {
     if (!active() || ImGui::GetIO().WantTextInput)
         return;
@@ -1159,7 +1280,10 @@ void PriorMapEditor::shortcuts(bool viewHovered) {
     windowFocused_ = false; // the editor's windows set it again as they draw
     if (!here)
         return;
+
     auto &io = ImGui::GetIO();
+
+    // Esc: cancel placing, else deselect.
     if (ImGui::IsKeyPressed(ImGuiKey_Escape) && drag_ == Handle::None) {
         if (placing_)
             placing_ = false;
@@ -1168,15 +1292,20 @@ void PriorMapEditor::shortcuts(bool viewHovered) {
             originSelected_ = false;
         }
     }
+
+    // Undo / redo / save.
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z))
         io.KeyShift ? redo() : undo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y))
         redo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S))
         saveFile();
+
     auto *o = pm::find(doc_.objects, selected_);
     if (!o || io.KeyCtrl)
         return;
+
+    // Arrows nudge in the pool frame (1 cm, Shift 10 cm), PgUp / PgDn height, Q / E turn (1 deg, Shift 15 deg).
     const double step = io.KeyShift ? .1 : .01, turn = io.KeyShift ? 15 : 1;
     // Held keys repeat; one undo step per run of key presses on the same prop.
     const auto nudge = [&](double dx, double dy, double dz, double dyaw) {
@@ -1188,6 +1317,7 @@ void PriorMapEditor::shortcuts(bool viewHovered) {
         moveSelected(dx, dy, dz, dyaw);
         changed();
     };
+
     if (!o->locked) {
         if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
             nudge(-step, 0, 0, 0);
@@ -1206,6 +1336,8 @@ void PriorMapEditor::shortcuts(bool viewHovered) {
         if (ImGui::IsKeyPressed(ImGuiKey_E))
             nudge(0, 0, 0, -turn);
     }
+
+    // L locks, H hides, Delete removes (children move to the map).
     if (ImGui::IsKeyPressed(ImGuiKey_L, false)) {
         o->locked = !o->locked;
         saveState();
@@ -1294,6 +1426,8 @@ void PriorMapEditor::drawFileBar() {
         ImGui::SetTooltip("%s", (std::string(pathField_) + "\nThe robot's prior map (Enter opens it)").c_str());
     if (ImGui::Button("Open") || enter)
         openFile(expandHome(pathField_));
+
+    // Reload asks first when there are unsaved edits.
     ImGui::SameLine();
     ImGui::BeginDisabled(!loaded());
     if (ImGui::Button("Reload")) {
@@ -1315,6 +1449,8 @@ void PriorMapEditor::drawFileBar() {
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
+
+    // Save, highlighted while there are unsaved edits.
     ImGui::SameLine();
     pushActiveColors(dirty_);
     if (ImGui::Button(dirty_ ? "Save*###save" : "Save###save"))
@@ -1323,7 +1459,9 @@ void PriorMapEditor::drawFileBar() {
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Write the poses into the file (Ctrl+S); comments, order and other sections are kept");
     ImGui::EndDisabled();
+
     if (loaded()) {
+        // The robot (namespace) picker when the file has several; switching needs no unsaved edits.
         if (doc_.namespaces.size() > 1) {
             ImGui::SetNextItemWidth(-1);
             if (ImGui::BeginCombo("##ns", doc_.ns.c_str())) {
@@ -1345,6 +1483,8 @@ void PriorMapEditor::drawFileBar() {
                 ImGui::EndCombo();
             }
         }
+
+        // Undo / redo, and a new prop in the middle of the pool.
         ImGui::BeginDisabled(undo_.empty());
         if (ImGui::Button("Undo"))
             undo();
@@ -1369,6 +1509,7 @@ void PriorMapEditor::drawFileBar() {
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("A new prop in the middle of the pool");
     }
+
     if (!message_.empty()) {
         ImGui::PushStyleColor(ImGuiCol_Text, messageError_ ? palette().error : palette().muted);
         ImGui::TextWrapped("%s", message_.c_str());
@@ -1376,7 +1517,9 @@ void PriorMapEditor::drawFileBar() {
     }
 }
 
+// The object tree as a table: name, lock, hide and (optionally) the stored x / y / z / yaw, editable in place.
 void PriorMapEditor::drawObjects() {
+    // The filter field and the Pose columns toggle.
     const float toggle = buttonWidth("Pose");
     ImGui::SetNextItemWidth(-(toggle + ImGui::GetStyle().ItemSpacing.x));
     char filter[64];
@@ -1394,6 +1537,7 @@ void PriorMapEditor::drawObjects() {
         ImGui::SetTooltip(poseColumns_ ? "Hide the x / y / z / yaw columns"
                                        : "Show each prop's x / y / z / yaw (relative to its parent, as the file "
                                          "stores it)");
+
     const auto matches = [&](const pm::Object &o) {
         return filter_.empty() || o.name.find(filter_) != std::string::npos;
     };
@@ -1410,6 +1554,7 @@ void PriorMapEditor::drawObjects() {
         names = std::max(names, float(depth) * ImGui::GetStyle().IndentSpacing + ImGui::GetTreeNodeToLabelSpacing() +
                                     ImGui::CalcTextSize(o.name.c_str()).x);
     }
+
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, {ui(2), ImGui::GetStyle().CellPadding.y}); // seven columns
     const bool table = ImGui::BeginTable("##tree", poseColumns_ ? 7 : 3,
                                          ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH |
@@ -1424,6 +1569,7 @@ void PriorMapEditor::drawObjects() {
     if (poseColumns_)
         for (const char *axis : {"x", "y", "z", "yaw"})
             ImGui::TableSetupColumn(axis, ImGuiTableColumnFlags_WidthFixed, ui(axis[1] ? 46.f : 40.f));
+
     // the header row: the pose headings right-aligned over their right-aligned figures
     if (typeRamp().strong)
         ImGui::PushFont(typeRamp().strong);
@@ -1439,6 +1585,8 @@ void PriorMapEditor::drawObjects() {
     if (typeRamp().strong)
         ImGui::PopFont();
     ruleUnderHeaders();
+
+    // One row per object, then its children (a row shows when it or a direct child matches the filter).
     std::function<void(const pm::Object &)> row = [&](const pm::Object &o) {
         std::vector<const pm::Object *> children;
         for (const auto &c : doc_.objects)
@@ -1448,6 +1596,7 @@ void PriorMapEditor::drawObjects() {
                                                     [&](const pm::Object *c) { return matches(*c); });
         if (!show)
             return;
+
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         // the checkboxes make the row a frame tall: centre the name in it, and highlight the whole row
@@ -1472,6 +1621,8 @@ void PriorMapEditor::drawObjects() {
         }
         if (o.hidden || o.locked)
             ImGui::PopStyleColor();
+
+        // Click selects, double-click looks at it.
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
             selected_ = o.name;
             originSelected_ = false;
@@ -1482,6 +1633,8 @@ void PriorMapEditor::drawObjects() {
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s  (frame %s_frame, parent %s)\nDouble-click to look at it", o.name.c_str(),
                               o.name.c_str(), o.parent == pm::kMap ? "map" : (o.parent + "_frame").c_str());
+
+        // The lock and hide toggles.
         ImGui::TableNextColumn();
         ImGui::PushID(o.name.c_str());
         auto *mutableObject = pm::find(doc_.objects, o.name);
@@ -1498,6 +1651,7 @@ void PriorMapEditor::drawObjects() {
             ImGui::SetTooltip(mutableObject->hidden ? "Hidden from the view (still editable here). Click to show"
                                                     : "Hide from the view");
         ImGui::PopID();
+
         if (poseColumns_) {
             // each cell is the stored pose, editable in place: click, type, Enter (one undo step per edit);
             // frameless until hovered so the table still reads as a table
@@ -1548,22 +1702,27 @@ void PriorMapEditor::drawObjects() {
             ImGui::PopStyleVar(2);
             ImGui::PopStyleColor(2);
         }
+
         if (opened && !children.empty()) {
             for (const auto *c : children)
                 row(*c);
             ImGui::TreePop();
         }
     };
+
+    // Roots: the map's children, and orphans whose parent is missing.
     for (const auto &o : doc_.objects)
         if (o.parent == pm::kMap || !pm::find(doc_.objects, o.parent))
             row(o);
     ImGui::EndTable();
 }
 
+// The selected prop's inspector: name, parent, stored and resulting poses, config fields, swap, add and delete.
 void PriorMapEditor::drawInspector() {
     auto *o = pm::find(doc_.objects, selected_);
     const auto poses = pm::mapPoses(doc_.objects);
     const auto section = [](const char *title) { sectionTitle(title); };
+
     // Name (Enter renames; children follow), lock and hide.
     const auto checkboxWidth = [](const char *label) {
         return ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(label).x +
@@ -1591,6 +1750,7 @@ void PriorMapEditor::drawInspector() {
     ImGui::SameLine();
     if (ImGui::Checkbox("Hidden", &o->hidden))
         saveState();
+
     // The parent, then the pose: the file stores it relative to the parent; a child also shows where that puts it.
     section("Parent");
     ImGui::SetNextItemWidth(std::min(ui(220), ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Parent").x -
@@ -1618,6 +1778,8 @@ void PriorMapEditor::drawInspector() {
     }
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Re-parenting keeps the prop where it is in the pool");
+
+    // x / y / z / yaw fields in a row; `apply` writes `values` back (one undo step per field activated).
     const auto fieldRow = [&](double values[4], const char *formatYaw, const std::function<void()> &apply) {
         const char *labels[] = {"x##f", "y##f", "z##f", "yaw##f"};
         // four fields sharing the column, each followed by its label
@@ -1641,6 +1803,7 @@ void PriorMapEditor::drawInspector() {
             ImGui::PopID();
         }
     };
+
     const bool child = o->parent != pm::kMap;
     section(child ? ("Stored: relative to " + o->parent + "_frame").c_str() : "Pose in the map (as stored)");
     if (ImGui::IsItemHovered())
@@ -1650,6 +1813,7 @@ void PriorMapEditor::drawInspector() {
     ImGui::PushID("relative");
     fieldRow(rel, "%.2f", [&] { o->pose = {rel[0], rel[1], rel[2], pm::wrapDegrees(rel[3])}; });
     ImGui::PopID();
+
     const auto mp = poses.at(o->name);
     if (child) { // where the parent's pose and this one put it: editable too (the stored pose follows)
         section("Resulting map position");
@@ -1661,9 +1825,11 @@ void PriorMapEditor::drawInspector() {
                  [&] { pm::setMapPose(doc_.objects, selected_, {inMap[0], inMap[1], inMap[2], inMap[3]}); });
         ImGui::PopID();
     }
+
     const auto inPool = pm::mapToPool(mp, origin_);
     ImGui::TextDisabled("In the pool: x %.2f  y %.2f  yaw %.1f  (%.2f m deep)", inPool.x, inPool.y, inPool.yaw,
                         pool_.waterLevel - worldOf(mp)[3].z);
+
     // Config flags and covariance, as the mapping node reads them.
     section("Config");
     if (ImGui::Checkbox("lock_orientation_to_config", &o->lockOrientation)) {
@@ -1686,6 +1852,7 @@ void PriorMapEditor::drawInspector() {
     ImGui::PushID("covar");
     fieldRow(cov, "%.3f", [&] { o->covar = {cov[0], cov[1], cov[2], cov[3]}; });
     ImGui::PopID();
+
     // Swap with another prop (e.g. the two gate sides), classes (fire / blood).
     section("Swap");
     static int other = 0;
@@ -1726,6 +1893,7 @@ void PriorMapEditor::drawInspector() {
         }
         ImGui::EndDisabled();
     }
+
     section("Object");
     if (ImGui::Button("Add child")) {
         record();
@@ -1766,11 +1934,13 @@ void PriorMapEditor::drawInspector() {
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
+
     ImGui::Spacing();
     if (ImGui::Button("Deselect (Esc)"))
         selected_.clear();
 }
 
+// The map origin's inspector (shown when no prop is selected): kind, placement, position, heading, pinning.
 void PriorMapEditor::drawOriginInspector() {
     sectionTitle("Map origin");
     ImGui::TextWrapped("%s", origin_.robot
@@ -1779,6 +1949,7 @@ void PriorMapEditor::drawOriginInspector() {
                                    "the origin, its ring to turn it."
                                  : "AprilTag: the map origin is the tag on a wall, at a line / wall "
                                    "intersection, +X into the pool.");
+
     int kind = origin_.robot ? 1 : 0;
     if (pins::Switch("Origin##origin_kind", &kind, {"AprilTag", "Robot frame"})) {
         const bool robot = kind == 1;
@@ -1806,6 +1977,7 @@ void PriorMapEditor::drawOriginInspector() {
             setOrigin(next);
         }
     }
+
     // the action on its own line: the switch above is a mode, this places it
     pushActiveColors(placing_);
     if (ImGui::Button(placing_ ? "Placing... (Esc)###place" : "Place origin in the view###place"))
@@ -1814,6 +1986,7 @@ void PriorMapEditor::drawOriginInspector() {
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip(origin_.robot ? "Click in the pool view to put the origin there"
                                         : "Click near a line end on a wall in the pool view; the tag snaps to it");
+
     double pos[2] = {origin_.x, origin_.y};
     ImGui::TextDisabled("Pool position (m)");
     for (int i = 0; i < 2; ++i) {
@@ -1828,6 +2001,7 @@ void PriorMapEditor::drawOriginInspector() {
         }
         ImGui::PopID();
     }
+
     ImGui::TextDisabled("Heading %.1f deg%s", origin_.yaw(),
                         origin_.robot ? "" : (std::string("  (") + origin_.wall + " wall)").c_str());
     if (ImGui::Button("Turn +90")) {
@@ -1848,17 +2022,21 @@ void PriorMapEditor::drawOriginInspector() {
         next.yawOffset = pm::wrapDegrees(offset);
         setOrigin(next);
     }
+
     if (ImGui::Checkbox("Pin props to the pool", &poolLock_))
         saveState();
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Moving or turning the origin keeps the props where they are in the pool\n"
                           "(their map poses change) instead of carrying them along");
+
     if (ImGui::Button("Reset to the scenario's origin")) {
         setOrigin(pool_.scenarioOrigin);
     }
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Where the scenario has the map (its calibration board placement)");
+
     ImGui::Spacing();
     ImGui::TextDisabled("Select a prop in the list or the view to edit it.");
 }
+
 } // namespace nereus::ros_viewer::host

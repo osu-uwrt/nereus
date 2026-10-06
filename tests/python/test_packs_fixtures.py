@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+# A four-thruster robot rooted at its COM, with an AHRS, an altitude sensor and one dropper.
 ROBOT = """\
 # Synthetic four-thruster robot; comments and key order must survive load/save.
 kind: robot
@@ -71,6 +72,7 @@ scoring_envelope:
   points: []
 """
 
+# A 10 x 5 x 3 m rectangular tank with still water.
 POOL = """\
 kind: pool
 id: tank
@@ -80,6 +82,7 @@ collision_boxes:
 - {id: floor, size_m: [10, 5, 1], center_m: [5, 2.5, -3.5], orientation_wxyz: [1, 0, 0, 0]}
 """
 
+# A tasks pack with a single task (HOOP) that needs a dropper.
 TASKS = """\
 kind: tasks
 id: practice
@@ -93,6 +96,7 @@ run_options:
 scoring_rules: []
 """
 
+# One hoop: a static bar, a portal region, a pass-through event and its points.
 HOOP = """\
 kind: task
 id: hoop
@@ -134,6 +138,7 @@ streams:
   fields: {data: {from: reading.target_world_z}}
 """
 
+# Selects the packs above (as sibling folders) and places the hoop mid-pool.
 SCENARIO = """\
 kind: scenario
 id: practice_run
@@ -167,10 +172,13 @@ def write_generic_packs(root: Path, bridge: bool = True) -> Path:
     }
     if bridge:
         files["bridge/bridge.yaml"] = BRIDGE
+
     for relative, text in files.items():
         target = root / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
+
+    # The hoop mesh only has to exist; its bytes are never parsed.
     (root / "tasks" / "assets").mkdir(exist_ok=True)
     (root / "tasks" / "assets" / "hoop.dae").write_bytes(b"mesh")
     return root / "scenario"

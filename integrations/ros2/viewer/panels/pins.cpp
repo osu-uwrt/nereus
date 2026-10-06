@@ -1,3 +1,6 @@
+// Pinnable controls: wrappers around ImGui's Button / Checkbox / Combo plus a sliding Switch that record each
+// widget as drawn, the toolbar copies of pinned ones, the right-click pin menu, off-screen drawing of hidden panels
+// and the [NereusPins] ini section. All state is one process-wide Board, used from the UI thread only.
 #include "nereus/ros_viewer/pins.hpp"
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/theme.hpp"
@@ -11,32 +14,37 @@
 
 namespace nereus::ros_viewer::pins {
 namespace {
+
 enum class Kind { Button, Checkbox, Combo };
 
+// What the toolbar copy of a control needs, refreshed every time the original widget draws.
 struct Record {
     Kind kind = Kind::Button;
-    std::string label, scopeTitle;
-    bool disabled = false, value = false;
-    int current = 0;
-    std::vector<std::string> items;
-    ImVec4 colors[4]{}; // button, hovered, active, text as the original was drawn
-    int frame = -100;   // last frame the original was drawn
+    std::string label, scopeTitle;        // label text without "##..."; the title of the window it lives in
+    bool disabled = false, value = false; // value: a checkbox's state
+    int current = 0;                      // a combo's / switch's selection
+    std::vector<std::string> items;       // a combo's / switch's choices
+    ImVec4 colors[4]{};                   // button, hovered, active, text as the original was drawn
+    int frame = -100;                     // last frame the original was drawn
 };
 
+// All pin state: records by key ("scope/part/.../id"), pins, queued actions and the current scope.
 struct Board {
     std::map<std::string, Record> records;
     std::vector<std::string> pinned;    // in pin order
     std::map<std::string, int> pending; // key -> click (1) / toggle (1) / selection + 1
-    std::string scope, title;
-    std::vector<std::string> parts;
-    std::set<std::string> seen; // scopes whose widgets ran this frame
-    std::string menuKey;        // the control the right-click menu is for
-    int censusUntil = -1;       // draw every scope off screen until this frame (the search index)
+    std::string scope, title;           // current beginScope(); empty scope: widgets are plain ImGui
+    std::vector<std::string> parts;     // nested Scope parts
+    std::set<std::string> seen;         // scopes whose widgets ran this frame
+    std::string menuKey;                // the control the right-click menu is for
+    int censusUntil = -1;               // draw every scope off screen until this frame (the search index)
 };
+
 Board &board() {
     static Board instance;
     return instance;
 }
+
 const ImGuiID kMenuId = ImHashStr("##nereus_pin_menu");
 
 // "Pause###pause" -> id "pause", label "Pause"; "Fire" -> both "Fire"; "##tree" -> id "tree", label "".
@@ -47,13 +55,18 @@ std::string idOf(const char *label) {
     const char *hidden = std::strstr(label, "##");
     return hidden ? std::string(hidden + 2) : std::string(label);
 }
+
+// The visible text of a label: everything before "##".
 std::string textOf(const char *label) {
     const char *hidden = std::strstr(label, "##");
     return hidden ? std::string(label, hidden) : std::string(label);
 }
+
 bool scoped() {
     return !board().scope.empty();
 }
+
+// Stable key of a widget: scope, nested parts and the label's ID, joined by '/'.
 std::string keyOf(const char *label) {
     auto &b = board();
     std::string key = b.scope;
@@ -61,10 +74,13 @@ std::string keyOf(const char *label) {
         key += "/" + part;
     return key + "/" + idOf(label);
 }
+
 bool isPinned(const std::string &key) {
     const auto &p = board().pinned;
     return std::find(p.begin(), p.end(), key) != p.end();
 }
+
+// Refreshes a widget's record just before it draws: kind, label, disabled state and current button colours.
 Record &record(const std::string &key, Kind kind, const char *label) {
     auto &b = board();
     auto &r = b.records[key];
@@ -81,6 +97,7 @@ Record &record(const std::string &key, Kind kind, const char *label) {
     b.seen.insert(b.scope);
     return r;
 }
+
 // Right-click on the widget just drawn (even disabled) opens the pin menu; not from inside another popup.
 void offerMenu(const std::string &key) {
     if (GImGui->BeginPopupStack.Size > 0)
@@ -90,6 +107,8 @@ void offerMenu(const std::string &key) {
         ImGui::OpenPopup(kMenuId);
     }
 }
+
+// Pops a queued toolbar action for `key` (1, or a choice + 1); false when none is queued.
 bool take(const std::string &key, int &value) {
     auto &pending = board().pending;
     const auto found = pending.find(key);
@@ -99,6 +118,7 @@ bool take(const std::string &key, int &value) {
     pending.erase(found);
     return true;
 }
+
 } // namespace
 
 void beginScope(const std::string &scope, const std::string &title) {
@@ -106,14 +126,17 @@ void beginScope(const std::string &scope, const std::string &title) {
     board().title = title;
     board().parts.clear();
 }
+
 void endScope() {
     board().scope.clear();
     board().parts.clear();
 }
+
 Scope::Scope(const std::string &part) {
     board().parts.push_back(part);
     ImGui::PushID(part.c_str());
 }
+
 Scope::~Scope() {
     ImGui::PopID();
     board().parts.pop_back();
@@ -126,6 +149,8 @@ bool Button(const char *label, const ImVec2 &size) {
     record(key, Kind::Button, label);
     bool clicked = ImGui::Button(label, size);
     offerMenu(key);
+
+    // A click on the toolbar copy counts as a click here (dropped while disabled).
     int value = 0;
     if (take(key, value) && !board().records[key].disabled)
         clicked = true;
@@ -139,6 +164,8 @@ bool Checkbox(const char *label, bool *v) {
     auto *r = &record(key, Kind::Checkbox, label);
     bool changed = ImGui::Checkbox(label, v);
     offerMenu(key);
+
+    // A click on the toolbar copy toggles the value.
     int value = 0;
     if (take(key, value) && !r->disabled) {
         *v = !*v;
@@ -153,11 +180,15 @@ bool Combo(const char *label, int *current, const char *items) {
         return ImGui::Combo(label, current, items);
     const auto key = keyOf(label);
     auto &r = record(key, Kind::Combo, label);
+
+    // Split the zero-separated items for the toolbar copy's dropdown.
     r.items.clear();
     for (const char *item = items; *item; item += std::strlen(item) + 1)
         r.items.emplace_back(item);
     bool changed = ImGui::Combo(label, current, items);
     offerMenu(key);
+
+    // A selection made in the toolbar copy (queued as index + 1).
     int value = 0;
     auto &now = board().records[key];
     if (take(key, value) && !now.disabled && value - 1 >= 0 && value - 1 < int(now.items.size()) &&
@@ -181,6 +212,8 @@ bool Switch(const char *label, int *current, std::initializer_list<const char *>
         auto &r = record(key, Kind::Combo, label);
         r.items.assign(items.begin(), items.end());
     }
+
+    // Choice widths: an even share of `width`, else each label's own width.
     const auto &style = ImGui::GetStyle();
     const auto &p = palette();
     std::vector<float> widths(static_cast<std::size_t>(count));
@@ -191,6 +224,8 @@ bool Switch(const char *label, int *current, std::initializer_list<const char *>
                       : ImGui::CalcTextSize(items[std::size_t(i)], nullptr, true).x + 2 * style.FramePadding.x;
         total += widths[std::size_t(i)];
     }
+
+    // Input: one invisible button per choice, side by side.
     const float height = ImGui::GetFrameHeight(), rounding = style.FrameRounding;
     const ImVec2 at = ImGui::GetCursorScreenPos();
     ImGui::PushID(label);
@@ -216,6 +251,8 @@ bool Switch(const char *label, int *current, std::initializer_list<const char *>
     ImGui::SetCursorScreenPos(at);
     ImGui::Dummy({total, height}); // the group's extent, one item for the pin menu and tooltips
     ImGui::EndGroup();
+
+    // A selection made in the toolbar copy, unless that choice is disabled.
     if (!key.empty()) {
         offerMenu(key);
         int value = 0;
@@ -235,13 +272,15 @@ bool Switch(const char *label, int *current, std::initializer_list<const char *>
     auto *storage = ImGui::GetStateStorage();
     float *thumbX = storage->GetFloatRef(id, targetX),
           *thumbW = storage->GetFloatRef(id + 1, widths[std::size_t(chosen)]);
-    const float follow = 1 - std::exp(-ImGui::GetIO().DeltaTime * 28);
+    const float follow = 1 - std::exp(-ImGui::GetIO().DeltaTime * 28); // time constant 1/28 s
     *thumbX += (targetX - *thumbX) * follow;
     *thumbW += (widths[std::size_t(chosen)] - *thumbW) * follow;
     if (std::abs(targetX - *thumbX) < .5f && std::abs(widths[std::size_t(chosen)] - *thumbW) < .5f) {
         *thumbX = targetX;
         *thumbW = widths[std::size_t(chosen)];
     }
+
+    // Drawing: the bevelled theme draws each choice as its own key, the others a track with a thumb.
     auto *draw = ImGui::GetWindowDrawList();
     const ImVec2 end(at.x + total, at.y + height);
     if (bevelledTheme()) { // Qt's toggle buttons: each choice raised, the chosen one pressed in and highlighted
@@ -265,6 +304,8 @@ bool Switch(const char *label, int *current, std::initializer_list<const char *>
         ImGui::PopID();
         return changed;
     }
+
+    // Other themes: a track, a hover highlight, the sliding thumb, then the labels on top.
     draw->AddRectFilled(at, end, ImGui::GetColorU32(ImGuiCol_FrameBg), rounding);
     if (hovered >= 0 && hovered != chosen) {
         float hx = 0;
@@ -278,6 +319,7 @@ bool Switch(const char *label, int *current, std::initializer_list<const char *>
                         ImGui::GetColorU32(p.active), std::max(0.f, rounding - inset * .5f));
     if (style.FrameBorderSize > 0)
         draw->AddRect(at, end, ImGui::GetColorU32(ImGuiCol_Border), rounding, 0, style.FrameBorderSize);
+
     x = 0;
     for (int i = 0; i < count; ++i) {
         const char *text = items[std::size_t(i)];
@@ -295,6 +337,7 @@ bool Switch(const char *label, int *current, std::initializer_list<const char *>
     return changed;
 }
 
+// Forgets which scopes drew, so needsDrawing() sees only this frame's.
 void newFrame() {
     board().seen.clear();
 }
@@ -315,6 +358,8 @@ void drawMenu() {
     ImGui::EndPopup();
 }
 
+// A scope that did not draw this frame needs an off-screen draw during a census, or when it holds a pin or a
+// queued action.
 bool needsDrawing(const std::string &scope) {
     const auto &b = board();
     if (b.seen.count(scope))
@@ -327,6 +372,7 @@ bool needsDrawing(const std::string &scope) {
            std::any_of(b.pending.begin(), b.pending.end(), [&](const auto &p) { return inScope(p.first); });
 }
 
+// The search index, built from the records.
 std::vector<Control> controls() {
     std::vector<Control> out;
     for (const auto &[key, r] : board().records) {
@@ -346,6 +392,7 @@ std::vector<Control> controls() {
     return out;
 }
 
+// Queues an action for a recorded control (a combo's queued value is the choice + 1).
 void trigger(const std::string &key, int choice) {
     auto &b = board();
     const auto found = b.records.find(key);
@@ -377,16 +424,21 @@ void drawOffscreen(const std::string &scope, const std::string &title, const std
 void drawPinned() {
     auto &b = board();
     const int frame = ImGui::GetFrameCount();
+    // Iterate over a copy: the menu or a click may unpin.
     for (const auto &key : std::vector<std::string>(b.pinned)) {
         const auto &r = b.records[key];
-        const bool live = frame - r.frame <= 2;
+        const bool live = frame - r.frame <= 2; // the original drew within the last two frames
         const std::string text = r.label.empty() ? key.substr(key.rfind('/') + 1) : r.label;
         ImGui::PushID(key.c_str());
+
+        // Combos get a fixed-width dropdown; buttons and checkboxes are sized to their label.
         if (r.kind == Kind::Combo) {
             sameLineIfFits(ui(160));
             ImGui::SetNextItemWidth(ui(160));
         } else
             sameLineIfFits(buttonWidth(text.c_str()));
+
+        // A copy is disabled when its original is, or has stopped drawing. Clicks are queued for the original.
         ImGui::BeginDisabled(!live || r.disabled);
         if (r.kind == Kind::Button) {
             // As the original was drawn (KILL red, ...); one never drawn yet (restored from a layout) as plain.
@@ -397,6 +449,7 @@ void drawPinned() {
                 b.pending[key] = 1;
             ImGui::PopStyleColor(4);
         } else if (r.kind == Kind::Checkbox) {
+            // A checkbox becomes a toggle button, lit while checked.
             pushActiveColors(r.value);
             if (ImGui::Button((text + "##pinned").c_str()))
                 b.pending[key] = 1;
@@ -411,6 +464,8 @@ void drawPinned() {
             }
         }
         ImGui::EndDisabled();
+
+        // Tooltip names the control and its window; right-click opens the same pin menu as the original.
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
             ImGui::SetTooltip("%s%s%s (pinned; right-click to unpin)", text.c_str(), r.scopeTitle.empty() ? "" : " - ",
                               r.scopeTitle.c_str());
@@ -444,6 +499,8 @@ void drawCustomization() {
 bool any() {
     return !board().pinned.empty();
 }
+
+// Unpins everything and drops queued actions.
 void clear() {
     board().pinned.clear();
     board().pending.clear();
@@ -454,6 +511,8 @@ void clear() {
 std::vector<std::string> pinnedKeys() {
     return board().pinned;
 }
+
+// Adds (at the end) or removes a pin and marks the ini dirty so it is saved.
 void setPinned(const std::string &key, bool pinned) {
     auto &p = board().pinned;
     const auto found = std::find(p.begin(), p.end(), key);
@@ -471,9 +530,12 @@ void install() {
     ImGuiSettingsHandler handler;
     handler.TypeName = "NereusPins";
     handler.TypeHash = ImHashStr("NereusPins");
+
     handler.ClearAllFn = [](ImGuiContext *, ImGuiSettingsHandler *) { board().pinned.clear(); };
     handler.ReadOpenFn = [](ImGuiContext *, ImGuiSettingsHandler *, const char *) -> void * { return &board(); };
+    // Restores a pin with a placeholder record (label and title only until its original draws).
     handler.ReadLineFn = [](ImGuiContext *, ImGuiSettingsHandler *, void *, const char *line) {
+        // Split on tabs.
         std::vector<std::string> fields;
         for (const char *at = line;; ++at) {
             const char *end = std::strchr(at, '\t');
@@ -506,4 +568,5 @@ void install() {
     };
     ImGui::AddSettingsHandler(&handler);
 }
+
 } // namespace nereus::ros_viewer::pins

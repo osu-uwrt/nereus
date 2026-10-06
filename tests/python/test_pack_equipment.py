@@ -23,12 +23,14 @@ items:
   frames:
   - {id: tag, position_m: [0.003, 0, 0.1], orientation_wxyz: [0.5, 0.5, 0.5, 0.5]}
 """
+# Generic scenario lines the placement tests rewrite.
 POOL_PLACEMENT = "pool_placement: {position_m: [0, 0, 0], yaw_deg: 0}\n"
 HOOP = "- {task: hoop, position_m: [5, 2.5, -1], yaw_deg: 90}\n"
 INITIAL = "initial: {frame: com, position_m: [2, 2, -1],"
 
 
 def close(test: unittest.TestCase, actual: Any, expected: Any, where: str = "") -> None:
+    """Compare nested dicts/lists exactly, floats to 1e-9; `where` names the failing path."""
     if isinstance(expected, dict):
         test.assertEqual(sorted(actual), sorted(expected), where)
         for key in expected:
@@ -44,7 +46,10 @@ def close(test: unittest.TestCase, actual: Any, expected: Any, where: str = "") 
 
 
 class EquipmentCase(PackRejectionCase):
+    """The generic pack set, optionally with the EQUIPMENT pack selected by the scenario."""
+
     def add_equipment(self, placements: str = "") -> None:
+        """Write the equipment pack, select it, and insert `placements` before task_placements."""
         folder = self.root / "equipment"
         (folder / "assets").mkdir(parents=True)
         (folder / "assets" / "board.obj").write_bytes(b"mesh")
@@ -60,6 +65,7 @@ class EquipmentCase(PackRejectionCase):
             )
 
     def placed(self) -> dict[str, Any]:
+        """Resolve and return the placed equipment items by id."""
         resolved = resolve_scenario(self.scenario)
         assert resolved.equipment is not None
         return {item["id"]: item for item in resolved.equipment["placed"]}
@@ -73,6 +79,7 @@ class EquipmentPackTests(EquipmentCase):
         self.assertNotIn("equipment", resolved.asset_paths())
 
     def test_unplaced_items_are_not_drawn(self) -> None:
+        """A selected pack with no placements still resolves its assets and manifest entry."""
         self.add_equipment()
         resolved = resolve_scenario(self.scenario)
         assert resolved.equipment is not None
@@ -99,6 +106,7 @@ class PlacementTreeTests(EquipmentCase):
         self.assertEqual(scenario["task_placements"][0]["position_m"], [5, 2.5, -1])
 
     def test_equipment_relative_to_the_pool_follows_it(self) -> None:
+        """An item placed relative to a moved, yawed pool picks up the pool's pose."""
         self.edit(
             "scenario/scenario.yaml",
             POOL_PLACEMENT,
@@ -108,11 +116,14 @@ class PlacementTreeTests(EquipmentCase):
             "equipment_placements:\n- {item: board, relative_to: pool, position_m: [1, 0, -0.3]}\n"
         )
         board = self.placed()["board"]
+
+        # Pool yawed 90 deg: the item's +x offset becomes +y in the world.
         close(self, board["position_m"], [10.0, 1.0, -0.3])
         half = math.sqrt(0.5)
         close(self, board["orientation_wxyz"], [half, 0.0, 0.0, half])
 
     def test_tasks_and_start_may_hang_from_equipment(self) -> None:
+        """Tasks and the robot start may be placed relative to an item; results are in world."""
         self.add_equipment(
             "equipment_placements:\n- {item: board, position_m: [1, 2, -0.5], yaw_deg: 180}\n"
         )
@@ -127,6 +138,8 @@ class PlacementTreeTests(EquipmentCase):
             "initial: {frame: com, relative_to: board, position_m: [2, 0, -0.5],",
         )
         scenario = resolve_scenario(self.scenario).scenario
+
+        # The board is yawed 180 deg, so offsets flip in x and y and yaws add.
         close(
             self,
             scenario["task_placements"][0],
@@ -161,6 +174,8 @@ class PlacementTreeTests(EquipmentCase):
         self.add_equipment(
             "equipment_placements:\n- {item: board, relative_to: pool, position_m: [0, 4, -0.5]}\n"
         )
+
+        # Each case edits a pristine copy of the scenario.
         scenario = self.root / "scenario" / "scenario.yaml"
         original = scenario.read_text(encoding="utf-8")
         world = "world_placement: {relative_to: board/tag, position_m: [0, 0.4, 0], rpy_deg: [-90, -90, 0]}\n"
@@ -199,10 +214,13 @@ class PlacementTreeTests(EquipmentCase):
             with self.subTest(new=new):
                 scenario.write_text(original.replace(old, new, 1), encoding="utf-8")
                 self.assert_resolve_rejects(fragment)
+
+        # The untouched scenario still resolves.
         scenario.write_text(original, encoding="utf-8")
         resolve_scenario(self.scenario)
 
     def test_cycle_through_equipment(self) -> None:
+        """A task placed relative to an item that is itself placed relative to the task fails."""
         self.add_equipment(
             "equipment_placements:\n- {item: board, relative_to: hoop, position_m: [0, 0, 0]}\n"
         )
@@ -223,6 +241,8 @@ class PlacementTreeTests(EquipmentCase):
 
 
 class UwrtEquipmentTests(unittest.TestCase):
+    """The shipped UWRT equipment pack and the Talos RPAC / RoboSub scenarios that use it."""
+
     def test_board_tag_frame_matches_the_print(self) -> None:
         board = load_pack(TALOS / "equipment" / "uwrt").plain()["items"][0]
         self.assertEqual([frame["id"] for frame in board["frames"]], ["tag"])

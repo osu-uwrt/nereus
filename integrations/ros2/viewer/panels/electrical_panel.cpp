@@ -1,11 +1,16 @@
+// Electrical panel: power rail commands, IMU mag cal and register access, FOG gyro tare, pinger settings and the
+// IVC link, each section shown only when the bound Electrical provider configures it.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/pins.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <imgui.h>
+
 namespace nereus::ros_viewer::panels {
 namespace {
+
+// Wrapped text in the disabled-text colour; nothing for an empty string.
 void muted(const std::string &text) {
     if (text.empty())
         return;
@@ -13,17 +18,19 @@ void muted(const std::string &text) {
     ImGui::TextWrapped("%s", text.c_str());
     ImGui::PopStyleColor();
 }
+
 // The RViz electrical panel: power commands (power cuts ask first), IMU mag cal and register edit, FOG tare,
 // pinger and IVC.
 class ElectricalPanel final : public Panel {
     std::shared_ptr<Electrical> electrical;
-    char reg[8]{}, data[128]{};
-    std::string shownValue;
-    int samples = 100000, header = 0, status = 0, rawCommand = 0;
-    double tareTimeout = 20;
-    bool pingerEnabled = true, pingerInitialized = false;
-    std::size_t logLines = 0;
+    char reg[8]{}, data[128]{};                                   // IMU register number and value text being edited
+    std::string shownValue;                                       // last register value copied into `data`
+    int samples = 100000, header = 0, status = 0, rawCommand = 0; // tare samples; IVC header/status/command
+    double tareTimeout = 20;                                      // seconds
+    bool pingerEnabled = true, pingerInitialized = false;         // checkbox seeded once from the provider
+    std::size_t logLines = 0;                                     // IVC log length last frame, to auto-scroll
 
+    // Power commands two per row; those marked `confirm` (power cuts) open a confirmation popup first.
     void power(const ElectricalState &s) {
         sectionTitle("Power");
         const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
@@ -58,6 +65,8 @@ class ElectricalPanel final : public Panel {
         }
         muted(s.commandMessage);
     }
+
+    // VectorNav mag cal (start/cancel with progress) and register read/write/save.
     void imu(const ElectricalState &s) {
         sectionTitle("IMU (VectorNav)");
         ImGui::BeginDisabled(!s.magCalRunning && !s.magCalReady);
@@ -71,6 +80,8 @@ class ElectricalPanel final : public Panel {
         if (s.magCalRunning || s.magCalProgress > 0)
             progressBar(s.magCalProgress);
         muted(s.magCalReady || s.magCalRunning ? s.magCalMessage : "Mag cal action unavailable");
+
+        // Register access: Read needs a register, Write also a value; all wait for the service.
         if (s.registerValue != shownValue) { // a read fills the value field, as RViz does
             shownValue = s.registerValue;
             std::snprintf(data, sizeof(data), "%s", shownValue.c_str());
@@ -99,6 +110,8 @@ class ElectricalPanel final : public Panel {
         ImGui::EndDisabled();
         muted(s.registerReady || s.registerPending ? s.registerMessage : "IMU config service unavailable");
     }
+
+    // FOG gyro tare: sample count and timeout (locked while running), then start/cancel.
     void fog(const ElectricalState &s) {
         sectionTitle("FOG");
         ImGui::BeginDisabled(s.tareRunning);
@@ -119,6 +132,8 @@ class ElectricalPanel final : public Panel {
         ImGui::EndDisabled();
         muted(s.tareReady || s.tareRunning ? s.tareMessage : "Gyro tare action unavailable");
     }
+
+    // Pinger enable plus one button per frequency (the board's current one highlighted) and its amplitude.
     void pinger(const ElectricalState &s) {
         sectionTitle("Pinger");
         if (!pingerInitialized) {
@@ -129,6 +144,7 @@ class ElectricalPanel final : public Panel {
             electrical->setPingerEnabled(pingerEnabled);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Re-sent every second, so a rebooted board picks it up (as RViz).");
+
         bool first = true;
         for (const int khz : s.pingerFrequencies) {
             const std::string label = std::to_string(khz) + " kHz";
@@ -146,12 +162,15 @@ class ElectricalPanel final : public Panel {
             if (selected)
                 ImGui::PopStyleColor();
         }
+
         char amplitude[32] = "--";
         if (s.pingerAmplitude)
             std::snprintf(amplitude, sizeof(amplitude), "%.3g", *s.pingerAmplitude);
         muted("Selected: " + (s.pingerSelected ? std::to_string(*s.pingerSelected) + " kHz" : std::string("--")) +
               "   Amplitude: " + amplitude);
     }
+
+    // IVC: pick a header, then a status (for status headers) or a raw 0..31 command, send, and the traffic log.
     void ivc(const ElectricalState &s) {
         sectionTitle("IVC");
         header = std::clamp(header, 0, std::max(0, int(s.ivcHeaders.size()) - 1));
@@ -162,6 +181,7 @@ class ElectricalPanel final : public Panel {
                     header = i;
             ImGui::EndCombo();
         }
+
         const bool statusMessage = header < s.ivcStatusHeaders;
         const float send = 70;
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - send - ImGui::GetStyle().ItemSpacing.x);
@@ -181,6 +201,7 @@ class ElectricalPanel final : public Panel {
         if (pins::Button("Send###ivc_send", {send, 0}))
             electrical->sendIvc(header, statusMessage ? status : rawCommand);
         ImGui::EndDisabled();
+
         ImGui::BeginChild("ivc_log", {-1, 130}, ImGuiChildFlags_Borders);
         if (s.ivcLog.empty())
             ImGui::TextDisabled("No IVC traffic yet");
@@ -195,12 +216,15 @@ class ElectricalPanel final : public Panel {
 
   public:
     explicit ElectricalPanel(const Binding &b) : electrical(std::dynamic_pointer_cast<Electrical>(b.provider)) {}
+
     void draw() override {
         if (!electrical) {
             emptyState("Connected, this shows the power rails and their switches, the IMU, FOG and pinger, and the "
                        "IVC link.");
             return;
         }
+
+        // Only the sections the provider has configured.
         const auto s = electrical->state();
         if (!s.commands.empty())
             power(s);
@@ -214,10 +238,14 @@ class ElectricalPanel final : public Panel {
             ivc(s);
     }
 };
+
 } // namespace
+
+// Registers the "electrical" panel type (takes no YAML keys).
 void registerElectricalPanel(Registry &r) {
     r.panels.emplace("electrical",
                      ViewFactory<Panel>{Kind::Electrical, [](const YAML::Node &n) { keys(n, {}, "electrical panel"); },
                                         [](const Binding &b) { return std::make_unique<ElectricalPanel>(b); }});
 }
+
 } // namespace nereus::ros_viewer::panels

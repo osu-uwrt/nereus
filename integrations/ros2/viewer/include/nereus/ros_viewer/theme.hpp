@@ -9,6 +9,7 @@
 #include <vector>
 
 namespace nereus::ros_viewer {
+// The colours the viewer draws itself, per theme (ImGui's own colours live in its style).
 struct Palette {
     ImVec4 text, muted;                                      // body text, secondary text
     ImVec4 accent;                                           // highlights: headings, OK status, selected tab line
@@ -20,6 +21,8 @@ struct Palette {
     ImVec4 change, changeText;                               // the lamp (a running clock) and its ink
     ImVec4 enable, enableHovered, enablePressed, enableText; // Enable (the robot is off): its own action ink
 };
+
+// A theme's identity and fonts, as listed in the theme menu.
 struct Theme {
     std::string id, label, description;
     std::string fontFamily; // empty: the viewer's own font (DejaVu Sans)
@@ -27,6 +30,7 @@ struct Theme {
     // Font files shipped with the viewer (content/viewer/fonts), in place of a family: body, bold, large figures.
     std::string fontRegular, fontStrong, fontFigures;
 };
+
 // Themes are data: one YAML file each (content/viewer/themes). loadThemes reads a directory (replacing the
 // built-in fallback) and returns a warning per file it could not use; themes() lists them by their `order`, the
 // default first.
@@ -37,18 +41,22 @@ const Theme &currentThemeInfo();
 bool applyTheme(const std::string &id);
 const std::string &currentTheme();
 const Palette &palette();
+
 // WCAG contrast ratio of two colours (1..21).
 float contrastRatio(ImVec4 a, ImVec4 b);
+
 // Interface scale (1 = the viewer's own 100 % sizes): the style's sizes and every fixed size written with ui().
 // Re-applies the current theme; the host rebuilds its fonts at the same scale.
 void setInterfaceScale(float scale);
 float interfaceScale();
+// A size in 100 %-scale pixels, scaled to the current interface scale.
 inline float ui(float pixels) {
     return pixels * interfaceScale();
 }
 inline ImVec2 ui(ImVec2 pixels) {
     return {ui(pixels.x), ui(pixels.y)};
 }
+
 // The host's fonts beyond the body font, at the interface scale (null until the host loads them: the current font).
 struct TypeRamp {
     ImFont *strong = nullptr;      // the body size in bold: section titles, table headers
@@ -58,6 +66,7 @@ struct TypeRamp {
 };
 void setTypeRamp(const TypeRamp &);
 const TypeRamp &typeRamp();
+
 // A section title in the strong font: over a rule (ImGui::SeparatorText), or in a ruled theme the text with a
 // heavy rule beneath it, the way a results sheet heads each event.
 void sectionTitle(const char *text);
@@ -91,6 +100,7 @@ inline float readoutWidth(const char *label, const char *value) {
         width += ImGui::CalcTextSize(value).x;
     return width;
 }
+// Draws the readout described above, readoutWidth() wide.
 inline bool statusReadout(const char *label, const char *value, ImVec4 dot, ImVec4 valueInk) {
     const ImVec2 at = ImGui::GetCursorScreenPos(), size{readoutWidth(label, value), ImGui::GetFrameHeight()};
     ImGui::InvisibleButton("##readout", size);
@@ -104,17 +114,20 @@ inline bool statusReadout(const char *label, const char *value, ImVec4 dot, ImVe
                   ImGui::GetColorU32(valueInk), value);
     return ImGui::IsItemHovered();
 }
+
 // A panel's explanation of what it shows once connected (muted, wrapped).
 inline void emptyState(const char *text) {
     ImGui::PushStyleColor(ImGuiCol_Text, palette().muted);
     ImGui::TextWrapped("%s", text);
     ImGui::PopStyleColor();
 }
+
 // A theme with bevels (Classic: a border shadow): edges drawn raised (light above / left, shadow below / right) or
 // sunken (the reverse), as Qt's Windows style draws buttons and fields.
 inline bool bevelledTheme() {
     return ImGui::GetStyle().Colors[ImGuiCol_BorderShadow].w > 0;
 }
+// Draws the 1-pixel bevel inside the rectangle [min, max), raised or sunken.
 inline void bevel(ImDrawList *draw, ImVec2 min, ImVec2 max, bool raised) {
     const ImU32 light = ImGui::GetColorU32(ImGuiCol_Border), shadow = ImGui::GetColorU32(ImGuiCol_BorderShadow);
     const ImU32 topLeft = raised ? light : shadow, bottomRight = raised ? shadow : light;
@@ -123,6 +136,7 @@ inline void bevel(ImDrawList *draw, ImVec2 min, ImVec2 max, bool raised) {
     draw->AddLine({max.x - 1, min.y}, {max.x - 1, max.y - 1}, bottomRight);
     draw->AddLine({max.x - 1, max.y - 1}, {min.x, max.y - 1}, bottomRight);
 }
+
 // A progress bar whose label stays at its left; over the filled part the label is drawn again in whichever of the
 // theme's inks (text, window paper) stands out more from the fill, so it reads wherever the fill has reached.
 // No label: the percentage.
@@ -133,6 +147,8 @@ inline void progressBar(float fraction, const char *label = nullptr) {
         std::snprintf(percent, sizeof(percent), "%.0f %%", double(fraction * 100));
         label = percent;
     }
+
+    // Reserve a frame-high row across the available width, then draw the track, the fill and the border.
     const auto &style = ImGui::GetStyle();
     const ImVec2 at = ImGui::GetCursorScreenPos(), size{ImGui::GetContentRegionAvail().x, ImGui::GetFrameHeight()};
     ImGui::Dummy(size);
@@ -149,6 +165,8 @@ inline void progressBar(float fraction, const char *label = nullptr) {
         bevel(draw, at, end, false);
     else if (style.FrameBorderSize > 0)
         draw->AddRect(at, end, ImGui::GetColorU32(ImGuiCol_Border), rounding, 0, style.FrameBorderSize);
+
+    // The label twice, clipped: normal ink over the empty part, the higher-contrast ink over the fill.
     const ImVec4 fill = style.Colors[ImGuiCol_PlotHistogram], ink = style.Colors[ImGuiCol_Text],
                  paper = style.Colors[ImGuiCol_WindowBg];
     const ImVec4 onFill =
@@ -163,11 +181,13 @@ inline void progressBar(float fraction, const char *label = nullptr) {
         draw->PopClipRect();
     }
 }
+
 // A status chip: an outlined capsule with a status dot and the text in the status colour (in a bevelled theme, a
 // sunken status-bar panel, as Qt draws one). It reads as a label, not a button; returns hover for a tooltip.
 inline float statusChipWidth(const char *text) {
     return ImGui::CalcTextSize(text, nullptr, true).x + 2 * ImGui::GetStyle().FramePadding.x + ui(13);
 }
+// Draws the chip described above, statusChipWidth() wide; text after "##" is the ID only.
 inline bool statusChip(const char *text, ImVec4 tint) {
     const ImVec2 at = ImGui::GetCursorScreenPos(), size{statusChipWidth(text), ImGui::GetFrameHeight()};
     ImGui::InvisibleButton("##status_chip", size);

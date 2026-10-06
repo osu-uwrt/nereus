@@ -1,9 +1,11 @@
+// Screen-space overlays (detections, MPC and planned paths, thrust arrows, TF axes) and the TF tree table.
 #include "overlay_draw.hpp"
 #include "nereus/ros_viewer/theme.hpp"
 #include <algorithm>
 #include <imgui_internal.h>
 
 namespace nereus::ros_viewer::host {
+// Clip space -> NDC -> pixels (ImGui y grows downwards).
 bool projectToScreen(const glm::mat4 &vp, const ScreenRect &rect, const glm::vec4 &world, ImVec2 &pixel) {
     const auto clip = vp * world;
     if (clip.w <= 0 || clip.z < -clip.w || clip.z > clip.w)
@@ -12,11 +14,13 @@ bool projectToScreen(const glm::mat4 &vp, const ScreenRect &rect, const glm::vec
              rect.position.y + (.5f - clip.y / clip.w * .5f) * rect.height};
     return true;
 }
+
 ImU32 rgba(float r, float g, float b, float a) {
     return ImGui::ColorConvertFloat4ToU32({r, g, b, a});
 }
 
 namespace {
+// A 6 px dash / 4 px gap line from a to b.
 void dashedLine(ImDrawList *draw, ImVec2 a, ImVec2 b, ImU32 color, float thickness) {
     const float dx = b.x - a.x, dy = b.y - a.y, length = std::sqrt(dx * dx + dy * dy);
     constexpr float dash = 6.f, gap = 4.f;
@@ -34,6 +38,8 @@ void drawDetections(const std::vector<PlacedDetection> &detections, const glm::m
     auto *draw = ImGui::GetWindowDrawList();
     draw->PushClipRect(rect.position, {rect.position.x + rect.width, rect.position.y + rect.height}, true);
     bool haveApprox = false;
+
+    // Each detection: pick its tint from the placement kind, then draw by marker type.
     for (const auto &placed : detections) {
         const auto &m = placed.marker;
         using Kind = PlacedDetection::Kind;
@@ -43,7 +49,9 @@ void drawDetections(const std::vector<PlacedDetection> &detections, const glm::m
         const float alpha = m.color.a * (approx ? .45f : 1.f);
         const ImU32 tint = outlined ? rgba(.25f, .9f, 1.f, std::max(alpha, approx ? .45f : .9f))
                                     : rgba(m.color.r, m.color.g, m.color.b, alpha);
+
         if (m.type == Marker::CUBE) {
+            // Flat rectangle in the marker's XY plane (scale.x by scale.y), skipped unless all corners project.
             const float hx = float(m.scale.x) / 2, hy = float(m.scale.y) / 2;
             const glm::vec4 corners[] = {{-hx, -hy, 0, 1}, {hx, -hy, 0, 1}, {hx, hy, 0, 1}, {-hx, hy, 0, 1}};
             ImVec2 pixels[4];
@@ -68,11 +76,14 @@ void drawDetections(const std::vector<PlacedDetection> &detections, const glm::m
                 !projectToScreen(vp, rect, placed.pose * glm::vec4(float(m.scale.x) * .77f, 0, 0, 1), neck) ||
                 !projectToScreen(vp, rect, placed.pose * glm::vec4(float(m.scale.x), 0, 0, 1), tip))
                 continue;
+
             const float thickness = 1.5f;
             if (approx)
                 dashedLine(draw, tail, neck, tint, thickness);
             else
                 draw->AddLine(tail, neck, tint, thickness);
+
+            // Head: a dot when it projects to nothing, else a triangle 3..12 px half-wide.
             const ImVec2 axis{tip.x - neck.x, tip.y - neck.y};
             const float headLength = std::sqrt(axis.x * axis.x + axis.y * axis.y);
             if (headLength < 1e-3f) {
@@ -87,6 +98,8 @@ void drawDetections(const std::vector<PlacedDetection> &detections, const glm::m
             draw->AddTriangle(head[0], head[1], head[2], tint, 1.f);
         }
     }
+
+    // Legend plate for the styles in use.
     if (both || haveApprox) {
         float y = rect.position.y + ui(52); // below the status pills
         const float x = rect.position.x + ui(10);
@@ -117,6 +130,7 @@ void drawMpcPath(const std::vector<glm::mat4> &path, const glm::mat4 &vp, const 
     const ImU32 line = IM_COL32(255, 170, 60, 230), heading = IM_COL32(255, 225, 150, 230);
     ImVec2 previous;
     bool previousVisible = false;
+    // Connect consecutive stage positions that both project; dot every stage.
     for (std::size_t i = 0; i < path.size(); ++i) {
         ImVec2 pixel;
         const bool visible = projectToScreen(vp, rect, path[i][3], pixel);
@@ -155,6 +169,8 @@ void drawPlannedPath(const std::vector<glm::mat4> &path, const glm::mat4 &vp, co
         previous = pixel;
         previousVisible = visible;
     }
+
+    // Ring at the final pose.
     if (!path.empty()) {
         ImVec2 end;
         if (projectToScreen(vp, rect, path.back()[3], end))
@@ -171,6 +187,8 @@ void drawThrust(const std::vector<ThrusterMount> &mounts, const std::vector<floa
     for (const auto &mount : mounts) {
         if (mount.index >= forces.size())
             continue;
+
+        // Arrow in the world: from the mount along its axis, signed length from the force.
         const float length = forces[mount.index] * mount.inputScale * metresPerNewton;
         if (std::abs(length) < 1e-3f)
             continue;
@@ -178,6 +196,7 @@ void drawThrust(const std::vector<ThrusterMount> &mounts, const std::vector<floa
         ImVec2 tail, tip;
         if (!projectToScreen(vp, rect, at, tail) || !projectToScreen(vp, rect, at + axis * length, tip))
             continue;
+
         // Head of a fixed screen size (shortened arrows keep a readable head), at most half the arrow.
         const ImVec2 screen{tip.x - tail.x, tip.y - tail.y};
         const float pixels = std::sqrt(screen.x * screen.x + screen.y * screen.y);
@@ -201,6 +220,8 @@ void drawTfAxes(const TfOverlay &tf, const glm::mat4 &vp, const ScreenRect &rect
     draw->PushClipRect(rect.position, {rect.position.x + rect.width, rect.position.y + rect.height}, true);
     const ImU32 colors[] = {IM_COL32(255, 70, 70, 255), IM_COL32(75, 235, 100, 255), IM_COL32(80, 150, 255, 255)};
     const ImU32 white = ImGui::ColorConvertFloat4ToU32({.87f, .92f, .95f, 1});
+
+    // Each frame: x / y / z axes in red / green / blue, a white origin dot and a shadowed name.
     if (tf.snapshot)
         for (const auto &[name, frame] : tf.snapshot->frames) {
             ImVec2 origin;
@@ -220,6 +241,8 @@ void drawTfAxes(const TfOverlay &tf, const glm::mat4 &vp, const ScreenRect &rect
                 draw->AddText(tf.font, tf.font->FontSize, at, white, name.c_str());
             }
         }
+
+    // Caption and the truth-vs-estimate difference line under the status pills.
     draw->AddText(tf.font, tf.font->FontSize, {rect.position.x + ui(14), rect.position.y + ui(50)}, white,
                   tf.caption.c_str());
     if (tf.snapshot && !tf.snapshot->difference.empty())
@@ -229,6 +252,7 @@ void drawTfAxes(const TfOverlay &tf, const glm::mat4 &vp, const ScreenRect &rect
 }
 
 void drawTfTree(TfTree &tree, const std::string &root) {
+    // Bulk toggles above the table.
     if (ImGui::Button("Show all"))
         tree.selectAll(true);
     ImGui::SameLine();
@@ -241,6 +265,8 @@ void drawTfTree(TfTree &tree, const std::string &root) {
         ImGui::TableSetupColumn("Only this", ImGuiTableColumnFlags_WidthFixed, 76);
         ImGui::TableSetupColumn("With children", ImGuiTableColumnFlags_WidthFixed, 112);
         ImGui::TableHeadersRow();
+
+        // One row per frame, recursing into children while the node is open; `visited` guards against cycles.
         std::set<std::string> visited;
         const auto row = [&](const auto &self, const std::string &name) -> void {
             if (!visited.insert(name).second)
@@ -257,6 +283,8 @@ void drawTfTree(TfTree &tree, const std::string &root) {
                 flags |= ImGuiTreeNodeFlags_Leaf;
             if (name == root)
                 flags |= ImGuiTreeNodeFlags_DefaultOpen;
+
+            // Column 0: tree node (right-click for branch show / hide).
             const bool open = ImGui::TreeNodeEx("branch", flags, "%s", name.c_str());
             if (ImGui::BeginPopupContextItem("branch selection")) {
                 if (ImGui::MenuItem("Show branch"))
@@ -269,6 +297,8 @@ void drawTfTree(TfTree &tree, const std::string &root) {
                 ImGui::SameLine();
                 ImGui::TextDisabled("(unavailable)");
             }
+
+            // Column 1: this frame only. Column 2: tri-state for the whole branch (MixedValue when partial).
             ImGui::TableSetColumnIndex(1);
             ImGui::Checkbox("##enabled", &frame.enabled);
             ImGui::TableSetColumnIndex(2);
@@ -283,6 +313,7 @@ void drawTfTree(TfTree &tree, const std::string &root) {
                     ImGui::SetTooltip(
                         "Show or hide this frame and all descendants.\nA filled square means some frames are shown.");
             }
+
             ImGui::TableSetColumnIndex(0);
             if (open) {
                 if (!leaf)
@@ -292,6 +323,7 @@ void drawTfTree(TfTree &tree, const std::string &root) {
             }
             ImGui::PopID();
         };
+
         for (const auto &r : tree.roots)
             row(row, r);
         ImGui::EndTable();

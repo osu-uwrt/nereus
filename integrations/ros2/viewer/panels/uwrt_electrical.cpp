@@ -1,3 +1,5 @@
+// "uwrt.electrical" provider: the RViz electrical panel's tools for the viewer (board commands, IMU mag cal
+// and registers, FOG tare, pinger and IVC link).
 #include "ros_runtime.hpp"
 #include <cmath>
 #include <ctime>
@@ -23,6 +25,7 @@ using TareGoal = rclcpp_action::ClientGoalHandle<TareGyro>;
 using ImuSerial = riptide_msgs2::srv::QueryImuSerial;
 using CommandMsg = riptide_msgs2::msg::ElectricalCommand;
 
+// Local wall-clock time as HH:MM:SS, for message and log prefixes.
 std::string clockStamp() {
     char text[16];
     const std::time_t now = std::time(nullptr);
@@ -31,6 +34,7 @@ std::string clockStamp() {
     std::strftime(text, sizeof(text), "%H:%M:%S", &local);
     return text;
 }
+
 // The register fields of a VectorNav reply, "$VNRRG,05,115200*58" -> "115200" (as the RViz panel shows them).
 std::string registerFields(const std::string &reply) {
     auto fields = reply;
@@ -39,6 +43,8 @@ std::string registerFields(const std::string &reply) {
             fields = fields.substr(comma + 1);
     return fields.substr(0, fields.find('*'));
 }
+
+// A VectorNav register number: one to three decimal digits.
 bool digits(const std::string &text) {
     return !text.empty() && text.size() <= 3 && text.find_first_not_of("0123456789") == std::string::npos;
 }
@@ -47,6 +53,7 @@ bool digits(const std::string &text) {
 // service, the FOG driver's tare action, the pinger broker and the IVC link. Sections absent from the options
 // are not shown. The pinger enable state is re-sent every `heartbeat_s` (as RViz) so a rebooted board recovers it.
 class UwrtElectrical final : public Electrical {
+    // A configured board command: the UI item plus the ElectricalCommand byte it sends.
     struct Command {
         ElectricalCommandItem item;
         uint8_t value = 0;
@@ -58,6 +65,8 @@ class UwrtElectrical final : public Electrical {
           saveTimeout(cfg["save_timeout"].as<double>(10)) {
         auto node = runtime->node;
         const auto name = [&](const YAML::Node &n) { return expand(n.as<std::string>(), ctx); };
+
+        // Each optional section creates its endpoints and sets its has* flag so the panel shows it.
         if (cfg["command_topic"]) {
             commandPub = node->create_publisher<CommandMsg>(name(cfg["command_topic"]), 10);
             for (const auto &entry : cfg["commands"])
@@ -65,15 +74,18 @@ class UwrtElectrical final : public Electrical {
                                      entry["confirm"].as<bool>(false)},
                                     uint8_t(entry["value"].as<int>())});
         }
+
         if (const auto imu = cfg["imu"]) {
             value.hasImu = true;
             magCal = rclcpp_action::create_client<MagCal>(node, name(imu["mag_cal_action"]));
             registers = node->create_client<ImuSerial>(name(imu["config_service"]));
         }
+
         if (cfg["tare_action"]) {
             value.hasTare = true;
             tare = rclcpp_action::create_client<TareGyro>(node, name(cfg["tare_action"]));
         }
+
         if (const auto pinger = cfg["pinger"]) {
             value.hasPinger = true;
             value.pingerEnabled = pinger["enabled"].as<bool>(true);
@@ -92,6 +104,7 @@ class UwrtElectrical final : public Electrical {
                     value.pingerAmplitude = msg.data;
                 });
         }
+
         if (const auto ivc = cfg["ivc"]) {
             value.hasIvc = true;
             value.ivcHeaders = ivc["headers"].as<std::vector<std::string>>();
@@ -113,6 +126,7 @@ class UwrtElectrical final : public Electrical {
                     logIvc("ACK ", msg.data);
                 });
         }
+
         for (const auto &command : commands)
             value.commands.push_back(command.item);
         timer = node->create_wall_timer(std::chrono::milliseconds(100), [this] { tick(); });
@@ -124,12 +138,14 @@ class UwrtElectrical final : public Electrical {
         if (tareGoal && rclcpp::ok())
             tare->async_cancel_goal(tareGoal);
     }
+
     ElectricalState state() override {
         std::lock_guard<std::mutex> lock(mutex);
         auto copy = value;
         copy.ivcLog.assign(ivcLines.begin(), ivcLines.end());
         return copy;
     }
+
     void command(const std::string &id) override {
         std::lock_guard<std::mutex> lock(mutex);
         for (const auto &command : commands)
@@ -141,6 +157,8 @@ class UwrtElectrical final : public Electrical {
                 return;
             }
     }
+
+    // Starts the VectorNav mag cal action; a Cancel pressed before acceptance is applied on acceptance.
     void startMagCal() override {
         std::lock_guard<std::mutex> lock(mutex);
         if (!magCal || value.magCalRunning || !magCal->action_server_is_ready())
@@ -165,6 +183,7 @@ class UwrtElectrical final : public Electrical {
             else
                 value.magCalMessage = "Calibrating: turn the robot slowly through every orientation";
         };
+        // Progress: how far the deviation norm has fallen from the largest value seen in this run.
         options.feedback_callback = [this](MagGoal::SharedPtr, MagCal::Feedback::ConstSharedPtr feedback) {
             std::lock_guard<std::mutex> lock(mutex);
             double sum = 0;
@@ -192,6 +211,7 @@ class UwrtElectrical final : public Electrical {
         };
         magCal->async_send_goal(MagCal::Goal{}, options);
     }
+
     void cancelMagCal() override {
         std::lock_guard<std::mutex> lock(mutex);
         if (!value.magCalRunning)
@@ -201,17 +221,24 @@ class UwrtElectrical final : public Electrical {
         if (magGoal)
             magCal->async_cancel_goal(magGoal);
     }
+
+    // VectorNav ASCII commands: $VNRRG read register, $VNWRG write register, $VNWNV save to flash.
     void readRegister(const std::string &reg) override {
         if (digits(reg))
             request("$VNRRG," + reg, "Read register " + reg, timeout);
     }
+
+    // Data may not contain the sentence's own framing characters.
     void writeRegister(const std::string &reg, const std::string &data) override {
         if (digits(reg) && !data.empty() && data.find_first_of("$*\r\n") == std::string::npos)
             request("$VNWRG," + reg + "," + data, "Wrote register " + reg, timeout);
     }
+
     void saveImuSettings() override {
         request("$VNWNV", "Saved the IMU settings to flash", saveTimeout);
     }
+
+    // Starts the FOG driver's gyro tare action (sample count and timeout in seconds).
     void startTare(int samples, double seconds) override {
         std::lock_guard<std::mutex> lock(mutex);
         if (!tare || value.tareRunning || !tare->action_server_is_ready() || samples < 1 || !std::isfinite(seconds) ||
@@ -256,6 +283,7 @@ class UwrtElectrical final : public Electrical {
         };
         tare->async_send_goal(goal, options);
     }
+
     void cancelTare() override {
         std::lock_guard<std::mutex> lock(mutex);
         if (!value.tareRunning)
@@ -265,6 +293,7 @@ class UwrtElectrical final : public Electrical {
         if (tareGoal)
             tare->async_cancel_goal(tareGoal);
     }
+
     void setPingerEnabled(bool enabled) override {
         std::lock_guard<std::mutex> lock(mutex);
         if (!pingerEnable)
@@ -272,6 +301,7 @@ class UwrtElectrical final : public Electrical {
         value.pingerEnabled = enabled;
         publishPingerEnabled();
     }
+
     void setPingerFrequency(int khz) override {
         std::lock_guard<std::mutex> lock(mutex);
         if (!pingerFrequency || khz <= 0)
@@ -280,6 +310,8 @@ class UwrtElectrical final : public Electrical {
         msg.data = khz;
         pingerFrequency->publish(msg);
     }
+
+    // One IVC byte: 3-bit header, 5-bit command. Status headers only take a listed status index.
     void sendIvc(int header, int command) override {
         std::lock_guard<std::mutex> lock(mutex);
         if (!ivcTx || header < 0 || header >= int(value.ivcHeaders.size()) || header > 7 || command < 0 ||
@@ -291,6 +323,8 @@ class UwrtElectrical final : public Electrical {
     }
 
   private:
+    // Sends one sentence through the IMU serial query service; `done` is shown on success and `limit` is the
+    // reply timeout in seconds. One request at a time.
     void request(const std::string &text, const std::string &done, double limit) {
         std::lock_guard<std::mutex> lock(mutex);
         if (!registers || value.registerPending || !registers->service_is_ready())
@@ -323,12 +357,16 @@ class UwrtElectrical final : public Electrical {
                                               })
                          .request_id;
     }
+
+    // Publishes the pinger enable state and restarts the heartbeat interval (mutex held).
     void publishPingerEnabled() {
         std_msgs::msg::Bool msg;
         msg.data = value.pingerEnabled;
         pingerEnable->publish(msg);
         lastHeartbeat = Steady::now();
     }
+
+    // "header: status-or-number  (header-data)" for an IVC log line.
     std::string ivcName(uint8_t byte) const {
         const int header = byte >> 5, data = byte & 0x1F;
         std::string text = header < int(value.ivcHeaders.size()) ? value.ivcHeaders[header] : "header";
@@ -337,11 +375,15 @@ class UwrtElectrical final : public Electrical {
                                                                                         : std::to_string(data);
         return text + "  (" + std::to_string(header) + "-" + std::to_string(data) + ")";
     }
+
+    // Appends a timestamped IVC log line, keeping the last 200 (mutex held).
     void logIvc(const char *direction, uint8_t byte) {
         ivcLines.push_back(clockStamp() + "  " + direction + "  " + ivcName(byte));
         while (ivcLines.size() > 200)
             ivcLines.pop_front();
     }
+
+    // 10 Hz: readiness flags, request timeouts and the pinger heartbeat.
     void tick() {
         std::lock_guard<std::mutex> lock(mutex);
         const auto now = Steady::now();
@@ -369,26 +411,37 @@ class UwrtElectrical final : public Electrical {
             value.registerPending = false;
             value.registerMessage = "The IMU config service never replied";
         }
+
+        // heartbeat_s = 0 disables the periodic resend.
         if (pingerEnable && heartbeat > 0 && elapsed(lastHeartbeat) >= heartbeat)
             publishPingerEnabled();
     }
+
     std::shared_ptr<RosRuntime> runtime;
     std::mutex mutex;
     ElectricalState value;
     std::deque<std::string> ivcLines;
+    // Seconds; maxDeviation is the largest mag cal deviation seen (progress baseline).
     double timeout, saveTimeout, heartbeat = 0, registerLimit = 3, maxDeviation = 1e-10;
+
     std::vector<Command> commands;
     rclcpp::Publisher<CommandMsg>::SharedPtr commandPub;
+
+    // Action goals and their "sent but not yet accepted" / "cancel on acceptance" flags.
     rclcpp_action::Client<MagCal>::SharedPtr magCal;
     MagGoal::SharedPtr magGoal;
     bool magAwaiting = false, magCancel = false;
     rclcpp_action::Client<TareGyro>::SharedPtr tare;
     TareGoal::SharedPtr tareGoal;
     bool tareAwaiting = false, tareCancel = false;
+
+    // IMU register service request bookkeeping.
     rclcpp::Client<ImuSerial>::SharedPtr registers;
     uint64_t registerEpoch = 0;
     int64_t registerId = 0;
     Steady::time_point magSince{}, tareSince{}, registerSince{}, lastHeartbeat{};
+
+    // Pinger and IVC endpoints.
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pingerEnable;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr pingerFrequency;
     rclcpp::Subscription<std_msgs::msg::Int32>::SharedPtr pingerSelected;
@@ -398,6 +451,8 @@ class UwrtElectrical final : public Electrical {
     rclcpp::Subscription<riptide_msgs2::msg::UInt8Stamped>::SharedPtr ivcConfirm;
     rclcpp::TimerBase::SharedPtr timer;
 };
+
+// required(), with the section name prefixed to the error.
 void requireTopics(const YAML::Node &node, std::initializer_list<const char *> names, const char *where) {
     try {
         required(node, names);
@@ -406,6 +461,8 @@ void requireTopics(const YAML::Node &node, std::initializer_list<const char *> n
     }
 }
 } // namespace
+
+// Registers "uwrt.electrical"; every section is optional and validated on its own.
 void registerUwrtElectrical(Registry &registry, const RuntimeFactory &runtime) {
     registry.providers.emplace(
         "uwrt.electrical",

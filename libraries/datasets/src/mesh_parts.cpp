@@ -1,3 +1,4 @@
+// Part resolution for scene instances: rule matching, connected-piece splitting and part value allocation.
 #include <nereus/datasets/mesh_parts.hpp>
 
 #include <opencv2/core.hpp>
@@ -13,12 +14,15 @@
 namespace nereus::datasets {
 namespace r = nereus::rendering;
 namespace {
+
+// A vertex position quantized to the weld grid, and its hash (for the weld map in connectedPieces).
 struct Key {
     std::int64_t x, y, z;
     bool operator==(const Key &o) const {
         return x == o.x && y == o.y && z == o.z;
     }
 };
+
 struct KeyHash {
     std::size_t operator()(const Key &k) const {
         std::uint64_t h = static_cast<std::uint64_t>(k.x) * 0x9e3779b97f4a7c15ull;
@@ -28,17 +32,20 @@ struct KeyHash {
     }
 };
 
+// Union-find root with path halving.
 std::size_t findRoot(std::vector<std::size_t> &parent, std::size_t i) {
     while (parent[i] != i)
         i = parent[i] = parent[parent[i]];
     return i;
 }
 
+// Whether a parts.visuals rule selects this instance (task instances only; prop/frame match when given).
 bool matches(const VisualPart &rule, const InstanceOrigin &origin) {
     return !origin.task.empty() && rule.task == origin.task && rule.asset == origin.asset &&
            (!rule.prop || *rule.prop == origin.prop) && (!rule.frame || *rule.frame == origin.frame);
 }
 
+// Rewrites `mesh` with each selected submesh replaced by one submesh per connected piece; others are kept.
 SplitMesh split(const r::MeshAsset &mesh, const std::vector<bool> &selected) {
     r::MeshAsset out;
     out.minimum = mesh.minimum;
@@ -59,6 +66,7 @@ SplitMesh split(const r::MeshAsset &mesh, const std::vector<bool> &selected) {
     result.mesh = std::make_shared<const r::MeshAsset>(std::move(out));
     return result;
 }
+
 } // namespace
 
 std::vector<std::vector<std::size_t>> connectedPieces(const r::Submesh &submesh, double tolerance) {
@@ -88,6 +96,8 @@ std::vector<std::vector<std::size_t>> connectedPieces(const r::Submesh &submesh,
         unite(index[0], index[1]);
         unite(index[0], index[2]);
     }
+
+    // Group triangles by the root of their first vertex, pieces numbered in first-triangle order.
     std::vector<std::vector<std::size_t>> pieces;
     std::unordered_map<std::size_t, std::size_t> pieceOf;
     for (std::size_t t = 0; t < triangles; ++t) {
@@ -152,6 +162,8 @@ InstanceParts resolveParts(const std::shared_ptr<const r::MeshAsset> &mesh, cons
     out.mesh = mesh;
     if (!mesh)
         return out;
+
+    // At most one visual rule may match the instance.
     for (std::size_t i = 0; i < job.visuals.size(); ++i)
         if (matches(job.visuals[i], origin)) {
             if (out.rule)
@@ -165,6 +177,7 @@ InstanceParts resolveParts(const std::shared_ptr<const r::MeshAsset> &mesh, cons
     const std::string where = (origin.task.empty() ? std::string("?") : origin.task) + "/" + origin.prop + "/" +
                               origin.asset + (origin.frame.empty() ? "" : "@" + origin.frame);
 
+    // Per submesh: the part a visual rule gives it, else the part map of its diffuse texture (if any).
     std::vector<std::optional<std::string>> ruled(n);
     std::vector<const TexturePart *> mapped(n, nullptr);
     std::map<int, std::pair<std::string, const TexturePart *>> textureValues;
@@ -219,6 +232,8 @@ InstanceParts resolveParts(const std::shared_ptr<const r::MeshAsset> &mesh, cons
         originOf = rewritten.origin;
     }
 
+    // Fixed values start above the largest part-map value in use, so they never collide with map pixels.
+    // Split pieces each get their own value; an unsplit part shares one value across its submeshes.
     int next = textureValues.empty() ? 1 : textureValues.rbegin()->first + 1;
     std::map<std::string, int> pieces;
     std::map<std::string, std::uint8_t> fixed; // unsplit rule part -> its value
@@ -243,6 +258,8 @@ InstanceParts resolveParts(const std::shared_ptr<const r::MeshAsset> &mesh, cons
         } else if (mapped[s])
             label.part_map = mapped[s]->mask;
     }
+
+    // Part-map values become part instances too; then everything is ordered by value.
     std::map<std::string, int> texturePieces;
     for (const auto &[value, entry] : textureValues)
         out.parts.push_back({static_cast<std::uint8_t>(value), entry.first, texturePieces[entry.first]++, {}});
@@ -252,4 +269,5 @@ InstanceParts resolveParts(const std::shared_ptr<const r::MeshAsset> &mesh, cons
         out.submeshes.clear();
     return out;
 }
+
 } // namespace nereus::datasets

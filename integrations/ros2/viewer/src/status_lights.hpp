@@ -1,3 +1,4 @@
+// Robot status lights (LEDs) drawn as emissive boxes: configuration, per-light colour state and blinking.
 // Geometry and input topic come from a viewer YAML document (content/viewer/*_status_lights.yaml),
 // never from code. Emitter poses are given in a named robot-pack frame.
 #pragma once
@@ -13,11 +14,14 @@ namespace nereus::ros_viewer::host {
 // Transport-independent display state. ROS message translation stays in the node.
 enum class LightMode { Solid, SlowFlash, FastFlash, Breath, Flash };
 
+// One light's colour over time: a steady colour with a blink mode, plus a short one-off Flash pulse on top.
+// Times are ROS-clock seconds.
 struct LightState {
     glm::vec3 steady{0}, pulse{0};
     LightMode mode = LightMode::Solid;
     double pulseStart = 0, pulseEnd = 0;
 
+    // Flash starts a `duration`-second pulse and keeps the steady state; any other mode replaces it.
     void command(glm::vec3 rgb, LightMode next, double now, double duration) {
         if (next == LightMode::Flash) {
             pulse = rgb;
@@ -28,9 +32,12 @@ struct LightState {
             mode = next;
         }
     }
+
+    // Colour to draw at `now`: the pulse while it lasts, else the steady colour scaled by the mode's blink.
     glm::vec3 color(double now) const {
         if (now >= pulseStart && now < pulseEnd)
             return pulse;
+
         float brightness = 1;
         // Match RViz's ROS-clock phase and periods, including paused sim time.
         switch (mode) {
@@ -50,24 +57,29 @@ struct LightState {
     }
 };
 
+// One emitter: a box of `size` metres at `mount`, answering commands whose target mask overlaps `targets`.
 struct StatusLight {
     std::string id, frame;
-    uint32_t targets = UINT32_MAX;
-    glm::mat4 mount{1}; // in `frame`
+    uint32_t targets = UINT32_MAX; // bit mask matched against the command's targets
+    glm::mat4 mount{1};            // in `frame`
     glm::vec3 size{.01f};
     float radiance = 200;
     LightState state;
 };
 
+// All emitters plus the input message type and topic; parsed and validated from the status-lights YAML.
 struct StatusLights {
-    std::string input, topic;
+    std::string input, topic; // message type (LedCommand or ColorRGBA) and topic
     double flashDuration = .15;
     std::vector<StatusLight> lights;
 
     StatusLights() = default;
+    // An absent or null config gives no lights. Throws std::invalid_argument on an invalid document.
     explicit StatusLights(const YAML::Node &config) {
         if (!config || config.IsNull())
             return;
+
+        // Input and flash timing.
         input = config["input"]["type"].as<std::string>();
         topic = config["input"]["topic"].as<std::string>();
         if (input != "riptide_msgs2/msg/LedCommand" && input != "std_msgs/msg/ColorRGBA")
@@ -77,6 +89,8 @@ struct StatusLights {
         flashDuration = config["flash_duration"].as<double>(.15);
         if (!std::isfinite(flashDuration) || flashDuration <= 0 || flashDuration > 10)
             throw std::invalid_argument("Status light flash_duration must be in (0,10]");
+
+        // Emitters: unique ids, a frame (default: the document's), a target mask, pose [x y z r p y] and size.
         const auto defaultFrame = config["frame"].as<std::string>("");
         const auto entries = config["lights"];
         if (!entries.IsSequence() || entries.size() == 0 || entries.size() > 256)
@@ -91,6 +105,7 @@ struct StatusLights {
             light.targets = entry["target_mask"].as<uint32_t>(UINT32_MAX);
             if (!light.targets)
                 throw std::invalid_argument("Status light target_mask must not be zero");
+
             for (const auto &key : {"pose", "size"}) {
                 auto v = entry[key];
                 if (!v.IsSequence() || v.size() != (std::string(key) == "pose" ? 6 : 3))
@@ -99,6 +114,7 @@ struct StatusLights {
                     if (!std::isfinite(value.as<double>()))
                         throw std::invalid_argument("Status light geometry must be finite");
             }
+
             const auto p = entry["pose"];
             light.mount = pose(vec3(p), {p[3].as<float>(), p[4].as<float>(), p[5].as<float>()});
             light.size = vec3(entry["size"]);
@@ -111,6 +127,9 @@ struct StatusLights {
             lights.push_back(light);
         }
     }
+
+    // Apply a command (rgb clamped to [0, 1]) to every light whose mask overlaps `targets`; non-finite input
+    // is ignored.
     void command(glm::vec3 rgb, LightMode mode, uint32_t targets, double now) {
         if (!std::isfinite(now))
             return;

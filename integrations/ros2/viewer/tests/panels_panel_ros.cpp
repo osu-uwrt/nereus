@@ -1,3 +1,6 @@
+// The ROS-backed motion and autonomy providers against mock riptide endpoints: kill switch, controller commands,
+// teleop handoff, watchdogs, mission trees, a competing operator, then the standard pose/enable protocol and the
+// gizmo's pointer geometry. argv[1]: the UWRT panels config; argv[2]: a standard-protocol example config.
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panels/pose_math.hpp"
 #include "nereus/ros_viewer/panels/ros_providers.hpp"
@@ -33,6 +36,8 @@ int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
     const std::string robot = "operator_test_" + std::to_string(getpid());
     auto node = std::make_shared<rclcpp::Node>("operator_test", "/" + robot);
+
+    // TF: a static world -> map (10 m along x, yawed 90 deg) and a live map -> base_link at (1, 2, -1).
     tf2_ros::Buffer targetTf(node->get_clock());
     tf2_ros::TransformListener targetListener(targetTf, node, false);
     tf2_ros::TransformBroadcaster tf(node);
@@ -55,6 +60,8 @@ int main(int argc, char **argv) {
         tf.sendTransform(pose);
     };
     freshPose();
+
+    // Mock robot: record kill reports and controller commands; the teleop service replies from the spin loop.
     std::vector<Kill> reports;
     std::vector<Command> lin, ang;
     auto ks =
@@ -71,6 +78,7 @@ int main(int argc, char **argv) {
             delayed = header;
         });
     // Send deferred replies from the test loop, after the callback has returned.
+
     Registry registry;
     registerPanels(registry);
     registerHostPlaceholders(registry);
@@ -82,6 +90,8 @@ int main(int argc, char **argv) {
     auto composition = std::make_unique<Composition>(cfg, Context{robot, "map", false, false}, registry);
     auto control = std::dynamic_pointer_cast<Motion>(composition->providers().at("motion"));
     auto mission = std::dynamic_pointer_cast<Autonomy>(composition->providers().at("mission"));
+
+    // Mock autonomy: the run_tree action (can reject) and a tree list with one tree.
     using Execute = riptide_msgs2::action::ExecuteTree;
     using Goal = rclcpp_action::ServerGoalHandle<Execute>;
     std::shared_ptr<Goal> running;
@@ -96,7 +106,10 @@ int main(int argc, char **argv) {
         "autonomy/list_trees",
         [](riptide_msgs2::srv::ListTrees::Request::SharedPtr,
            riptide_msgs2::srv::ListTrees::Response::SharedPtr reply) { reply->trees = {"/trees/test.xml"}; });
+
     ros.start();
+    // Spins for `seconds`: `touch` keeps the UI watchdog fed, `fresh` republishes the robot pose; sends the
+    // deferred teleop reply unless `delay`, and completes cancellations of the running tree.
     auto spin = [&](double seconds, bool touch = true, bool fresh = true) {
         auto end = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
         while (std::chrono::steady_clock::now() < end) {
@@ -119,9 +132,11 @@ int main(int argc, char **argv) {
             std::this_thread::sleep_for(5ms);
         }
     };
+
     spin(1);
     assert(control->state().fresh && !control->state().enabled);
     assert(!reports.empty() && reports.back().switch_asserting_kill); // killed from the moment it comes up
+
     // Enable is never gated on pose: a stale estimator still lets the operator switch.
     spin(1.15, true, false);
     assert(!control->state().fresh);
@@ -136,6 +151,8 @@ int main(int argc, char **argv) {
     assert(control->state().enabled && !(control->state().mode == Mode::Position));
     assert(!reports.back().switch_asserting_kill && !reports.back().switch_needs_update); // latched enable
     assert(lin.back().mode == Command::DISABLED);
+
+    // Position mode publishes the setpoint as the "ghost" TF frame and as controller commands in world.
     control->activate(Mode::Position, control->state().actual);
     spin(.3);
     assert((control->state().mode == Mode::Position) && lin.back().mode == Command::POSITION);
@@ -147,6 +164,8 @@ int main(int argc, char **argv) {
     assert(std::abs(lin.back().setpoint_vect.x - 8) < 1e-4);
     assert(std::abs(lin.back().setpoint_vect.y - 1) < 1e-4);
     assert(std::abs(ang.back().setpoint_quat.z - std::sqrt(.5)) < 1e-4);
+
+    // A dragged map-frame target goes out in world coordinates (rotated by the world/map yaw).
     const auto targetAngles = glm::radians(glm::vec3(20, -15, 30));
     auto target = nereus::ros_viewer::rpyPose({4, 5, -2}, targetAngles);
     control->drag(target);
@@ -157,6 +176,7 @@ int main(int argc, char **argv) {
     const auto expectedQuat = glm::angleAxis(glm::half_pi<float>(), glm::vec3(0, 0, 1)) * glm::quat(targetAngles);
     const auto &q = ang.back().setpoint_quat;
     assert(std::abs(glm::dot(expectedQuat, glm::quat(q.w, q.x, q.y, q.z))) > 1 - 1e-5);
+
     // Each rotation handle changes its named Euler angle, preserving the others.
     for (int i = 0; i < 3; ++i) {
         auto edited = targetAngles;
@@ -167,12 +187,14 @@ int main(int argc, char **argv) {
         for (int c = 0; c < 4; ++c)
             assert(glm::length(actual[c] - expected[c]) < 1e-5);
     }
+
     // NaNs cannot enter the controller.
     const auto count = lin.size();
     target[3].x = std::numeric_limits<float>::quiet_NaN();
     control->drag(target);
     spin(.1);
     assert(lin.size() == count);
+
     // Watchdogs release manual control but never kill: the robot keeps its last command (untethered runs).
     const auto held = lin.size();
     spin(.9, false); // render hang, while ROS and TF continue
@@ -183,11 +205,14 @@ int main(int argc, char **argv) {
     control->activate(Mode::Position, control->state().actual);
     spin(.2);
     assert(control->state().mode == Mode::Position);
+
     const auto beforeStale = lin.size();
     spin(1.15, true, false); // estimator stops, UI remains responsive
     assert(control->state().enabled && !control->state().fresh && control->state().mode == Mode::Disabled);
     assert(!reports.back().switch_asserting_kill && lin.size() == beforeStale);
     spin(.1);
+
+    // Killing while the teleop request is pending wins over its late success.
     delay = true;
     control->activate(Mode::Position, control->state().actual);
     spin(.1);
@@ -199,6 +224,8 @@ int main(int argc, char **argv) {
     assert(!(control->state().mode == Mode::Position) && !control->state().enabled);
     for (size_t i = killedCount; i < lin.size(); ++i)
         assert(lin[i].mode == Command::DISABLED);
+
+    // A failed teleop request leaves the mode disabled; an unanswered one times out after ~3 s.
     control->enable();
     serviceSuccess = false;
     control->activate(Mode::Position, control->state().actual);
@@ -216,6 +243,9 @@ int main(int argc, char **argv) {
     control->enable();
     control->activate(Mode::Position, control->state().actual);
     spin(.2);
+
+    // Autonomy owns motion while a tree runs: manual control is blocked and disabled, drags publish nothing, and
+    // the ghost frame keeps updating.
     assert(mission->state().connected && mission->state().trees.size() == 1);
     mission->start("/trees/test.xml");
     spin(.4);
@@ -237,6 +267,8 @@ int main(int argc, char **argv) {
     spin(.5);
     assert(!mission->state().busy && !control->state().blocked && control->state().mode == Mode::Disabled);
     assert(mission->state().stack.size() == 2); // no forged empty stack
+
+    // A rejected goal and return code 3 are failures; return code 2 is not.
     reject = true;
     mission->start("/trees/test.xml");
     spin(.3);
@@ -258,6 +290,7 @@ int main(int argc, char **argv) {
     running.reset();
     spin(.3);
     assert(!mission->state().failed && !mission->state().busy);
+
     // A late goal response after timeout is canceled, never left executing.
     mission->start("/trees/test.xml");
     auto untilLate = std::chrono::steady_clock::now() + 3200ms;
@@ -269,6 +302,7 @@ int main(int argc, char **argv) {
     assert(mission->state().failed && mission->state().busy && control->state().blocked);
     spin(.6);
     assert(!mission->state().busy && !running);
+
     // Discover a goal submitted by another client, including after local results.
     auto external = rclcpp_action::create_client<Execute>(node, "autonomy/run_tree");
     spin(.3);
@@ -280,6 +314,8 @@ int main(int argc, char **argv) {
     mission->stop();
     spin(.5);
     assert(!mission->state().busy);
+
+    // Feedforward mode: commands carry FEEDFORWARD and drags do not publish setpoints.
     control->activate(Mode::Feedforward, control->state().actual);
     spin(.3);
     assert(lin.back().mode == Command::FEEDFORWARD && ang.back().mode == Command::FEEDFORWARD);
@@ -287,6 +323,8 @@ int main(int argc, char **argv) {
     control->drag(glm::mat4(1));
     spin(.1);
     assert(lin.size() == ffCount);
+
+    // Another operator's kill-switch reports: this one stands down and can only enable once they go quiet.
     auto competitor = node->create_publisher<Kill>("command/software_kill", 10);
     spin(.3);
     Kill other;
@@ -301,6 +339,8 @@ int main(int argc, char **argv) {
     control->enable();
     spin(.1);
     assert(control->state().enabled);
+
+    // Shutdown stops the heartbeats without asserting a kill.
     ros.stop();
     control.reset();
     mission.reset();
@@ -326,6 +366,7 @@ int main(int argc, char **argv) {
     registerPanels(standardRegistry);
     registerHostPlaceholders(standardRegistry);
     standardRos.registerFactories(standardRegistry);
+
     auto standard =
         std::make_unique<Composition>(YAML::LoadFile(argv[2]), Context{robot, "map", false, false}, standardRegistry);
     auto generic = std::dynamic_pointer_cast<Motion>(standard->providers().at("vehicle"));
@@ -339,6 +380,7 @@ int main(int argc, char **argv) {
             std::this_thread::sleep_for(5ms);
         }
     };
+
     waitStandard(.6);
     assert(enables.size() == 1 && !enables.back() && poses.empty()); // disabled once when it comes up
     generic->enable();

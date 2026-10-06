@@ -11,6 +11,7 @@ using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
 
 namespace {
+// defaultRobot() plus a launcher and a dropper.
 Json robotWithMechanisms() {
     Json robot = defaultRobot();
     robot["mechanisms"] =
@@ -18,6 +19,8 @@ Json robotWithMechanisms() {
                      {{"id", "dropper"}, {"type", "dropper"}, {"parameters", Json::object()}}});
     return robot;
 }
+
+// A 50 Hz MarkerArray publish stream on /demo/<topic> with format options `options`.
 Json marker(const std::string &id, const std::string &topic, const std::string &native, Json options,
             const std::string &frame = kWorld) {
     return {{"id", id},
@@ -32,6 +35,9 @@ Json marker(const std::string &id, const std::string &topic, const std::string &
             {"qos", qos()},
             {"options", options}};
 }
+
+// Scenario with only `streams` in the bridge, one task "table" with a meshed prop ("crate") and a prop
+// without a visual asset ("ghost"), and task / robot asset paths for the meshes.
 session::ResolvedScenario scenarioWith(const std::vector<Json> &streams, const Json &robot = robotWithMechanisms()) {
     Json bridge = defaultBridge();
     bridge["streams"] = Json::array();
@@ -57,6 +63,8 @@ session::ResolvedScenario scenarioWith(const std::vector<Json> &streams, const J
          {{"tasks", {{"crate_mesh", "/assets/crate.obj"}}}, {"robot", {{"projectile_mesh", "/assets/torpedo.obj"}}}}}};
     return session::parseResolvedScenario(document);
 }
+
+// Runs fn and returns the BridgeError message, or "<no error>" if nothing was thrown.
 template <class Fn> std::string bridgeError(Fn &&fn) {
     try {
         fn();
@@ -65,9 +73,12 @@ template <class Fn> std::string bridgeError(Fn &&fn) {
     }
     return "<no error>";
 }
+
 const MarkerArray &markers(const Publication &publication) {
     return *static_cast<const MarkerArray *>(publication.message->data());
 }
+
+// Steps `ticks` times and returns the publications of `stream`.
 std::vector<Publication> stepUntil(BridgeCore &core, const std::string &stream, int ticks = 5) {
     std::vector<Publication> out;
     for (int k = 0; k < ticks; ++k)
@@ -77,6 +88,7 @@ std::vector<Publication> stepUntil(BridgeCore &core, const std::string &stream, 
 }
 } // namespace
 
+// Each indicator becomes a sphere colored by its initial or latched color name, mapped through `colors`.
 TEST(Viewer, MagnetLightsUseLatchedColorsFromTheIndicatorState) {
     const auto resolved = scenarioWith({marker("lights", "lights", "state:indicators",
                                                {{"shape", "sphere"},
@@ -96,6 +108,8 @@ TEST(Viewer, MagnetLightsUseLatchedColorsFromTheIndicatorState) {
                                         {"latched", true},
                                         {"colors", {{"initial", "red"}, {"latched", "green"}}}}});
     BridgeCore core(resolved, port, kEpochNs);
+
+    // 50 Hz stream: one message in 10 steps (20 ms), stamped at the publishing step.
     const auto out = stepUntil(core, "lights", 10);
     ASSERT_EQ(out.size(), 1u);
     const auto &list = markers(out[0]).markers;
@@ -113,6 +127,7 @@ TEST(Viewer, MagnetLightsUseLatchedColorsFromTheIndicatorState) {
               static_cast<std::int64_t>(kEpochNs + 10 * kStepNs));
 }
 
+// Every color an indicator can show needs an RGBA entry; shape, scale and required keys are checked.
 TEST(Viewer, IndicatorOptionsAreValidatedAgainstThePackState) {
     FakePort port;
     port.indicator_list = Json::array({{{"task", "t"},
@@ -141,6 +156,7 @@ TEST(Viewer, IndicatorOptionsAreValidatedAgainstThePackState) {
               std::string::npos);
 }
 
+// Free props are mesh markers in the world frame; held props are relative to held_frame_id.
 TEST(Viewer, HeldPropsAreExpressedInTheHeldFrame) {
     const auto resolved =
         scenarioWith({marker("objects", "objects", "state:props", {{"held_frame_id", "robot/base_link"}})});
@@ -150,6 +166,7 @@ TEST(Viewer, HeldPropsAreExpressedInTheHeldFrame) {
         "table", "crate", {1.1, 2.0, 2.95}, Eigen::Quaterniond::Identity(), true}; // at the reference origin
     PropVisual no_mesh{"table", "ghost", {0, 0, 0}, Eigen::Quaterniond::Identity(), false};
     port.props = {free_prop, no_mesh, held};
+
     BridgeCore core(resolved, port, kEpochNs);
     const auto out = stepUntil(core, "objects", 10);
     ASSERT_EQ(out.size(), 1u);
@@ -166,6 +183,9 @@ TEST(Viewer, HeldPropsAreExpressedInTheHeldFrame) {
     EXPECT_NEAR(list[1].pose.position.z, 0.0, 1e-9);
 }
 
+// Payload markers: a leading DELETEALL, namespace per mechanism type (+ loaded_suffix while loaded), the
+// payload id as marker id, scale from length and diameter (2 x radius). Missing namespaces or assets
+// are refused.
 TEST(Viewer, PayloadsUseNamespacesLoadedSuffixAndDeleteAll) {
     const Json options = {{"namespaces", {{"launcher", "torpedo"}, {"dropper", "dropper"}}},
                           {"loaded_suffix", "_loaded"},
@@ -188,12 +208,14 @@ TEST(Viewer, PayloadsUseNamespacesLoadedSuffixAndDeleteAll) {
     EXPECT_DOUBLE_EQ(list[1].scale.y, 0.1);
     EXPECT_EQ(list[2].ns, "dropper_loaded");
     EXPECT_FALSE(list[2].mesh_use_embedded_materials);
+
     Json missing = options;
     missing["namespaces"] = {{"launcher", "torpedo"}};
     EXPECT_NE(bridgeError([&] {
                   BridgeCore c(scenarioWith({marker("p", "p", "state:payloads", missing)}), port, kEpochNs);
               }).find("no namespace for mechanism types ['dropper']"),
               std::string::npos);
+
     Json asset = options;
     asset["mesh_asset"] = "absent";
     EXPECT_NE(bridgeError([&] {
@@ -202,6 +224,8 @@ TEST(Viewer, PayloadsUseNamespacesLoadedSuffixAndDeleteAll) {
               std::string::npos);
 }
 
+// Marker streams must be in the world frame; json streams are unstamped String messages with no field
+// map, events have rate_hz 0, and format/options are publish-only.
 TEST(Viewer, FormatStreamsAreValidated) {
     FakePort port;
     const auto build = [&](const Json &stream) { BridgeCore core(scenarioWith({stream}), port, kEpochNs); };
@@ -210,6 +234,8 @@ TEST(Viewer, FormatStreamsAreValidated) {
               std::string::npos);
     Json wrong_format = marker("m", "m", "state:run", Json::object());
     EXPECT_NE(bridgeError([&] { build(wrong_format); }).find("cannot use format 'marker_array'"), std::string::npos);
+
+    // json streams: each step below fixes the previous error and introduces the next one.
     Json json_stream = {{"id", "j"},
                         {"direction", "publish"},
                         {"topic", "/j"},
@@ -249,6 +275,7 @@ TEST(Viewer, ScenarioDescriptionIsPublishedOnceAsTheResolvedDocument) {
         {"frame_id", ""},
         {"qos",
          {{"reliability", "reliable"}, {"durability", "transient_local"}, {"history", "keep_last"}, {"depth", 1}}}};
+
     const auto resolved = scenarioWith({stream});
     FakePort port;
     BridgeCore core(resolved, port, kEpochNs);
@@ -260,6 +287,7 @@ TEST(Viewer, ScenarioDescriptionIsPublishedOnceAsTheResolvedDocument) {
     EXPECT_TRUE(core.startupPublications().size() == 1u); // callable again; the node calls it once
 }
 
+// refresh() (used while paused) republishes thruster state but not robot truth.
 TEST(Viewer, PausedRefreshSkipsRobotTruthAndSensors) {
     Json thrusters = {{"id", "forces"},
                       {"direction", "publish"},
@@ -271,6 +299,7 @@ TEST(Viewer, PausedRefreshSkipsRobotTruthAndSensors) {
                       {"frame_id", ""},
                       {"qos", qos()}};
     Json truth = publishStream("truth", "std_msgs/msg/UInt8", "state:robot", {{"data", {{"constant", 1}}}}, 100);
+
     const auto resolved = scenarioWith({thrusters, truth});
     FakePort port;
     BridgeCore core(resolved, port, kEpochNs);

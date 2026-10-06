@@ -1,3 +1,5 @@
+// Autonomy panel: pick a behaviour tree from the robot's list, start/stop it, and show the running tree's
+// execution stack as reported by the bound Autonomy provider.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/pins.hpp"
@@ -5,17 +7,20 @@
 #include <cfloat>
 #include <filesystem>
 #include <imgui.h>
+
 namespace nereus::ros_viewer::panels {
 namespace {
+
 class AutonomyPanel final : public Panel {
     std::shared_ptr<Autonomy> mission;
-    std::function<bool()> mayStart;
-    std::string selected;
-    ImGuiTextFilter filter;
+    std::function<bool()> mayStart; // Composition::mayStart: the owned motion is enabled, fresh, uncontested
+    std::string selected;           // full path of the chosen tree; the UI shows only its filename
+    ImGuiTextFilter filter;         // search box inside the tree combo
 
   public:
     explicit AutonomyPanel(const Binding &b)
         : mission(std::dynamic_pointer_cast<Autonomy>(b.provider)), mayStart(b.mayStart) {}
+
     void draw() override {
         const auto s = mission ? mission->state() : MissionState{};
         if (!mission)
@@ -23,7 +28,11 @@ class AutonomyPanel final : public Panel {
                        "execution stack.");
         else if (!s.message.empty())
             ImGui::TextWrapped("%s", s.message.c_str());
+
+        // Tree picker, refresh and start are locked while disconnected or while a tree runs/starts.
         ImGui::BeginDisabled(!mission || !s.connected || s.busy || s.pending);
+
+        // Size the combo popup to the longest tree filename, clamped to the display width.
         float labelWidth = ImGui::CalcTextSize("Select a tree").x;
         for (const auto &tree : s.trees)
             labelWidth = std::max(labelWidth, ImGui::CalcTextSize(std::filesystem::path(tree).filename().c_str()).x);
@@ -33,6 +42,8 @@ class AutonomyPanel final : public Panel {
                                            2 * ImGui::GetStyle().FramePadding.x + ImGui::GetFrameHeight()));
         ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x, popupWidth));
         ImGui::SetNextWindowSizeConstraints({popupWidth, 0}, {popupWidth, FLT_MAX});
+
+        // Searchable tree list; hovering an entry shows its full path.
         if (ImGui::BeginCombo("##tree", selected.empty() ? "Select a tree"
                                                          : std::filesystem::path(selected).filename().c_str())) {
             ImGui::SetNextItemWidth(-1);
@@ -52,6 +63,7 @@ class AutonomyPanel final : public Panel {
                 }
             ImGui::EndCombo();
         }
+
         if (pins::Button(s.refreshing ? "Refreshing...###refresh" : "Refresh###refresh"))
             mission->refresh();
         ImGui::SameLine();
@@ -60,11 +72,15 @@ class AutonomyPanel final : public Panel {
             mission->start(selected);
         ImGui::EndDisabled();
         ImGui::EndDisabled();
+
+        // Stop stays enabled whenever a tree is running.
         ImGui::SameLine();
         ImGui::BeginDisabled(!mission || !s.busy);
         if (pins::Button("Stop"))
             mission->stop();
         ImGui::EndDisabled();
+
+        // Execution stack: numbered entries, the innermost (last) one highlighted in the accent colour.
         if (!s.activeTree.empty())
             ImGui::TextWrapped("Tree: %s", std::filesystem::path(s.activeTree).filename().c_str());
         sectionTitle(s.stackStale ? "Execution stack (stale)" : s.busy ? "Execution stack" : "Last execution stack");
@@ -83,10 +99,14 @@ class AutonomyPanel final : public Panel {
         ImGui::EndChild();
     }
 };
+
 } // namespace
+
+// Registers the "autonomy" panel type (takes no YAML keys).
 void registerAutonomyPanel(Registry &r) {
     r.panels.emplace("autonomy",
                      ViewFactory<Panel>{Kind::Autonomy, [](const YAML::Node &n) { keys(n, {}, "autonomy panel"); },
                                         [](const Binding &b) { return std::make_unique<AutonomyPanel>(b); }});
 }
+
 } // namespace nereus::ros_viewer::panels

@@ -1,12 +1,17 @@
+// Detection marker placement: TF at the acquisition stamp, immutable per-observation poses, simulator-truth
+// placement, the RViz-like estimate path with its retry window, and the truth/estimate display modes.
 #include "detection_pose.hpp"
 #include <gtest/gtest.h>
 #include <iostream>
 using namespace nereus::ros_viewer::host;
 #include <iostream>
 
+// The long end-to-end case: a camera frame moving in TF, markers in it with various stamps and flags, and the
+// simulator-truth branch diverging from the estimate.
 TEST(HostDetectionPose, AcquisitionTimeAndImmutablePlacement) {
     auto clock = std::make_shared<rclcpp::Clock>(RCL_ROS_TIME);
     tf2_ros::Buffer tf(clock);
+    // map -> camera at `sec`: a pure translation along x.
     auto set = [&](int sec, double x) {
         geometry_msgs::msg::TransformStamped t;
         t.header.frame_id = "map";
@@ -18,6 +23,8 @@ TEST(HostDetectionPose, AcquisitionTimeAndImmutablePlacement) {
     };
     set(10, 1);
     set(12, 3);
+
+    // A marker 5 m along the camera x axis, acquired at t = 11 (camera at x = 2 by interpolation).
     visualization_msgs::msg::Marker m;
     m.header.frame_id = "camera";
     m.header.stamp.sec = 11;
@@ -42,6 +49,7 @@ TEST(HostDetectionPose, AcquisitionTimeAndImmutablePlacement) {
     ASSERT_TRUE(resolveDetectionPose(m, "map", tf, result));
     close(glm::vec3(result[3]), {17, 0, 0});
 
+    // A zero stamp takes the latest transform; frame_locked still resolves at the acquisition stamp.
     m.header.stamp.sec = 0;
     ASSERT_TRUE(resolveDetectionPose(m, "map", tf, result));
     close(glm::vec3(result[3]), {17, 0, 0});
@@ -53,6 +61,7 @@ TEST(HostDetectionPose, AcquisitionTimeAndImmutablePlacement) {
     ASSERT_TRUE(resolveDetectionPose(m, "map", tf, result));
     close(glm::vec3(result[3]), {7, 0, 0});
 
+    // A marker already in the target frame needs no TF; an unknown frame never resolves.
     m.frame_locked = false;
     m.header.frame_id = "map";
     ASSERT_TRUE(resolveDetectionPose(m, "map", tf, result));
@@ -86,6 +95,7 @@ TEST(HostDetectionPose, AcquisitionTimeAndImmutablePlacement) {
             ASSERT_TRUE(m.lifetime.sec == 5 && m.frame_locked == locked);
         }
     }
+
     // Unresolved observations can retry; replacement creates a new placement.
     m.header.stamp.sec = nextStamp;
     DetectionPose pending;
@@ -103,6 +113,7 @@ TEST(HostDetectionPose, AcquisitionTimeAndImmutablePlacement) {
     // diverge. This covers replacement markers, not just a cached observation.
     const auto target =
         glm::translate(glm::mat4(1), glm::vec3(8, -3, -2)) * glm::rotate(glm::mat4(1), .7f, glm::vec3(0, 1, 0));
+    // map -> `child` at `sec` with a full pose.
     const auto setPose = [&](const std::string &child, int sec, const glm::mat4 &pose) {
         geometry_msgs::msg::TransformStamped t;
         t.header.frame_id = "map";
@@ -120,6 +131,7 @@ TEST(HostDetectionPose, AcquisitionTimeAndImmutablePlacement) {
     };
     m.frame_locked = false;
     for (int step = 0; step < 20; ++step) {
+        // The true camera (simulator/camera) moves and turns; the estimate (camera) drifts away from it.
         const int stamp = 40 + 2 * step;
         const auto camera = glm::translate(glm::mat4(1), glm::vec3(step * .2f, 1, -1)) *
                             glm::rotate(glm::mat4(1), step * .1f, glm::vec3(0, 0, 1)) * opticalToLink();
@@ -129,6 +141,8 @@ TEST(HostDetectionPose, AcquisitionTimeAndImmutablePlacement) {
         setPose("simulator/camera", stamp, camera);
         // A newer robot pose must not affect a delayed detection.
         setPose("simulator/camera", stamp + 1, glm::translate(glm::mat4(1), glm::vec3(20, 30, 40)));
+
+        // The marker reports the target in the camera frame, as a detector would.
         const auto local = glm::inverse(camera) * target;
         const auto q = glm::quat_cast(local);
         m.header.frame_id = "camera";
@@ -168,6 +182,7 @@ TEST(HostDetectionPose, AcquisitionTimeAndImmutablePlacement) {
         for (int column = 0; column < 4; ++column)
             ASSERT_TRUE(glm::length(result[column] - target[column]) < 1e-5f);
     }
+
     // Zero stamps have no matching acquisition: use simulator TF once, then
     // keep the observation fixed even when newer simulator poses arrive.
     m.header.frame_id = "camera";
@@ -202,15 +217,18 @@ TEST(HostDetectionPose, TruthBaseAcquisition) {
     };
     setTruth(10, 1, 0);
     setTruth(12, 3, 0);
+
     // Optical frame 0.1 m ahead of base_link looking along +X.
     const glm::mat4 baseToOptical = glm::translate(glm::mat4(1), glm::vec3(.1f, 0, 0)) * opticalToLink();
     glm::mat4 world(1);
     ASSERT_TRUE(
         truthAcquisitionPose(tf, "map", "simulator/talos/base_link", rclcpp::Time(11, 0), baseToOptical, world));
     ASSERT_TRUE(glm::length(glm::vec3(world[3]) - glm::vec3(2.1f, 0, 0)) < 1e-5f); // interpolated at acquisition
+
     // Not yet available: the caller retries, it never falls back to estimated TF.
     ASSERT_TRUE(
         !truthAcquisitionPose(tf, "map", "simulator/talos/base_link", rclcpp::Time(20, 0), baseToOptical, world));
+
     // Placement stays fixed after the robot moves on.
     visualization_msgs::msg::Marker marker;
     marker.header.frame_id = "talos/ffc_left_camera_optical_frame";
@@ -229,6 +247,7 @@ TEST(HostDetectionPose, TruthBaseAcquisition) {
 }
 
 namespace {
+// A TF buffer with a map -> camera translation along x set per stamp.
 struct TfFixture {
     std::shared_ptr<rclcpp::Clock> clock = std::make_shared<rclcpp::Clock>(RCL_ROS_TIME);
     tf2_ros::Buffer tf{clock};
@@ -242,6 +261,8 @@ struct TfFixture {
         ASSERT_TRUE(tf.setTransform(t, "test"));
     }
 };
+
+// A marker 1 m along the camera x axis, stamped `sec` (0 = latest).
 visualization_msgs::msg::Marker markerAt(int sec) {
     visualization_msgs::msg::Marker m;
     m.header.frame_id = "camera";
@@ -252,6 +273,8 @@ visualization_msgs::msg::Marker markerAt(int sec) {
 }
 } // namespace
 
+// placeViaTf(marker, frame, tf, age): with TF covering the stamp the placement is exact, and later TF or a
+// larger age never moves it.
 TEST(HostDetectionPose, EstimatePlacementExactThenImmutable) {
     TfFixture f;
     f.set(10, 0);
@@ -296,6 +319,7 @@ TEST(HostDetectionPose, EstimatePlacementRetriesThenApproximates) {
     ASSERT_TRUE(!r.placeViaTf(bad, "map", g.tf, 5.));
 }
 
+// A zero stamp means "latest", which is exact rather than an approximate fallback.
 TEST(HostDetectionPose, ZeroStampUsesLatestExactly) {
     TfFixture f;
     f.set(10, 3);
@@ -305,10 +329,12 @@ TEST(HostDetectionPose, ZeroStampUsesLatestExactly) {
     EXPECT_NEAR(p.world()[3].x, 4.0, 1e-5);
 }
 
+// resolveDetectionMode(requested, simulator truth exists, pose source is truth) -> which placements to draw.
 TEST(HostDetectionPose, ModeResolution) {
     EXPECT_TRUE(parseDetectionMode("both") == DetectionMode::Both);
     EXPECT_TRUE(parseDetectionMode("pose_source") == DetectionMode::PoseSource);
     EXPECT_THROW(parseDetectionMode("nope"), std::invalid_argument);
+
     // Simulator present: pose source follows the active source; both shows both placements.
     auto s = resolveDetectionMode(DetectionMode::PoseSource, true, true);
     EXPECT_TRUE(s.truth && !s.estimate);
@@ -318,6 +344,7 @@ TEST(HostDetectionPose, ModeResolution) {
     EXPECT_TRUE(s.truth && s.estimate && !s.downgraded);
     s = resolveDetectionMode(DetectionMode::Estimate, true, true);
     EXPECT_TRUE(!s.truth && s.estimate);
+
     // Real robot: truth and both are never offered; they collapse to the estimate.
     for (auto mode : {DetectionMode::Truth, DetectionMode::Both, DetectionMode::PoseSource, DetectionMode::Estimate}) {
         s = resolveDetectionMode(mode, false, false);

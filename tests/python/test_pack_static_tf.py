@@ -11,11 +11,15 @@ from test_packs_fixtures import write_generic_packs
 
 
 class PackStaticTfTests(unittest.TestCase):
+    """Generic packs whose bridge aliases two robot frames and a static TF between them."""
+
     def setUp(self) -> None:
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.root = Path(folder.name)
         self.scenario = write_generic_packs(self.root)
+
+        # Rename base_link/imu_mount for ROS and declare the static transform between them.
         self.path = self.root / "bridge" / "bridge.yaml"
         document = load_pack(self.path)
         document.data["frame_names"] = {"base_link": "auv/body", "imu_mount": "auv/sensor"}
@@ -35,6 +39,7 @@ class PackStaticTfTests(unittest.TestCase):
         document.save()
 
     def test_generic_fixed_transform_resolves_and_round_trips(self) -> None:
+        """The static entry resolves, and an unedited load + save keeps the file byte-exact."""
         resolved = resolve_scenario(self.scenario)
         assert resolved.bridge is not None
         self.assertEqual(resolved.bridge["tf"]["static"][0]["to_frame"], "imu_mount")
@@ -43,6 +48,7 @@ class PackStaticTfTests(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), original)
 
     def test_invalid_native_frame_and_conflicting_alias_fail_resolution(self) -> None:
+        """from/to must be robot frames and parent/child must match their bridge aliases."""
         for field, value in (
             ("from_frame", "missing"),
             ("to_frame", "world"),
@@ -56,10 +62,13 @@ class PackStaticTfTests(unittest.TestCase):
                 doc.save()
                 with self.assertRaises(PackError):
                     resolve_scenario(self.scenario)
+
+                # Restore the field for the next case.
                 doc.data["tf"]["static"][0][field] = old
                 doc.save()
 
     def test_one_tf_owner_no_cycles_and_never_publish_apply_to_static(self) -> None:
+        """A static child may not also be looked up, close a cycle, or be never-published."""
         doc = load_pack(self.path)
         original = copy.deepcopy(doc.data["tf"])
         cases: list[dict[str, Any]] = [
@@ -73,6 +82,7 @@ class PackStaticTfTests(unittest.TestCase):
                 doc.save()
                 with self.assertRaises(PackError):
                     load_pack(self.path)
+
         doc.data["tf"] = original
         doc.save()
 

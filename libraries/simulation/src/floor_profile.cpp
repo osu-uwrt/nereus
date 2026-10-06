@@ -1,3 +1,4 @@
+// FloorProfile / PoolFloor: PCHIP floor profiles, depth and ray queries, and the floor's contact boxes.
 #include <nereus/simulation/floor_profile.hpp>
 
 #include <algorithm>
@@ -23,6 +24,7 @@ double sign(double value) {
 std::vector<double> tangents(const std::vector<Eigen::Vector2d> &p) {
     const std::size_t n = p.size();
     std::vector<double> h(n - 1), d(n - 1), m(n, 0.0);
+    // Interval widths h and secant slopes d.
     for (std::size_t k = 0; k + 1 < n; ++k) {
         h[k] = p[k + 1].x() - p[k].x();
         d[k] = (p[k + 1].y() - p[k].y()) / h[k];
@@ -31,12 +33,16 @@ std::vector<double> tangents(const std::vector<Eigen::Vector2d> &p) {
         m[0] = m[1] = d[0];
         return m;
     }
+
+    // Interior points: weighted harmonic mean where neighbouring slopes share a sign, else zero.
     for (std::size_t k = 1; k + 1 < n; ++k) {
         if (d[k - 1] * d[k] <= 0)
             continue;
         const double w1 = 2 * h[k] + h[k - 1], w2 = h[k] + 2 * h[k - 1];
         m[k] = (w1 + w2) / (w1 / d[k - 1] + w2 / d[k]);
     }
+
+    // End points: three-point estimate, zeroed or limited so the end segment doesn't overshoot.
     const auto edge = [](double h0, double h1, double d0, double d1) {
         double t = ((2 * h0 + h1) * d0 - h0 * d1) / (h0 + h1);
         if (sign(t) != sign(d0))
@@ -63,6 +69,7 @@ std::vector<Eigen::Vector2d> merged(const std::vector<Eigen::Vector2d> &samples,
             const double chord = a.y() + (b.y() - a.y()) * (samples[k].x() - a.x()) / (b.x() - a.x());
             fits = std::abs(samples[k].y() - chord) <= (keep[k] ? 1e-12 : tolerance);
         }
+        // The chord no longer fits: keep the previous sample and start a new chord there.
         if (!fits) {
             out.push_back(samples[end - 1]);
             start = end - 1;
@@ -92,6 +99,8 @@ FloorProfile FloorProfile::smooth(Axis axis, const std::vector<Eigen::Vector2d> 
         require(points[k].allFinite() && points[k].y() > 0, "depths must be positive and finite");
         require(k == 0 || points[k].x() > points[k - 1].x(), "positions must strictly increase");
     }
+
+    // Sample each interval's cubic Hermite segment at no more than `step` spacing; control points are exact.
     const auto m = tangents(points);
     std::vector<Eigen::Vector2d> samples{points.front()};
     std::vector<bool> keep{true};
@@ -104,6 +113,7 @@ FloorProfile FloorProfile::smooth(Axis axis, const std::vector<Eigen::Vector2d> 
                 keep.push_back(true);
                 break;
             }
+            // Cubic Hermite basis on t in [0, 1].
             const double t = static_cast<double>(i) / count, t2 = t * t, t3 = t2 * t;
             const double y = (2 * t3 - 3 * t2 + 1) * y0 + (t3 - 2 * t2 + t) * h * m[k] + (-2 * t3 + 3 * t2) * y1 +
                              (t3 - t2) * h * m[k + 1];
@@ -111,6 +121,7 @@ FloorProfile FloorProfile::smooth(Axis axis, const std::vector<Eigen::Vector2d> 
             keep.push_back(false);
         }
     }
+
     FloorProfile profile;
     profile.axis_ = axis;
     profile.polyline_ = merged(samples, keep, tolerance);
@@ -133,10 +144,13 @@ double FloorProfile::maxDepth() const {
 
 double FloorProfile::depthAt(double position) const {
     require(!empty(), "empty profile has no depth");
+    // Clamp outside the polyline (the negated comparison also sends NaN to the first depth).
     if (!(position > polyline_.front().x()))
         return polyline_.front().y();
     if (position >= polyline_.back().x())
         return polyline_.back().y();
+
+    // Linear interpolation within the containing segment.
     const auto upper = std::upper_bound(polyline_.begin(), polyline_.end(), position,
                                         [](double s, const Eigen::Vector2d &v) { return s < v.x(); });
     const Eigen::Vector2d &a = *(upper - 1), &b = *upper;
@@ -148,6 +162,7 @@ std::optional<double> FloorProfile::rayDistance(const Eigen::Vector3d &origin, c
     require(!empty(), "empty profile has no floor");
     if (direction.z() >= 0)
         return std::nullopt;
+    // Ray origin and direction along the profile axis.
     const double os = axis_ == Axis::X ? origin.x() : origin.y();
     const double ds = axis_ == Axis::X ? direction.x() : direction.y();
     if (isFlat() || ds == 0) {
@@ -155,6 +170,9 @@ std::optional<double> FloorProfile::rayDistance(const Eigen::Vector3d &origin, c
         const double floor = surface_z - depthAt(os);
         return (floor - origin.z()) / direction.z();
     }
+
+    // Intersect the ray with each segment's sloped line and with the flat extensions past both ends; keep the
+    // nearest hit.
     std::optional<double> best;
     const auto consider = [&](double s0, double s1, double depth0, double slope) {
         // Floor z over [s0, s1]: surface - (depth0 + slope * (s - s0)).
@@ -167,6 +185,7 @@ std::optional<double> FloorProfile::rayDistance(const Eigen::Vector3d &origin, c
         if (t >= 0 && s >= s0 && s <= s1 && (!best || t < *best))
             best = t;
     };
+
     const double infinity = std::numeric_limits<double>::infinity();
     consider(-infinity, polyline_.front().x(), polyline_.front().y(), 0);
     for (std::size_t k = 0; k + 1 < polyline_.size(); ++k) {
@@ -230,10 +249,12 @@ std::vector<FloorBox> floorBoxes(const FloorProfile &profile, double span, doubl
                 overlap >= 0,
             "floor boxes need a positive span and thickness");
     const bool alongX = profile.axis() == FloorProfile::Axis::X;
+    // Pool-local point at position s along the axis, centred across the span, `depth` below the surface.
     const auto lift = [&](double s, double depth) {
         return alongX ? Eigen::Vector3d(s, span / 2, surface_z - depth)
                       : Eigen::Vector3d(span / 2, s, surface_z - depth);
     };
+
     std::vector<FloorBox> boxes;
     const auto &line = profile.polyline();
     for (std::size_t k = 0; k + 1 < line.size(); ++k) {
@@ -241,8 +262,11 @@ std::vector<FloorBox> floorBoxes(const FloorProfile &profile, double span, doubl
         const Eigen::Vector3d u = (b - a).normalized();
         // Up normal of the segment, in the plane of the axis and z.
         const Eigen::Vector3d n = alongX ? Eigen::Vector3d(-u.z(), 0, u.x()) : Eigen::Vector3d(0, -u.z(), u.y());
+
+        // Box frame: x along the segment, z along its up normal, y completing a right-handed frame.
         Eigen::Matrix3d rotation;
         rotation << u, n.cross(u), n;
+
         FloorBox box;
         box.size = {(b - a).norm() + 2 * overlap, span, thickness};
         box.center = (a + b) / 2 - n * (thickness / 2);

@@ -1,3 +1,4 @@
+// Parsing and validation of the planner's job document (nereus.dataset_job.v1). Errors name the JSON path.
 #include <nereus/datasets/job.hpp>
 
 #include <cmath>
@@ -7,10 +8,13 @@
 
 namespace nereus::datasets {
 namespace {
+
+// Throws "job <where>: <what>"; `where` is the JSON path of the offending value.
 [[noreturn]] void fail(const std::string &where, const std::string &what) {
     throw std::runtime_error("job " + where + ": " + what);
 }
 
+// A finite JSON number.
 double number(const Json &value, const std::string &where) {
     if (!value.is_number())
         fail(where, "expected a number");
@@ -34,6 +38,7 @@ Range range(const Json &value, const std::string &where) {
     return result;
 }
 
+// parent[key] as a Range; absent or null -> nullopt.
 std::optional<Range> optionalRange(const Json &parent, const char *key, const std::string &where) {
     if (!parent.is_object() || !parent.contains(key) || parent.at(key).is_null())
         return std::nullopt;
@@ -46,18 +51,21 @@ Eigen::Vector3d vector3(const Json &value, const std::string &where) {
     return {number(value.at(0), where), number(value.at(1), where), number(value.at(2), where)};
 }
 
+// parent[key] as a string; absent or null -> nullopt.
 std::optional<std::string> optionalString(const Json &parent, const char *key) {
     if (!parent.contains(key) || parent.at(key).is_null())
         return std::nullopt;
     return parent.at(key).get<std::string>();
 }
 
+// Canonical form for comparing texture paths with mesh diffuse paths; lexical normalization if that fails.
 std::filesystem::path canonical(const std::filesystem::path &path) {
     std::error_code error;
     auto result = std::filesystem::weakly_canonical(path, error);
     return error ? path.lexically_normal() : result;
 }
 
+// One block's `sampler`; omitted keys keep the Sampler defaults.
 Sampler parseSampler(const Json &item, const std::string &where) {
     Sampler s;
     s.type = item.at("type").get<std::string>();
@@ -78,6 +86,8 @@ Sampler parseSampler(const Json &item, const std::string &where) {
         }
         s.target_frame = optionalString(item, "target_frame");
     }
+
+    // Target frame(s): a single name or a list, one picked per attempt.
     if (item.contains("frame")) {
         const auto &frame = item.at("frame");
         s.frames.clear();
@@ -96,6 +106,8 @@ Sampler parseSampler(const Json &item, const std::string &where) {
         if (Eigen::Vector2d(s.facing.x(), s.facing.y()).norm() < 1e-9)
             fail(where, "facing needs a horizontal component");
     }
+
+    // Ranges, then half-widths / limits (stored as magnitudes: the sign is ignored).
     const auto get = [&](const char *key, Range &target) {
         if (item.contains(key))
             target = range(item.at(key), where + "." + key);
@@ -121,12 +133,15 @@ Sampler parseSampler(const Json &item, const std::string &where) {
         fail(where, "range_m must be positive");
     return s;
 }
+
+// Per-channel [r, g, b], each a number or [lo, hi].
 std::array<Range, 3> rgbRange(const Json &value, const std::string &where) {
     if (!value.is_array() || value.size() != 3)
         fail(where, "expected [r, g, b] (numbers or [lo, hi])");
     return {range(value.at(0), where), range(value.at(1), where), range(value.at(2), where)};
 }
 
+// One randomize environment (or, for pre-§10 jobs, the randomize object itself). `index` prefixes error paths.
 Environment parseEnvironment(const Json &item, const std::string &index) {
     Environment e;
     if (item.contains("id"))
@@ -138,6 +153,8 @@ Environment parseEnvironment(const Json &item, const std::string &index) {
     const auto water = item.value("water", Json::object()), lighting = item.value("lighting", Json::object()),
                image = item.value("image", Json::object());
     const auto w = where + ".water", l = where + ".lighting", im = where + ".image";
+
+    // Water: scales of the pool's values, or absolute overrides.
     e.tint_scale = optionalRange(water, "tint_scale", w);
     e.absorption_scale = optionalRange(water, "absorption_scale", w);
     e.scattering_scale = optionalRange(water, "scattering_scale", w);
@@ -147,6 +164,8 @@ Environment parseEnvironment(const Json &item, const std::string &index) {
         e.tint_rgb = rgbRange(water.at("tint_rgb"), w + ".tint_rgb");
     if (water.contains("absorption_per_m_rgb") && !water.at("absorption_per_m_rgb").is_null())
         e.absorption_per_m_rgb = rgbRange(water.at("absorption_per_m_rgb"), w + ".absorption_per_m_rgb");
+
+    // Lighting, time and image post-processing.
     e.caustics = optionalRange(lighting, "caustics", l);
     e.exposure = optionalRange(lighting, "exposure", l);
     e.sun_azimuth_deg = optionalRange(lighting, "sun_azimuth_deg", l);
@@ -160,6 +179,7 @@ Environment parseEnvironment(const Json &item, const std::string &index) {
     e.time_s = optionalRange(item, "time_s", where);
     e.noise_sigma = optionalRange(image, "noise_sigma", im);
     e.blur_px = optionalRange(image, "blur_px", im);
+
     // No silent clamps: every scale and absolute physical value is non-negative, absolute tint at most 1.
     const auto nonNegative = [](const std::optional<Range> &value, const std::string &key) {
         if (value && value->lo < 0)
@@ -188,6 +208,7 @@ Environment parseEnvironment(const Json &item, const std::string &index) {
     }
     return e;
 }
+
 } // namespace
 
 std::int64_t Job::sampleCount() const {
@@ -224,6 +245,8 @@ std::string Job::name(std::int64_t k) const {
 
 Job parseJob(const Json &d) {
     Job job;
+
+    // Header and scenarios.
     if (d.value("format", std::string()) != "nereus.dataset_job.v1")
         fail("format", "expected nereus.dataset_job.v1");
     job.dataset = d.at("dataset").get<std::string>();
@@ -234,6 +257,7 @@ Job parseJob(const Json &d) {
     if (job.scenarios.empty())
         fail("scenarios", "empty");
 
+    // Camera: sensor id, optional output resolution, encoding.
     const auto &camera = d.at("camera");
     job.camera.sensor = camera.at("sensor").get<std::string>();
     if (camera.contains("resolution_px") && camera.at("resolution_px").is_array()) {
@@ -256,6 +280,7 @@ Job parseJob(const Json &d) {
     if (job.camera.supersample < 1 || job.camera.supersample > 4)
         fail("camera.supersample", "1..4");
 
+    // Part rules: texture part maps (mask value -> part), then visual rules (materials or a fixed part).
     const auto parts = d.value("parts", Json::object());
     for (const auto &item : parts.value("textures", Json::array())) {
         TexturePart part;
@@ -289,9 +314,12 @@ Job parseJob(const Json &d) {
         part.split = split == "connected";
         job.visuals.push_back(std::move(part));
     }
+
+    // (task, part) pairs that count for acceptance; other parts are still labelled in the id map.
     for (const auto &item : d.value("labelled", Json::array()))
         job.labelled.emplace(item.at("task").get<std::string>(), item.at("part").get<std::string>());
 
+    // Acceptance thresholds; omitted keys keep the Acceptance defaults.
     const auto acceptance = d.value("acceptance", Json::object());
     auto &a = job.acceptance;
     a.max_range_m = acceptance.value("max_range_m", a.max_range_m);
@@ -309,6 +337,7 @@ Job parseJob(const Json &d) {
     if (a.max_attempts < 1)
         fail("acceptance.max_attempts", "must be >= 1");
 
+    // Sample blocks, in document order (global sample indices run through them contiguously).
     std::size_t index = 0;
     for (const auto &item : d.at("samples")) {
         SampleBlock block;
@@ -327,6 +356,7 @@ Job parseJob(const Json &d) {
         job.samples.push_back(std::move(block));
     }
 
+    // Randomization: environments and their selection mode.
     const auto r = d.value("randomize", Json::object());
     auto &z = job.randomize;
     if (r.contains("environments")) {
@@ -351,6 +381,8 @@ Job parseJob(const Json &d) {
         if (job.samples[i].environment && *job.samples[i].environment >= z.environments.size())
             fail("samples[" + std::to_string(i) + "].environment",
                  "index " + std::to_string(*job.samples[i].environment) + " beyond randomize.environments");
+
+    // Task placement jitter and groups (each task in at most one group).
     const auto placement = r.value("placement", Json::object());
     z.task_yaw_deg = std::abs(placement.value("task_yaw_deg", 0.0));
     z.task_offset_m = std::abs(placement.value("task_offset_m", 0.0));
@@ -371,6 +403,8 @@ Job parseJob(const Json &d) {
             fail("randomize.placement.groups", "empty group");
         z.placement_groups.push_back(std::move(tasks));
     }
+
+    // Probability that each indicator region is drawn in its latched state.
     z.latched_probability = r.value("indicators", Json::object()).value("latched_probability", 0.0);
     if (z.latched_probability < 0 || z.latched_probability > 1)
         fail("randomize.indicators.latched_probability", "0..1");
@@ -389,4 +423,5 @@ Job loadJob(const std::filesystem::path &path) {
     }
     return parseJob(document);
 }
+
 } // namespace nereus::datasets

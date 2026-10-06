@@ -1,3 +1,4 @@
+// "uwrt.telemetry" provider: header readouts for the FOG, computer diagnostics and battery packs.
 #include "ros_runtime.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -13,16 +14,19 @@ using DiagnosticStatus = diagnostic_msgs::msg::DiagnosticStatus;
 using GyroStatus = riptide_msgs2::msg::GyroStatus;
 using BatteryStatus = riptide_msgs2::msg::BatteryStatus;
 
+// Value formatters for readouts and tooltips.
 std::string celsius(double value) {
     char text[32];
     std::snprintf(text, sizeof(text), "%.1f\u00B0C", value);
     return text;
 }
+
 std::string number(double value) {
     char text[32];
     std::snprintf(text, sizeof(text), "%.3g", value);
     return text;
 }
+
 std::string fixed(double value, int digits) {
     char text[32];
     std::snprintf(text, sizeof(text), "%.*f", digits, value);
@@ -36,6 +40,8 @@ std::string fixed(double value, int digits) {
 //   battery      riptide_msgs2/BatteryStatus of one side (port / stbd; both share the topic): state of charge,
 //                low is bad.
 class UwrtTelemetry final : public Telemetry {
+    // One configured reading: its latest Reading, thresholds (°C or %) and subscription. Held by pointer so
+    // the subscription callbacks can keep `s` across vector growth.
     struct Source {
         Reading reading;
         std::string topic;
@@ -59,6 +65,8 @@ class UwrtTelemetry final : public Telemetry {
             s->reading.label = entry["label"].as<std::string>(s->reading.id);
             s->topic = expand(entry["topic"].as<std::string>(), ctx);
             s->timeout = entry["timeout"].as<double>(2);
+
+            // Thresholds are percent for batteries (low is bad), degrees C for the rest (high is bad).
             const auto type = entry["source"].as<std::string>();
             if (type == "battery") {
                 s->warn = entry["warn_pct"].as<double>();
@@ -96,6 +104,8 @@ class UwrtTelemetry final : public Telemetry {
             sources.push_back(std::move(source));
         }
     }
+
+    // Copies the readings, marking those never received or older than their timeout as stale.
     TelemetryState state() override {
         std::lock_guard<std::mutex> lock(mutex);
         TelemetryState value;
@@ -118,15 +128,19 @@ class UwrtTelemetry final : public Telemetry {
     }
 
   private:
+    // Level for a value against the source's warn / error thresholds.
     static Level threshold(const Source &s, double value) {
         if (s.lowIsBad)
             return value < s.error ? Level::Error : value < s.warn ? Level::Warn : Level::Ok;
         return value >= s.error ? Level::Error : value >= s.warn ? Level::Warn : Level::Ok;
     }
+
     static void mark(Source &s) {
         s.seen = true;
         s.received = Steady::now();
     }
+
+    // FOG temperature against the thresholds, overridden by the driver's connection and health flags.
     void gyro(Source &s, const GyroStatus &m) {
         mark(s);
         auto &r = s.reading;
@@ -152,6 +166,7 @@ class UwrtTelemetry final : public Telemetry {
                    number(s.error) + ")\nSupply " + number(m.vsupply) + ", SLD current " + number(m.sldcurrent) +
                    ", diag signal " + number(m.diagsignal);
     }
+
     // The fields the voltage monitor reports; pack current is negative while discharging.
     void battery(Source &s, const BatteryStatus &m) {
         mark(s);
@@ -164,6 +179,8 @@ class UwrtTelemetry final : public Telemetry {
                    std::to_string(m.time_to_dischg) + " min\nCell " + m.cell_name + ", serial " +
                    std::to_string(m.serial);
     }
+
+    // Shows the highest numeric key/value of the matched status as °C; every key/value goes in the detail.
     void diagnostic(Source &s, const DiagnosticStatus &status) {
         mark(s);
         auto &r = s.reading;
@@ -188,11 +205,14 @@ class UwrtTelemetry final : public Telemetry {
         r.level =
             reported == Level::Stale ? Level::Stale : std::max(found ? threshold(s, highest) : Level::Ok, reported);
     }
+
     std::shared_ptr<RosRuntime> runtime;
     std::mutex mutex;
     std::vector<std::unique_ptr<Source>> sources;
 };
 } // namespace
+
+// Registers "uwrt.telemetry"; battery readings and temperature readings take different keys.
 void registerUwrtTelemetry(Registry &registry, const RuntimeFactory &runtime) {
     registry.providers.emplace(
         "uwrt.telemetry",

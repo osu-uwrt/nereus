@@ -1,3 +1,5 @@
+// CPU mesh loading through Assimp (baked node transforms, materials, dependency tracking) and
+// panel perforation for UV cutouts. No OpenGL.
 #include "nereus/rendering/assets.hpp"
 #include <Eigen/LU>
 #include <algorithm>
@@ -15,6 +17,8 @@
 
 namespace nereus::rendering {
 namespace {
+
+// Assimp IO handler that records every file the importer opens (mesh plus material/buffer sidecars).
 class DependencyIO final : public Assimp::DefaultIOSystem {
   public:
     Assimp::IOStream *Open(const char *path, const char *mode = "rb") override {
@@ -31,30 +35,41 @@ class DependencyIO final : public Assimp::DefaultIOSystem {
         }
         return stream;
     }
-    std::set<std::filesystem::path> files;
+    std::set<std::filesystem::path> files; // Canonical paths, sorted.
 };
+
+// Assimp matrices are row-major (a1..a4 is the first row).
 Eigen::Matrix4f matrix(const aiMatrix4x4 &m) {
     Eigen::Matrix4f result;
     result << m.a1, m.a2, m.a3, m.a4, m.b1, m.b2, m.b3, m.b4, m.c1, m.c2, m.c3, m.c4, m.d1, m.d2, m.d3, m.d4;
     return result;
 }
+
 Eigen::Vector3f vector(const aiVector3D &v) {
     return {v.x, v.y, v.z};
 }
+
+// Panel-frame (y, z) position -> panel UV in [0, 1] across the face (see PanelCutouts).
 Eigen::Vector2f panelUv(const Eigen::Vector3f &panel_position, float half_size) {
     return {panel_position.y() / (2 * half_size) + 0.5f, panel_position.z() / (2 * half_size) + 0.5f};
 }
+
 } // namespace
+
 MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
     const auto fail = [&path](const std::string &message) -> void {
         throw std::runtime_error(path.string() + ": " + message);
     };
     if (!limits.file_bytes || !limits.vertices || !limits.triangles || !limits.submeshes || !limits.nodes)
         throw std::invalid_argument("asset limits must be positive");
+
+    // Bound the source size before handing it to Assimp.
     std::error_code error;
     const auto bytes = std::filesystem::file_size(path, error);
     if (error || !bytes || bytes > limits.file_bytes)
         fail("missing, empty or oversized asset");
+
+    // Import (COLLADA up-axis ignored so authored axes are kept as-is).
     Assimp::Importer importer;
     auto *io = new DependencyIO;
     importer.SetIOHandler(io); // The importer owns the handler through scene extraction.
@@ -63,10 +78,13 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
                                                              aiProcess_JoinIdenticalVertices);
     if (!scene || !scene->mRootNode)
         fail(importer.GetErrorString());
+
     MeshAsset result;
     result.dependencies.assign(io->files.begin(), io->files.end());
     result.minimum.setConstant(std::numeric_limits<float>::infinity());
     result.maximum = -result.minimum;
+
+    // Iterative depth-first walk of the node tree, accumulating each node's world transform.
     struct Pending {
         const aiNode *node;
         Eigen::Matrix4f parent;
@@ -84,7 +102,9 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
         if (!transform.allFinite() || !transform.row(3).isApprox(Eigen::RowVector4f(0, 0, 0, 1)) ||
             !linear.fullPivLu().isInvertible())
             fail("invalid or singular affine node transform");
-        const Eigen::Matrix3f normal = linear.inverse().transpose();
+        const Eigen::Matrix3f normal = linear.inverse().transpose(); // Normals use the inverse transpose.
+
+        // Bake every mesh referenced by this node into its own submesh.
         for (unsigned j = 0; j < node->mNumMeshes; ++j) {
             if (node->mMeshes[j] >= scene->mNumMeshes)
                 fail("invalid node mesh index");
@@ -98,6 +118,8 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
                 fail("mesh allocation limit exceeded");
             vertices += input->mNumVertices;
             triangles += input->mNumFaces;
+
+            // Vertices: transformed into asset coordinates, normals renormalized.
             Submesh mesh;
             mesh.vertices.reserve(input->mNumVertices);
             mesh.indices.reserve(static_cast<std::size_t>(input->mNumFaces) * 3);
@@ -115,6 +137,8 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
                     fail("invalid transformed vertex");
                 mesh.vertices.push_back({position.head<3>(), n * (1.f / norm), uv});
             }
+
+            // Triangle indices; bounds cover only referenced vertices.
             for (unsigned k = 0; k < input->mNumFaces; ++k) {
                 const auto &face = input->mFaces[k];
                 if (face.mNumIndices != 3)
@@ -128,6 +152,8 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
                     result.maximum = result.maximum.cwiseMax(position);
                 }
             }
+
+            // Material: diffuse colour with alpha = min(colour alpha, opacity), name and diffuse texture.
             if (input->mMaterialIndex >= scene->mNumMaterials)
                 fail("invalid material index");
             const auto *material = scene->mMaterials[input->mMaterialIndex];
@@ -151,6 +177,7 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
             }
             result.submeshes.push_back(std::move(mesh));
         }
+
         if (node->mNumChildren > limits.nodes - nodes || pending.size() > limits.nodes - nodes - node->mNumChildren)
             fail("node limit exceeded");
         // Reverse push preserves the original recursive depth-first draw order.
@@ -161,6 +188,7 @@ MeshAsset loadMesh(const std::filesystem::path &path, AssetLimits limits) {
         fail("asset contains no triangles");
     return result;
 }
+
 PerforatedMesh perforatePanel(const MeshAsset &mesh, const PanelCutouts &panel) {
     const float half = panel.half_size;
     if (panel.faces_x.empty() ||
@@ -175,15 +203,19 @@ PerforatedMesh perforatePanel(const MeshAsset &mesh, const PanelCutouts &panel) 
             return cutout.center.allFinite() && std::isfinite(cutout.radius) && cutout.radius > 0;
         }))
         throw std::invalid_argument("panel needs one to four finite cutouts with positive radius");
+
     const Eigen::Matrix4f &transform = panel.asset_to_panel;
     const Eigen::Matrix3f rotation = transform.topLeftCorner<3, 3>();
     if (!transform.allFinite() || transform.row(3) != Eigen::RowVector4f(0, 0, 0, 1) ||
         !(rotation.transpose() * rotation).isApprox(Eigen::Matrix3f::Identity(), 1e-5f) ||
         std::abs(rotation.determinant() - 1) > 1e-5f)
         throw std::invalid_argument("panel transform must be rigid");
+
     const auto toPanel = [&transform](const Eigen::Vector3f &p) -> Eigen::Vector3f {
         return (transform * Eigen::Vector4f(p.x(), p.y(), p.z(), 1)).head<3>();
     };
+
+    // Index of the panel face whose plane and extent contain all three corners, if any.
     const auto faceOf = [&](const Submesh &part, std::size_t triangle) -> std::optional<std::size_t> {
         Eigen::Vector3f corners[3];
         for (std::size_t k = 0; k < 3; ++k) {
@@ -202,17 +234,22 @@ PerforatedMesh perforatePanel(const MeshAsset &mesh, const PanelCutouts &panel) 
         }
         return std::nullopt;
     };
+
+    // A textured face keeps its authored UVs, so they must already match the panel mapping.
     const auto checkTexture = [&](const Submesh &part, const Vertex &vertex) {
         if (part.material.diffuse_texture &&
             (vertex.uv - panelUv(toPanel(vertex.position), half)).cwiseAbs().maxCoeff() > 1e-4f)
             throw std::invalid_argument("textured panel face UVs differ from the panel mapping");
     };
+
     PerforatedMesh result;
     result.mesh.dependencies = mesh.dependencies;
     result.mesh.minimum = mesh.minimum;
     result.mesh.maximum = mesh.maximum;
     result.mesh.submeshes.reserve(mesh.submeshes.size());
     result.face_triangles.assign(panel.faces_x.size(), 0);
+
+    // Split each submesh into triangles off the panel (remainder) and on a panel face (selected).
     for (const auto &part : mesh.submeshes) {
         if (part.indices.size() % 3)
             throw std::invalid_argument("submesh indices are not a triangle list");
@@ -224,12 +261,15 @@ PerforatedMesh perforatePanel(const MeshAsset &mesh, const PanelCutouts &panel) 
             if (face)
                 ++result.face_triangles[*face];
         }
+
         if (selected.empty()) {
             result.mesh.submeshes.push_back(part);
             continue;
         }
         if (!part.material.cutouts.empty())
             throw std::invalid_argument("panel submesh already has cutouts");
+
+        // Entirely on the panel: reuse the submesh, assigning panel UVs to untextured vertices.
         if (remainder.empty()) {
             Submesh panel_part = part;
             for (auto index : selected) {
@@ -242,6 +282,8 @@ PerforatedMesh perforatePanel(const MeshAsset &mesh, const PanelCutouts &panel) 
             result.mesh.submeshes.push_back(std::move(panel_part));
             continue;
         }
+
+        // Mixed: keep the remainder in place and append a panel submesh with its own vertex copies.
         Submesh kept{part.vertices, std::move(remainder), part.material};
         Submesh panel_part;
         panel_part.material = part.material;
@@ -261,4 +303,5 @@ PerforatedMesh perforatePanel(const MeshAsset &mesh, const PanelCutouts &panel) 
     }
     return result;
 }
+
 } // namespace nereus::rendering

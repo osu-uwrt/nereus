@@ -1,3 +1,5 @@
+// Mechanisms: validates the robot pack's launcher/dropper/claw/magnet data once, then runs the release slots,
+// shared cooldown groups and timed claw travel on the session clock.
 #include <nereus/session/mechanisms.hpp>
 
 #include "json_util.hpp"
@@ -9,8 +11,10 @@
 namespace nereus::session {
 namespace {
 using namespace detail;
+
 constexpr std::int64_t kMaxNs = std::numeric_limits<std::int64_t>::max();
 
+// Validated JSON readers: throw std::invalid_argument naming the offending field.
 double number(const Json &value, const std::string &name, double minimum = 0) {
     if (!value.is_number())
         throw std::invalid_argument(name + " must be a finite number");
@@ -21,30 +25,39 @@ double number(const Json &value, const std::string &name, double minimum = 0) {
     }
     return result;
 }
+
 bool boolean(const Json &value, const std::string &name) {
     if (!value.is_boolean())
         throw std::invalid_argument(name + " must be a bool");
     return value.get<bool>();
 }
+
+// Seconds to integer nanoseconds, rounded the same way as the Python reference implementation.
 std::int64_t nanoseconds(double seconds) {
     const double value = seconds * 1e9;
     if (!std::isfinite(value) || value > 9223372036854775807.0)
         throw std::invalid_argument("duration exceeds signed 64-bit nanoseconds");
     return static_cast<std::int64_t>(std::nearbyint(value)); // round half to even, as Python round()
 }
+
 const Json &at(const Json &object, const char *key) {
     if (!object.is_object() || !object.contains(key))
         throw std::invalid_argument(std::string("missing field '") + key + "'");
     return object.at(key);
 }
 
+// One claw's jaw state. `q`, `target` and `initial` are per-jaw openings in metres measured from the closed
+// position (gap = minimum + 2 q), so q runs from 0 (closed) to travel() (fully open).
 struct Claw {
     double minimum, maximum, speed, tolerance, initial, q, target;
-    int direction{0};
-    std::optional<std::int64_t> remaining_ns;
+    int direction{0};                         // +1 opening, -1 closing, 0 idle (only used for reporting)
+    std::optional<std::int64_t> remaining_ns; // time left on a timed (signed-duration) move; empty = run to target
+
     double travel() const {
         return (maximum - minimum) / 2;
     }
+
+    // Freeze the jaws where they are.
     void stop() {
         target = q;
         direction = 0;
@@ -54,24 +67,28 @@ struct Claw {
 } // namespace
 
 struct Mechanisms::Impl {
+    // Static configuration, built once by the constructor.
     std::unique_ptr<spatial::FixedFrames> frames;
-    std::map<std::string, Json> release_configs; // launcher/dropper parameters (stable addresses)
-    std::map<std::string, std::vector<Pose>> mounts;
+    std::map<std::string, Json> release_configs;     // launcher/dropper parameters (stable addresses)
+    std::map<std::string, std::vector<Pose>> mounts; // slot mounts in the frame-tree root, one per slot
     std::map<std::string, std::int64_t> cooldown_ns;
     std::map<std::string, Claw> claws;
     std::map<std::string, std::string> types;
-    std::vector<std::string> order;
+    std::vector<std::string> order; // mechanism ids in robot-pack order
     bool initial_armed, kill_disarms, reject_arm_killed;
-    std::set<std::string> guarded;
+    std::set<std::string> guarded; // mechanisms that only work while armed (safety.arming.applies_to)
 
+    // Run state, restored by reset().
     std::int64_t time_ns{0};
     bool armed{false};
-    std::map<std::string, int> available;
+    std::map<std::string, int> available;                                  // rounds left per release mechanism
     std::map<std::string, std::pair<std::int64_t, std::string>> cooldowns; // group -> deadline, owner
 
     int capacity(const std::string &id) const {
         return release_configs.at(id).at("capacity").get<int>();
     }
+
+    // Back to the start of a run: full magazines, no cooldowns, claws at their initial opening.
     void reset(bool killed) {
         time_ns = 0;
         armed = initial_armed && !(killed && kill_disarms);
@@ -85,6 +102,9 @@ struct Mechanisms::Impl {
             claw.stop();
         }
     }
+
+    // Apply the current kill/arm state: a kill may disarm, and claws that are killed or guarded-and-disarmed
+    // stop moving. Called before every command so the state is always current.
     void kill(bool killed) {
         if (killed && kill_disarms)
             armed = false;
@@ -92,9 +112,13 @@ struct Mechanisms::Impl {
             if (killed || (guarded.count(key) && !armed))
                 claw.stop();
     }
+
+    // True when `id` may not act right now (vehicle killed, or a guarded mechanism while disarmed).
     bool blocked(const std::string &id, bool killed) const {
         return killed || (guarded.count(id) && !armed);
     }
+
+    // Drive the claw fully open or closed; with `duration_ns`, only for that long (0 stops it at once).
     CommandResult commandClaw(const std::string &id, bool opened, std::optional<std::int64_t> duration_ns,
                               bool killed) {
         auto &claw = claws.at(id);
@@ -114,6 +138,8 @@ struct Mechanisms::Impl {
 
 Mechanisms::Mechanisms(const Json &robot) : impl_(std::make_unique<Impl>()) {
     auto &m = *impl_;
+
+    // Fixed frame tree, used to place slot mounts and release reference frames.
     const Json &config = at(robot, "frames");
     std::vector<spatial::FixedFrame> edges;
     for (const auto &entry : at(config, "transforms")) {
@@ -124,6 +150,8 @@ Mechanisms::Mechanisms(const Json &robot) : impl_(std::make_unique<Impl>()) {
         edges.push_back(std::move(edge));
     }
     m.frames = std::make_unique<spatial::FixedFrames>(at(config, "root").get<std::string>(), std::move(edges));
+
+    // Arming and kill semantics from robot.safety.
     const Json &safety = at(robot, "safety");
     const Json &arming = at(safety, "arming");
     m.initial_armed = boolean(at(arming, "initially_armed"), "initially_armed");
@@ -131,6 +159,8 @@ Mechanisms::Mechanisms(const Json &robot) : impl_(std::make_unique<Impl>()) {
     m.reject_arm_killed = boolean(at(arming, "arm_rejected_while_killed"), "arm_rejected_while_killed");
     for (const auto &id : at(arming, "applies_to"))
         m.guarded.insert(id.get<std::string>());
+
+    // Validate and compile each mechanism by type.
     std::set<std::string> ids;
     const Json none = Json::array();
     const Json &list = robot.contains("mechanisms") ? robot.at("mechanisms") : none;
@@ -144,6 +174,7 @@ Mechanisms::Mechanisms(const Json &robot) : impl_(std::make_unique<Impl>()) {
         m.order.push_back(id);
         const Pose mount = m.frames->fromRoot(at(entry, "frame").get<std::string>());
         if (kind == "launcher" || kind == "dropper") {
+            // Slot release: one slot per round, fired in slot order.
             const Json &slots = at(p, "slots");
             const Json &capacity = at(p, "capacity");
             std::set<std::string> slot_ids;
@@ -185,14 +216,17 @@ Mechanisms::Mechanisms(const Json &robot) : impl_(std::make_unique<Impl>()) {
             claw.q = claw.target = claw.initial;
             m.claws[id] = claw;
         } else if (kind != "magnet" || !(p.contains("actuated") && p.at("actuated") == false)) {
+            // A passive (actuated: false) magnet is accepted and has no runtime state; anything else is rejected.
             throw std::invalid_argument("unsupported mechanism type " + repr(kind));
         }
     }
+
     for (const auto &g : m.guarded)
         if (!ids.count(g))
             throw std::invalid_argument("arming references unknown mechanisms");
     m.reset(boolean(at(safety, "initially_killed"), "initially_killed"));
 }
+
 Mechanisms::~Mechanisms() = default;
 Mechanisms::Mechanisms(Mechanisms &&) noexcept = default;
 Mechanisms &Mechanisms::operator=(Mechanisms &&) noexcept = default;
@@ -231,6 +265,8 @@ CommandResult Mechanisms::fire(const std::string &id, const Pose &world_from_ref
     if (found == m.release_configs.end())
         throw std::out_of_range("unknown release mechanism " + repr(id));
     const Json &p = found->second;
+
+    // Validate the inputs before touching any state.
     const Pose world = composeChecked({}, world_from_reference);
     if (!linear_velocity_reference.allFinite())
         throw std::invalid_argument("linear velocity must contain three finite values");
@@ -241,6 +277,8 @@ CommandResult Mechanisms::fire(const std::string &id, const Pose &world_from_ref
     if (water_density <= 0)
         throw std::invalid_argument("water density must be positive");
     const Pose root_from_reference = m.frames->fromRoot(reference_frame);
+
+    // Gate on arming, the shared cooldown group and ammunition.
     m.kill(killed);
     if (m.blocked(id, killed))
         return {false, "Mechanism is disarmed or vehicle is killed"};
@@ -250,12 +288,17 @@ CommandResult Mechanisms::fire(const std::string &id, const Pose &world_from_ref
         return {false, "Release group is busy"};
     if (m.available.at(id) == 0)
         return {false, "No ammunition; reload first"};
+
+    // Next loaded slot, placed in the world through the reference frame.
     const int capacity = m.capacity(id);
     const int index = capacity - m.available.at(id);
     const Pose mount =
         composeChecked(inverseChecked(root_from_reference), m.mounts.at(id)[static_cast<std::size_t>(index)]);
     const Pose pose = composeChecked(world, mount);
-    const Eigen::Vector3d axis = rotate(pose.rotation, Eigen::Vector3d::UnitX());
+    const Eigen::Vector3d axis = rotate(pose.rotation, Eigen::Vector3d::UnitX()); // launch along the slot's +x
+
+    // Spring launch: all spring energy goes into the projectile's inertial mass (mass + added mass), with a
+    // neutrally buoyant projectile weighing exactly its displaced water.
     const Json &projectile = p.at("projectile");
     const double mass = projectile.at("neutral_buoyancy").get<bool>()
                             ? water_density * projectile.at("displaced_volume_m3").get<double>()
@@ -264,6 +307,9 @@ CommandResult Mechanisms::fire(const std::string &id, const Pose &world_from_ref
     if (inertia <= 0)
         throw std::invalid_argument("effective projectile inertial mass must be positive");
     const double speed = std::sqrt(2 * p.at("launch").at("spring_energy_j").get<double>() / inertia);
+
+    // Vehicle velocity carried to the slot (rigid-body transport), plus the launch speed along the slot axis
+    // and the spin's contribution at the projectile's centre of mass, which sits `com` metres along that axis.
     const Eigen::Vector3d world_omega = rotate(world.rotation, angular_velocity_reference);
     Eigen::Vector3d world_velocity =
         rotate(world.rotation, linear_velocity_reference + angular_velocity_reference.cross(mount.translation));
@@ -271,6 +317,8 @@ CommandResult Mechanisms::fire(const std::string &id, const Pose &world_from_ref
     world_velocity += axis * speed + world_omega.cross(axis * com);
     if (!world_velocity.allFinite())
         throw std::invalid_argument("release velocity is not finite");
+
+    // Commit: fill the release, spend the round and start the group's cooldown.
     const std::int64_t cooldown_ns = m.cooldown_ns.at(id);
     if (m.time_ns > kMaxNs - cooldown_ns)
         throw std::invalid_argument("cooldown exceeds simulation time range");
@@ -299,6 +347,7 @@ CommandResult Mechanisms::moveClaw(const std::string &id, double signed_duration
     return impl_->commandClaw(id, value > 0, nanoseconds(std::fabs(value)), killed);
 }
 
+// Step the mechanism clock: claws move toward their target at jaw speed, timed moves count down.
 void Mechanisms::advance(std::int64_t dt_ns, bool killed) {
     auto &m = *impl_;
     if (dt_ns < 0 || m.time_ns > kMaxNs - dt_ns)
@@ -324,11 +373,15 @@ MechanismState Mechanisms::snapshot(bool killed) const {
     MechanismState state;
     state.time_ns = m.time_ns;
     state.armed = m.armed;
+
+    // Busy while any cooldown group is still running or any claw is moving.
     bool busy = false;
     for (const auto &[group, entry] : m.cooldowns) {
         (void)group;
         busy = busy || m.time_ns < entry.first;
     }
+
+    // Release mechanisms: only the mechanism that started a group's cooldown reports busy.
     for (const auto &[key, p] : m.release_configs) {
         const auto found = m.cooldowns.find(p.at("cooldown_group").get<std::string>());
         const std::int64_t deadline = found == m.cooldowns.end() ? 0 : found->second.first;
@@ -340,6 +393,8 @@ MechanismState Mechanisms::snapshot(bool killed) const {
                                                                     : "empty";
         state.releases[key] = {name, available};
     }
+
+    // Claws: report gaps, not per-jaw openings.
     for (const auto &[key, claw] : m.claws) {
         const bool moving = !m.blocked(key, killed) && std::fabs(claw.q - claw.target) > claw.tolerance;
         busy = busy || moving;
@@ -356,12 +411,15 @@ MechanismState Mechanisms::snapshot(bool killed) const {
 int Mechanisms::slotCount(const std::string &id) const {
     return static_cast<int>(impl_->mounts.at(id).size());
 }
+
 Pose Mechanisms::slotMount(const std::string &id, int index) const {
     return impl_->mounts.at(id).at(static_cast<std::size_t>(index));
 }
+
 const std::string &Mechanisms::type(const std::string &id) const {
     return impl_->types.at(id);
 }
+
 std::vector<std::string> Mechanisms::ids() const {
     return impl_->order;
 }

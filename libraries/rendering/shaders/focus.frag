@@ -1,6 +1,8 @@
 #version 330 core
+// Orbit focus marker: translucent yellow disc with fixed view-space diffuse and highlight lights.
 in vec3 viewNormal;
 out vec4 frag;
+
 void main(){
     vec3 n=normalize(viewNormal);
     float diffuse=max(0.,dot(n,normalize(vec3(-.4,.6,1.))));

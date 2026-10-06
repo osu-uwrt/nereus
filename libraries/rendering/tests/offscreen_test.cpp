@@ -1,3 +1,5 @@
+// Tests for the headless EGL OffscreenRenderer: colour/depth captures, EGL context hygiene and threading, and
+// the label pass (ids + depth) used for dataset export. Label ids are (instance id << 8) | part value.
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <Eigen/Geometry>
@@ -14,6 +16,7 @@
 
 namespace r = nereus::rendering;
 namespace {
+// Unit box 3 m in front of the default camera (camera looks down -Z).
 r::Scene scene() {
     r::Scene result;
     r::Instance box;
@@ -22,6 +25,8 @@ r::Scene scene() {
     result.instances.push_back(box);
     return result;
 }
+
+// Perspective projection with focal 2 (about 53 deg FOV), near 0.05 m, far 100 m.
 r::View view() {
     r::View result;
     result.projection.setZero();
@@ -31,16 +36,22 @@ r::View view() {
     result.projection(3, 2) = -1;
     return result;
 }
+
+// Lighting effects off so captures are cheap and deterministic.
 r::Appearance appearance() {
     r::Appearance result;
     result.shadows = result.reflections = false;
     result.caustics = 0;
     return result;
 }
+
+// Captures the box scene at width x 32.
 r::ImageCapture capture(r::OffscreenRenderer &host, int width = 32) {
     return host.capture(scene(), view(), appearance(), 0, width, 32);
 }
 } // namespace
+
+// Pixels are owned by the returned image (a later capture doesn't alias them) and no context stays current.
 TEST(Offscreen, CapturesWithoutAWindowAndOwnsPixelsAcrossResize) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     EXPECT_FALSE(host.device().empty());
@@ -55,6 +66,8 @@ TEST(Offscreen, CapturesWithoutAWindowAndOwnsPixelsAcrossResize) {
     EXPECT_EQ(image.rgb, saved);
     EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
 }
+
+// Captures may run on other threads; concurrent calls are serialized and give identical results.
 TEST(Offscreen, CanMoveCaptureToAWorkerAndSerializeConcurrentCalls) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     const auto expected = capture(host);
@@ -64,6 +77,9 @@ TEST(Offscreen, CanMoveCaptureToAWorkerAndSerializeConcurrentCalls) {
     EXPECT_EQ(second.get().depth, expected.depth);
     EXPECT_EQ(capture(host).rgb, expected.rgb);
 }
+
+// Destroying one host keeps the shared EGL display alive for the others; bad sizes throw and leave no
+// context current.
 TEST(Offscreen, HostsShareDisplayLifetimeAndRecoverFromInvalidInput) {
     auto first = std::make_unique<r::OffscreenRenderer>(NEREUS_RENDERING_SHADERS);
     r::OffscreenRenderer second(NEREUS_RENDERING_SHADERS);
@@ -74,12 +90,15 @@ TEST(Offscreen, HostsShareDisplayLifetimeAndRecoverFromInvalidInput) {
     EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
     EXPECT_EQ(capture(second).rgb, expected.rgb);
 }
+
 TEST(Offscreen, FailedConstructionReleasesItsContext) {
     EXPECT_THROW(r::OffscreenRenderer("/nonexistent/nereus-shaders"), std::runtime_error);
     EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
     r::OffscreenRenderer next(NEREUS_RENDERING_SHADERS);
     EXPECT_FALSE(capture(next).rgb.empty());
 }
+
+// A caller's current EGL context, surfaces and bound API are restored after a capture, even a failed one.
 TEST(Offscreen, RestoresCallersEglContextAndApiAfterSuccessAndFailure) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     const auto get = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
@@ -112,6 +131,7 @@ TEST(Offscreen, RestoresCallersEglContextAndApiAfterSuccessAndFailure) {
     EXPECT_EQ(eglQueryAPI(), EGL_OPENGL_ES_API);
 }
 
+// The host can be destroyed on a different thread from the one that created it.
 TEST(Offscreen, HostCanBeDestroyedOnAWorkerThread) {
     auto host = std::make_unique<r::OffscreenRenderer>(NEREUS_RENDERING_SHADERS);
     capture(*host);
@@ -123,6 +143,7 @@ TEST(Offscreen, HostCanBeDestroyedOnAWorkerThread) {
     EXPECT_FALSE(capture(next).rgb.empty());
 }
 
+// Destroying the last host must not terminate the display under an external context that is still current.
 TEST(Offscreen, LastHostDoesNotInvalidateAnExternalContextOnTheSameDisplay) {
     auto host = std::make_unique<r::OffscreenRenderer>(NEREUS_RENDERING_SHADERS);
     const auto get = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
@@ -150,6 +171,7 @@ TEST(Offscreen, LastHostDoesNotInvalidateAnExternalContextOnTheSameDisplay) {
     eglBindAPI(EGL_OPENGL_ES_API);
 }
 
+// A display terminated by someone else between host lifetimes is reinitialized by the next host.
 TEST(Offscreen, ReinitializesDisplayTerminatedBetweenHostLifetimes) {
     {
         r::OffscreenRenderer first(NEREUS_RENDERING_SHADERS);
@@ -182,6 +204,7 @@ void writePng(const fs::path &path, int width, int height, int channels, const s
     png_destroy_write_struct(&png, &info);
     std::fclose(file);
 }
+
 // Unit quad in the YZ plane facing +X at x, uv (0,0) at (y=-.5, z=-.5), scaled by `size`.
 std::shared_ptr<r::MeshAsset> quad(float x = 0, float size = 1, std::optional<fs::path> texture = {},
                                    std::vector<r::UvCutout> cutouts = {}, float alpha = 1) {
@@ -200,6 +223,7 @@ std::shared_ptr<r::MeshAsset> quad(float x = 0, float size = 1, std::optional<fs
     mesh->maximum = {x, .5f * size, .5f * size};
     return mesh;
 }
+
 // Camera on +X at 1.2 m looking back at the quads; image up is world +Z, image right is world -Y.
 r::View front() {
     r::View v;
@@ -218,17 +242,23 @@ r::View front() {
     v.eye = eye;
     return v;
 }
+
+// Scene instance with the given mesh and surface material.
 r::Instance item(std::shared_ptr<const r::MeshAsset> mesh, r::SurfaceMaterial material = r::SurfaceMaterial::Asset) {
     r::Instance result;
     result.mesh = std::move(mesh);
     result.material = material;
     return result;
 }
+
+// Label for an instance with whole-instance id and no per-submesh parts.
 r::InstanceLabel label(std::uint32_t id) {
     r::InstanceLabel result;
     result.id = id;
     return result;
 }
+
+// Per-test temporary directory for generated PNGs; ids and depth are indexed with row 0 at the bottom.
 class Labels : public ::testing::Test {
   protected:
     void SetUp() override {
@@ -238,16 +268,19 @@ class Labels : public ::testing::Test {
     void TearDown() override {
         fs::remove_all(directory);
     }
+
     static std::uint32_t at(const r::LabelCapture &image, int column, int row_from_bottom) {
         return image.ids[std::size_t(row_from_bottom) * image.width + column];
     }
     static float depthAt(const r::LabelCapture &image, int column, int row_from_bottom) {
         return image.depth[std::size_t(row_from_bottom) * image.width + column];
     }
+
     fs::path directory;
 };
 } // namespace
 
+// A per-submesh part-map PNG is sampled with the same UVs as the diffuse texture, texel for texel.
 TEST_F(Labels, PartMapLinesUpTexelForTexelWithTheDiffuseTexture) {
     // 2x2 texture and part map, file rows top first: red 1 | green 2 / blue 3 | white 4.
     const std::vector<std::uint8_t> colours = {255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255};
@@ -316,6 +349,7 @@ TEST_F(Labels, PartMapLinesUpTexelForTexelWithTheDiffuseTexture) {
     EXPECT_EQ(at(host.captureLabels(scene, {label(9)}, front(), 64, 64), 32, 32), 9u << 8);
 }
 
+// id 0 marks an occluder that hides labelled geometry; clear or invisible covers occlude only if labelled.
 TEST_F(Labels, UnlabelledOccluderHidesALabelledQuadButClearOnlyWhenLabelled) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     r::Scene scene;
@@ -342,6 +376,7 @@ TEST_F(Labels, UnlabelledOccluderHidesALabelledQuadButClearOnlyWhenLabelled) {
     EXPECT_EQ(at(host.captureLabels(scene, {label(5), label(6)}, front(), 64, 64), 32, 32), 5u << 8);
 }
 
+// Shader cutouts and low-alpha texels discard fragments in the label pass, as in the colour pass.
 TEST_F(Labels, CutoutsAndTransparentTexelsDiscardLikeTheColourPass) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     r::Scene scene;
@@ -389,6 +424,7 @@ TEST_F(Labels, PartMapValuesFillCutoutsAndZeroKeepsThemOpen) {
     EXPECT_LT(depthAt(occluder, 36, 46), 1.f) << "solid part still occludes";
 }
 
+// Part maps are loaded (and validated) even when their submesh is off screen.
 TEST_F(Labels, PartMapsOfOffscreenSubmeshesAreStillLoaded) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     r::Scene scene;
@@ -402,6 +438,7 @@ TEST_F(Labels, PartMapsOfOffscreenSubmeshesAreStillLoaded) {
     EXPECT_EQ(std::set<std::uint32_t>(ids.ids.begin(), ids.ids.end()), std::set<std::uint32_t>{0});
 }
 
+// Label depth equals colour depth; the water surface and Marking stripes never get label ids.
 TEST_F(Labels, DepthMatchesTheColourPassAndWaterAndMarkingsAreNotDrawn) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     auto scene = ::scene();                        // box 3 m away
@@ -441,6 +478,7 @@ TEST_F(Labels, DepthMatchesTheColourPassAndWaterAndMarkingsAreNotDrawn) {
         ASSERT_EQ(markings.count(value), 0u);
 }
 
+// Label captures don't change later colour captures; invalid labels and sizes throw.
 TEST_F(Labels, LabelPassesDoNotDisturbCapturesAndInvalidInputIsRejected) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
     const auto expected = capture(host);

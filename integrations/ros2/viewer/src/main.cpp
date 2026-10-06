@@ -1,9 +1,11 @@
+// nereus-viewer entry point: parses the command line into host::Options and runs the viewer.
 #include "app.hpp"
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 
 namespace {
+// --help text (keep in step with the parser below and host::Options).
 void usage() {
     std::cout
         << "nereus-viewer: ROS 2 pool viewer for the nereus simulator bridge\n"
@@ -62,8 +64,11 @@ void usage() {
 
 int main(int argc, char **argv) {
     nereus::ros_viewer::host::Options options;
+
+    // Parse arguments in order; everything from --ros-args on goes to rclcpp.
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
+        // The next argument as this option's value (exits with usage error 2 when missing).
         const auto value = [&]() -> std::string {
             if (i + 1 >= argc) {
                 std::cerr << arg << " needs a value\n";
@@ -71,6 +76,7 @@ int main(int argc, char **argv) {
             }
             return argv[++i];
         };
+
         if (arg == "--help" || arg == "-h") {
             usage();
             return 0;
@@ -126,6 +132,7 @@ int main(int argc, char **argv) {
         else if (arg == "--no-local-cameras")
             options.localCameras = false;
         else if (arg == "--local-cameras") {
+            // Optional value: a following word that is not another option.
             std::string v = "true";
             if (i + 1 < argc && argv[i + 1][0] != '-')
                 v = argv[++i];
@@ -183,6 +190,7 @@ int main(int argc, char **argv) {
             return 2;
         }
     }
+
     try {
         return nereus::ros_viewer::host::run(options, argc, argv);
     } catch (const std::exception &error) {

@@ -27,18 +27,21 @@ struct PackRuntime {
     std::vector<std::string> sensor_ids, deferred_sensor_ids; // executed / not executed
     std::map<std::string, std::string> sensor_types;          // executed sensor id -> pack type
 };
+
 // sensor_ids: explicit selection (nullptr = every enabled non-camera sensor).
 PackRuntime createRuntime(const ResolvedScenario &scenario, const std::vector<std::string> *sensor_ids = nullptr);
 
+// A payload released by a launcher/dropper, propagated by the session until it stops or times out.
 struct Payload {
-    int id{0};
+    int id{0}; // unique within the session until a full reset
     std::string mechanism_id, mechanism_type;
-    simulation::PayloadState state;
+    simulation::PayloadState state; // world frame
     std::int64_t released_ns{0};
-    bool active{true};
-    std::string outcome;
+    bool active{true};   // false once stopped
+    std::string outcome; // why it stopped: "timeout", "stopped", or the id of the event that stopped it
 };
 
+// What one advance() produced.
 struct Step {
     simulation::Snapshot snapshot;
     Events task_events; // everything produced this tick, in order
@@ -49,6 +52,7 @@ struct SessionOptions {
     bool tasks{true};                                  // false: plain navigation plant
 };
 
+// Owns one run: build it from a resolved scenario and its PackRuntime, then drive it tick by tick.
 class Session {
   public:
     Session(const ResolvedScenario &scenario, PackRuntime pack, const RulesRegistry &rules,
@@ -59,27 +63,32 @@ class Session {
 
     Step advance(); // exactly one physics tick
     const Step &lastStep() const;
+
     std::int64_t timeNs() const;
     std::int64_t timestepNs() const;
     sensors::Runtime &runtime();
     const PackRuntime &pack() const;
+    // World pose of the robot's reference frame for a COM body state.
     spatial::Pose referencePose(const simulation::BodyState &body) const;
 
     // Commands (serialized by the transport).
     void commandThrusters(const Eigen::VectorXd &forces_native_order);
+    // Kill switch: may stop the thrusters and disarm mechanisms, per robot.safety.
     void setKilled(bool killed);
     bool killed() const;
     CommandResult setArmed(bool armed);
     CommandResult reloadAll();
     CommandResult commandClaw(const std::string &id, bool open);
     CommandResult moveClaw(const std::string &id, double signed_duration_s);
-    CommandResult fire(const std::string &id); // task events land in lastStep().task_events
-    std::optional<MechanismState> mechanismState() const;
+    CommandResult fire(const std::string &id);            // task events land in lastStep().task_events
+    std::optional<MechanismState> mechanismState() const; // nullopt when the robot has no mechanisms
 
     // Placement and resets.
+    // Teleport the robot (COM state), optionally clearing actuator state.
     simulation::Snapshot place(const simulation::BodyState &com_state, bool clear_actuators);
     const simulation::BodyState &startState() const;
     CommandResult resetTasks(); // payloads cleared, reload + disarm, props/tasks reset
+    // Plant, sensors and everything else back to the start (optionally with a new seed).
     simulation::Snapshot fullReset(std::optional<std::uint64_t> seed = std::nullopt);
     std::uint64_t seed() const;
 

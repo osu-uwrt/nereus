@@ -1,3 +1,5 @@
+// Plant: synchronous simulation of one vehicle in a pool (marine dynamics, thruster actuators, pool or box
+// contacts), advanced in fixed ticks.
 #include "nereus/simulation/plant.hpp"
 #include "detail/box_contacts.hpp"
 #include "detail/marine_dynamics.hpp"
@@ -18,8 +20,10 @@ void require(bool condition, const std::string &message) {
     }
 }
 
+// Validates pool, floor and thruster parameters up front (MarineDynamics checks the body parameters).
 void validate(const PlantParameters &p) {
     require(p.timestep.count() > 0 && p.timestep <= std::chrono::milliseconds(100), "timestep must be in (0, 100ms]");
+    // Pool geometry and current; omega times the longest representable simulated time must stay finite.
     for (double value : {p.pool.length, p.pool.width, p.pool.depth, p.pool.water_density}) {
         require(std::isfinite(value) && value > 0, "pool dimensions and density must be positive");
     }
@@ -33,6 +37,8 @@ void validate(const PlantParameters &p) {
                 std::isfinite(omega * (static_cast<double>(std::numeric_limits<std::int64_t>::max()) / 1e9)),
             "current oscillation must have finite amplitude and nonnegative frequency");
     require(std::isfinite(p.pool.water_level - p.pool.depth), "pool floor must be finite");
+
+    // A sloped floor must span the pool along each profile's axis and set the pool depth.
     if (!p.pool.floor.empty()) {
         for (const auto &profile : p.pool.floor.profiles()) {
             const double extent = profile.axis() == FloorProfile::Axis::X ? p.pool.length : p.pool.width;
@@ -43,6 +49,8 @@ void validate(const PlantParameters &p) {
                 "pool depth must be the floor profile's deepest point");
         require(p.contacts.model != ContactModel::SpherePool, "sphere_pool contacts need a flat pool floor");
     }
+
+    // Thrusters: unique ids, unit directions, optional positive propeller radius.
     std::set<std::string> ids;
     for (const auto &t : p.thrusters) {
         require(!t.id.empty() && ids.insert(t.id).second, "thruster IDs must be nonempty and unique");
@@ -53,6 +61,7 @@ void validate(const PlantParameters &p) {
     }
 }
 
+// BodyState <-> 13-element integrator state [position, quaternion w x y z, body linear, body angular velocity].
 detail::State13d pack(const BodyState &s) {
     require(s.position.allFinite() && s.orientation.coeffs().allFinite() && std::isfinite(s.orientation.norm()) &&
                 s.orientation.norm() > 1e-10 && s.linear_velocity.allFinite() && s.angular_velocity.allFinite(),
@@ -76,6 +85,7 @@ BodyState unpack(const detail::State13d &x) {
 // No surface ceiling, general mesh contacts, or grasp/prop interaction in this slice.
 class PoolContacts {
   public:
+    // Allowed COM region in pool-local coordinates: walls and floor inset by the collision radius, no ceiling.
     explicit PoolContacts(const PlantParameters &p)
         : lower_(p.body.collision_radius, p.body.collision_radius,
                  p.pool.water_level - p.pool.depth + p.body.collision_radius),
@@ -83,6 +93,8 @@ class PoolContacts {
                  std::numeric_limits<double>::infinity()),
           origin_(p.pool.origin_xy_world.x(), p.pool.origin_xy_world.y(), 0),
           rotation_(Eigen::AngleAxisd(p.pool.yaw_world, Eigen::Vector3d::UnitZ()).toRotationMatrix()) {
+        // Off-origin or yawed pools lose exactness in the world <-> pool transform; local() snaps positions within a
+        // few ulps onto the boundaries.
         if (!p.pool.origin_xy_world.isZero(0) || p.pool.yaw_world != 0)
             boundary_tolerance_ = 16 * std::numeric_limits<double>::epsilon() *
                                   std::max({1.0, origin_.cwiseAbs().maxCoeff(), p.pool.length, p.pool.width,
@@ -98,11 +110,14 @@ class PoolContacts {
                 "initial collision sphere must be inside the pool walls and above the floor");
     }
 
+    // True when the sphere is on (within 1e-9 m of) a wall or the floor.
     bool touching(const detail::State13d &x) const {
         const auto position = local(x.head<3>());
         return (position.array() <= lower_.array() + 1e-9).any() || (position.array() >= upper_.array() - 1e-9).any();
     }
 
+    // Projects the COM back inside, then removes inward normal velocity at each touched wall/floor with an
+    // impulse through the 6x6 inverse mass.
     void resolve(detail::State13d &x, const Matrix6 &inverse_mass) const {
         const Eigen::Quaterniond q(x[3], x[4], x[5], x[6]);
         const Eigen::Vector3d position = local(x.head<3>()).cwiseMax(lower_).cwiseMin(upper_);
@@ -136,6 +151,7 @@ class PoolContacts {
     }
 
   private:
+    // World position to pool-local coordinates (corner origin, yawed axes).
     Eigen::Vector3d local(const Eigen::Vector3d &position) const {
         Eigen::Vector3d result = rotation_.transpose() * (position - origin_);
         // Preserve exact legal boundaries through finite-precision rigid transforms.
@@ -147,6 +163,7 @@ class PoolContacts {
         }
         return result;
     }
+
     double boundary_tolerance_{0};
     Eigen::Vector3d lower_, upper_, origin_;
     Eigen::Matrix3d rotation_;
@@ -156,6 +173,7 @@ class PoolContacts {
 struct Plant::Impl {
     explicit Impl(const PlantParameters &p, const BodyState &initial) : parameters(p), state(pack(initial)) {
         validate(p);
+        // Contact model.
         switch (p.contacts.model) {
         case ContactModel::Disabled:
             break;
@@ -170,11 +188,15 @@ struct Plant::Impl {
         default:
             throw std::invalid_argument("unknown contact model");
         }
+
+        // Body model.
         const auto &b = p.body;
         dynamics.configure(b.mass, b.inertia, b.added_mass);
         dynamics.configureDamping(b.linear_damping, b.quadratic_damping, b.damping_center);
         dynamics.configureHydrostatics(p.pool.water_density, b.displaced_volume, b.buoyancy_center, b.buoyancy_radii,
                                        9.80665, p.pool.water_level);
+
+        // Thruster actuators and the 6xN allocation matrix (force and torque about the COM per newton of thrust).
         std::vector<detail::ThrusterParameters> actuator_parameters;
         allocation.resize(6, static_cast<Eigen::Index>(p.thrusters.size()));
         for (std::size_t i = 0; i < p.thrusters.size(); ++i) {
@@ -198,6 +220,8 @@ struct Plant::Impl {
         committed_forces = actuators.forces();
     }
 
+    // Body wrench from thruster forces. A thruster with a propeller radius is scaled by the immersed fraction of
+    // its disk: a circular segment over the disk's projected vertical extent.
     Vector6 propulsion(const detail::State13d &stage, Eigen::VectorXd forces) const {
         const Eigen::Quaterniond q = Eigen::Quaterniond(stage[3], stage[4], stage[5], stage[6]).normalized();
         const double pi = std::acos(-1.0);
@@ -214,6 +238,8 @@ struct Plant::Impl {
         }
         return allocation * forces;
     }
+
+    // Body state derivative at simulated `time` (s), including the pool current's sinusoidal oscillation.
     detail::State13d derivative(const detail::State13d &stage, const Eigen::VectorXd &forces, double time) const {
         const auto &pool = parameters.pool;
         const double omega = 2 * std::acos(-1.0) * pool.current_oscillation_frequency;
@@ -223,6 +249,7 @@ struct Plant::Impl {
                                    pool.current_oscillation_amplitude * (omega * std::cos(phase)));
     }
 
+    // Configuration and models.
     PlantParameters parameters;
     detail::MarineDynamics dynamics;
     detail::ThrusterDynamics actuators;
@@ -230,9 +257,12 @@ struct Plant::Impl {
     std::unique_ptr<detail::BoxContacts> box_contacts;
     std::shared_ptr<ContactResolver> resolver;
     Eigen::Matrix<double, 6, Eigen::Dynamic> allocation;
+
+    // Committed state: body, thruster forces at the last tick boundary, tick count and reset generation.
     detail::State13d state;
     Eigen::VectorXd committed_forces;
     std::uint64_t tick = 0, generation = 0;
+    // Set when an advance throws; only reset() clears it.
     bool faulted = false;
 };
 
@@ -246,6 +276,7 @@ void Plant::command(const Eigen::VectorXd &forces) {
     }
     impl_->actuators.command(forces);
 }
+
 void Plant::stopThrusters() {
     if (impl_->faulted)
         throw std::logic_error("plant must be reset after a failed advance");
@@ -266,6 +297,8 @@ MotionSample Plant::motion() const {
     }
     MotionSample sample;
     sample.state = observe();
+
+    // Accelerations from the model derivative; the linear one adds the rotating-frame term w x v.
     const auto derivative =
         p.derivative(p.state, p.committed_forces, std::chrono::duration<double>(sample.state.elapsed).count());
     const auto &body = sample.state.body;
@@ -285,26 +318,35 @@ Snapshot Plant::advance(std::uint64_t ticks) {
     if (p.faulted) {
         throw std::logic_error("plant must be reset after a failed advance");
     }
+
+    // Reject tick counts whose elapsed nanoseconds would overflow int64.
     const auto max_tick =
         static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max() / p.parameters.timestep.count());
     if (ticks > max_tick - p.tick) {
         throw std::overflow_error("requested advance overflows simulation time");
     }
+
     const double dt = std::chrono::duration<double>(p.parameters.timestep).count();
     try {
         for (std::uint64_t i = 0; i < ticks; ++i) {
             // Midpoint actuator force held during the RK4 body step (operator splitting).
             // One authoritative state commit per integer tick.
             p.actuators.advance(dt / 2);
+
+            // Contacts (box model, then the external resolver) on the start state.
             auto start = p.state;
             if (p.box_contacts)
                 start = p.box_contacts->resolve(start, p.dynamics.inverseMass());
             if (p.resolver)
                 start = p.resolver->resolve(start, p.dynamics.inverseMass());
+
+            // Body step with the actuator forces held at their midpoint values.
             const double time = static_cast<double>(p.tick) * dt;
             auto next = detail::integrateBodyRk4(start, dt, [&](const auto &stage, double offset) {
                 return p.derivative(stage, p.actuators.forces(), time + offset);
             });
+
+            // Contacts on the raw RK4 endpoint, then renormalize the quaternion.
             if (p.box_contacts)
                 next = p.box_contacts->resolve(next, p.dynamics.inverseMass());
             if (p.resolver)
@@ -316,6 +358,8 @@ Snapshot Plant::advance(std::uint64_t ticks) {
             } else {
                 next.segment<4>(3).normalize();
             }
+
+            // Sphere-pool contact, validation, the second actuator half step, then commit the tick.
             if (p.pool_contacts)
                 p.pool_contacts->resolve(next, p.dynamics.inverseMass());
             detail::MarineDynamics::validateState(next);
@@ -325,6 +369,7 @@ Snapshot Plant::advance(std::uint64_t ticks) {
             ++p.tick;
         }
     } catch (...) {
+        // Any failure leaves the plant faulted until reset().
         p.faulted = true;
         throw;
     }
@@ -356,6 +401,7 @@ Snapshot Plant::reset(const BodyState &initial) {
     if (impl_->generation == std::numeric_limits<std::uint64_t>::max()) {
         throw std::overflow_error("reset generation overflow");
     }
+
     impl_->actuators.reset();
     impl_->state = next;
     impl_->committed_forces.setZero();

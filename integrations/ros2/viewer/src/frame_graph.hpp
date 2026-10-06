@@ -8,6 +8,7 @@
 namespace nereus::ros_viewer::host {
 class FrameGraph {
   public:
+    // Add one edge; throws on an empty name, a self edge or a second parent for `child`.
     void add(const std::string &parent, const std::string &child, const glm::mat4 &childInParent) {
         if (parent.empty() || child.empty() || parent == child)
             throw std::invalid_argument("invalid frame edge " + parent + " -> " + child);
@@ -17,18 +18,21 @@ class FrameGraph {
         known_.insert(parent);
         known_.insert(child);
     }
+
     bool has(const std::string &name) const {
         return known_.count(name) > 0;
     }
     const std::set<std::string> &names() const {
         return known_;
     }
+
     // Pose of `to` expressed in `from`; both must share a root.
     glm::mat4 relative(const std::string &from, const std::string &to) const {
         return glm::inverse(inRoot(from)) * inRoot(to);
     }
 
   private:
+    // Pose of `name` in the root of its tree, walking parent edges up (throws on a cycle).
     glm::mat4 inRoot(const std::string &name) const {
         if (!has(name))
             throw std::out_of_range("unknown frame '" + name + "'");
@@ -43,11 +47,13 @@ class FrameGraph {
         }
         return result;
     }
+
     struct Edge {
         std::string parent;
         glm::mat4 pose{1};
     };
-    std::map<std::string, Edge> parents_;
+
+    std::map<std::string, Edge> parents_; // child -> its parent and pose in it
     std::set<std::string> known_;
 };
 } // namespace nereus::ros_viewer::host

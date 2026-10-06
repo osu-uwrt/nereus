@@ -9,9 +9,11 @@ target_include_directories(nereus_pack_scene PUBLIC
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(nereus_pack_scene PUBLIC nereus_session nereus_scene_rendering nereus_mesh_assets nereus_spatial)
 nereus_project_options(nereus_pack_scene)
+
 if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
+  # Resolved scenario fixtures (Talos in the default pool and in RPAC) live in the build tree.
   set(nereus_resolved_talos ${CMAKE_BINARY_DIR}/session_fixtures/talos_uwrt_resolved.json)
   add_executable(pack_scene_tests tests/pack_scene_test.cpp)
   target_link_libraries(pack_scene_tests PRIVATE nereus_pack_scene GTest::gtest_main)

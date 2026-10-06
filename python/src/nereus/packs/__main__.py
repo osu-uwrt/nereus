@@ -12,8 +12,10 @@ from ._document import canonical_file, read_yaml
 
 
 def _validate(arguments: argparse.Namespace) -> int:
+    """Validate a pack, or fully resolve a scenario; print every problem and return 1 if invalid."""
     path = Path(arguments.pack)
     try:
+        # Scenarios are resolved (composes their packs); other kinds are only loaded
         kind = read_yaml(canonical_file(path)).get("kind")
         if kind == "scenario":
             resolved = resolve_scenario(path)
@@ -37,6 +39,7 @@ def _resolve(arguments: argparse.Namespace) -> int:
     path = Path(arguments.scenario)
     try:
         resolved = resolve_scenario(path)
+        # Refuse to write a manifest whose digests may not match the files on disk
         if resolved.changed_sources():
             raise PackError(["pack sources changed while resolving"])
         document = resolved.manifest()
@@ -46,6 +49,7 @@ def _resolve(arguments: argparse.Namespace) -> int:
         for problem in error.problems:
             print(f"  {problem}", file=sys.stderr)
         return 1
+
     output = Path(arguments.output)
     output.write_text(json.dumps(document, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     print(f"resolved {path} -> {output}")
@@ -53,6 +57,7 @@ def _resolve(arguments: argparse.Namespace) -> int:
 
 
 def _types(arguments: argparse.Namespace) -> int:
+    """List built-in types per category, or dump their parameter schemas with ``--json``."""
     if arguments.json:
         print(json.dumps(type_catalog(), indent=2))
     else:
@@ -69,20 +74,26 @@ def _schema(arguments: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m nereus.packs")
     commands = parser.add_subparsers(dest="command", required=True)
+
+    # Each subcommand stores its handler in ``run``
     validate = commands.add_parser("validate", help="validate a pack or scenario (no runtime/ROS)")
     validate.add_argument("pack", help="pack folder or file")
     validate.add_argument("--dump", metavar="JSON", help="write the resolved scenario manifest")
     validate.set_defaults(run=_validate)
+
     resolve = commands.add_parser("resolve", help="write the runtime document of a scenario")
     resolve.add_argument("scenario", help="scenario pack folder or file")
     resolve.add_argument("--output", "-o", required=True, help="resolved JSON to write")
     resolve.set_defaults(run=_resolve)
+
     types = commands.add_parser("types", help="list built-in types")
     types.add_argument("--json", action="store_true", help="parameter schemas as JSON")
     types.set_defaults(run=_types)
+
     kind = commands.add_parser("schema", help="print a document kind's JSON Schema")
     kind.add_argument("kind", choices=DOCUMENT_KINDS)
     kind.set_defaults(run=_schema)
+
     arguments = parser.parse_args(argv)
     result: int = arguments.run(arguments)
     return result

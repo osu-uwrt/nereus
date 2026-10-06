@@ -34,6 +34,7 @@ YOLO_CONFIG = ROOT.parent / "src/riptide_perception/tensor_detector/config/yolo_
 
 
 def _labels() -> dict[str, Any]:
+    """A minimal valid labels document: one ffc model with two torpedo classes."""
     return {
         "kind": "labels",
         "id": "test",
@@ -44,6 +45,7 @@ def _labels() -> dict[str, Any]:
 
 
 def _dataset() -> dict[str, Any]:
+    """A minimal valid dataset document: five torpedo approach samples."""
     return {
         "kind": "dataset",
         "id": "test",
@@ -62,6 +64,8 @@ def _dataset() -> dict[str, Any]:
 
 
 class SchemaTests(unittest.TestCase):
+    """Schema-only checks (check_data): no scenario or tasks pack involved."""
+
     def test_minimal_documents_pass(self) -> None:
         self.assertEqual(check_data("labels", _labels()), [])
         self.assertEqual(check_data("dataset", _dataset()), [])
@@ -69,6 +73,7 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(check_data("parts", parts), [])
 
     def test_parts_rejections(self) -> None:
+        """Duplicate mask values, a visual with both part and materials, value 0, bad fill."""
         texture: dict[str, Any] = {
             "texture": "torpedo_texture",
             "mask": "assets/x.png",
@@ -80,6 +85,8 @@ class SchemaTests(unittest.TestCase):
         both = {"task": "bins", "asset": "m", "part": "a", "materials": {"M": "b"}}
         parts = {"kind": "parts", "id": "p", "tasks": "t", "textures": [texture]}
         self.assertEqual(check_data("parts", parts), ["/textures/0/parts: duplicate value '1'"])
+
+        # Each fix exposes the next problem, so only the first one is checked.
         parts["visuals"] = [both]
         self.assertTrue(check_data("parts", parts)[0].startswith("/visuals/0"))
         texture["parts"][0]["value"] = 0
@@ -88,11 +95,13 @@ class SchemaTests(unittest.TestCase):
         self.assertIn("/textures/0/parts/0/fill", check_data("parts", parts)[0])
 
     def test_labels_rejections(self) -> None:
+        """Duplicate classes, unknown `when` keys and unknown class shapes are rejected."""
         labels = _labels()
         labels["models"]["ffc"]["classes"].append("fire")
         self.assertEqual(
             check_data("labels", labels), ["/models/ffc/classes: duplicate class 'fire'"]
         )
+
         labels = _labels()
         labels["tasks"]["bins"] = {"magnet": {"parts": ["cover"], "when": {"colour": "red"}}}
         self.assertTrue(check_data("labels", labels))
@@ -103,6 +112,7 @@ class SchemaTests(unittest.TestCase):
         self.assertTrue(check_data("labels", labels))
 
     def test_dataset_rejections(self) -> None:
+        """Each case breaks one rule of a fresh minimal dataset."""
         dataset = _dataset()
         dataset["split"] = {"train": 0.8, "val": 0.3}
         self.assertEqual(check_data("dataset", dataset), ["/split: fractions sum to 1.1, not 1"])
@@ -126,6 +136,8 @@ class SchemaTests(unittest.TestCase):
         self.assertIn("/tasks/background", check_data("dataset", dataset)[0])
 
     def test_environment_values(self) -> None:
+        """Environment list/sweep values are range- and name-checked; ids must be unique."""
+
         def problems(randomize: dict[str, Any]) -> list[str]:
             dataset = _dataset()
             dataset["randomize"] = randomize
@@ -143,6 +155,8 @@ class SchemaTests(unittest.TestCase):
         for entry in bad:
             found = problems({"environments": {"list": [entry]}})
             self.assertTrue(found, entry["id"])
+
+        # The exact message for a reversed range.
         found = problems({"environments": {"list": [bad[2]]}})
         self.assertEqual(
             found,
@@ -157,6 +171,7 @@ class SchemaTests(unittest.TestCase):
         self.assertIn("duplicate environment 'a'", problems({"environments": both})[0])
 
     def test_load_document_reports_the_file(self) -> None:
+        """Schema problems are prefixed with the file path; a missing document also raises."""
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
             (folder / "labels.yaml").write_text("kind: labels\nid: x\n")
@@ -168,6 +183,8 @@ class SchemaTests(unittest.TestCase):
 
 
 class CrossCheckTests(unittest.TestCase):
+    """Checks against the resolved Talos/RoboSub 2026 course (textures, frames, parts)."""
+
     resolved: ResolvedScenario
     place: Course
 
@@ -177,9 +194,11 @@ class CrossCheckTests(unittest.TestCase):
         cls.place = course(cls.resolved)
 
     def _parts(self, data: dict[str, Any]) -> Document:
+        """Wrap parts data as if loaded from the course's parts file."""
         return Document(self.place.parts_file, "parts", data)
 
     def _base_parts(self) -> dict[str, Any]:
+        """A valid parts document: two torpedo texture parts and the bins magnet cover."""
         return {
             "kind": "parts",
             "id": "p",
@@ -206,9 +225,11 @@ class CrossCheckTests(unittest.TestCase):
         }
 
     def test_textures_belong_to_the_tasks_drawing_them(self) -> None:
+        """The course maps each texture to the tasks drawing it, and parts_by_task follows."""
         self.assertEqual(self.place.texture_tasks["torpedo_texture"], {"torpedo"})
         self.assertEqual(self.place.texture_tasks["bin_vinyl_fire_texture"], {"bins"})
         self.assertEqual(self.place.texture_tasks["pill_visual_task5_pill_fixed"], {"table"})
+
         parts = self._parts(self._base_parts())
         self.assertEqual(check_parts(parts, self.place), [])
         available = parts_by_task(parts, self.place)
@@ -216,6 +237,7 @@ class CrossCheckTests(unittest.TestCase):
         self.assertEqual(available["bins"], {"magnet_cover"})
 
     def test_parts_rejections(self) -> None:
+        """Every course reference in a parts document is checked; all problems are reported."""
         data = self._base_parts()
         data["tasks"] = "robosub_2025"
         data["textures"][0]["texture"] = "no_such_texture"
@@ -236,6 +258,7 @@ class CrossCheckTests(unittest.TestCase):
         )
 
     def test_label_rejections(self) -> None:
+        """Label rules must match real parts, a shown indicator state and a real task."""
         labels = _labels()
         labels["models"]["ffc"]["classes"] += ["blood", "fire_too", "magnet"]
         labels["tasks_pack"] = "other"
@@ -257,6 +280,7 @@ class CrossCheckTests(unittest.TestCase):
         )
 
     def test_dataset_frames(self) -> None:
+        """Sampler frames must belong to the sampled task, and the task must exist."""
         dataset = _dataset()
         dataset["tasks"]["torpedo"]["sampler"]["frame"] = ["task", "slalom_front"]
         dataset["tasks"]["nowhere"] = copy.deepcopy(dataset["tasks"]["torpedo"])
@@ -270,6 +294,7 @@ class CrossCheckTests(unittest.TestCase):
         )
 
     def test_classes_in_no_model(self) -> None:
+        """Rules for a class no model lists are errors; a model class with no rule warns."""
         labels = _labels()
         labels["models"]["ffc"]["classes"].append("blood")
         labels["tasks"]["torpedo"]["hammer_wrench"] = ["icon_blood"]  # typo of a class
@@ -289,6 +314,7 @@ class CrossCheckTests(unittest.TestCase):
         )
 
     def test_placement_groups(self) -> None:
+        """Placement groups pass the schema but are cross-checked: no repeats, real tasks."""
         dataset = _dataset()
         dataset["randomize"] = {"placement": {"groups": [["surface", "table"], ["table", "nope"]]}}
         self.assertEqual(check_data("dataset", dataset), [])
@@ -304,6 +330,7 @@ class CrossCheckTests(unittest.TestCase):
 
 class ClassMapTests(unittest.TestCase):
     def test_classify(self) -> None:
+        """classify() gives the model's class index or None; labelled() lists matched parts."""
         labels = _labels()
         labels["tasks"]["bins"] = {
             "fire": ["icon_*"],
@@ -314,6 +341,7 @@ class ClassMapTests(unittest.TestCase):
         self.assertEqual(classes.classify("bins", "icon_fire", None), 0)
         self.assertIsNone(classes.classify("bins", "magnet_cover", "red"))  # not an ffc class
         self.assertIsNone(classes.classify("slalom", "pole_red", None))
+
         parts = {"bins": {"icon_fire", "magnet_cover"}, "torpedo": {"ring", "icon_blood"}}
         self.assertEqual(
             classes.labelled(parts),
@@ -321,6 +349,7 @@ class ClassMapTests(unittest.TestCase):
         )
 
     def test_classes_outside_the_model_never_shadow_later_rules(self) -> None:
+        """A rule for a class the model lacks is skipped, so a later matching rule still applies."""
         labels = _labels()
         labels["models"]["dfc"] = {"camera": "dfc", "max_range_m": 3.0, "classes": ["magnet"]}
         labels["tasks"]["bins"] = {
@@ -335,6 +364,9 @@ class ClassMapTests(unittest.TestCase):
 
 
 class ClassOrderTests(unittest.TestCase):
+    """Label-pack class order vs the detector's ROS parameter file (check-classes)."""
+
+    # A yolo_orientation parameter file with a commented-out dfc map.
     CONFIG = """\
 /**/yolo_orientation:
   ros__parameters:
@@ -351,6 +383,8 @@ class ClassOrderTests(unittest.TestCase):
             config.write_text(self.CONFIG)
             labels = _labels()
             self.assertEqual(class_order_problems(labels, config)[0], [])
+
+            # Reversed classes: every id is reported.
             labels["models"]["ffc"]["classes"].reverse()
             problems, _ = class_order_problems(labels, config)
             self.assertEqual(
@@ -361,6 +395,8 @@ class ClassOrderTests(unittest.TestCase):
                     "  id 1: label pack 'fire', config 'circle'",
                 ],
             )
+
+            # The CLI exits 1 and prints the same diff on stderr.
             labels_file = Path(directory) / "labels.yaml"
             labels_file.write_text(
                 "kind: labels\nid: t\ntasks_pack: x\n"
@@ -375,6 +411,8 @@ class ClassOrderTests(unittest.TestCase):
 
 @unittest.skipUnless((LABELS / "labels.yaml").is_file() and PARTS.is_file(), "no UWRT label pack")
 class RealContentTests(unittest.TestCase):
+    """The shipped UWRT label pack, parts file and dataset specs, against the real course."""
+
     def test_label_pack_parts_and_specs_cross_check(self) -> None:
         labels = load_document(LABELS, "labels")
         parts = load_document(PARTS, "parts")

@@ -1,5 +1,7 @@
 # CPU assets are independently usable without OpenGL or simulation.
 find_package(assimp 5 REQUIRED CONFIG)
+
+# nereus_mesh_assets: Assimp mesh loading (assets.cpp); Assimp stays private.
 add_library(nereus_mesh_assets src/assets.cpp)
 add_library(Nereus::mesh_assets ALIAS nereus_mesh_assets)
 set_target_properties(nereus_mesh_assets PROPERTIES EXPORT_NAME mesh_assets)
@@ -8,9 +10,13 @@ target_include_directories(nereus_mesh_assets PUBLIC
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(nereus_mesh_assets PUBLIC Eigen3::Eigen PRIVATE assimp::assimp)
 nereus_project_options(nereus_mesh_assets)
+
+# Install the library and only its own header (the GL headers belong to the optional targets).
 install(TARGETS nereus_mesh_assets EXPORT NereusTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(FILES include/nereus/rendering/assets.hpp DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nereus/rendering)
+
+# Asset tests read fixture meshes and the shipped content packs from the source tree.
 if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
@@ -23,6 +29,7 @@ if(BUILD_TESTING)
   gtest_discover_tests(asset_tests DISCOVERY_MODE PRE_TEST)
 endif()
 
+# Optional OpenGL scene renderer (scene.cpp, renderer.cpp); needs GLEW, libpng and the vendored glm.
 if(NEREUS_BUILD_SCENE_RENDERER)
   find_package(OpenGL REQUIRED)
   find_package(GLEW REQUIRED)
@@ -37,9 +44,12 @@ if(NEREUS_BUILD_SCENE_RENDERER)
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(FILES include/nereus/rendering/scene.hpp include/nereus/rendering/renderer.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nereus/rendering)
+  # Shaders are loaded at runtime from a directory the caller passes in, so they install as data.
   install(DIRECTORY shaders/ DESTINATION ${CMAKE_INSTALL_DATADIR}/nereus/shaders)
   install(FILES ${PROJECT_SOURCE_DIR}/third_party/glm/glm/copying.txt
     DESTINATION ${CMAKE_INSTALL_DATADIR}/nereus/legal RENAME glm-license.txt)
+
+  # Optional headless EGL host for the renderer (offscreen.cpp).
   if(NEREUS_BUILD_OFFSCREEN_RENDERER)
     find_package(OpenGL REQUIRED COMPONENTS EGL)
     find_package(Threads REQUIRED)
@@ -63,6 +73,8 @@ if(NEREUS_BUILD_SCENE_RENDERER)
       gtest_discover_tests(offscreen_tests DISCOVERY_MODE PRE_TEST)
     endif()
   endif()
+
+  # Image tests render through a GLFW window context, using the shaders straight from the source tree.
   if(BUILD_TESTING)
     find_package(glfw3 REQUIRED CONFIG)
     add_executable(renderer_image_tests tests/renderer_image_test.cpp)

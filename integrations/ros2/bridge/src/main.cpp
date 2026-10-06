@@ -21,6 +21,7 @@ using namespace nereus;
 using namespace nereus::ros_bridge;
 
 namespace {
+// Parsed command line; see the usage text in parse().
 struct Arguments {
     fs::path scenario, output;
     std::optional<std::string> sensors;
@@ -80,6 +81,7 @@ Arguments parse(int argc, char **argv) {
     return arguments;
 }
 
+// Camera sensors are rendered by the camera sink, not executed by the native session.
 bool isCamera(const Json &sensor) {
     return sensor.at("type") == "stereo_camera";
 }
@@ -116,6 +118,8 @@ int main(int argc, char **argv) {
         return 2;
     }
 
+    // Load the scenario, select sensors, build the session, camera sink and core, and write the startup
+    // records.
     std::optional<session::ResolvedScenario> resolved;
     std::unique_ptr<SessionAdapter> adapter;
     std::unique_ptr<CameraSink> cameras;
@@ -127,6 +131,8 @@ int main(int argc, char **argv) {
         resolved = session::loadResolvedScenario(arguments.scenario);
         if (arguments.no_cameras)
             withoutCameras(*resolved);
+
+        // Selection: --sensors or every enabled sensor, minus cameras under --no-cameras.
         std::map<std::string, Json> by_id;
         std::vector<std::string> enabled;
         for (const auto &sensor : resolved->robot.at("sensors")) {
@@ -150,6 +156,8 @@ int main(int argc, char **argv) {
                 if (!isCamera(by_id.at(id)))
                     selection.push_back(id);
         }
+
+        // Split the selection into native sensors (session) and cameras (camera sink).
         std::set<std::string> unique(selection.begin(), selection.end());
         if (unique.size() != selection.size())
             throw std::invalid_argument("selected sensors must have unique ids from the robot pack");
@@ -161,6 +169,7 @@ int main(int argc, char **argv) {
                 throw std::invalid_argument("selected sensor is disabled in the robot pack");
             (isCamera(by_id.at(id)) ? camera_ids : native_ids).push_back(id);
         }
+
         adapter = std::make_unique<SessionAdapter>(*resolved, rules::standardRules(), &native_ids);
         if (!camera_ids.empty()) {
             CameraSinkOptions camera_options;
@@ -172,15 +181,19 @@ int main(int argc, char **argv) {
                 throw std::runtime_error("camera sensors need the camera runtime, which this build does not "
                                          "include; run with --no-cameras");
         }
+
         sensors = selection;
         for (const auto &id : adapter->deferredSensorIds())
             if (std::find(camera_ids.begin(), camera_ids.end(), id) == camera_ids.end())
                 deferred.push_back(id);
+
+        // ROS epoch for clock.epoch system_time_at_start.
         epoch_ns =
             std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
                 .count();
         if (arguments.duration)
             duration_ns = static_cast<std::int64_t>(std::llround(*arguments.duration * 1e9));
+
         if (fs::exists(arguments.output))
             throw std::runtime_error("output directory exists: " + arguments.output.string());
         fs::create_directories(arguments.output);
@@ -199,6 +212,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // Run the node until the duration, shutdown or a failure.
     rclcpp::init(argc, argv);
     std::string reason = "duration reached";
     int status = 0;
@@ -214,6 +228,8 @@ int main(int argc, char **argv) {
         std::cerr << "nereus-sim: " << reason << "\n";
         status = 1;
     }
+
+    // Exit records are written whatever the stop reason.
     std::signal(SIGINT, SIG_IGN); // a repeated Ctrl-C must not cut the records
     if (node)
         node->stopExecutor();
@@ -255,6 +271,7 @@ int main(int argc, char **argv) {
         std::cerr << "nereus-sim: " << error.what() << "\n";
         status = 1;
     }
+
     node.reset();
     if (rclcpp::ok())
         rclcpp::shutdown();

@@ -19,10 +19,12 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
+# The mission trees live in the surrounding UWRT workspace (nereus is checked out inside it).
 DEFAULT_TREE = ROOT.parent / "src/riptide_autonomy/trees/RepairCompTree.xml"
 
 
 def stop(process: subprocess.Popen) -> None:
+    """Stops a process group: SIGINT (12 s grace), then SIGTERM (5 s), then SIGKILL."""
     if process.poll() is not None:
         return
     os.killpg(process.pid, signal.SIGINT)
@@ -38,10 +40,12 @@ def stop(process: subprocess.Popen) -> None:
 
 
 def write(path: Path, value: object) -> None:
+    """Writes `value` as indented JSON (NaN/inf rejected)."""
     path.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n")
 
 
 def drive(args: argparse.Namespace, log: list[dict]) -> dict:
+    """Runs the tree as the operator would; appends each new subtree stack to `log`."""
     import rclpy
     from rclpy.action import ActionClient
     from rclpy.node import Node
@@ -50,6 +54,7 @@ def drive(args: argparse.Namespace, log: list[dict]) -> dict:
     from rosgraph_msgs.msg import Clock
     from std_msgs.msg import String
 
+    # Driver node: sim clock, software kill, run control and the tree action.
     rclpy.init()
     node = Node("mission_driver", namespace="/talos")
     clock = {"sim_s": 0.0}
@@ -62,6 +67,7 @@ def drive(args: argparse.Namespace, log: list[dict]) -> dict:
     start = time.monotonic()
     result: dict = {"tree": str(args.tree)}
     try:
+        # Wait for autonomy, then let the stack settle.
         if not client.wait_for_server(timeout_sec=args.startup):
             result["error"] = "autonomy/run_tree never became available"
             return result
@@ -77,6 +83,7 @@ def drive(args: argparse.Namespace, log: list[dict]) -> dict:
         for _ in range(10):
             rclpy.spin_once(node, timeout_sec=0.1)
 
+        # Record the subtree stack whenever it changes.
         def feedback(message) -> None:
             stack = list(message.feedback.stack.stack)
             if not log or log[-1]["stack"] != stack:
@@ -88,6 +95,7 @@ def drive(args: argparse.Namespace, log: list[dict]) -> dict:
                     }
                 )
 
+        # Send the tree, release the kill after --kill-delay, and wait for the result or the timeout.
         goal = ExecuteTree.Goal(tree=str(args.tree))
         future = client.send_goal_async(goal, feedback_callback=feedback)
         rclpy.spin_until_future_complete(node, future, timeout_sec=30)
@@ -139,6 +147,8 @@ def main() -> int:
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
     args.tree = args.tree.resolve()
+
+    # Private, localhost-only ROS domain for the children and for this process's own node.
     env = dict(
         os.environ,
         ROS_DOMAIN_ID=str(args.domain),
@@ -149,6 +159,8 @@ def main() -> int:
     os.environ.update(
         {k: env[k] for k in ("ROS_DOMAIN_ID", "ROS_LOCALHOST_ONLY", "RMW_IMPLEMENTATION")}
     )
+
+    # Resolve the scenario pack, then start the bridge and the stack, each in its own process group.
     resolved = args.output / "resolved.json"
     subprocess.run(
         [
@@ -188,6 +200,7 @@ def main() -> int:
             )
         result = drive(args, log)
     finally:
+        # Stop the stack, then the bridge (which writes tasks.json on exit), and collect the scores.
         for process in reversed(processes):
             stop(process)
         for handle in logs:

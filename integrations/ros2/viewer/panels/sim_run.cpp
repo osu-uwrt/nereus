@@ -1,3 +1,5 @@
+// "sim.run" provider: the simulator's competition run scoring over ROS (score snapshots, task summary,
+// events, magnet target lights, claw jaw gap) plus run commands and reset.
 #include "ros_runtime.hpp"
 #include <set>
 #include <std_msgs/msg/empty.hpp>
@@ -7,16 +9,20 @@
 
 namespace nereus::ros_viewer::panels {
 namespace {
+// Topics carry YAML/JSON strings; every callback stores under `mutex` and state() hands the UI a copy.
 class SimRun final : public Run {
   public:
     SimRun(std::shared_ptr<RosRuntime> runtime, const YAML::Node &cfg, const Context &ctx)
         : runtime(runtime), timeout(cfg["status_timeout"].as<double>(1)) {
+        // The run profile can switch scoring off and supplies the UI schema (run option types).
         if (cfg["profile"] && ctx.documents.count(cfg["profile"].as<std::string>())) {
             const auto document = ctx.documents.at(cfg["profile"].as<std::string>());
             enabled = document["scoring_enabled"].as<bool>(true);
             if (document["ui"])
                 schema = YAML::Clone(document["ui"]);
         }
+
+        // Optional inputs: task summary text, run events, magnet target lights and claw joints.
         auto node = runtime->node;
         if (cfg["task_score_topic"])
             taskScoreSub = node->create_subscription<std_msgs::msg::String>(
@@ -28,6 +34,7 @@ class SimRun final : public Run {
             events = node->create_subscription<std_msgs::msg::String>(
                 expand(cfg["events_topic"].as<std::string>(), ctx), 10, [this](const std_msgs::msg::String &msg) {
                     std::lock_guard<std::mutex> lock(mutex);
+                    // Events are YAML maps (kind / result / target); show the raw text if parsing fails.
                     std::string text = msg.data;
                     try {
                         auto e = YAML::Load(msg.data);
@@ -37,6 +44,8 @@ class SimRun final : public Run {
                         text = kind + " / " + result + " / " + e["target"].as<std::string>();
                     } catch (const YAML::Exception &) {
                     }
+
+                    // Newest first, keeping the last five.
                     history.insert(history.begin(), text);
                     if (history.size() > 5)
                         history.pop_back();
@@ -46,6 +55,7 @@ class SimRun final : public Run {
                 expand(cfg["lights_topic"].as<std::string>(), ctx), 10,
                 [this](const visualization_msgs::msg::MarkerArray &msg) {
                     std::lock_guard<std::mutex> lock(mutex);
+                    // One marker per target namespace; a greener-than-red marker means the target is green.
                     for (const auto &m : msg.markers) {
                         if (m.action == visualization_msgs::msg::Marker::ADD)
                             magnetTargets[m.ns] = m.color.g > m.color.r;
@@ -55,6 +65,8 @@ class SimRun final : public Run {
                             magnetTargets.clear();
                     }
                 });
+
+        // Jaw gap = the profile's claw min_gap plus both finger joint positions (meters, shown in mm).
         float minGap = 0;
         if (cfg["profile"] && ctx.documents.count(cfg["profile"].as<std::string>())) {
             const auto document = ctx.documents.at(cfg["profile"].as<std::string>());
@@ -71,6 +83,8 @@ class SimRun final : public Run {
                     readings["Jaw gap"] =
                         std::to_string(std::lround(1000 * (minGap + msg.data[0] + msg.data[1]))) + " mm";
                 });
+
+        // Required endpoints: run commands, reset, and the score snapshot.
         commandPub = runtime->node->create_publisher<std_msgs::msg::String>(
             expand(cfg["command_topic"].as<std::string>(), ctx), 10);
         resetPub = runtime->node->create_publisher<std_msgs::msg::Empty>(
@@ -78,6 +92,7 @@ class SimRun final : public Run {
         subscription = runtime->node->create_subscription<std_msgs::msg::String>(
             expand(cfg["score_topic"].as<std::string>(), ctx), 10, [this](const std_msgs::msg::String &msg) {
                 std::lock_guard<std::mutex> lock(mutex);
+                // Validate the whole snapshot before accepting it; a bad one marks the run stale.
                 try {
                     auto document = YAML::Load(msg.data);
                     if (!document.IsMap())
@@ -103,6 +118,7 @@ class SimRun final : public Run {
                 }
             });
     }
+
     RunState state() override {
         std::lock_guard<std::mutex> lock(mutex);
         RunState value;
@@ -118,6 +134,10 @@ class SimRun final : public Run {
         value.events = history;
         return value;
     }
+
+    // Serializes a command map to a flow-style JSON object on command_topic. Run option values are typed
+    // from the schema; "points" is a number; unquoted true/false become booleans; the rest are strings.
+    // Start while running, stop while idle, and nonfinite numbers are dropped.
     void command(const YAML::Node &command) override {
         std::lock_guard<std::mutex> lock(mutex);
         if (!fresh() || !command.IsMap())
@@ -153,6 +173,7 @@ class SimRun final : public Run {
         msg.data = json.c_str();
         commandPub->publish(msg);
     }
+
     void reset() override {
         std::lock_guard<std::mutex> lock(mutex);
         if (fresh())
@@ -160,10 +181,13 @@ class SimRun final : public Run {
     }
 
   private:
+    // A score snapshot arrived within status_timeout seconds (and scoring is enabled).
     bool fresh() const {
         return enabled && std::chrono::duration<double>(Steady::now() - lastScore).count() < timeout;
     }
+
     std::shared_ptr<RosRuntime> runtime;
+    // Guards all state below; ROS callbacks run on the runtime's executor thread.
     std::mutex mutex;
     double timeout;
     bool enabled = true;
@@ -171,6 +195,7 @@ class SimRun final : public Run {
     std::string taskScore;
     std::map<std::string, bool> magnetTargets;
     std::map<std::string, std::string> readings;
+    // Recent events, newest first.
     std::vector<std::string> history;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr taskScoreSub, events;
     rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr joints;
@@ -182,6 +207,7 @@ class SimRun final : public Run {
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr subscription;
 };
 } // namespace
+
 void registerSimRun(Registry &registry, const RuntimeFactory &runtime) {
     registry.providers.emplace(
         "sim.run", ProviderFactory{Kind::Run,

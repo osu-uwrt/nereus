@@ -23,12 +23,14 @@ PALETTE = [
     (128, 0, 0), (200, 130, 0), (240, 240, 70), (128, 128, 0), (255, 190, 220),
 ]
 # fmt: on
+# Opacity of the class colour painted over each mask
 ALPHA = 0.45
 
 Image = NDArray[np.uint8]
 
 
 def colour(cls: int) -> tuple[int, int, int]:
+    """BGR colour of a class id."""
     return PALETTE[cls % len(PALETTE)]
 
 
@@ -45,6 +47,8 @@ def _text(image: Image, text: str, origin: tuple[int, int], fill: tuple[int, int
     cv2 = cv2_module()
     font, scale, thickness = cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1
     (width, height), baseline = cv2.getTextSize(text, font, scale, thickness)
+
+    # Clamp the label inside the image, then pick black or white ink by the fill's luminance
     x = min(max(origin[0], 0), max(image.shape[1] - width - 2, 0))
     y = min(max(origin[1], height + 2), image.shape[0] - baseline - 1)
     cv2.rectangle(image, (x, y - height - 2), (x + width + 2, y + baseline), fill, cv2.FILLED)
@@ -57,6 +61,7 @@ def _text(image: Image, text: str, origin: tuple[int, int], fill: tuple[int, int
 def _legend(names: list[str], width: int) -> Image:
     """Class ids and names in their colours, wrapped to ``width``."""
     cv2 = cv2_module()
+    # Greedy line wrap: start a new row when the next entry would pass ``width``
     rows: list[list[tuple[int, str]]] = [[]]
     used = 4
     for cls, name in enumerate(names):
@@ -66,6 +71,8 @@ def _legend(names: list[str], width: int) -> Image:
             used = 4
         rows[-1].append((cls, f"{cls} {name}"))
         used += size + 10
+
+    # 22 px per row on a dark strip
     legend: Image = np.full((22 * len(rows) + 4, width, 3), 32, dtype=np.uint8)
     for row, items in enumerate(rows):
         x = 4
@@ -75,6 +82,7 @@ def _legend(names: list[str], width: int) -> Image:
 
 
 def read_image(render: Path, record: dict[str, Any]) -> Image:
+    """A record's rendered image as BGR."""
     cv2 = cv2_module()
     path = render / record["image"]
     loaded = cv2.imread(str(path), cv2.IMREAD_COLOR)
@@ -94,6 +102,8 @@ def overlay(
 ) -> Image:
     """Class-coloured masks blended at full resolution, scaled to ``width``, outlines and names."""
     cv2 = cv2_module()
+
+    # Paint and blend at full resolution, then downscale to the tile width
     painted = image.copy()
     for label in labelled.labels:
         painted[label.mask] = colour(label.cls)
@@ -101,6 +111,8 @@ def overlay(
     scale = width / image.shape[1]
     height = max(1, round(image.shape[0] * scale))
     small = np.asarray(cv2.resize(blended, (width, height), interpolation=cv2.INTER_AREA))
+
+    # Per label: outline of the downscaled mask, box from the full-resolution extent, name
     for label in labelled.labels:
         mask = np.asarray(
             cv2.resize(
@@ -126,6 +138,8 @@ def tile(render: Path, record: dict[str, Any], classes: Any, width: int) -> Imag
     labelled = label_record(record, read_ids(render, record), classes)
     small = overlay(read_image(render, record), labelled, classes.names, width)
     height = small.shape[0]
+
+    # Caption: label count and what the export dropped or would skip (red when skipped)
     caption = f"{record['name']}  {len(labelled.labels)} labels"
     if labelled.dropped_small:
         caption += f", {labelled.dropped_small} < min px"
@@ -157,6 +171,8 @@ def preview(
     render = Path(render).resolve()
     classes, _ = class_map(render, labels, model)
     found = records(render)
+
+    # Optional environment filter (globs), then an even spread of samples
     if environments is not None:
         found = [
             record
@@ -168,6 +184,8 @@ def preview(
     chosen = _pick(found, max(count, 1))
     if not chosen:
         raise PackError(f"{render}: no records to preview")
+
+    # Grid of tiles (rows sized to the tallest), under a legend as wide as the sheet
     tiles = [tile(render, record, classes, tile_width) for record in chosen]
     height = max(item.shape[0] for item in tiles)
     columns = min(columns, len(tiles))
@@ -181,6 +199,7 @@ def preview(
         y, x = gap + row * (height + gap), gap + column * (tile_width + gap)
         sheet[y : y + item.shape[0], x : x + item.shape[1]] = item
     full: Image = np.concatenate([_legend(classes.names, sheet.shape[1]), sheet])
+
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     if not cv2.imwrite(str(out), full, [cv2.IMWRITE_JPEG_QUALITY, 90]):

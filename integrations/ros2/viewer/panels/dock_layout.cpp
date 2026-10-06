@@ -1,3 +1,5 @@
+// Operator window layout: the built-in dock presets and their DockBuilder construction, side-width queries on the
+// live dock tree, the [Nereus][Windows] ini handler for open/closed states, and saved-layout file helpers.
 #include "nereus/ros_viewer/dock_layout.hpp"
 #include <algorithm>
 #include <cctype>
@@ -6,6 +8,8 @@
 #include <imgui_internal.h>
 
 namespace nereus::ros_viewer {
+
+// The three built-in presets (Ctrl+Shift+1..3); unset fractions keep LayoutPreset's defaults.
 const std::vector<LayoutPreset> &layoutPresets() {
     static const std::vector<LayoutPreset> presets = [] {
         LayoutPreset standard;
@@ -13,6 +17,7 @@ const std::vector<LayoutPreset> &layoutPresets() {
         standard.label = "Standard";
         standard.shortcut = "Ctrl+Shift+1";
         standard.description = "Panels on the left, camera feeds and the course map on the right.";
+
         LayoutPreset wide;
         wide.id = "wide";
         wide.label = "Wide view";
@@ -21,6 +26,7 @@ const std::vector<LayoutPreset> &layoutPresets() {
         wide.left = .22f;
         wide.bottom = .3f;
         wide.remap = {{Dock::Right, Dock::Bottom}, {Dock::RightBottom, Dock::Bottom}};
+
         LayoutPreset cameras;
         cameras.id = "cameras";
         cameras.label = "Camera wall";
@@ -29,6 +35,7 @@ const std::vector<LayoutPreset> &layoutPresets() {
         cameras.left = .22f;
         cameras.right = .42f;
         cameras.rightBottom = .26f;
+
         return std::vector<LayoutPreset>{standard, wide, cameras};
     }();
     return presets;
@@ -43,13 +50,18 @@ const LayoutPreset *findPreset(const std::string &id) {
 
 void buildLayout(ImGuiID dockspace, ImVec2 size, const LayoutPreset &preset, const std::string &center,
                  const std::vector<LayoutWindow> &windows) {
+    // Group the windows by the area this preset puts them in; only used areas get a node.
     std::map<Dock, std::vector<const LayoutWindow *>> areas;
     for (const auto &window : windows)
         areas[preset.area(window.area)].push_back(&window);
     const auto used = [&](Dock area) { return areas.count(area) > 0; };
+
+    // Start from an empty dock space.
     ImGui::DockBuilderRemoveNode(dockspace); // undocks every window (their saved dock IDs too)
     ImGui::DockBuilderAddNode(dockspace, ImGuiDockNodeFlags_DockSpace);
     ImGui::DockBuilderSetNodeSize(dockspace, size);
+
+    // Split off the left column, right column and bottom strip; `rest` ends up as the central node.
     ImGuiID rest = dockspace, left = 0, leftTop = 0, right = 0, rightBottom = 0, bottom = 0;
     float leftShare = 0;
     if (used(Dock::Left) || used(Dock::LeftTop)) {
@@ -62,6 +74,8 @@ void buildLayout(ImGuiID dockspace, ImVec2 size, const LayoutPreset &preset, con
                                             nullptr, &rest);
     if (used(Dock::Bottom))
         bottom = ImGui::DockBuilderSplitNode(rest, ImGuiDir_Down, preset.bottom, nullptr, &rest);
+
+    // The sub-areas take the whole column when the column's main area is unused.
     if (used(Dock::LeftTop))
         leftTop =
             used(Dock::Left) ? ImGui::DockBuilderSplitNode(left, ImGuiDir_Up, preset.leftTop, nullptr, &left) : left;
@@ -69,12 +83,15 @@ void buildLayout(ImGuiID dockspace, ImVec2 size, const LayoutPreset &preset, con
         rightBottom = used(Dock::Right)
                           ? ImGui::DockBuilderSplitNode(right, ImGuiDir_Down, preset.rightBottom, nullptr, &right)
                           : right;
+
     ImGui::DockBuilderDockWindow(center.c_str(), rest);
     std::vector<std::pair<ImGuiID, const LayoutWindow *>> shownTabs;
     // Stacked windows each take an even share of the area, in order; tabbed ones share the last share.
     const auto place = [&](Dock area, ImGuiID node, ImGuiDir direction) {
         if (!node)
             return;
+
+        // Split the node into one part per stacked window plus one for all the tabbed ones.
         std::vector<const LayoutWindow *> stacked, tabbed;
         for (const auto *window : areas[area])
             (window->stacked ? stacked : tabbed).push_back(window);
@@ -83,6 +100,8 @@ void buildLayout(ImGuiID dockspace, ImVec2 size, const LayoutPreset &preset, con
         for (int i = 0; i + 1 < parts; ++i)
             nodes.push_back(ImGui::DockBuilderSplitNode(node, direction, 1.f / float(parts - i), nullptr, &node));
         nodes.push_back(node);
+
+        // Dock the windows; remember which tab each multi-tab node should open on.
         std::size_t next = 0;
         for (const auto *window : stacked)
             ImGui::DockBuilderDockWindow(window->name.c_str(), nodes[next++]);
@@ -95,12 +114,15 @@ void buildLayout(ImGuiID dockspace, ImVec2 size, const LayoutPreset &preset, con
         if (tabbed.size() > 1)
             shownTabs.emplace_back(nodes[next], shown ? shown : tabbed.front());
     };
+
+    // Floating windows have no area node: DockBuilderRemoveNode above already undocked them.
     place(Dock::LeftTop, leftTop, ImGuiDir_Up);
     place(Dock::Left, left, ImGuiDir_Up);
     place(Dock::Right, right, ImGuiDir_Up);
     place(Dock::RightBottom, rightBottom, ImGuiDir_Up);
     place(Dock::Bottom, bottom, ImGuiDir_Left);
     ImGui::DockBuilderFinish(dockspace);
+
     // A new node's tab bar opens on its SelectedTabId: the window's tab ID ("#TAB" in the window's ID scope).
     for (const auto &[id, window] : shownTabs)
         if (auto *node = ImGui::DockBuilderGetNode(id))
@@ -108,10 +130,13 @@ void buildLayout(ImGuiID dockspace, ImVec2 size, const LayoutPreset &preset, con
 }
 
 namespace {
+
+// The dock space's central node (the pool view), or null before the dock space exists.
 ImGuiDockNode *centralNode(ImGuiID dockspace) {
     auto *root = ImGui::DockBuilderGetNode(dockspace);
     return root ? root->CentralNode : nullptr;
 }
+
 } // namespace
 
 float sideWidth(ImGuiID dockspace, Side side) {
@@ -128,6 +153,8 @@ std::vector<std::string> sideWindows(ImGuiID dockspace, Side side) {
     const auto *central = centralNode(dockspace);
     if (!central)
         return names;
+    // Active windows docked in this dock space, classified by where their node sits relative to the central node
+    // (1 px slack for rounding).
     for (const auto *window : ImGui::GetCurrentContext()->Windows) {
         const auto *node = window->DockNode;
         if (!window->WasActive || !node || node == central ||
@@ -156,7 +183,7 @@ bool setSideWidth(ImGuiID dockspace, Side side, float width) {
                                           : (parent->ChildNodes[0] == node ? parent->ChildNodes[1] : nullptr);
         if (!beside)
             continue;
-        const float target = std::max(40.f, beside->Size.x + width - current);
+        const float target = std::max(40.f, beside->Size.x + width - current); // keep at least 40 px
         ImGui::DockBuilderSetNodeSize(beside->ID, {target, std::max(1.f, beside->Size.y)});
         return true;
     }
@@ -168,11 +195,14 @@ bool windowInFront(const char *name) {
     return window && window->WasActive && !window->Collapsed && (!window->DockIsActive || window->DockTabIsVisible);
 }
 
+// The handler reads "key=0|1" lines of the [Nereus][Windows] section into saved_, applies them once the ini is
+// loaded, and writes saved_ overlaid with the current flags (so absent windows keep their saved state).
 void WindowStates::install() {
     ImGuiSettingsHandler handler;
     handler.TypeName = "Nereus";
     handler.TypeHash = ImHashStr("Nereus");
     handler.UserData = this;
+
     handler.ClearAllFn = [](ImGuiContext *, ImGuiSettingsHandler *h) {
         static_cast<WindowStates *>(h->UserData)->saved_.clear();
     };
@@ -201,12 +231,15 @@ void WindowStates::install() {
 }
 
 namespace {
+
+// "key=1;key=0;..." of the current flags, to detect operator changes cheaply.
 std::string signatureOf(const WindowStates::Flags &flags) {
     std::string signature;
     for (const auto &[key, flag] : flags)
         signature += key + (*flag ? "=1;" : "=0;");
     return signature;
 }
+
 } // namespace
 
 void WindowStates::apply() {
@@ -223,6 +256,7 @@ void WindowStates::update() {
     auto signature = signatureOf(flags_());
     if (signature == signature_)
         return;
+    // The first call only records the baseline.
     if (!signature_.empty() && ImGui::GetCurrentContext())
         ImGui::MarkIniSettingsDirty();
     signature_ = std::move(signature);
@@ -241,6 +275,8 @@ std::string layoutFileStem(const std::string &name) {
     for (const char c : name)
         if (std::isalnum(static_cast<unsigned char>(c)) || c == ' ' || c == '-' || c == '_')
             stem += c;
+
+    // Trim surrounding spaces.
     const auto first = stem.find_first_not_of(' '), last = stem.find_last_not_of(' ');
     return first == std::string::npos ? std::string() : stem.substr(first, last - first + 1);
 }
@@ -256,4 +292,5 @@ std::vector<std::string> savedLayouts(const std::filesystem::path &dir) {
     std::sort(names.begin(), names.end());
     return names;
 }
+
 } // namespace nereus::ros_viewer

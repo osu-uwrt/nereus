@@ -18,6 +18,7 @@ struct BagHost {
     std::vector<std::string> ssh{"ssh"}; // the ssh program (and its own leading arguments)
     std::vector<std::string> recordArgs; // extra `ros2 bag record` arguments (storage, splitting, ...)
 };
+
 // What to record.
 struct BagRequest {
     std::string name;                // the bag's folder name inside the directory
@@ -26,6 +27,7 @@ struct BagRequest {
     std::vector<std::string> topics; // explicit topics (with all = false)
     std::string exclude;             // -x regex (empty: none)
 };
+
 // A script's report: lines "NEREUS_BAG <key> <value>" among whatever else the setup printed.
 struct BagReport {
     std::map<std::string, std::string> values;
@@ -39,10 +41,12 @@ struct BagReport {
     // A number reported as text, or `fallback`.
     double number(const std::string &key, double fallback = 0) const;
 };
+// Collects the NEREUS_BAG lines of a script's output; other lines are ignored.
 BagReport parseBagReport(const std::string &output);
 
 // POSIX shell single quoting: the value as one word.
 std::string shellQuote(const std::string &value);
+
 // Scripts for `bash -c`. Each ends in a report with `state`: idle, recording, stopping, stopped, died or error
 // (with `error`). Recording / stopping reports carry pid, bag (absolute path), start and now (the machine's epoch
 // seconds, so elapsed time does not depend on the clocks agreeing), bytes and free (bytes left on its disk).
@@ -57,6 +61,7 @@ std::string bagStopScript(const BagHost &, double waitSeconds, bool kill = false
 // The command that runs `script` on the host: bash -c locally, else ssh (non-interactive, short timeouts, one
 // shared connection) running bash -c there.
 std::vector<std::string> bagCommand(const BagHost &, const std::string &script);
+
 // "<prefix>_<YYYYmmdd_HHMMSS>" (local time), or the prefix alone without a timestamp.
 std::string bagName(const std::string &prefix, bool timestamp);
 // Whether `name` can be a bag folder name (no slashes, not . or ..; letters, digits and ._- only).
@@ -64,6 +69,7 @@ bool validBagName(const std::string &name);
 // "1.4 GB" style sizes.
 std::string byteSize(double bytes);
 
+// Outcome of runProcess().
 struct ProcessResult {
     int status = -1; // exit code; -1 on a signal, a spawn failure or a timeout
     bool timedOut = false;

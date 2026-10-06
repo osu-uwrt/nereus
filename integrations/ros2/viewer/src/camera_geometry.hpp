@@ -3,6 +3,7 @@
 #include "math.hpp"
 
 namespace nereus::ros_viewer::host {
+// Rectified pinhole intrinsics (pixels) and the GL clip planes (metres) used to render the sensor's view.
 struct Intrinsics {
     int width = 1920, height = 1200;
     double fx = 0, fy = 0, cx = 0, cy = 0;
@@ -20,22 +21,29 @@ struct Intrinsics {
         p[3][2] = float(-2 * farPlane * nearPlane / (farPlane - nearPlane));
         return p;
     }
+
+    // Throws on a resolution outside 16..8192 or non-finite / non-positive intrinsics.
     void validate() const {
         if (width < 16 || height < 16 || width > 8192 || height > 8192 || !std::isfinite(fx) || !std::isfinite(fy) ||
             fx <= 0 || fy <= 0 || !std::isfinite(cx) || !std::isfinite(cy) || farPlane <= nearPlane)
             throw std::runtime_error("Invalid camera resolution or intrinsics");
     }
 };
+
+// Eye position, view and projection matrices for rendering what a sensor sees.
 struct SensorView {
     glm::vec3 eye{};
     glm::mat4 view{1}, projection{1};
 };
+
 // `opticalWorld`: pose of the optical frame in the world (map) frame.
 inline SensorView sensorView(const glm::mat4 &opticalWorld, const Intrinsics &k) {
     // GL camera = optical frame with y and z flipped (down -> up, forward -> -Z).
     const glm::mat4 flip = glm::scale(glm::mat4(1), glm::vec3(1, -1, -1));
     return {glm::vec3(opticalWorld[3]), glm::inverse(opticalWorld * flip), k.projection()};
 }
+
+// Metric depth from a [0, 1] depth-buffer value of the projection above.
 inline float linearDepth(float z, float nearPlane = 0.05f, float farPlane = 100.f) {
     return 2 * nearPlane * farPlane / (farPlane + nearPlane - (2 * z - 1) * (farPlane - nearPlane));
 }

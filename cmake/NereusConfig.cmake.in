@@ -1,6 +1,9 @@
+# Package config template for find_package(Nereus). The @NEREUS_BUILD_*@ flags are substituted at configure
+# time, so consumers only look for the third-party dependencies of the components that were actually built.
 @PACKAGE_INIT@
 include(CMakeFindDependencyMacro)
 find_dependency(Eigen3 3.3 NO_MODULE)
+
 if(@NEREUS_BUILD_CAMERAS@)
   find_dependency(OpenCV 4 COMPONENTS core imgproc imgcodecs)
 endif()
@@ -18,5 +21,6 @@ if(@NEREUS_BUILD_OFFSCREEN_RENDERER@)
   find_dependency(OpenGL COMPONENTS EGL)
   find_dependency(Threads)
 endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/NereusTargets.cmake")
 check_required_components(Nereus)

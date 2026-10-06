@@ -22,6 +22,8 @@ from ruamel.yaml.events import (
     SequenceStartEvent,
 )
 
+# Kinds a pack folder's canonical <kind>.yaml may have; "task" documents only live inside a
+# tasks pack (as includes), so they are a document kind but not a pack kind.
 PACK_KINDS = ("robot", "pool", "tasks", "bridge", "equipment", "scenario")
 DOCUMENT_KINDS = PACK_KINDS + ("task",)
 
@@ -34,6 +36,7 @@ class PackError(ValueError):
         super().__init__("\n".join(self.problems))
 
 
+# A fresh round-trip loader/dumper per call, configured identically for loading and saving.
 def _yaml() -> YAML:
     yaml = YAML(typ="rt")  # YAML 1.2 core schema: 'on'/'yes' stay strings
     yaml.preserve_quotes = True
@@ -43,7 +46,10 @@ def _yaml() -> YAML:
     return yaml
 
 
+# Recursive worker for ``plain``. ``where`` is the JSON-pointer-like path used in error messages;
+# ``active`` holds the ids of containers on the current recursion stack (alias cycle detection).
 def _plain(value: Any, where: str, active: set[int]) -> Any:
+    # Containers: copy into plain dict/list, refusing a container that contains itself
     if isinstance(value, (dict, list, tuple)):
         if id(value) in active:
             raise PackError(f"{where or '/'}: recursive alias")
@@ -59,6 +65,9 @@ def _plain(value: Any, where: str, active: set[int]) -> Any:
             return [_plain(item, f"{where}/{index}", active) for index, item in enumerate(value)]
         finally:
             active.discard(id(value))
+
+    # Scalars: unwrap ruamel's scalar subclasses (ScalarFloat, ScalarBoolean, ...) to builtins.
+    # bool is checked before int because bool is an int subclass.
     if isinstance(value, bool):
         return bool(value)
     if isinstance(value, int):
@@ -96,6 +105,7 @@ class Source:
         return hashlib.sha256(self.data).hexdigest()
 
 
+# Read a file's raw bytes, turning OS errors into a PackError.
 def read_source(path: Path) -> Source:
     try:
         return Source(path, path.read_bytes())
@@ -105,6 +115,7 @@ def read_source(path: Path) -> Source:
 
 def _recursive_alias(text: str) -> str | None:
     """Anchor referenced inside its own collection; ruamel would silently build None there."""
+    # Stack of anchors of the collections currently open in the event stream
     open_anchors: list[str | None] = []
     for event in _yaml().parse(text):
         if isinstance(event, (MappingStartEvent, SequenceStartEvent)):
@@ -116,6 +127,8 @@ def _recursive_alias(text: str) -> str | None:
     return None
 
 
+# Strictly load one YAML file as a round-trip tree: rejects recursive aliases, duplicate keys,
+# non-mapping roots and anything ``plain`` cannot represent (the tree itself is returned unchanged).
 def read_yaml(path: Path, source: Source | None = None) -> CommentedMap:
     source = source if source is not None else read_source(path)
     try:
@@ -127,6 +140,8 @@ def read_yaml(path: Path, source: Source | None = None) -> CommentedMap:
         raise PackError(f"{path}: invalid YAML: {error}") from None
     if not isinstance(data, CommentedMap):
         raise PackError(f"{path}: document root must be a mapping")
+
+    # Validate only; the plain copy is discarded
     try:
         plain(data)
     except PackError as error:
@@ -165,6 +180,8 @@ class PackDocument:
     _baseline: str | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
+        # Remember how the freshly loaded tree emits, so an unedited document can save its
+        # original bytes instead of the emitter's normalization.
         if self.source is not None:
             self._baseline = self._emit()
 
@@ -182,6 +199,7 @@ class PackDocument:
         _yaml().dump(self.data, stream)
         return stream.getvalue()
 
+    # Original bytes when the tree is unchanged since loading, else freshly emitted UTF-8
     def _bytes(self) -> bytes:
         text = self._emit()
         if self.source is not None and text == self._baseline:
@@ -195,6 +213,8 @@ class PackDocument:
         """Write comments, key order, quoting and metadata unchanged; atomic replace."""
         target = Path(path) if path is not None else self.path
         data = self._bytes()
+
+        # Write a hidden temp file in the target folder, then rename over the target
         descriptor, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
         try:
             with os.fdopen(descriptor, "wb") as stream:

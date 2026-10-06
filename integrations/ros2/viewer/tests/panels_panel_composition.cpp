@@ -1,3 +1,5 @@
+// The panel composition built from the viewer YAML: provider bindings, validation (a bad config creates nothing),
+// preview passivity, autonomy owning motion, panel windows and dock placement, the toolbar and header, themes.
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/theme.hpp"
 #include <cassert>
@@ -6,6 +8,8 @@
 #include <imgui_internal.h>
 #include <iostream>
 using namespace nereus::ros_viewer::panels;
+
+// In-memory Motion provider: enable/kill/activate/drag/block just update its state.
 struct FakeMotion : Motion {
     MotionState s;
     MotionState state() override {
@@ -28,6 +32,8 @@ struct FakeMotion : Motion {
         s.blocked = b;
     }
 };
+
+// In-memory Autonomy provider: busy between start() and stop().
 struct FakeMission : Autonomy {
     MissionState s;
     MissionState state() override {
@@ -41,6 +47,7 @@ struct FakeMission : Autonomy {
         s.busy = false;
     }
 };
+
 // Host items: no provider, recorded when drawn so the toolbar order can be observed.
 struct HostItem final : Panel {
     std::string name;
@@ -53,6 +60,7 @@ struct HostItem final : Panel {
         log->push_back("draw:" + name);
     }
 };
+
 int main() {
     Registry r;
     registerPanels(r);
@@ -64,6 +72,8 @@ int main() {
                                                 return std::unique_ptr<Panel>(new HostItem(type, &drawLog));
                                             },
                                             true, std::string(type) != "detections"});
+
+    // Fake provider types; `created` counts providers built, `telemetryReads` the telemetry state() calls.
     int created = 0, telemetryReads = 0;
     struct FakeTelemetry : Telemetry {
         int *reads;
@@ -86,6 +96,8 @@ int main() {
                                                             ++created;
                                                             return std::make_shared<FakeMission>();
                                                         }});
+
+    // The base config: a motion panel, an autonomy panel, a gizmo overlay, and autonomy owning motion.
     const auto text = R"(providers:
   motion: {type: fake.motion, options: {}}
   mission: {type: fake.mission, options: {}}
@@ -97,12 +109,15 @@ overlays:
 ownership:
   - {motion: motion, autonomy: mission}
 )";
+
     Context ctx{"some_robot", "some_frame", false, false};
     Composition good(YAML::Load(text), ctx, r);
     assert(created == 2);
+
     // Left dock column of the built-in layout: a fraction of the window (default .29) or sidebar_width pixels.
     assert(std::abs(good.width(1000) - 290) < .01f);
     assert(std::abs(good.width(1500) - 435) < .01f);
+
     // Panels are dockable windows: the title shown, the instance ID as the window's identity in saved layouts.
     {
         const Context ctx{"some_robot", "some_frame", true, false}; // preview: these create no providers
@@ -128,6 +143,8 @@ ownership:
             assert(!*flag.second);
         assert(parseDock("right_bottom") == Dock::RightBottom && parseDock("floating") == Dock::Floating);
     }
+
+    // Ownership: motion is blocked while the mission runs.
     auto motion = std::dynamic_pointer_cast<Motion>(good.providers().at("motion"));
     auto mission = std::dynamic_pointer_cast<Autonomy>(good.providers().at("mission"));
     mission->start("test");
@@ -136,12 +153,16 @@ ownership:
     mission->stop();
     good.touch();
     assert(!motion->state().blocked);
+
+    // Preview compositions create no providers; a config without panels is empty.
     ctx.preview = true;
     Composition preview(YAML::Load(text), ctx, r);
     assert(created == 2 && preview.providers().empty());
     Composition empty(YAML::Load("providers: {}"), ctx, r);
     assert(empty.empty());
     ctx.preview = false;
+
+    // Asserts that `cfg` is rejected without creating any provider.
     auto fails = [&](const YAML::Node &cfg) {
         const int before = created; // a rejected composition creates no provider
         bool threw = false;
@@ -155,6 +176,9 @@ ownership:
                       << YAML::Dump(cfg) << "\n";
         assert(threw && created == before);
     };
+
+    // Rejected: unknown or mismatched providers, duplicate IDs, out-of-range or conflicting sidebar widths,
+    // unknown provider types / dock areas / keys, invalid overlay options.
     auto cfg = YAML::Load(text);
     cfg["panels"][0]["provider"] = "missing";
     fails(cfg);
@@ -188,6 +212,7 @@ ownership:
     cfg = YAML::Load(text);
     cfg["tools"] = YAML::Load("[{id: tool, type: motion, provider: motion}]");
     fails(cfg); // the old `tools:` list is now `toolbar:`
+
     // --- toolbar: parsing, ordering, validation
     const auto toolbarText = std::string(text) + R"(toolbar:
   - {type: view}
@@ -215,6 +240,7 @@ ownership:
         ImGui::Render();
         const std::vector<std::string> drawn{"toolbar:view", "toolbar:scene_settings"};
         assert(drawLog == drawn); // panels_menu / motion draw their own widgets, not through the log
+
         // The operator's toolbar customization: every item with its type, configured title and shown flag.
         {
             auto titled = YAML::Load(toolbarText);
@@ -232,6 +258,7 @@ ownership:
             ImGui::Render();
             assert(drawLog == std::vector<std::string>{"toolbar:scene_settings"});
         }
+
         // Themes restyle everything; unknown names change nothing. Every shipped theme file loads.
         assert(nereus::ros_viewer::loadThemes(NEREUS_VIEWER_THEMES).empty());
         assert(nereus::ros_viewer::themes().size() >= 12);
@@ -245,6 +272,7 @@ ownership:
         const float daylightText = nereus::ros_viewer::palette().text.x;
         assert(!nereus::ros_viewer::applyTheme("nope") && nereus::ros_viewer::currentTheme() == "daylight");
         assert(nereus::ros_viewer::applyTheme("abyss") && nereus::ros_viewer::palette().text.x > daylightText);
+
         // Panel windows: each visible panel is its own window; closing it (Windows menu, its x) hides it.
         Composition windows(YAML::Load(toolbarText), ctx, r);
         const auto frame = [&] {
@@ -265,6 +293,7 @@ ownership:
         frame();
         frame();
         assert(active("control###panel.control") && !active("autonomy###panel.autonomy"));
+
         // The host's right-click menu runs right after each visible panel window's Begin, with the panel's ID.
         std::vector<std::string> menus;
         windows.setWindowContextMenu([&](const std::string &id) { menus.push_back(id); });
@@ -274,6 +303,7 @@ ownership:
         frame();
         frame();
         assert(active("autonomy###panel.autonomy") && *windows.visibility()[1].second);
+
         // visible: false hides an item without dropping it
         auto hidden = YAML::Load(toolbarText);
         hidden["toolbar"][0]["visible"] = false;
@@ -344,11 +374,14 @@ ownership:
         bad["header"] = YAML::Load("{type: view}");
         fails(bad);
     }
+
     // SVO names: ~ is the robot's home, the camera id keeps cameras apart, the extension is kept or .svo2.
     assert(recordingFile("~/svos/run", "ffc", "", "/home/ros") == "/home/ros/svos/run_ffc.svo2");
     assert(recordingFile("/data/gate.svo", "dfc", "20261002_101500", "/home/ros") ==
            "/data/gate_20261002_101500_dfc.svo");
     assert(recordingFile("~other/x.svo2", "ffc", "", "/h") == "~other/x_ffc.svo2");
+
+    // Toolbar validation: the base config with this `toolbar:` list.
     const auto withToolbar = [&](const char *yaml) {
         auto c = YAML::Load(text);
         c["toolbar"] = YAML::Load(yaml);
@@ -366,6 +399,8 @@ ownership:
     fails(withToolbar("{type: view}"));                   // not a sequence
     fails(withToolbar("[{id: x}]"));                      // missing type
     fails(withToolbar("[{type: view, slot: settings}]")); // slot is gone
+
+    // The error names the offending item and the problem.
     try {
         Composition bad(withToolbar("[{type: nope}]"), ctx, r);
         assert(false);
@@ -378,6 +413,8 @@ ownership:
     cfg["panels"][0]["slot"] = "settings";
     fails(cfg);
     fails(withToolbar("[{type: view, dock: left}]")); // dock places panel windows only
+
+    // Topic templates expand context placeholders; unknown placeholders are errors.
     assert(expand("/{namespace}/{fixed_frame}", ctx) == "/some_robot/some_frame");
     bool threw = false;
     try {

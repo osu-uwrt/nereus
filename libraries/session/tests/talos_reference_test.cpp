@@ -19,6 +19,8 @@ constexpr double kReferenceTolerance = 1e-9;
 constexpr double kReferenceTolerance = 1e-2;
 #endif
 
+// Steps the pack plant through three initial conditions and compares 27 state fields per tick with the
+// recordings (optimized and unoptimized builds of the original simulator).
 TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
     auto pack = nereus::session::createRuntime(nereus::session::loadResolvedScenario(NEREUS_RESOLVED_TALOS));
     // The recordings placed the pool corner with a 1e-15 m residual; initial wall contact is
@@ -33,6 +35,8 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
     for (std::uint64_t tick = 0; tick <= 800; tick += 200)
         commands.emplace_back(tick, forces);
     commands.emplace_back(1000, Eigen::VectorXd::Zero(8));
+
+    // Both recordings are read in lockstep; the header row is skipped.
     std::array<std::ifstream, 2> fixtures{
         std::ifstream(std::string(NEREUS_SOURCE_DIR) + "/tests/fixtures/legacy_talos.csv"),
         std::ifstream(std::string(NEREUS_SOURCE_DIR) + "/tests/fixtures/legacy_talos_unoptimized.csv")};
@@ -43,7 +47,9 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
         ASSERT_TRUE(fixture);
         ASSERT_TRUE(std::getline(fixture, row));
     }
+
     for (int scenario = 0; scenario < 3; ++scenario) {
+        // Case 0 starts from the pack's initial state; cases 1 and 2 from the recorded poses and velocities.
         auto initial = pack.initial;
         if (scenario == 1) {
             initial.position = {11.43, -5.4864, .05};
@@ -56,9 +62,11 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
             initial.position = {11.43, -5.4864, -1.8836};
             initial.linear_velocity = {.2, .1, -.8};
         }
+
         nereus::simulation::Plant plant(pack.parameters, initial);
         std::size_t next_command = 0;
         for (std::uint64_t tick = 0; tick <= ticks; ++tick) {
+            // Compare the current state against the row for this tick in each recording.
             {
                 const auto motion = plant.motion();
                 const auto &state = motion.state;
@@ -92,6 +100,8 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
                     EXPECT_FALSE(std::getline(fields, value, ','));
                 }
             }
+
+            // Apply the scripted command for this tick, then step.
             if (tick == ticks)
                 break;
             if (next_command < commands.size() && commands[next_command].first == tick)
@@ -99,6 +109,7 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
             plant.advance();
         }
     }
+
     for (auto &fixture : fixtures)
         EXPECT_FALSE(std::getline(fixture, row));
     // One complete original trajectory must match; never mix candidate values per field.
@@ -106,6 +117,8 @@ TEST(TalosReference, OriginalDynamicsActuatorsImmersionAndPoolContacts) {
         << "optimized max=" << error[0] << " " << worst[0] << "; unoptimized max=" << error[1] << " " << worst[1];
 }
 
+// Noise-free Talos AHRS, FOG, DVL velocity and depth models against outputs recorded from the original
+// simulator for 24 hand-picked kinematic states.
 TEST(TalosReference, OriginalNoiseDisabledSensorFormulas) {
     namespace sensors = nereus::sensors;
     const auto pack = nereus::session::createRuntime(nereus::session::loadResolvedScenario(NEREUS_RESOLVED_TALOS));
@@ -114,6 +127,8 @@ TEST(TalosReference, OriginalNoiseDisabledSensorFormulas) {
         const auto &pose = frames.fromRoot(frame);
         return sensors::Mount{pose.translation, pose.rotation};
     };
+
+    // Original sensor settings: reported variances and the calibrated gravity magnitude.
     sensors::AhrsParameters parameters;
     parameters.inertial_reporting.gravity_magnitude = 9.755455;
     parameters.inertial_reporting.force_variance = Eigen::Vector3d::Constant(.01);
@@ -131,6 +146,8 @@ TEST(TalosReference, OriginalNoiseDisabledSensorFormulas) {
     altitude_parameters.target_position_body = frames.fromRoot("base_link").translation;
     altitude_parameters.reported_variance = .0001;
     sensors::ReferenceAltitude altitude(altitude_parameters);
+
+    // Each row: index, body state (13), accelerations (6), then the 28 expected outputs from column 20.
     std::ifstream fixture(std::string(NEREUS_SOURCE_DIR) + "/tests/fixtures/legacy_sensor_kinematics.csv");
     ASSERT_TRUE(fixture);
     std::string row;
@@ -147,18 +164,21 @@ TEST(TalosReference, OriginalNoiseDisabledSensorFormulas) {
         EXPECT_FALSE(std::getline(fields, value, ','));
         ASSERT_TRUE(values.allFinite());
         EXPECT_EQ(values[0], count++);
+
         nereus::simulation::MotionSample input;
         auto &body = input.state.body;
         body.position = values.segment<3>(1);
         body.orientation = Eigen::Quaterniond(values[4], values[5], values[6], values[7]);
         body.linear_velocity = values.segment<3>(8);
         body.angular_velocity = values.segment<3>(11);
+        // The recorded acceleration is d/dt of the body-frame velocity; add w x v for the inertial value.
         input.acceleration_body = values.segment<3>(14) + body.angular_velocity.cross(body.linear_velocity);
         input.angular_acceleration_body = values.segment<3>(17);
         const auto imu = ahrs.sample(input, .02).value.value();
         const auto gyro = fog.sample(input, .002).value.value();
         Eigen::Quaterniond orientation = imu.attitude.sensor_to_world;
         const Eigen::Quaterniond expected_orientation(values[26], values[27], values[28], values[29]);
+        // q and -q are the same rotation; match the recorded sign before comparing.
         if (orientation.dot(expected_orientation) < 0)
             orientation.coeffs() *= -1;
         const auto speed = velocity.sample(input, .125).value.value();

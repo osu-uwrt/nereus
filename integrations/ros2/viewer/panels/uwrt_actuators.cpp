@@ -1,3 +1,5 @@
+// "uwrt.actuators" provider: riptide ActuatorStatus (armed, torpedo / marker counts) and configurable
+// actuator command buttons, each publishing a Bool, Float32 or Empty message.
 #include "ros_runtime.hpp"
 #include <riptide_msgs2/msg/actuator_status.hpp>
 #include <set>
@@ -8,6 +10,7 @@
 namespace nereus::ros_viewer::panels {
 namespace {
 class UwrtActuators final : public Actuators {
+    // One configured button; publish() is passed the current armed state.
     struct Command {
         std::string id, label, armedLabel;
         bool requiresArmed = false;
@@ -17,6 +20,8 @@ class UwrtActuators final : public Actuators {
   public:
     UwrtActuators(std::shared_ptr<RosRuntime> runtime, const YAML::Node &cfg, const Context &ctx)
         : runtime(runtime), timeout(cfg["status_timeout"].as<double>(1)) {
+        // Build a publisher per command. A bool command sends its fixed value, or with toggle_armed the
+        // opposite of the current armed state (an arm / disarm toggle).
         auto node = runtime->node;
         for (const auto &entry : cfg["commands"]) {
             Command command;
@@ -48,6 +53,7 @@ class UwrtActuators final : public Actuators {
             }
             commands.push_back(std::move(command));
         }
+
         status = node->create_subscription<riptide_msgs2::msg::ActuatorStatus>(
             expand(cfg["status_topic"].as<std::string>(), ctx), rclcpp::SensorDataQoS(),
             [this](const riptide_msgs2::msg::ActuatorStatus &msg) {
@@ -58,6 +64,8 @@ class UwrtActuators final : public Actuators {
                 readings["Markers remaining"] = std::to_string(msg.dropper_available_count);
             });
     }
+
+    // Buttons are enabled only while status is fresh and, for requires_armed commands, the actuators are armed.
     ActuatorState state() override {
         std::lock_guard<std::mutex> lock(mutex);
         ActuatorState value;
@@ -71,6 +79,7 @@ class UwrtActuators final : public Actuators {
         value.readings.assign(readings.begin(), readings.end());
         return value;
     }
+
     void command(const std::string &id) override {
         std::lock_guard<std::mutex> lock(mutex);
         if (!fresh())
@@ -83,9 +92,11 @@ class UwrtActuators final : public Actuators {
     }
 
   private:
+    // An ActuatorStatus arrived within status_timeout seconds.
     bool fresh() const {
         return std::chrono::duration<double>(Steady::now() - lastStatus).count() < timeout;
     }
+
     std::shared_ptr<RosRuntime> runtime;
     std::mutex mutex;
     double timeout;
@@ -96,6 +107,8 @@ class UwrtActuators final : public Actuators {
     rclcpp::Subscription<riptide_msgs2::msg::ActuatorStatus>::SharedPtr status;
 };
 } // namespace
+
+// Registers "uwrt.actuators"; validates each command entry (unique id, known type, finite float value).
 void registerUwrtActuators(Registry &registry, const RuntimeFactory &runtime) {
     registry.providers.emplace(
         "uwrt.actuators",

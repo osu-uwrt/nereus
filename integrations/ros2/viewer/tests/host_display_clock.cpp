@@ -1,3 +1,4 @@
+// The display clock that smooths jittery pose-stream stamps into an evenly advancing time to sample TF at.
 #include "display_clock.hpp"
 #include <cmath>
 #include <gtest/gtest.h>
@@ -10,6 +11,9 @@ struct Run {
     std::vector<double> latestSamples, clockSamples;
     bool ahead = false;
 };
+
+// 10 s of 100 Hz stamps with 0-4 ms arrival jitter, sampled at 60 Hz `delay` behind: the clock's times versus
+// "newest stamp minus delay".
 Run simulate(double delay) {
     DisplayClock clock;
     std::mt19937 rng(7);
@@ -20,6 +24,8 @@ Run simulate(double delay) {
         const double stamp = 100 + i * .01;
         arrivals.emplace_back(i * .01 + jitter(rng), stamp);
     }
+
+    // Render loop: deliver everything that has arrived by `wall`, then sample.
     std::size_t next = 0;
     double latest = 0;
     for (double wall = 0; wall < 9.5; wall += 1. / 60) {
@@ -38,6 +44,8 @@ Run simulate(double delay) {
     }
     return run;
 }
+
+// Coefficient of variation of the frame-to-frame steps (0 = perfectly even).
 double stepSpread(const std::vector<double> &v) {
     double mean = 0, var = 0;
     std::vector<double> steps;
@@ -52,6 +60,7 @@ double stepSpread(const std::vector<double> &v) {
 }
 } // namespace
 
+// The clock is monotonic, never past the newest stamp, and at least twice as even as sampling the latest stamp.
 TEST(HostDisplayClock, SmootherThanLatestStampAndNeverAhead) {
     const auto run = simulate(.02);
     EXPECT_FALSE(run.ahead); // never samples beyond the newest stamp (no extrapolation)
@@ -62,6 +71,7 @@ TEST(HostDisplayClock, SmootherThanLatestStampAndNeverAhead) {
         ASSERT_GE(run.clockSamples[i], run.clockSamples[i - 1]);
 }
 
+// A stamp jumping backwards (simulator reset) restarts the timeline at the new stamps.
 TEST(HostDisplayClock, ReanchorsOnClockJump) {
     DisplayClock clock;
     for (int i = 0; i < 50; ++i)
@@ -90,6 +100,7 @@ struct Loaded {
     int held = 0, frames = 0;
     bool ahead = false, backwards = false;
 };
+
 Loaded loaded(double period, double rate = 1., double seconds = 20) {
     DisplayClock clock;
     std::mt19937 rng(11);
@@ -100,7 +111,9 @@ Loaded loaded(double period, double rate = 1., double seconds = 20) {
         const double late = jitter(rng) + (std::fmod(wall, 2.) < period / rate ? .04 : 0.);
         arrivals.emplace_back(wall + late, 500 + i * period);
     }
-    std::sort(arrivals.begin(), arrivals.end());
+    std::sort(arrivals.begin(), arrivals.end()); // late samples can be overtaken
+
+    // Render loop at 60 Hz; `held` counts frames that sit exactly on the newest stamp (waiting for data).
     Loaded result;
     std::size_t next = 0;
     double latest = 0, previous = -1;
@@ -125,6 +138,8 @@ Loaded loaded(double period, double rate = 1., double seconds = 20) {
         }
         previous = t;
     }
+
+    // Step statistics: coefficient of variation and the largest step relative to the mean.
     double mean = 0, var = 0;
     for (double s : steps)
         mean += s;
@@ -145,6 +160,7 @@ TEST(HostDisplayClock, LoadedDeliveryStaysEvenWithoutHolding) {
     EXPECT_LT(truth.cv, .05) << "displayed time must advance evenly frame to frame";
     EXPECT_LT(truth.maxStepRatio, 1.2);
     EXPECT_LT(truth.held, truth.frames / 100) << "display must almost never wait at the newest stamp";
+
     const auto estimate = loaded(.034); // 30 Hz EKF
     EXPECT_FALSE(estimate.ahead);
     EXPECT_LT(estimate.cv, .05) << "held " << estimate.held << "/" << estimate.frames << " max step ratio "
@@ -152,6 +168,7 @@ TEST(HostDisplayClock, LoadedDeliveryStaysEvenWithoutHolding) {
     EXPECT_LT(estimate.held, estimate.frames / 100);
 }
 
+// The clock tracks a stream that runs faster than wall time.
 TEST(HostDisplayClock, FollowsFasterSimulation) {
     const auto fast = loaded(.01, 2.); // real_time_factor 2
     EXPECT_FALSE(fast.ahead);
@@ -159,6 +176,7 @@ TEST(HostDisplayClock, FollowsFasterSimulation) {
     EXPECT_LT(fast.held, fast.frames / 50);
 }
 
+// With no data the clock holds at the last stamp; when data resumes it catches up without going backwards.
 TEST(HostDisplayClock, HoldsWhilePausedAndReanchorsOnResume) {
     DisplayClock clock;
     for (int i = 0; i <= 300; ++i)

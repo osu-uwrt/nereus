@@ -1,3 +1,5 @@
+// Sensor runtime: owns the plant, samples registered sensor models on their schedules, and
+// delivers samples to per-sensor streams after their configured latency.
 #pragma once
 
 #include "nereus/sensors/types.hpp"
@@ -25,6 +27,7 @@ template <class T> class SensorStream {
     SensorStream() = default;
     SensorStream(const SensorStream &) = delete;
     SensorStream &operator=(const SensorStream &) = delete;
+
     std::optional<Sample<T>> latest() const {
         return latest_;
     }
@@ -34,6 +37,8 @@ template <class T> class SensorStream {
     bool active() const {
         return active_;
     }
+
+    // Removes and returns every delivered sample, oldest first.
     std::vector<Sample<T>> drain() {
         std::vector<Sample<T>> samples;
         samples.reserve(ready_.size());
@@ -63,9 +68,12 @@ class ScheduledDevice {
     virtual void discardBuffered() noexcept = 0;
 };
 
+// Schedules one model: samples it when its period comes due, holds the sample in a pending
+// queue for the configured latency, then moves it to the stream's ready queue.
 template <class Model> class ScheduledSensor final : public ScheduledDevice {
   public:
     using Reading = typename Model::Reading;
+
     ScheduledSensor(Device config, Model model, std::uint64_t seed)
         : config_(std::move(config)), model_(std::move(model)), stream_(std::make_shared<SensorStream<Reading>>()) {
         reset(seed);
@@ -77,6 +85,7 @@ template <class Model> class ScheduledSensor final : public ScheduledDevice {
         return stream_;
     }
 
+    // Reseeds the model and restarts the schedule: first sample is due one period after t=0.
     void reset(std::uint64_t seed) override {
         invalidate();
         model_.reset(seed, config_.id);
@@ -85,12 +94,16 @@ template <class Model> class ScheduledSensor final : public ScheduledDevice {
         stream_->stats_ = {};
         stream_->active_ = true;
     }
+
+    // Clears all buffered samples and marks the stream inactive (stats are left alone).
     void invalidate() noexcept override {
         pending_.clear();
         stream_->ready_.clear();
         stream_->latest_.reset();
         stream_->active_ = false;
     }
+
+    // Drops buffered samples (counted as drops) but keeps the schedule and model state.
     void discardBuffered() noexcept override {
         stream_->stats_.dropped_pending += pending_.size();
         stream_->stats_.dropped_delivered += stream_->ready_.size();
@@ -98,6 +111,8 @@ template <class Model> class ScheduledSensor final : public ScheduledDevice {
         stream_->ready_.clear();
         stream_->latest_.reset();
     }
+
+    // Called once per plant tick: delivers due samples, then acquires a new one if due.
     void advance(const simulation::MotionSample &motion) override {
         const auto now = motion.state.elapsed;
         deliver(now);
@@ -107,6 +122,8 @@ template <class Model> class ScheduledSensor final : public ScheduledDevice {
         if (config_.latency.count() > std::numeric_limits<std::int64_t>::max() - now.count()) {
             throw std::overflow_error("sensor delivery time overflow: " + config_.id);
         }
+
+        // Acquire: the model sees the time since its previous acquisition, in seconds.
         const auto elapsed = std::chrono::duration<double>(now - last_acquired_).count();
         auto measurement = model_.sample(motion, elapsed);
         if (measurement.value.has_value() == !measurement.unavailable_reason.empty()) {
@@ -120,11 +137,15 @@ template <class Model> class ScheduledSensor final : public ScheduledDevice {
             ++stream_->stats_.unavailable;
         }
         last_acquired_ = now;
+
+        // Schedule the next acquisition; an overflowing due time stops the sensor for good.
         if (config_.period.count() > std::numeric_limits<std::int64_t>::max() - next_due_->count()) {
             next_due_.reset();
         } else {
             *next_due_ += config_.period;
         }
+
+        // Queue for delivery after the latency (zero latency delivers on this same tick).
         makeRoom(pending_, stream_->stats_.dropped_pending);
         pending_.push_back({now + config_.latency, std::move(sample)});
         deliver(now);
@@ -132,9 +153,11 @@ template <class Model> class ScheduledSensor final : public ScheduledDevice {
 
   private:
     struct Pending {
-        Nanoseconds available;
+        Nanoseconds available; // Sim time at which the sample may be delivered.
         Sample<Reading> sample;
     };
+
+    // Applies the overflow policy when a queue is at capacity.
     template <class Queue> void makeRoom(Queue &queue, std::uint64_t &dropped) {
         if (queue.size() == config_.capacity) {
             if (config_.overflow == OverflowPolicy::Fail) {
@@ -144,6 +167,8 @@ template <class Model> class ScheduledSensor final : public ScheduledDevice {
             ++dropped;
         }
     }
+
+    // Moves every pending sample whose latency has elapsed into the stream.
     void deliver(Nanoseconds now) {
         while (!pending_.empty() && pending_.front().available <= now) {
             makeRoom(stream_->ready_, stream_->stats_.dropped_delivered);
@@ -155,11 +180,12 @@ template <class Model> class ScheduledSensor final : public ScheduledDevice {
             ++stream_->stats_.delivered;
         }
     }
+
     Device config_;
     Model model_;
     std::shared_ptr<SensorStream<Reading>> stream_;
     std::deque<Pending> pending_;
-    std::optional<Nanoseconds> next_due_;
+    std::optional<Nanoseconds> next_due_; // Empty once the schedule would overflow.
     Nanoseconds last_acquired_{0};
 };
 } // namespace detail
@@ -174,6 +200,7 @@ class Runtime {
     Runtime(const Runtime &) = delete;
     Runtime &operator=(const Runtime &) = delete;
 
+    // Registers a sensor model and returns its stream; ids must be unique.
     template <class Model> std::shared_ptr<SensorStream<typename Model::Reading>> add(Device device, Model model) {
         validateDevice(device);
         auto entry = std::make_unique<detail::ScheduledSensor<Model>>(device, std::move(model), seed_);
@@ -188,6 +215,8 @@ class Runtime {
         }
         return stream;
     }
+
+    // Looks up a registered stream by id; throws if unknown or if Reading does not match.
     template <class Reading> std::shared_ptr<SensorStream<Reading>> stream(const std::string &id) const {
         const auto found = streams_.find(id);
         if (found == streams_.end()) {
@@ -199,6 +228,7 @@ class Runtime {
         }
         return *typed;
     }
+
     void command(const Eigen::VectorXd &forces);
     void stopThrusters(); // Clears propulsion targets/queues without restarting sensors/time.
     simulation::Snapshot advance(std::uint64_t ticks = 1);
@@ -209,6 +239,7 @@ class Runtime {
     void setContactResolver(std::shared_ptr<simulation::ContactResolver> resolver) {
         plant_.setContactResolver(std::move(resolver));
     }
+    // True after an advance/reset threw; add/command/advance/place then throw until reset succeeds.
     bool faulted() const {
         return faulted_;
     }
@@ -216,11 +247,12 @@ class Runtime {
   private:
     void validateDevice(const Device &) const;
     void requireHealthy() const;
+
     simulation::Plant plant_;
     Nanoseconds timestep_;
     std::uint64_t seed_;
-    std::map<std::string, std::any> streams_;
+    std::map<std::string, std::any> streams_; // id -> shared_ptr<SensorStream<Reading>>.
     std::vector<std::unique_ptr<detail::ScheduledDevice>> devices_;
-    bool sealed_ = false, faulted_ = false;
+    bool sealed_ = false, faulted_ = false; // sealed_: registration closed after first advance.
 };
 } // namespace nereus::sensors

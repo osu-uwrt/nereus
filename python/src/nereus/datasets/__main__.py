@@ -18,6 +18,7 @@ from .render import render
 
 
 def _overrides(arguments: argparse.Namespace) -> Overrides:
+    """Spec overrides from the shared ``_spec_options`` flags (None = keep the spec's value)."""
     return Overrides(
         tasks=arguments.task,
         count=arguments.count,
@@ -34,6 +35,7 @@ def _overrides(arguments: argparse.Namespace) -> Overrides:
 
 
 def _plan(dataset: str, out: Path, arguments: argparse.Namespace) -> Path:
+    """Plan a job, print warnings and a summary, and return the folder holding job.json."""
     result = plan(Path(dataset), out, _overrides(arguments))
     for warning in result.warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
@@ -49,6 +51,7 @@ def _plan(dataset: str, out: Path, arguments: argparse.Namespace) -> Path:
 
 
 def _formats(text: str) -> list[str]:
+    """argparse type for ``--formats``: a non-empty comma-separated list of known formats."""
     formats = [item.strip() for item in text.split(",") if item.strip()]
     unknown = [item for item in formats if item not in FORMATS]
     if unknown or not formats:
@@ -57,13 +60,18 @@ def _formats(text: str) -> list[str]:
 
 
 def _export(folder: Path, fmt: str, out: Path, arguments: argparse.Namespace) -> None:
+    """Export one format; ``--labels``/``--model`` are optional (generate does not define them)."""
     labels = Path(arguments.labels) if getattr(arguments, "labels", None) else None
     summary = export(folder, fmt, out, labels=labels, model=getattr(arguments, "model", None))
     for line in summary.report():
         print(line)
 
 
+# Subcommand handlers (each set as ``run`` on its subparser; return the exit code)
+
+
 def _run_generate(arguments: argparse.Namespace) -> int:
+    """plan + render + (unless --no-export) every format and a preview sheet, under --out."""
     root = Path(arguments.out)
     folder = _plan(arguments.dataset, root / "render", arguments)
     render(folder, workers=arguments.workers, renderer=_path(arguments.renderer))
@@ -109,6 +117,7 @@ def _run_preview(arguments: argparse.Namespace) -> int:
 
 
 def _run_environments(arguments: argparse.Namespace) -> int:
+    """The ``environments`` subcommand: comparison sheets of the same views per environment."""
     options = Options(
         tasks=arguments.task,
         views=arguments.views,
@@ -128,6 +137,7 @@ def _run_environments(arguments: argparse.Namespace) -> int:
 
 
 def _run_check_classes(arguments: argparse.Namespace) -> int:
+    """Compare each label-pack model's class order with a YOLO parameter file's id maps."""
     labels = load_document(Path(arguments.labels), "labels")
     problems, notes = class_order_problems(labels.data, Path(arguments.yolo_config))
     for note in notes:
@@ -142,6 +152,7 @@ def _path(value: str | None) -> Path | None:
 
 
 def _spec_options(parser: argparse.ArgumentParser) -> None:
+    """Flags shared by ``generate`` and ``plan``: the dataset spec and its overrides."""
     parser.add_argument("dataset", help="dataset folder (dataset.yaml) or file")
     parser.add_argument("--out", required=True, help="output folder")
     parser.add_argument(
@@ -174,6 +185,7 @@ def _spec_options(parser: argparse.ArgumentParser) -> None:
 
 
 def _label_options(parser: argparse.ArgumentParser) -> None:
+    """Label pack/model flags for commands that apply labels to rendered records."""
     parser.add_argument("--labels", help="label pack (default: the one the plan used)")
     parser.add_argument("--model", help="label-pack model (default: the one the plan used)")
 
@@ -255,6 +267,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     check.set_defaults(run=_run_check_classes)
 
+    # Every handler reports bad input as a PackError listing its problems
     arguments = parser.parse_args(argv)
     try:
         result: int = arguments.run(arguments)

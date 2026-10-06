@@ -1,14 +1,20 @@
+// Plant behaviour: analytic motion, placement and reset semantics, determinism, validation, sphere-pool and box
+// contacts, motion samples and actuator calibration.
 #include "nereus/simulation/plant.hpp"
 #include <gtest/gtest.h>
 #include <limits>
 
 using namespace nereus::simulation;
 namespace {
+// 2 m deep inside the default 20 x 10 x 5 m pool, at rest.
 BodyState initial() {
     BodyState s;
     s.position = {5, 5, -2};
     return s;
 }
+
+// Default body (10 kg, neutrally buoyant, undamped) with one undelayed, instantaneous surge thruster at the COM and
+// no command watchdog, so the commanded thrust is the applied force.
 PlantParameters ideal() {
     PlantParameters p;
     p.command_timeout = 0;
@@ -18,9 +24,12 @@ PlantParameters ideal() {
     p.thrusters = {t};
     return p;
 }
+
 Eigen::VectorXd force(double value) {
     return Eigen::VectorXd::Constant(1, value);
 }
+
+// Bit-identical snapshots (generation excluded).
 void same(const Snapshot &a, const Snapshot &b) {
     EXPECT_EQ(a.tick, b.tick);
     EXPECT_EQ(a.elapsed, b.elapsed);
@@ -32,6 +41,7 @@ void same(const Snapshot &a, const Snapshot &b) {
 }
 } // namespace
 
+// 10 N on 10 kg for 1 s: v = 1 m/s, x advances 0.5 m.
 TEST(Plant, ConstantForceMatchesAnalyticalTranslation) {
     Plant plant(ideal(), initial());
     plant.command(force(10));
@@ -51,6 +61,8 @@ TEST(Plant, PlacementPreservesTimeAndClearsActiveAndDelayedForces) {
     plant.command(force(10));
     const auto before = plant.advance(20);
     ASSERT_GT(before.thruster_forces[0], 0);
+
+    // A delayed command is still pending at placement; placing drops it and the active force.
     plant.command(force(20));
     auto position = initial();
     position.position.x() = 7;
@@ -61,6 +73,7 @@ TEST(Plant, PlacementPreservesTimeAndClearsActiveAndDelayedForces) {
     EXPECT_EQ(placed.body.position, position.position);
     EXPECT_EQ(placed.thruster_forces[0], 0);
     EXPECT_EQ(plant.advance(20).thruster_forces[0], 0);
+
     plant.command(force(3));
     EXPECT_EQ(plant.advance(20).thruster_forces[0], 3);
 }
@@ -76,11 +89,15 @@ TEST(Plant, PlacementCanPreservePropulsionAndRejectsInvalidStateAtomically) {
     reference.advance(20);
     plant.command(force(20));
     reference.command(force(20));
+
+    // Placing without clearing actuators keeps propulsion in step with the unplaced reference.
     auto placed = plant.observe().body;
     placed.position.x() += 1;
     plant.place(placed, false);
     for (int i = 0; i < 20; ++i)
         EXPECT_EQ(plant.advance().thruster_forces, reference.advance().thruster_forces);
+
+    // A rejected placement leaves the plant untouched.
     const auto before = plant.observe();
     placed.position.x() = std::numeric_limits<double>::quiet_NaN();
     EXPECT_THROW(plant.place(placed), std::invalid_argument);
@@ -92,6 +109,7 @@ TEST(Plant, OffCenterThrusterProducesExpectedTorque) {
     auto p = ideal();
     p.thrusters[0].position.y() = 0.2;
     Plant plant(p, initial());
+    // 10 N at y = 0.2 m: -2 N m of yaw torque on unit inertia for one 2 ms tick.
     plant.command(force(10));
     const auto end = plant.advance();
     EXPECT_NEAR(end.body.angular_velocity.z(), -2 * 0.002, 1e-12);
@@ -101,6 +119,7 @@ TEST(Plant, AddedMassReducesAcceleration) {
     auto p = ideal();
     p.body.added_mass(0, 0) = 10;
     Plant plant(p, initial());
+    // 10 kg plus 10 kg added mass halves the acceleration.
     plant.command(force(10));
     EXPECT_NEAR(plant.advance(500).body.linear_velocity.x(), 0.5, 1e-12);
 }
@@ -130,6 +149,8 @@ TEST(Plant, ResetClearsPendingCommandsAndRestartsTime) {
     EXPECT_EQ(reset.tick, 0U);
     EXPECT_EQ(reset.thruster_forces.norm(), 0);
     same(a.advance(200), fresh.advance(200));
+
+    // Reset replays deterministically.
     a.reset(initial());
     a.command(force(12));
     const auto first = a.advance(300);
@@ -166,6 +187,7 @@ TEST(Plant, RejectsBadCommandsAndResetWithoutMutation) {
     b.command(force(10));
     EXPECT_THROW(a.command(Eigen::VectorXd::Zero(2)), std::invalid_argument);
     EXPECT_THROW(a.command(force(std::numeric_limits<double>::quiet_NaN())), std::invalid_argument);
+
     auto bad = initial();
     bad.position.x() = -1;
     EXPECT_THROW(a.reset(bad), std::invalid_argument);
@@ -210,6 +232,7 @@ TEST(Plant, FloorStopsInwardMotionAndAllowsTangentialMotion) {
     s.position.z() = -4.79;
     s.linear_velocity = {0.1, 0, -1};
     Plant plant(ideal(), s);
+    // The 0.2 m sphere settles on the 5 m floor at z = -4.8 m while it keeps sliding in x.
     const auto end = plant.advance(20);
     EXPECT_NEAR(end.body.position.z(), -4.8, 1e-12);
     EXPECT_NEAR(end.body.linear_velocity.z(), 0, 1e-12);
@@ -291,6 +314,8 @@ TEST(Motion, DerivativesIncludeThrustTorqueAndContactValidity) {
     plant.advance();
     EXPECT_NEAR(plant.motion().acceleration_body.x(), 1, 1e-10);
     EXPECT_NEAR(plant.motion().angular_acceleration_body.z(), -2, 1e-10);
+
+    // Resting on the floor makes the instantaneous acceleration invalid (impulsive contact).
     auto contact = initial();
     contact.position.z() = -parameters.pool.depth + parameters.body.collision_radius;
     plant.reset(contact);
@@ -310,10 +335,12 @@ TEST(Plant, ActuatorCalibrationOrdersDeadbandScaleSaturationAndEfficiency) {
     t.reverse_limit = 2;
     t.efficiency = .5;
     Plant plant(p, initial());
+    // (command, force): deadband 2 N, scale x2 forward / x0.5 reverse, limits 8 / 2 N, then efficiency 0.5.
     for (const auto &command : std::vector<std::pair<double, double>>{{1.9, 0}, {2, 2}, {5, 4}, {-5, -1}}) {
         plant.command(force(command.first));
         EXPECT_DOUBLE_EQ(plant.advance().thruster_forces[0], command.second);
     }
+
     t.efficiency = 1.1;
     EXPECT_THROW(Plant(p, initial()), std::invalid_argument);
     t.efficiency = .5;
@@ -378,6 +405,8 @@ TEST(Plant, PlacedSpherePoolMatchesTransformedCornerContactAndHydrostatics) {
     BodyState start;
     start.position = {.201, .201, -4.79};
     start.linear_velocity = {-.4, -.3, -.2};
+
+    // The same motion in a pool moved and yawed in the world must match after the rigid transform.
     auto placed = local;
     placed.pool.origin_xy_world = {-10, -12};
     placed.pool.yaw_world = .7;
@@ -396,6 +425,7 @@ TEST(Plant, PlacedSpherePoolMatchesTransformedCornerContactAndHydrostatics) {
         EXPECT_NEAR((y.body.angular_velocity - x.body.angular_velocity).norm(), 0, 1e-10);
         EXPECT_EQ(a.motion().acceleration_valid, b.motion().acceleration_valid);
     }
+
     EXPECT_NO_THROW(b.reset(transformed));
     EXPECT_THROW(b.reset(start), std::invalid_argument);
     placed.pool.yaw_world = std::numeric_limits<double>::quiet_NaN();
@@ -409,6 +439,7 @@ TEST(Plant, PlacedPoolKeepsExactBoundaryLegalAndRejectsExterior) {
         params.pool.yaw_world = yaw;
         const Eigen::Quaterniond rotation(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
         auto state = initial();
+        // Exactly on the radius-inset corner boundary is legal despite transform rounding; just outside is not.
         state.position = Eigen::Vector3d(-10, -12, 0) + rotation * Eigen::Vector3d(.2, .2, -2);
         EXPECT_NO_THROW((Plant(params, state)));
         state.position -= rotation * Eigen::Vector3d(1e-8, 0, 0);

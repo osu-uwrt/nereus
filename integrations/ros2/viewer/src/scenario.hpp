@@ -13,13 +13,16 @@
 #include <vector>
 
 namespace nereus::ros_viewer::host {
+// A stereo camera of the robot pack (left eye): frames, intrinsics, depth range and bridge topics.
 struct SensorCamera {
     std::string id, mountFrame, opticalFrame, rosOpticalFrame, title, model;
     Intrinsics k;
-    double periodS = 1. / 15, minRange = .15, maxRange = 4;
-    std::string rgbTopic, depthTopic, infoTopic; // absolute; empty when the bridge does not publish them
+    double periodS = 1. / 15, minRange = .15, maxRange = 4; // seconds per frame; depth range in metres
+    std::string rgbTopic, depthTopic, infoTopic;            // absolute; empty when the bridge does not publish them
     glm::mat4 mountInBase{1}, opticalInBase{1};
 };
+
+// A robot mesh placed relative to base_link.
 struct RobotVisual {
     std::string asset, frame;
     glm::mat4 inBase{1};      // frame pose in base_link composed with the visual placement
@@ -27,6 +30,8 @@ struct RobotVisual {
     glm::mat4 local{1};       // placement in `frame`
     std::filesystem::path path;
 };
+
+// A robot mechanism (launcher, dropper, claw, magnet): its frame and the type-specific geometry.
 struct Mechanism {
     std::string id, type, frame;
     glm::mat4 frameInBase{1};
@@ -35,11 +40,15 @@ struct Mechanism {
     float minGap = 0; // claw
     glm::vec3 tip{0}; // magnet
 };
+
+// Holes cut through a task prop's faces: face offsets along local x, the region half size (metres) and the
+// holes in that region's uv coordinates.
 struct CutoutSpec {
     std::vector<float> facesX;
     float halfSize = 0;
     std::vector<rendering::UvCutout> holes;
 };
+
 // A thruster in bridge (ROS force array) order: where it acts and its force axis in base_link, and the bridge
 // input scale (ROS value * scale = newtons).
 struct ThrusterMount {
@@ -48,23 +57,33 @@ struct ThrusterMount {
     glm::vec3 position{0}, axis{1, 0, 0};
     float inputScale = 1;
 };
+
+// A static task-prop mesh at its world pose (moving props come from the simulator instead).
 struct TaskVisual {
     std::string task, prop, asset;
     glm::mat4 taskFromAsset{1}, world{1}; // world = task placement * taskFromAsset
     std::filesystem::path path;
     std::optional<CutoutSpec> cutouts;
 };
+
+// A named world pose: a task placement or one of its frames (focus targets, demo picker).
 struct Landmark {
     glm::mat4 world{1};
 };
+
+// The parsed scenario: identities and ROS frames, then pool, robot, task and camera content.
 struct Scenario {
     std::string id, robotId, ns, mapFrame, truthBaseFrame, estimateBaseFrame, baseId;
-    YAML::Node document, bridge, ui;
-    FrameGraph frames;
+    YAML::Node document, bridge, ui; // the whole document, its bridge section, merged ui settings
+    FrameGraph frames;               // robot pack frame tree
+
+    // Pool geometry (metres) and placement in the world.
     glm::mat4 poolToWorld{1}, worldToPool{1};
     float poolLength = 50, poolWidth = 22.86f, poolDepth = 2.1336f, deckHeight = .305f, waterLevel = 0;
     std::string poolId, tasksId;
     rendering::Appearance appearance;
+
+    // Robot and course content.
     std::vector<SensorCamera> cameras;
     std::vector<RobotVisual> robotVisuals;
     std::vector<std::string> thrusterOrder;
@@ -75,6 +94,7 @@ struct Scenario {
     std::map<std::string, std::filesystem::path> robotAssets;
     std::map<std::string, std::string> frameNames; // pack frame id -> ROS frame
     YAML::Node runOptions;
+
     // The same document as the session's resolved scenario (asset_paths filled from the pack folder for
     // local previews); null with `resolvedError` set when it lacks what scene composition needs.
     std::shared_ptr<const session::ResolvedScenario> resolved;

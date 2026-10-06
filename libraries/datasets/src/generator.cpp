@@ -1,3 +1,5 @@
+// Generator: builds each scenario's labelled scene once, then renders samples (environment draw, placement
+// jitter, pose attempts judged on label passes, RGB, id map, record).
 #include <nereus/datasets/environment.hpp>
 #include <nereus/datasets/generator.hpp>
 #include <nereus/datasets/output.hpp>
@@ -18,13 +20,16 @@ namespace nereus::datasets {
 namespace r = nereus::rendering;
 namespace ps = nereus::pack_scene;
 namespace {
+
 constexpr double kNearPlaneM = 0.05, kFarPlaneM = 100.0; // as SessionCameras
 constexpr double kDeg = M_PI / 180;
 
+// Wall-clock milliseconds since `start` (per-phase timings in the sample log).
 double msSince(std::chrono::steady_clock::time_point start) {
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 }
 
+// Shader directory: the option, else $NEREUS_SHADER_DIR, else the build tree's shaders (compile definition).
 std::filesystem::path shaderDirectory(const std::filesystem::path &given) {
     if (!given.empty())
         return given;
@@ -37,6 +42,7 @@ std::filesystem::path shaderDirectory(const std::filesystem::path &given) {
 #endif
 }
 
+// Render view (view matrix, projection, eye) for an optical-frame camera pose with intrinsics k.
 r::View viewFor(const Pose &world_from_optical, const cameras::Intrinsics &k) {
     r::View view;
     view.view = cameras::opticalView(world_from_optical);
@@ -52,8 +58,10 @@ std::optional<int> maskValueAtOrigin(const std::filesystem::path &mask) {
         return std::nullopt;
     return int(image.ptr<std::uint8_t>(image.rows - 1)[0]);
 }
+
 } // namespace
 
+// A task's placement in the scenario and its named frames.
 struct TaskInfo {
     Pose world_from_task;
     std::map<std::string, Pose> frames; // task-relative, including "task"
@@ -70,23 +78,31 @@ struct Draw {
     Json record;
 };
 
+// Everything about one scenario that does not change between samples.
 struct Generator::Scenario {
+    // Source scenario and its pack scene.
     std::string id;
     std::size_t index = 0;
     session::ResolvedScenario resolved;
     std::unique_ptr<ps::PackScene> pack;
     PoolFrame pool;
+
+    // Camera: mount on the robot root, output intrinsics and the reduced acceptance-prefilter intrinsics.
     Pose root_from_optical;
     cameras::Intrinsics output, accept;
+
+    // Tasks (in resolved-definition order) and indicator regions (in pack indicator-visual order).
     std::vector<std::string> task_order;
     std::map<std::string, TaskInfo> tasks;
     std::map<std::string, std::pair<std::string, std::string>> indicator_names; // region -> initial, latched
     std::vector<std::string> regions;
+
+    // Scene instance table, parallel to the composed scene's instances.
     std::vector<SceneEntry> entries; // composed order: static, robot (non-null meshes, if drawn), props
     std::size_t static_count = 0, robot_count = 0;
-    std::vector<Eigen::Matrix4d> robot_root_from_asset;
-    std::vector<Eigen::Matrix4d> prop_reset;
-    std::vector<r::InstanceLabel> labels;
+    std::vector<Eigen::Matrix4d> robot_root_from_asset; // every non-null robot visual, drawn or not
+    std::vector<Eigen::Matrix4d> prop_reset;            // world_from_asset of each prop at reset
+    std::vector<r::InstanceLabel> labels;               // per entry; empty label for entries without parts
     std::map<std::uint32_t, std::pair<std::size_t, std::size_t>> keys; // label key -> entry, part index
     std::vector<std::uint8_t> self_output;                             // robot pixels (bottom-up), 1 = robot
 };
@@ -105,10 +121,12 @@ const std::string &Generator::device() const {
     return host_->device();
 }
 
+// Builds scenario `index` on first use and caches it.
 Generator::Scenario &Generator::scenario(std::size_t index) {
     auto &slot = scenarios_.at(index);
     if (slot)
         return *slot;
+
     auto s = std::make_unique<Scenario>();
     s->id = job_.scenarios[index].first;
     s->index = index;
@@ -189,6 +207,8 @@ Generator::Scenario &Generator::scenario(std::size_t index) {
         s->entries.push_back(std::move(entry));
     }
     s->static_count = s->entries.size();
+
+    // Robot visuals: always keep their mount transforms; add entries only when the camera draws them.
     for (const auto &visual : s->pack->robotVisuals())
         if (visual.mesh) {
             s->robot_root_from_asset.push_back(visual.rootFromAsset());
@@ -202,6 +222,8 @@ Generator::Scenario &Generator::scenario(std::size_t index) {
             }
         }
     s->robot_count = job_.camera.robot_visuals ? s->robot_root_from_asset.size() : 0;
+
+    // Props last; their reset pose is moved with their task's placement jitter per sample.
     for (const auto &visual : s->pack->propVisuals()) {
         if (!visual.mesh)
             continue;
@@ -213,6 +235,8 @@ Generator::Scenario &Generator::scenario(std::size_t index) {
         s->prop_reset.push_back(visual.world_from_asset_at_reset);
         s->entries.push_back(std::move(entry));
     }
+
+    // Label ids: entry index + 1 for entries with parts; key = id << 8 | part value.
     for (std::size_t i = 0; i < s->entries.size(); ++i) {
         auto &entry = s->entries[i];
         r::InstanceLabel label;
@@ -243,6 +267,7 @@ Generator::Scenario &Generator::scenario(std::size_t index) {
         for (std::size_t p = 0; p < capture.depth.size(); ++p)
             s->self_output[p] = capture.depth[p] < 1.f ? 1 : 0;
     }
+
     slot = std::move(s);
     return *slot;
 }
@@ -250,7 +275,7 @@ Generator::Scenario &Generator::scenario(std::size_t index) {
 Json Generator::describe() {
     auto &s = scenario(0);
     Json instances = Json::array();
-    std::map<std::filesystem::path, std::optional<int>> origins;
+    std::map<std::filesystem::path, std::optional<int>> origins; // part map -> value at uv (0, 0), read once
     for (std::size_t i = 0; i < s.entries.size(); ++i) {
         const auto &entry = s.entries[i];
         const auto &mesh = entry.parts.mesh;
@@ -283,6 +308,7 @@ Json Generator::describe() {
             item["part_at_uv00"] = part;
             submeshes.push_back(std::move(item));
         }
+
         Json parts = Json::array();
         for (const auto &p : entry.parts.parts)
             parts.push_back({{"value", p.value},
@@ -305,6 +331,7 @@ Json Generator::describe() {
                              {"submeshes", submeshes},
                              {"parts", parts}});
     }
+
     const auto &k = s.output;
     // Share of the image the robot's own visuals cover (excluded from the near-geometry check).
     double robotFraction = 0;
@@ -336,11 +363,14 @@ Json Generator::render(std::int64_t k) {
     const auto recordPath = out / "records" / (name + ".json");
     Json log = {{"sample", k}, {"name", name}, {"task", block.task ? Json(*block.task) : Json()}};
     const std::string imageRel = std::string("images/") + name + ext, idsRel = "ids/" + name + ".png";
+
     // Complete = record (written last) plus non-empty image and id map; anything less is rendered again.
     if (options_.resume && nonEmptyFile(recordPath) && nonEmptyFile(out / imageRel) && nonEmptyFile(out / idsRel)) {
         log["status"] = "existing";
         return log;
     }
+
+    // Samples cycle through the scenarios; every draw comes from the sample's own stream.
     const std::size_t scenarioIndex = static_cast<std::size_t>(k % std::int64_t(job_.scenarios.size()));
     auto &s = scenario(scenarioIndex);
     if (block.task && !s.tasks.count(*block.task))
@@ -357,6 +387,8 @@ Json Generator::render(std::int64_t k) {
     d.time = drawn.time;
     d.noise_sigma = drawn.noise_sigma;
     d.blur_px = drawn.blur_px;
+
+    // Task placement jitter: yaw in [-task_yaw_deg, task_yaw_deg], offset uniform over a disc of task_offset_m.
     Json placementRecord = Json::object();
     // One draw per group (when its first member comes up in task order) or per ungrouped task.
     std::map<std::string, const std::vector<std::string> *> groupOf;
@@ -399,6 +431,8 @@ Json Generator::render(std::int64_t k) {
         if (group != groupOf.end())
             placementRecord[task]["pivot_task"] = group->second->front();
     }
+
+    // Indicator states, then the image noise seed (fixed draw order keeps samples reproducible).
     Json indicatorRecord = Json::object();
     for (const auto &region : s.regions) {
         d.latched[region] = rng.chance(z.latched_probability);
@@ -415,6 +449,8 @@ Json Generator::render(std::int64_t k) {
     for (const auto &task : s.task_order)
         delta[task] =
             ps::toMatrix(d.world_from_task.at(task)) * ps::toMatrix(spatial::inverse(s.tasks.at(task).world_from_task));
+
+    // Props follow their task's delta from their reset pose.
     std::vector<r::Instance> props;
     for (std::size_t p = 0; p < s.prop_reset.size(); ++p) {
         const auto &entry = s.entries[s.static_count + s.robot_count + p];
@@ -431,6 +467,8 @@ Json Generator::render(std::int64_t k) {
                               scene.instances.begin() + static_cast<std::ptrdiff_t>(s.static_count + composedRobots));
     if (scene.instances.size() != s.entries.size())
         throw std::logic_error("composed scene does not match the generator's instance table");
+
+    // Static instances: swap in the (possibly split) labelled mesh and move task visuals with their task.
     for (std::size_t i = 0; i < s.static_count; ++i) {
         auto &instance = scene.instances[i];
         instance.mesh = s.entries[i].parts.mesh;
@@ -445,10 +483,12 @@ Json Generator::render(std::int64_t k) {
         for (const auto &[id, pose] : s.tasks.at(*block.task).frames)
             frames[id] = spatial::compose(d.world_from_task.at(*block.task), pose);
 
+    // Acceptance: the prefilter's pixel threshold scales with the reduced capture's area.
     const auto &acc = job_.acceptance;
     const double areaScale = double(s.accept.width) * s.accept.height / (double(s.output.width) * s.output.height);
     const bool reduced = s.accept.width != s.output.width || s.accept.height != s.output.height;
-    std::map<std::string, int> reasons;
+    std::map<std::string, int> reasons; // rejection reason -> count, for the log
+
     // §3.2 checks 2-4 on a full-resolution label capture; empty string = accepted.
     const auto judge = [&](const r::LabelCapture &capture, const std::vector<std::uint8_t> &self,
                            LabelStats &stats) -> std::string {
@@ -490,6 +530,7 @@ Json Generator::render(std::int64_t k) {
             }
         return {};
     };
+
     // A9 prefilter at reduced resolution: rejects only views whose target is clearly too small (below half the
     // area-scaled threshold), so the full-resolution checks decide every other case and the acceptance scale
     // changes cost, not output.
@@ -513,6 +554,7 @@ Json Generator::render(std::int64_t k) {
         return false;
     };
 
+    // Pose attempts: draw, check the camera position in the pool, place the robot, then judge label passes.
     double labelMs = 0;
     std::int64_t attempts = 0;
     std::optional<Pose> root, camera;
@@ -556,6 +598,7 @@ Json Generator::render(std::int64_t k) {
         targetFrame = draw.frame;
         break;
     }
+
     log["attempts"] = attempts;
     log["reasons"] = reasons;
     log["scenario_index"] = scenarioIndex;
@@ -574,6 +617,8 @@ Json Generator::render(std::int64_t k) {
     appearance.supersample = job_.camera.supersample;
     auto image = host_->capture(scene, viewFor(*camera, K), appearance, d.time, K.width, K.height, true, false);
     const double rgbMs = msSince(rgbStart);
+
+    // Blur + noise, then the camera model's processing and encoding.
     const auto encodeStart = std::chrono::steady_clock::now();
     postProcess(image.rgb, K.width, K.height, d.blur_px, d.noise_sigma, d.noise_seed);
     cameras::Processor processor;
@@ -618,6 +663,7 @@ Json Generator::render(std::int64_t k) {
     const auto ids = encodePng16(idMap(full, table), K.width, K.height);
     const double encodeMs = msSince(encodeStart);
 
+    // Record: camera, robot and task poses plus the drawn randomization and visible instances.
     Json tasks = Json::object();
     const auto cameraFromWorld = spatial::inverse(*camera);
     for (const auto &task : s.task_order)
@@ -650,6 +696,7 @@ Json Generator::render(std::int64_t k) {
                    {"randomization", d.record},
                    {"instances", instances}};
 
+    // Image and id map first, record last (see the resume check above).
     const auto writeStart = std::chrono::steady_clock::now();
     writeAtomic(out / imageRel, encoded);
     writeAtomic(out / idsRel, ids);

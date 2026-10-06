@@ -37,6 +37,7 @@ POOLS = {"robosub": "talos_uwrt", "rpac": "talos_uwrt_rpac"}
 
 
 def _scenario(context):
+    """Absolute path of the scenario pack folder chosen by scenario:= or pool:= (default robosub)."""
     scenario, pool = LC("scenario").perform(context), LC("pool").perform(context)
     if scenario and pool:
         raise RuntimeError("pass pool:= or scenario:=, not both")
@@ -60,11 +61,14 @@ def _gpu_env(context):
 
 
 def _processes(context):
+    """Resolves the scenario pack, then launches the viewer on it in estimate pose mode."""
     rmw = LC("rmw").perform(context)
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
     # The resolver and viewer run in the repository root: relative paths mean the caller's directory.
     scenario = _scenario(context)
     config = LC("config").perform(context)
+
+    # Resolve synchronously at launch time; the viewer reads the resolved JSON.
     resolved = str(Path(tempfile.gettempdir()) / "nereus_robot_resolved.json")
     subprocess.run(
         [PYTHON, "-m", "nereus.packs", "resolve", scenario, "-o", resolved],
@@ -77,6 +81,8 @@ def _processes(context):
             ),
         },
     )
+
+    # Viewer on wall-clock time, drawing the robot from the localization estimate.
     command = [
         LC("viewer_binary").perform(context),
         "--scenario",

@@ -1,3 +1,5 @@
+// PackScene: composes the renderer scene of a resolved scenario (pool geometry and fixtures, task visuals with
+// cutouts / texture overrides / indicators, equipment, robot visuals) and caches the meshes it loads.
 #include <algorithm>
 #include <array>
 #include <nereus/pack_scene/pack_scene.hpp>
@@ -13,14 +15,17 @@
 
 namespace nereus::pack_scene {
 namespace {
+
 namespace r = nereus::rendering;
 using session::Json;
+
 constexpr double kPanelToleranceM = 5e-4; // declared panel faces are sub-millimetre data
 
 Eigen::Vector3d vector3(const Json &value) {
     return {value.at(0).get<double>(), value.at(1).get<double>(), value.at(2).get<double>()};
 }
 
+// The robot pack's fixed-frame tree as parent -> child edges.
 std::vector<spatial::FixedFrame> edges(const Json &robot) {
     std::vector<spatial::FixedFrame> result;
     for (const auto &item : robot.at("frames").at("transforms"))
@@ -31,6 +36,7 @@ std::vector<spatial::FixedFrame> edges(const Json &robot) {
 Eigen::Vector3f rgb(const Json &value) {
     return vector3(value).cast<float>();
 }
+
 Eigen::Vector2f vector2(const Json &value) {
     return {value.at(0).get<float>(), value.at(1).get<float>()};
 }
@@ -41,6 +47,8 @@ struct StripeStyle {
     Eigen::Vector3f color = {.093f, .14f, .16f};
     std::array<bool, 2> t_ends = {false, false};
 };
+
+// `style` overridden by the item's width_m, t_length_m, color_rgb and ends ("t" or per end [from, to]).
 StripeStyle styled(const Json &item, StripeStyle style) {
     style.width = item.value("width_m", style.width);
     style.t_length = item.value("t_length_m", style.t_length);
@@ -56,6 +64,7 @@ StripeStyle styled(const Json &item, StripeStyle style) {
     }
     return style;
 }
+
 // The stripe, then a bar across each T end (centred on the end, same width and colour).
 void addStripe(std::vector<r::PoolStripe> &out, r::PoolSide side, Eigen::Vector2f from, Eigen::Vector2f to,
                const StripeStyle &style) {
@@ -68,6 +77,8 @@ void addStripe(std::vector<r::PoolStripe> &out, r::PoolSide side, Eigen::Vector2
                 {side, end - across * style.t_length / 2, end + across * style.t_length / 2, style.width, style.color});
         }
 }
+
+// Pool pack wall name -> renderer side.
 r::PoolSide wallSide(const std::string &wall) {
     if (wall == "x_min")
         return r::PoolSide::XMin;
@@ -80,6 +91,7 @@ r::PoolSide wallSide(const std::string &wall) {
     throw std::runtime_error("unknown pool wall '" + wall + "'");
 }
 
+// Camera appearance (water optics, lighting) from the pool pack; renderer defaults when absent and not strict.
 rendering::Appearance appearanceFrom(const Json &pool, bool strict) {
     r::Appearance appearance;
     if (!pool.contains("water_optics") || !pool.contains("lighting")) {
@@ -105,6 +117,7 @@ rendering::Appearance appearanceFrom(const Json &pool, bool strict) {
     appearance.glare = lighting.at("glare").get<float>();
     return appearance;
 }
+
 } // namespace
 
 std::vector<r::PoolStripe> poolStripes(const Json &pool) {
@@ -129,6 +142,8 @@ std::vector<r::PoolStripe> poolStripes(const Json &pool, const simulation::PoolF
                                                                : Eigen::Vector2d(at, width);
         return static_cast<float>(floor.depthAt(xy));
     };
+
+    // Lane grid: floor lines, optional wall continuations (no T ends) and end-wall targets.
     if (markings.contains("lane_grid")) {
         const auto &grid = markings.at("lane_grid");
         const StripeStyle style = styled(grid, base);
@@ -176,6 +191,8 @@ std::vector<r::PoolStripe> poolStripes(const Json &pool, const simulation::PoolF
             }
         }
     }
+
+    // Free floor lines, then wall lines (wall-local coordinates).
     for (const auto &line : markings.value("lines", Json::array()))
         addStripe(out, r::PoolSide::Floor, vector2(line.at("from")), vector2(line.at("to")), styled(line, base));
     for (const auto &line : markings.value("wall_lines", Json::array()))
@@ -222,6 +239,8 @@ PackScene::PackScene(const session::ResolvedScenario &resolved, Options options)
     buildPool();
     buildTasks();
     buildEquipment();
+
+    // Robot visuals: mounts resolved once; compose() places them at the requested root pose.
     for (const auto &visual : resolved_.robot.value("visuals", Json::array())) {
         RobotVisual item;
         item.asset = visual.at("asset").get<std::string>();
@@ -236,6 +255,7 @@ PackScene::PackScene(const session::ResolvedScenario &resolved, Options options)
 
 std::shared_ptr<const r::MeshAsset> PackScene::mesh(const std::string &role, const std::string &asset,
                                                     const std::string &texture) const {
+    // NUL separators keep distinct (role, asset, texture) triples from colliding.
     const std::string key = role + '\0' + asset + '\0' + texture;
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -243,6 +263,9 @@ std::shared_ptr<const r::MeshAsset> PackScene::mesh(const std::string &role, con
         if (found != cache_.end())
             return found->second;
     }
+
+    // Load outside the lock. A texture override replaces every textured submesh's diffuse texture, or every
+    // submesh's when none is textured. Non-strict failures cache null so they are reported once.
     std::shared_ptr<const r::MeshAsset> loaded;
     try {
         r::MeshAsset value = r::loadMesh(resolved_.asset(role, asset));
@@ -263,6 +286,7 @@ std::shared_ptr<const r::MeshAsset> PackScene::mesh(const std::string &role, con
             throw std::runtime_error(text);
         warn(text);
     }
+
     std::lock_guard<std::mutex> lock(mutex_);
     cache_[key] = loaded;
     return loaded;
@@ -283,6 +307,8 @@ void PackScene::buildPool() {
         options_.strict ? pool.at("type").get<std::string>() : pool.value("type", std::string("rectangular_pool"));
     if (type != "rectangular_pool")
         throw std::runtime_error("pool type '" + type + "' has no camera scene");
+
+    // Generated geometry: box dimensions, water level and the pool's world placement (yaw about +Z).
     const auto &p = pool.at("parameters");
     const auto &placementJson = resolved_.scenario.at("pool_placement");
     const auto &at = placementJson.at("position_m");
@@ -293,6 +319,8 @@ void PackScene::buildPool() {
     geometry.deck_height = p.at("deck_height_m").get<float>();
     const double yaw = placementJson.at("yaw_deg").get<double>();
     geometry.local_to_world = toMatrix(upright(Json::array({at.at(0), at.at(1), 0.0}), yaw)).cast<float>();
+
+    // Optional tile / waterline finish.
     if (pool.contains("surface")) {
         const auto &surface = pool.at("surface");
         if (surface.contains("tile_rgb"))
@@ -303,6 +331,8 @@ void PackScene::buildPool() {
         if (surface.contains("waterline_band_m"))
             geometry.waterline_band = vector2(surface.at("waterline_band_m"));
     }
+
+    // Stripes and sloped floor profiles from the pool model.
     const auto model = session::poolModel(pool);
     geometry.markings = pack_scene::poolStripes(pool, model.floor);
     if (model.profiled)
@@ -313,6 +343,7 @@ void PackScene::buildPool() {
                 slope.polyline.push_back(vertex.cast<float>());
             geometry.floor_profiles.push_back(std::move(slope));
         }
+
     // One pass over the fixtures, in document order: each box takes its placement from the model (by id; the
     // pack tool keeps fixture ids unique) and its finish from the document; recesses come straight from it.
     std::map<std::string, const session::PoolFixtureBox *> placedBoxes;
@@ -347,14 +378,19 @@ void PackScene::buildPool() {
             geometry.recesses.push_back(recess);
         }
     }
+
+    // Generate the pool instances; the layout tells which belong to the floor and which to the walls.
     r::PoolLayout layout;
     static_ = r::makePoolScene(geometry, &layout);
     pool_stripes_ = geometry.markings;
     pool_floor_ = std::move(layout.floor);
     pool_walls_ = std::move(layout.walls);
     sources_.assign(static_.instances.size(), StaticSource{"pool", {}, {}, {}, {}, {}, 0});
+
     // Mesh fixtures from the pool's own assets (stairs, rails, grates), after the generated pool geometry.
     for (const auto &fixture : model.meshes) {
+        // Fixture centres are pool-model coordinates (surface at model.surface_z); the generated pool is
+        // surface-relative, so shift by the surface, then up to the placed water level.
         Matrix4d pool_from_mesh = Matrix4d::Identity();
         pool_from_mesh.topLeftCorner<3, 3>() = fixture.orientation.toRotationMatrix();
         pool_from_mesh.topRightCorner<3, 1>() = fixture.center - Eigen::Vector3d(0, 0, model.surface_z);
@@ -367,6 +403,7 @@ void PackScene::buildPool() {
         sources_.push_back({"pool", {}, {}, fixture.asset, {}, {}, 0});
     }
     pool_instances_ = static_.instances.size();
+
     pool_record_ = {{"dimensions_m", {geometry.dimensions[0], geometry.dimensions[1], geometry.dimensions[2]}},
                     {"water_level_world_m", geometry.water_level},
                     {"deck_height_m", geometry.deck_height},
@@ -376,6 +413,8 @@ void PackScene::buildPool() {
         pool_record_["floor_profile"] = p.at("floor_profile");
 }
 
+// Task props: static_body visuals become static instances (cut out, retextured, tinted), rigid_body props with a
+// visual_asset become PropVisuals; everything else is listed as unrendered.
 void PackScene::buildTasks() {
     std::map<std::string, Json> placements;
     for (const auto &item : resolved_.scenario.at("task_placements"))
@@ -390,6 +429,7 @@ void PackScene::buildTasks() {
         std::map<std::string, Json> regions;
         for (const auto &item : task.at("regions"))
             regions[item.at("id").get<std::string>()] = item;
+
         for (const auto &prop : task.at("props")) {
             const auto propId = prop.at("id").get<std::string>();
             const auto type = prop.at("type").get<std::string>();
@@ -421,6 +461,8 @@ void PackScene::buildTasks() {
                 unrendered_.push_back(id + "/" + propId);
                 continue;
             }
+
+            // Cutouts: holes of a task region punched through the visual's panel faces (local x offsets).
             std::optional<r::PanelCutouts> panel;
             if (cutouts != parameters.end()) {
                 const auto &region = regions.at(cutouts->at("region").get<std::string>()).at("parameters");
@@ -437,6 +479,8 @@ void PackScene::buildTasks() {
                 spec.tolerance = static_cast<float>(kPanelToleranceM);
                 panel = std::move(spec);
             }
+
+            // One static instance per visual; counts[i] = triangles found on cutout face i across all visuals.
             std::vector<std::size_t> counts(panel ? panel->faces_x.size() : 0, 0);
             for (std::size_t index = 0; index < visuals.size(); ++index) {
                 const auto &visual = visuals[index];
@@ -465,9 +509,12 @@ void PackScene::buildTasks() {
                         continue;
                     }
                 }
+
                 r::Instance item;
                 item.mesh = meshAsset;
                 item.transform = toMatrix(spatial::compose(world_task, task_asset)).cast<float>();
+
+                // Surface material ("asset" keeps the mesh's own).
                 const auto material = visual.value("material", std::string("asset"));
                 if (material == "liner")
                     item.material = r::SurfaceMaterial::Liner;
@@ -498,6 +545,8 @@ void PackScene::buildTasks() {
                 static_.instances.push_back(std::move(item));
                 sources_.push_back({"task", id, propId, asset, texture, frame, index});
             }
+
+            // Every cutout face must have received geometry (strict); record the counts for describe().
             if (panel) {
                 Json faces = Json::array(), triangles = Json::array();
                 for (std::size_t i = 0; i < counts.size(); ++i) {
@@ -534,12 +583,15 @@ void PackScene::buildEquipment() {
 r::Scene PackScene::compose(const Matrix4d &world_from_root, const std::vector<r::Instance> &dynamic,
                             const std::vector<RobotOverride> &overrides,
                             const std::map<std::string, bool> &latched) const {
+    // Copy of the static scene (meshes are shared), with indicator tints for the given latch states.
     r::Scene scene = static_;
     for (const auto &item : indicators_) {
         const auto found = latched.find(item.region);
         if (found != latched.end())
             scene.instances[item.instance].tint = found->second ? item.latched : item.initial;
     }
+
+    // Robot visuals with non-null meshes (an override replaces the reset mount), then the caller's instances.
     scene.instances.reserve(static_.instances.size() + robot_.size() + dynamic.size());
     for (std::size_t i = 0; i < robot_.size(); ++i) {
         if (!robot_[i].mesh)
@@ -572,4 +624,5 @@ Json PackScene::describe() const {
             {"indicator_visuals", indicators_.size()},
             {"warnings", warnings_}};
 }
+
 } // namespace nereus::pack_scene

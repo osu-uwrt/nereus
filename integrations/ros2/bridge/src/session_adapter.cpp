@@ -4,12 +4,16 @@
 
 namespace nereus::ros_bridge {
 namespace {
+// Native readings -> bridge Values, laid out as readingSpec() in core.cpp expects: quaternions w, x, y, z
+// and matrices row-major.
 Value vec3(const Eigen::Vector3d &v) {
     return Value::array({v.x(), v.y(), v.z()});
 }
+
 Value quat(const Eigen::Quaterniond &q) {
     return Value::array({q.w(), q.x(), q.y(), q.z()});
 }
+
 Value matrix(const Eigen::MatrixXd &m) {
     std::vector<double> flat;
     flat.reserve(static_cast<std::size_t>(m.size()));
@@ -18,6 +22,7 @@ Value matrix(const Eigen::MatrixXd &m) {
             flat.push_back(m(r, c));
     return Value::array(std::move(flat));
 }
+
 Value vectorX(const Eigen::VectorXd &v) {
     return Value::array(std::vector<double>(v.data(), v.data() + v.size()));
 }
@@ -28,35 +33,45 @@ Value imuValue(const sensors::ImuReading &r) {
                        {"force_covariance", matrix(r.force_covariance)},
                        {"angular_covariance", matrix(r.angular_covariance)}});
 }
+
 Value attitudeValue(const sensors::AttitudeReading &r) {
     return Value::map({{"orientation_wxyz", quat(r.sensor_to_world)}, {"covariance", matrix(r.covariance)}});
 }
+
+// One toValue overload per native reading type (picked by makeDrain).
 Value toValue(const sensors::ImuReading &r) {
     return imuValue(r);
 }
+
 Value toValue(const sensors::AttitudeReading &r) {
     return attitudeValue(r);
 }
+
 Value toValue(const sensors::AhrsReading &r) {
     return Value::map({{"inertial", imuValue(r.inertial)}, {"attitude", attitudeValue(r.attitude)}});
 }
+
 Value toValue(const sensors::FogReading &r) {
     return Value::map({{"angular_rates", vectorX(r.angular_rates)}, {"covariance", matrix(r.covariance)}});
 }
+
 Value toValue(const sensors::DvlReading &r) {
     return Value::map({{"bottom_relative_velocity", vec3(r.bottom_relative_velocity)},
                        {"covariance", matrix(r.covariance)},
                        {"bottom_distance", Value::real(r.bottom_distance)}});
 }
+
 Value toValue(const sensors::VelocityReading &r) {
     return Value::map(
         {{"reference_relative_velocity", vec3(r.reference_relative_velocity)}, {"covariance", matrix(r.covariance)}});
 }
+
 Value toValue(const sensors::AltitudeReading &r) {
     return Value::map({{"mounted_world_z", Value::real(r.mounted_world_z)},
                        {"target_world_z", Value::real(r.target_world_z)},
                        {"variance", Value::real(r.variance)}});
 }
+
 Value toValue(const sensors::PressureReading &r) {
     return Value::map({{"absolute_pressure", Value::real(r.absolute_pressure)},
                        {"pressure_variance", Value::real(r.pressure_variance)},
@@ -64,6 +79,8 @@ Value toValue(const sensors::PressureReading &r) {
                        {"depth_variance", Value::real(r.depth_variance)}});
 }
 
+// Type-erased per-sensor drain: moves queued samples into SensorSamples (reading nullopt when
+// unavailable) and reports the stream stats.
 struct Drain {
     std::string id;
     std::function<void(std::vector<SensorSample> &)> drain;
@@ -86,6 +103,7 @@ template <class Reading> Drain makeDrain(sensors::Runtime &runtime, const std::s
                  [stream] { return stream->stats(); }};
 }
 
+// Picks the typed drain for a sensor declaration; types match readingSpec() in core.cpp.
 Drain drainFor(sensors::Runtime &runtime, const Json &sensor) {
     const std::string id = sensor.at("id"), kind = sensor.at("type");
     if (kind == "imu")
@@ -108,6 +126,7 @@ Drain drainFor(sensors::Runtime &runtime, const Json &sensor) {
 }
 } // namespace
 
+// The owned Session plus what payloadVisuals() needs: slot geometry and projectile sizes.
 struct SessionAdapter::Impl {
     const session::ResolvedScenario &scenario;
     std::unique_ptr<session::Session> session;
@@ -120,10 +139,14 @@ struct SessionAdapter::Impl {
         : scenario(s) {
         session::PackRuntime pack = session::createRuntime(s, ids);
         session = std::make_unique<session::Session>(s, std::move(pack), rules);
+
+        // One drain per executed sensor, in the pack's sensor order.
         for (const auto &id : session->pack().sensor_ids)
             for (const auto &sensor : s.robot.at("sensors"))
                 if (sensor.at("id") == id)
                     drains.push_back(drainFor(session->runtime(), sensor));
+
+        // Mechanism geometry and projectile dimensions for payloadVisuals().
         const Json mechanisms_json = s.robot.value("mechanisms", Json::array());
         if (!mechanisms_json.empty())
             mechanisms.emplace(s.robot);
@@ -147,63 +170,81 @@ StepResult SessionAdapter::advance() {
     auto step = impl_->session->advance();
     return StepResult{std::move(step.snapshot), std::move(step.task_events)};
 }
+
 simulation::Snapshot SessionAdapter::observe() const {
     return impl_->session->runtime().observe();
 }
+
 const simulation::Snapshot &SessionAdapter::lastSnapshot() const {
     return impl_->session->lastStep().snapshot;
 }
+
 std::int64_t SessionAdapter::timeNs() const {
     return impl_->session->timeNs();
 }
+
 std::int64_t SessionAdapter::timestepNs() const {
     return impl_->session->timestepNs();
 }
+
 std::vector<SensorSample> SessionAdapter::drainSensors() {
     std::vector<SensorSample> out;
     for (auto &drain : impl_->drains)
         drain.drain(out);
     return out;
 }
+
 std::map<std::string, sensors::StreamStats> SessionAdapter::sensorStats() const {
     std::map<std::string, sensors::StreamStats> out;
     for (const auto &drain : impl_->drains)
         out[drain.id] = drain.stats();
     return out;
 }
+
 std::vector<std::string> SessionAdapter::sensorIds() const {
     return impl_->session->pack().sensor_ids;
 }
+
 std::vector<std::string> SessionAdapter::deferredSensorIds() const {
     return impl_->session->pack().deferred_sensor_ids;
 }
+
 std::shared_ptr<const spatial::FixedFrames> SessionAdapter::frames() const {
     return impl_->session->pack().frames;
 }
+
 spatial::Pose SessionAdapter::referencePose(const simulation::BodyState &body) const {
     return impl_->session->referencePose(body);
 }
+
 void SessionAdapter::commandThrusters(const Eigen::VectorXd &forces) {
     impl_->session->commandThrusters(forces);
 }
+
 void SessionAdapter::setKilled(bool killed) {
     impl_->session->setKilled(killed);
 }
+
 bool SessionAdapter::killed() const {
     return impl_->session->killed();
 }
+
 session::CommandResult SessionAdapter::setArmed(bool armed) {
     return impl_->session->setArmed(armed);
 }
+
 session::CommandResult SessionAdapter::reloadAll() {
     return impl_->session->reloadAll();
 }
+
 session::CommandResult SessionAdapter::commandClaw(const std::string &id, bool open) {
     return impl_->session->commandClaw(id, open);
 }
+
 session::CommandResult SessionAdapter::moveClaw(const std::string &id, double duration) {
     return impl_->session->moveClaw(id, duration);
 }
+
 session::CommandResult SessionAdapter::fire(const std::string &id, session::Events &events) {
     // only what the fire recorded: lastStep() still holds the step's own events, already taken by step()
     const std::size_t before = impl_->session->lastStep().task_events.size();
@@ -213,55 +254,72 @@ session::CommandResult SessionAdapter::fire(const std::string &id, session::Even
         events.push_back(recorded[i]);
     return result;
 }
+
 std::optional<session::MechanismState> SessionAdapter::mechanismState() const {
     return impl_->session->mechanismState();
 }
+
 simulation::Snapshot SessionAdapter::place(const simulation::BodyState &state, bool clear_actuators) {
     return impl_->session->place(state, clear_actuators);
 }
+
 const simulation::BodyState &SessionAdapter::startState() const {
     return impl_->session->startState();
 }
+
 session::CommandResult SessionAdapter::resetTasks() {
     return impl_->session->resetTasks();
 }
+
 simulation::Snapshot SessionAdapter::fullReset() {
     return impl_->session->fullReset();
 }
+
 std::uint64_t SessionAdapter::seed() const {
     return impl_->session->seed();
 }
+
 session::CommandResult SessionAdapter::runStart(const Json &options) {
     return impl_->session->runStart(options);
 }
+
 session::CommandResult SessionAdapter::runStop() {
     return impl_->session->runStop();
 }
+
 session::CommandResult SessionAdapter::runAdjust(double points) {
     return impl_->session->runAdjust(points);
 }
+
 std::optional<Json> SessionAdapter::runSnapshot() const {
     return impl_->session->runSnapshot();
 }
+
 void SessionAdapter::setRunMessage(const std::string &message) {
     impl_->session->setRunMessage(message);
 }
+
 Json SessionAdapter::takeFeed() {
     return impl_->session->takeFeed();
 }
+
 Json SessionAdapter::taskCounters() const {
     return impl_->session->taskCounters();
 }
+
 Eigen::VectorXd SessionAdapter::thrusterForces() const {
     return impl_->session->thrusterForces();
 }
+
 std::map<std::string, std::array<double, 2>> SessionAdapter::clawJaws() const {
     return impl_->session->clawJaws();
 }
+
 Json SessionAdapter::indicators() const {
     return impl_->session->indicators();
 }
 
+// Every task prop's world pose; `held` is the prop's attached flag.
 std::vector<PropVisual> SessionAdapter::propVisuals() const {
     std::vector<PropVisual> out;
     for (const auto &[task, props] : impl_->session->props())
@@ -270,6 +328,8 @@ std::vector<PropVisual> SessionAdapter::propVisuals() const {
     return out;
 }
 
+// Released payloads (loaded false), then the still-loaded ones posed at their slot mounts on the body.
+// Only launcher/dropper mechanisms (those with a projectile size) are shown.
 std::vector<PayloadVisual> SessionAdapter::payloadVisuals() const {
     std::vector<PayloadVisual> out;
     for (const auto &payload : impl_->session->payloads()) {
@@ -279,6 +339,8 @@ std::vector<PayloadVisual> SessionAdapter::payloadVisuals() const {
         out.push_back({payload.mechanism_id, payload.mechanism_type, payload.id, false, payload.state.position,
                        payload.state.orientation, found->second.first, found->second.second});
     }
+
+    // Loaded payloads occupy the last `available` slots of each release mechanism.
     const auto state = impl_->session->mechanismState();
     if (state && impl_->mechanisms) {
         const auto &body = impl_->session->lastStep().snapshot.body;

@@ -1,3 +1,5 @@
+// PackScene tests on the resolved Talos (default pool) and RPAC fixtures, plus pool stripe / pool geometry checks
+// on small inline pool documents.
 #include <nereus/pack_scene/pack_scene.hpp>
 #include <nereus/session/pool.hpp>
 
@@ -10,10 +12,14 @@ namespace rs = nereus::session;
 namespace r = nereus::rendering;
 
 namespace {
+
+// The resolved Talos fixture, loaded once per test binary.
 const rs::ResolvedScenario &talos() {
     static const auto resolved = rs::loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     return resolved;
 }
+
+// Instances with at least one submesh whose diffuse texture file name starts with `name`.
 std::size_t texturedWith(const r::Scene &scene, const std::string &name) {
     std::size_t count = 0;
     for (const auto &instance : scene.instances)
@@ -24,6 +30,7 @@ std::size_t texturedWith(const r::Scene &scene, const std::string &name) {
             }
     return count;
 }
+
 } // namespace
 
 TEST(PackScene, ComposesPoolTasksAndRobot) {
@@ -57,6 +64,7 @@ TEST(PackScene, EquipmentVisualsAreLastInTheWorldFrame) {
     EXPECT_TRUE(rotation.isIdentity(1e-6f));
     EXPECT_EQ(texturedWith(pack.staticScene(), "calibration_board"), 1u);
     EXPECT_EQ(pack.describe().at("equipment_visuals"), 1);
+
     auto without = talos();
     without.equipment = nullptr;
     ps::PackScene bare(without);
@@ -71,6 +79,8 @@ TEST(PackScene, DynamicInstancesAndOverrides) {
     ps::Matrix4d at = ps::Matrix4d::Identity();
     at(2, 3) = -1;
     dynamic.push_back(pack.instance("tasks", pack.propVisuals()[0].asset, at));
+
+    // Override robot visual 1's mount; the dynamic prop instance goes last.
     ps::Matrix4d moved = ps::Matrix4d::Identity();
     moved(1, 3) = 0.25;
     const auto scene = pack.compose(ps::Matrix4d::Identity(), dynamic, {{1, moved}});
@@ -274,6 +284,8 @@ TEST(PackScene, ProfiledFloorDrapesStripesAndMeetsTheWalls) {
         }
     }
     EXPECT_EQ(walls, 4u);
+
+    // Pool geometry with the stripes and floor profiles converted as PackScene::buildPool() does.
     r::PoolGeometry geometry;
     geometry.dimensions = {20, 8, 5};
     geometry.markings = stripes;
@@ -292,6 +304,8 @@ TEST(PackScene, ProfiledFloorDrapesStripesAndMeetsTheWalls) {
         EXPECT_NEAR(v.position.z(), -depth(v.position), 1e-5);
         EXPECT_GT(v.normal.z(), .85); // this test floor peaks near 27 degrees
     }
+
+    // Sample points inside every triangle (centroid and three off-centre points).
     double worst = 0;
     for (std::size_t t = 0; t + 2 < floorMesh.indices.size(); t += 3)
         for (const Eigen::Vector3f &weights :
@@ -303,6 +317,7 @@ TEST(PackScene, ProfiledFloorDrapesStripesAndMeetsTheWalls) {
             worst = std::max(worst, std::abs(q.z() + depth(q)));
         }
     EXPECT_LT(worst, 1e-4);
+
     // Each wall reaches the deepest floor along its foot, plus the deck.
     const auto height = [&](std::size_t i) { return scene.instances[i].transform.col(2).head<3>().norm(); };
     EXPECT_NEAR(height(1), 5 + geometry.deck_height, 1e-5); // y = 0
@@ -319,6 +334,7 @@ TEST(PackScene, ProfiledFloorDrapesStripesAndMeetsTheWalls) {
             onSlope += v.position.x() > 8 && v.position.x() < 14;
         }
     EXPECT_GT(onSlope, 2u * 2 * 50);
+
     // A profile that does not span the pool is rejected.
     geometry.floor_profiles[1].polyline.back().x() = 7;
     EXPECT_THROW(r::makePoolScene(geometry), std::invalid_argument);
@@ -344,6 +360,7 @@ TEST(PackScene, RpacDiveWellBuildsItsSlopedFloor) {
 }
 
 TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
+    // A 20 x 8 x 4 m pool with a stair-well recess in the y = 0 wall, a floor grate box and a tread in the recess.
     r::PoolGeometry geometry;
     geometry.dimensions = {20, 8, 4};
     geometry.deck_height = .3f;
@@ -370,6 +387,7 @@ TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
     geometry.markings = {band};
     r::PoolLayout layout;
     const auto scene = r::makePoolScene(geometry, &layout);
+
     // Nothing of the y = 0 wall's tiles is left inside the opening.
     const auto inside = [&](const r::Instance &instance) {
         const Eigen::Vector3f c = instance.transform.col(3).head<3>();
@@ -391,6 +409,7 @@ TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
         lining += i > 12 && instance.material == r::SurfaceMaterial::Tiles;
     }
     EXPECT_GE(lining, 4u); // the wall's other pieces and the lining
+
     // No two tiled wall pieces share volume: overlapping faces would fight (the lining showing through the wall).
     std::vector<std::pair<Eigen::Vector3f, Eigen::Vector3f>> tiled;
     for (const auto i : layout.walls) {
@@ -409,6 +428,7 @@ TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
                 (tiled[a].second.cwiseMin(tiled[b].second) - tiled[a].first.cwiseMax(tiled[b].first)).cwiseMax(0);
             EXPECT_LT(overlap.prod(), 1e-6f) << "tiled pieces " << a << " and " << b << " overlap";
         }
+
     // Every wall piece comes before the wall markings, which are drawn after the surface they lie on.
     std::size_t markings = 0;
     for (std::size_t i = 0; i < scene.instances.size(); ++i)
@@ -418,10 +438,12 @@ TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
         if (scene.instances[i].material == r::SurfaceMaterial::Tiles) {
             EXPECT_LT(i, markings);
         }
+
     // The tread sits in the opening, grouped with the walls; the grate with the floor.
     EXPECT_EQ(layout.floor.back(), scene.instances.size() - 2);
     EXPECT_EQ(layout.walls.back(), scene.instances.size() - 1);
     EXPECT_TRUE(inside(scene.instances.back()));
+
     // The grate is a sloped-sided box: its top face is the smaller one, its sides their own colour.
     const auto &grateMesh = *scene.instances[layout.floor.back()].mesh;
     ASSERT_EQ(grateMesh.submeshes.size(), 2u);
@@ -438,6 +460,7 @@ TEST(PackScene, RecessesOpenTheirWallAndBoxesJoinTheirGroup) {
         EXPECT_LT(v.normal.z(), .99f);
         EXPECT_GT(v.normal.head<2>().dot(v.position.head<2>()), 0);
     }
+
     // Without recesses or boxes the scene keeps its usual 13 boxes.
     EXPECT_EQ(r::makePoolScene({}).instances.size(), 13u);
     geometry.recesses[0].depth = 0;
@@ -457,6 +480,8 @@ TEST(PackScene, StaticSourcesNameWhereEachInstanceCameFrom) {
         EXPECT_EQ(sources[i].role, "equipment");
         EXPECT_EQ(instances[i].mesh, pack.mesh("equipment", sources[i].asset));
     }
+
+    // Walk the task definitions in document order alongside the task sources.
     std::size_t expected = 0, cursor = pack.poolInstanceCount();
     for (const auto &task : talos().task_definitions)
         for (const auto &prop : task.at("props")) {
@@ -486,6 +511,7 @@ TEST(PackScene, StaticSourcesNameWhereEachInstanceCameFrom) {
     EXPECT_GT(expected, 10u);
     for (const auto &item : pack.indicatorVisuals())
         EXPECT_EQ(sources.at(item.instance).task, item.task);
+
     // Bins: two vinyl placements carry the blood and fire texture overrides.
     std::multiset<std::string> textures;
     for (const auto &source : sources)
@@ -495,6 +521,7 @@ TEST(PackScene, StaticSourcesNameWhereEachInstanceCameFrom) {
                                                     "bin_vinyl_fire_texture", "bin_vinyl_fire_texture"}));
     for (const auto &visual : pack.propVisuals())
         EXPECT_FALSE(visual.frame.empty()) << visual.prop;
+
     // Pool mesh fixtures (RPAC stairs, rails) are pool sources naming their asset.
     const auto resolved = rs::loadResolvedScenario(NEREUS_RESOLVED_RPAC);
     ps::PackScene rpac(resolved);

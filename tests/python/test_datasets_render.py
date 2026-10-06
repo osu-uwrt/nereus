@@ -28,6 +28,8 @@ exit 0
 
 
 class RenderTests(unittest.TestCase):
+    """render() against the FAKE shell renderer in a temp folder with an empty job.json."""
+
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
         self.root = Path(self.directory.name)
@@ -40,6 +42,7 @@ class RenderTests(unittest.TestCase):
         self.directory.cleanup()
 
     def test_lookup_order(self) -> None:
+        """An explicit path wins over the environment variable; both must be executable."""
         self.assertEqual(find_renderer(self.fake), self.fake.resolve())
         with mock.patch.dict(os.environ, {RENDERER_ENV: str(self.fake)}):
             self.assertEqual(find_renderer(), self.fake.resolve())
@@ -50,6 +53,7 @@ class RenderTests(unittest.TestCase):
                 find_renderer()  # not executable
 
     def test_shards_stream_and_succeed(self) -> None:
+        """Each shard's stdout and stderr lines reach stdout prefixed with its [i/N]."""
         output = io.StringIO()
         with mock.patch("sys.stdout", output):
             render(self.root, workers=3, renderer=self.fake)
@@ -60,6 +64,7 @@ class RenderTests(unittest.TestCase):
             self.assertIn(f"[{index}/3] progress {index}/3", lines)
 
     def test_a_failed_shard_fails_the_render(self) -> None:
+        """A non-zero shard exit raises with its code; the CLI turns that into exit 1."""
         with mock.patch.dict(os.environ, {"FAIL_SHARD_1": "1"}):
             with mock.patch("sys.stdout", io.StringIO()):
                 with self.assertRaises(PackError) as caught:
@@ -67,6 +72,7 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(
             caught.exception.problems, ["nereus-dataset-render failed: shard 1/3 exit 4"]
         )
+
         with mock.patch.dict(os.environ, {"FAIL_SHARD_1": "1"}):
             with mock.patch("sys.stdout", io.StringIO()):
                 with contextlib.redirect_stderr(io.StringIO()):
@@ -76,9 +82,13 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(code, 1)
 
     def test_sigterm_stops_the_shards(self) -> None:
+        """SIGTERM to the runner process kills every shard it started."""
+        # Each sleeper shard writes its PID to $PID_DIR/pid_<index>, then sleeps.
         sleeper = self.root / "sleeper"
         sleeper.write_text('#!/bin/sh\necho $$ > "$PID_DIR/pid_${3%%/*}"\nexec sleep 60\n')
         sleeper.chmod(sleeper.stat().st_mode | stat.S_IXUSR)
+
+        # Run render() in a child Python so the test can signal it.
         script = "import sys; from pathlib import Path; from nereus.datasets.render import render; "
         script += "render(Path(sys.argv[1]), workers=2, renderer=Path(sys.argv[2]))"
         source = Path(__file__).resolve().parents[2] / "python/src"
@@ -89,6 +99,8 @@ class RenderTests(unittest.TestCase):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+
+        # Wait for both shards to start, terminate the runner, then wait for the shards to go.
         pids = [self.root / "pid_0", self.root / "pid_1"]
         deadline = time.monotonic() + 20
         while not all(path.is_file() and path.read_text().strip() for path in pids):
@@ -105,6 +117,7 @@ class RenderTests(unittest.TestCase):
 
     @staticmethod
     def _alive(pid: int) -> bool:
+        """True while the process exists and is not a zombie (zombies count as dead)."""
         try:
             os.kill(pid, 0)
         except ProcessLookupError:

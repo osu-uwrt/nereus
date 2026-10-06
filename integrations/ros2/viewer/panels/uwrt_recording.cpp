@@ -1,3 +1,4 @@
+// "uwrt.recording" provider: per-camera ZED SVO recording and single-image capture over ROS services.
 #include "ros_runtime.hpp"
 #include <set>
 #include <std_srvs/srv/trigger.hpp>
@@ -14,6 +15,7 @@ using StartSvo = zed_msgs::srv::StartSvoRec;
 // ZED SVO recording per camera (zed_node start_svo_rec / stop_svo_rec) and the picture taker's capture_image.
 // Starting needs zed_msgs at build time; stopping and capturing are std_srvs/Trigger.
 class UwrtRecording final : public Recording {
+    // One configured camera: its UI state, service clients, and the in-flight request (epoch-guarded).
     struct Camera {
         RecordingCamera value;
 #ifdef NEREUS_VIEWER_HAVE_ZED
@@ -31,6 +33,8 @@ class UwrtRecording final : public Recording {
     UwrtRecording(std::shared_ptr<RosRuntime> runtime, const YAML::Node &cfg, const Context &ctx)
         : runtime(runtime), timeout(cfg["request_timeout"].as<double>(5)) {
         auto node = runtime->node;
+
+        // A start / stop client pair per camera.
         for (const auto &entry : cfg["cameras"]) {
             Camera camera;
             camera.value.id = entry["id"].as<std::string>();
@@ -41,9 +45,12 @@ class UwrtRecording final : public Recording {
             camera.stop = node->create_client<Trigger>(expand(entry["stop_service"].as<std::string>(), ctx));
             cameras.push_back(std::move(camera));
         }
+
         captureClient = node->create_client<Trigger>(expand(cfg["capture_service"].as<std::string>(), ctx));
         timer = node->create_wall_timer(std::chrono::milliseconds(100), [this] { tick(); });
     }
+
+    // Snapshot for the UI, with each recording camera's elapsed time filled in.
     RecordingState state() override {
         std::lock_guard<std::mutex> lock(mutex);
         RecordingState value;
@@ -61,6 +68,8 @@ class UwrtRecording final : public Recording {
         }
         return value;
     }
+
+    // Starts SVO recording to `file` (a path on the robot) for one camera.
     void start(const std::string &id, const std::string &file) override {
         std::lock_guard<std::mutex> lock(mutex);
         auto *camera = find(id);
@@ -88,6 +97,7 @@ class UwrtRecording final : public Recording {
         (void)file; // start_svo_rec needs zed_msgs at build time
 #endif
     }
+
     void stop(const std::string &id) override {
         std::lock_guard<std::mutex> lock(mutex);
         auto *camera = find(id);
@@ -103,6 +113,8 @@ class UwrtRecording final : public Recording {
                                                    })
                               .request_id;
     }
+
+    // Asks the picture taker for one capture; one request at a time.
     void capture() override {
         std::lock_guard<std::mutex> lock(mutex);
         if (capturing || !captureClient->service_is_ready())
@@ -137,6 +149,8 @@ class UwrtRecording final : public Recording {
                 return &camera;
         return nullptr;
     }
+
+    // Marks a start / stop request as pending; bumping the epoch voids any earlier reply.
     static void begin(Camera &camera, bool starting, const std::string &message) {
         camera.value.pending = true;
         camera.value.message = message;
@@ -144,6 +158,8 @@ class UwrtRecording final : public Recording {
         camera.since = Steady::now();
         ++camera.epoch;
     }
+
+    // Applies a start / stop reply (runs on the executor thread; takes the lock itself).
     void finish(const std::string &id, uint64_t epoch, bool started, bool success, const std::string &message) {
         std::lock_guard<std::mutex> lock(mutex);
         auto *camera = find(id);
@@ -161,6 +177,8 @@ class UwrtRecording final : public Recording {
         if (!message.empty())
             camera->value.message += ": " + message;
     }
+
+    // 10 Hz: service readiness and request timeouts.
     void tick() {
         std::lock_guard<std::mutex> lock(mutex);
         const auto now = Steady::now();
@@ -182,6 +200,7 @@ class UwrtRecording final : public Recording {
                 camera.value.message = std::string(camera.starting ? "Start" : "Stop") + " timed out; result unknown";
             }
         }
+
         captureReady = captureClient->service_is_ready();
         if (capturing && elapsed(captureSince) > timeout) {
             captureClient->remove_pending_request(captureRequest);
@@ -190,10 +209,13 @@ class UwrtRecording final : public Recording {
             captureMessage = "Capture timed out; result unknown";
         }
     }
+
     std::shared_ptr<RosRuntime> runtime;
     std::mutex mutex;
     double timeout;
     std::vector<Camera> cameras;
+
+    // Image capture request state.
     rclcpp::Client<Trigger>::SharedPtr captureClient;
     bool captureReady = false, capturing = false;
     std::string captureMessage;
@@ -203,6 +225,7 @@ class UwrtRecording final : public Recording {
     rclcpp::TimerBase::SharedPtr timer;
 };
 } // namespace
+
 void registerUwrtRecording(Registry &registry, const RuntimeFactory &runtime) {
     registry.providers.emplace(
         "uwrt.recording",

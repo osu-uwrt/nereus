@@ -31,6 +31,7 @@ _DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
 def _load(name: str) -> dict[str, Any]:
+    """Read one bundled ``definitions/<name>.json`` file from the installed package."""
     text = (
         resources.files(__package__)
         .joinpath("definitions")
@@ -56,6 +57,7 @@ def _rewrite(node: Any) -> Any:
 
 @lru_cache(maxsize=None)
 def _schema(kind: str) -> str:
+    """The kind's schema with common.json's $defs merged in, checked, cached as JSON text."""
     if kind not in DATASET_KINDS:
         raise KeyError(kind)
     document = _rewrite(_load(kind))
@@ -79,10 +81,12 @@ def schema(kind: str) -> dict[str, Any]:
 
 @lru_cache(maxsize=None)
 def _validator(kind: str) -> Draft202012Validator:
+    """Cached validator for one dataset document kind."""
     return Draft202012Validator(json.loads(_schema(kind)))
 
 
 def schema_problems(kind: str, data: dict[str, Any]) -> list[str]:
+    """Every schema violation in ``data`` as "/json/path: message", sorted by path."""
     problems = []
     errors = _validator(kind).iter_errors(data)
     for error in sorted(errors, key=lambda item: [str(part) for part in item.path]):
@@ -126,6 +130,7 @@ def _ordered(value: Any, where: str, problems: list[str]) -> None:
         is_range = len(value) == 2 and all(
             isinstance(item, (int, float)) and not isinstance(item, bool) for item in value
         )
+        # Two-element lists that are not ranges: sweep value lists, pixel seeds and resolutions
         parent, _, name = where.rpartition("/")
         values_list = parent.endswith("/sweep")  # a sweep key's values, not a range
         if is_range and not values_list and name not in ("seed_px", "resolution_px"):
@@ -136,6 +141,7 @@ def _ordered(value: Any, where: str, problems: list[str]) -> None:
 
 
 def duplicates(values: Iterable[str], what: str, where: str, problems: list[str]) -> None:
+    """Append a problem for every repeat of an already-seen value."""
     seen: set[str] = set()
     for value in values:
         if value in seen:
@@ -144,6 +150,7 @@ def duplicates(values: Iterable[str], what: str, where: str, problems: list[str]
 
 
 def _parts_semantics(data: dict[str, Any]) -> list[str]:
+    """One entry per (texture, task), and unique mask values within each texture."""
     problems: list[str] = []
     keys = [f"{item['texture']}@{item.get('task', '*')}" for item in data.get("textures", [])]
     duplicates(keys, "texture entry", "/textures", problems)
@@ -154,6 +161,7 @@ def _parts_semantics(data: dict[str, Any]) -> list[str]:
 
 
 def _labels_semantics(data: dict[str, Any]) -> list[str]:
+    """Unique class names within each model."""
     problems: list[str] = []
     for name, model in data["models"].items():
         duplicates(model["classes"], "class", f"/models/{name}/classes", problems)
@@ -161,6 +169,7 @@ def _labels_semantics(data: dict[str, Any]) -> list[str]:
 
 
 def _dataset_semantics(data: dict[str, Any]) -> list[str]:
+    """Ordered ranges, split fractions, task/background blocks, then expanded environments."""
     problems: list[str] = []
     _ordered(data, "", problems)
     split = data.get("split")
@@ -172,6 +181,8 @@ def _dataset_semantics(data: dict[str, Any]) -> list[str]:
         problems.append("/tasks/background: 'background' names the background block, not a task")
     if not data.get("tasks") and "background" not in data:
         problems.append("/: no tasks and no background block: nothing to generate")
+
+    # Environments are expanded only from an otherwise valid spec
     if not problems:
         problems += environment_problems(data.get("randomize", {}))
     return problems
@@ -179,6 +190,7 @@ def _dataset_semantics(data: dict[str, Any]) -> list[str]:
 
 @lru_cache(maxsize=None)
 def _environment_validator() -> Draft202012Validator:
+    """Validator of one environment entry, taken from the dataset schema's $defs."""
     bundle = schema("dataset")
     return Draft202012Validator({"$ref": "#/$defs/environment", "$defs": bundle["$defs"]})
 
@@ -205,6 +217,8 @@ def check_environment(item: dict[str, Any], where: str) -> list[str]:
         location = "/".join(str(part) for part in error.path)
         problems.append(f"{where}/{location}: {error.message[:300]}")
     _ordered(candidate, where, problems)
+
+    # Merging layers must not leave both an absolute value and its pool-relative scale
     for group, pairs in environments.EXCLUSIVE.items():
         for absolute, scale in pairs.items():
             if absolute in item.get(group, {}) and scale in item.get(group, {}):
@@ -212,6 +226,7 @@ def check_environment(item: dict[str, Any], where: str) -> list[str]:
     return problems
 
 
+# Single-document semantic checks per kind (run after the schema passes)
 _SEMANTICS = {
     "parts": _parts_semantics,
     "labels": _labels_semantics,
@@ -240,6 +255,7 @@ def load_document(path: Path, kind: str) -> Document:
 
 # ------------------------------------------------------------------ the course a scenario selects
 
+# Collada <init_from> elements: the image files a .dae mesh's materials load
 _INIT_FROM = re.compile(r"<init_from>\s*([^<]*?)\s*</init_from>")
 
 
@@ -257,6 +273,7 @@ def _references(node: Any) -> Iterator[tuple[str, str]]:
 
 
 def _dae_textures(path: Path) -> set[Path]:
+    """Absolute paths of the images a .dae file references (empty if unreadable)."""
     try:
         text = path.read_text("utf-8", errors="replace")
     except OSError:
@@ -282,6 +299,7 @@ class Course:
 
 
 def course(resolved: ResolvedScenario) -> Course:
+    """Collect the tasks pack's assets, frames, indicator regions and texture users."""
     folder = (resolved.path.parent / resolved.scenario["tasks"]).resolve()
     folder = folder if folder.is_dir() else folder.parent
     assets = {key: Path(value) for key, value in resolved.asset_paths()["tasks"].items()}
@@ -290,6 +308,9 @@ def course(resolved: ResolvedScenario) -> Course:
     regions: dict[str, dict[str, set[str]]] = {}
     texture_tasks: dict[str, set[str]] = {}
     task_assets: dict[str, set[str]] = {}
+
+    # Per task: frame ids, indicator colours per region, and the assets its props draw.
+    # A texture is "used" by a task when a prop draws the .png directly or through a .dae.
     for task in resolved.task_definitions:
         name = task["id"]
         frames[name] = {"task", *(item["id"] for item in task.get("frames", []))}
@@ -327,6 +348,8 @@ def check_parts(parts: Document, place: Course) -> list[str]:
     problems: list[str] = []
     if data["tasks"] != place.tasks_id:
         problems.append(f"/tasks: '{data['tasks']}' is not the tasks pack id '{place.tasks_id}'")
+
+    # Texture entries: a .png tasks-pack asset plus a mask image inside the pack
     for index, item in enumerate(data.get("textures", [])):
         where = f"/textures/{index}"
         texture = place.assets.get(item["texture"])
@@ -341,6 +364,8 @@ def check_parts(parts: Document, place: Course) -> list[str]:
             problems.append(f"{where}/mask: {item['mask']} is not a file")
         if "task" in item and item["task"] not in place.frames:
             problems.append(f"{where}/task: no task '{item['task']}'")
+
+    # Visual entries: a whole asset drawn by the task, optionally per frame or indicator region
     for index, item in enumerate(data.get("visuals", [])):
         where = f"/visuals/{index}"
         task = item["task"]
@@ -369,6 +394,8 @@ def parts_by_task(parts: Document, place: Course) -> dict[str, set[str]]:
             tasks = place.texture_tasks.get(item["texture"], set())
         for task in tasks:
             result.setdefault(task, set()).update(names)
+
+    # A visual is one part, or one part per material
     for item in parts.data.get("visuals", []):
         names = {item["part"]} if "part" in item else set(item["materials"].values())
         result.setdefault(item["task"], set()).update(names)
@@ -387,10 +414,12 @@ def indicator_colours(parts: Document, place: Course) -> dict[str, set[str]]:
 
 
 def mapping_parts(mapping: list[str] | dict[str, Any]) -> list[str]:
+    """Part patterns of a class mapping: a plain list, or ``{parts: [...], when: ...}``."""
     return list(mapping) if isinstance(mapping, list) else list(mapping["parts"])
 
 
 def _model_classes(data: dict[str, Any]) -> set[str]:
+    """Union of every model's class names."""
     return {name for model in data["models"].values() for name in model["classes"]}
 
 
@@ -435,6 +464,8 @@ def check_labels(labels: Document, parts: Document, place: Course) -> list[str]:
             problems.append(f"/tasks/{task}: no task '{task}' in tasks pack '{place.tasks_id}'")
             continue
         names = available.get(task, set())
+
+        # Each pattern must match a part; a part may belong to only one unconditional class
         unconditional: dict[str, str] = {}
         for name, mapping in classes.items():
             where = f"/tasks/{task}/{name}"
@@ -448,6 +479,8 @@ def check_labels(labels: Document, parts: Document, place: Course) -> list[str]:
                     other = unconditional.setdefault(part, name)
                     if other != name:
                         problems.append(f"{where}: part '{part}' is already class '{other}'")
+
+            # A conditional class must name an indicator colour the task's parts can show
             when = mapping.get("when", {}) if isinstance(mapping, dict) else {}
             colour = when.get("indicator")
             if colour is not None and colour not in colours.get(task, set()):
@@ -471,6 +504,7 @@ def check_model(labels: Document, model: str, resolved: ResolvedScenario) -> lis
 
 
 def native_resolution(resolved: ResolvedScenario, camera: str) -> list[int]:
+    """The robot camera's ``resolution_px`` [width, height]."""
     for sensor in resolved.robot.get("sensors", []):
         if sensor["id"] == camera:
             return [int(value) for value in sensor["parameters"]["resolution_px"]]
@@ -489,6 +523,8 @@ def check_dataset(dataset: Document, place: Course) -> list[str]:
         for frame in [frames] if isinstance(frames, str) else frames:
             if frame not in place.frames[task]:
                 problems.append(f"{where}/sampler/frame: task '{task}' has no frame '{frame}'")
+
+    # Placement groups: known tasks, each in at most one group
     groups = dataset.data.get("randomize", {}).get("placement", {}).get("groups", [])
     grouped: set[str] = set()
     for index, group in enumerate(groups):

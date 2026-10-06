@@ -3,16 +3,21 @@
 # so components can be developed independently: src/*.cpp, src/tasks/*.cpp.
 find_package(nlohmann_json 3.10 REQUIRED)
 find_package(Bullet REQUIRED)
+
+# The session library itself.
 file(GLOB nereus_session_sources CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
      ${CMAKE_CURRENT_SOURCE_DIR}/src/tasks/*.cpp)
 add_library(nereus_session ${nereus_session_sources})
 add_library(Nereus::session ALIAS nereus_session)
 set_target_properties(nereus_session PROPERTIES EXPORT_NAME session)
+
+# Public headers live in include/; src/ holds private headers shared between components.
 target_include_directories(nereus_session PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_include_directories(nereus_session SYSTEM PRIVATE ${BULLET_INCLUDE_DIRS})
+
 # The prop world needs the double-precision Bullet build (Debian ships both).
 target_compile_definitions(nereus_session PRIVATE BT_USE_DOUBLE_PRECISION)
 target_link_libraries(nereus_session PUBLIC nereus_sensors nereus_spatial nlohmann_json::nlohmann_json
@@ -30,6 +35,7 @@ nereus_project_options(nereus_rules)
 if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)
+
   # Frozen resolved Talos/UWRT scenarios (tests/fixtures/*_resolved.json.in), not the live packs: the recorded
   # references pin the plant to the last bit, and the team retunes the Talos pack. configure_file fills in the
   # absolute asset paths. Re-freeze with tools/freeze_session_scenarios.py only when re-recording the references.
@@ -40,6 +46,8 @@ if(BUILD_TESTING)
   set(nereus_resolved_rpac ${CMAKE_BINARY_DIR}/session_fixtures/talos_uwrt_rpac_resolved.json)
   configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/talos_uwrt_rpac_resolved.json.in ${nereus_resolved_rpac}
     @ONLY)
+
+  # One gtest executable per tests/*_test.cpp, named session_<file stem>.
   file(GLOB nereus_session_tests CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/*_test.cpp)
   foreach(test_source ${nereus_session_tests})
     get_filename_component(test_name ${test_source} NAME_WE)

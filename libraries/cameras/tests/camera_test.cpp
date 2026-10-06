@@ -1,3 +1,4 @@
+// Tests for camera projection/view geometry, frame products and the depth noise model.
 #include "nereus/cameras/camera.hpp"
 #include <cmath>
 #include <gtest/gtest.h>
@@ -7,11 +8,15 @@
 using namespace nereus::cameras;
 namespace spatial = nereus::spatial;
 namespace {
+
+// Inverse of the processor's linearization: metric depth -> OpenGL [0, 1] depth-buffer value.
 float bufferDepth(double metres, const Intrinsics &k) {
     return static_cast<float>((k.far_plane + k.near_plane - 2 * k.near_plane * k.far_plane / metres) /
                                   (k.far_plane - k.near_plane) * .5 +
                               .5);
 }
+
+// Small odd-calibrated camera so tests are fast and catch principal-point mistakes.
 Intrinsics small(int width = 64, int height = 48) {
     Intrinsics k;
     k.width = width;
@@ -22,11 +27,15 @@ Intrinsics small(int width = 64, int height = 48) {
     k.cy = 22.7;
     return k;
 }
+
+// Projects a world point through the GL matrices and returns its pixel coordinates (integer centres).
 Eigen::Vector2d pixel(const Intrinsics &k, const spatial::Pose &pose, Eigen::Vector3d world) {
     const Eigen::Vector4f point(world.x(), world.y(), world.z(), 1);
     const Eigen::Vector4f clip = k.projection() * opticalView(pose) * point;
     return {(clip.x() / clip.w() + 1) * k.width / 2 - .5, (1 - clip.y() / clip.w()) * k.height / 2 - .5};
 }
+
+// Element-wise equality that treats NaN == NaN.
 void same(const std::vector<float> &a, const std::vector<float> &b) {
     ASSERT_EQ(a.size(), b.size());
     for (std::size_t i = 0; i < a.size(); ++i)
@@ -35,6 +44,7 @@ void same(const std::vector<float> &a, const std::vector<float> &b) {
         else
             EXPECT_EQ(a[i], b[i]);
 }
+
 } // namespace
 
 TEST(CameraGeometry, PixelCentresMatchPinholeWithArbitraryPrincipalPointAndPose) {
@@ -48,6 +58,7 @@ TEST(CameraGeometry, PixelCentresMatchPinholeWithArbitraryPrincipalPointAndPose)
         EXPECT_NEAR(measured.y(), k.fy * optical.y() / optical.z() + k.cy, 2e-5);
     }
 }
+
 TEST(CameraGeometry, RectifiedStereoDisparityUsesPhysicalBaseline) {
     const auto k = small();
     spatial::Pose left;
@@ -61,6 +72,7 @@ TEST(CameraGeometry, RectifiedStereoDisparityUsesPhysicalBaseline) {
     EXPECT_NEAR(a.x() - b.x(), k.fx * .05 / 2.5, 2e-5);
     EXPECT_NEAR(a.y(), b.y(), 2e-5);
 }
+
 TEST(CameraGeometry, RejectsInvalidCalibrationAndNonrigidPose) {
     auto k = small();
     k.fx = 0;
@@ -75,6 +87,7 @@ TEST(CameraGeometry, RejectsInvalidCalibrationAndNonrigidPose) {
     pose.rotation.coeffs().setZero();
     EXPECT_THROW(opticalView(pose), std::invalid_argument);
 }
+
 TEST(CameraProducts, TopDownColorAndOpticalDepthStayRegistered) {
     const auto k = small(2, 2);
     const std::vector<std::uint8_t> bottom_rgb{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
@@ -92,6 +105,7 @@ TEST(CameraProducts, TopDownColorAndOpticalDepthStayRegistered) {
     EXPECT_EQ(bottom_rgb[0], 1); // Caller inputs remain owned and unchanged.
     EXPECT_EQ(bottom_depth[3], 1);
 }
+
 TEST(CameraProducts, RangeAndBackgroundRemainInvalidWithNoiseDisabled) {
     const auto k = small(5, 1);
     DepthNoise noise;
@@ -105,6 +119,7 @@ TEST(CameraProducts, RangeAndBackgroundRemainInvalidWithNoiseDisabled) {
     EXPECT_TRUE(frame.rgb.empty());
     EXPECT_TRUE(frame.jpeg.empty());
 }
+
 TEST(CameraProducts, JpegKeepsRgbChannelMeaning) {
     const auto k = small(32, 32);
     std::vector<std::uint8_t> rgb(k.width * k.height * 3);
@@ -123,6 +138,7 @@ TEST(CameraProducts, JpegKeepsRgbChannelMeaning) {
     EXPECT_NEAR(color[2], 200, 3);
     EXPECT_TRUE(frame.depth.empty());
 }
+
 TEST(CameraNoise, ReplayOtherCameraAndRejectedFrameDoNotChangeRandomStream) {
     const auto k = small();
     const std::vector<float> depth(k.width * k.height, bufferDepth(2, k));
@@ -135,6 +151,7 @@ TEST(CameraNoise, ReplayOtherCameraAndRejectedFrameDoNotChangeRandomStream) {
     camera.reset(42);
     same(camera.process(k, {}, {}, depth).depth, first.depth);
 }
+
 TEST(CameraNoise, MarginalVarianceAndSpatialCorrelationMatchSettings) {
     const auto k = small(400, 400);
     const std::vector<float> depth(k.width * k.height, bufferDepth(2, k));
@@ -161,6 +178,7 @@ TEST(CameraNoise, MarginalVarianceAndSpatialCorrelationMatchSettings) {
     EXPECT_GT(adjacent / pairs, .000025);
     EXPECT_LT(adjacent / pairs, .000075);
 }
+
 TEST(CameraNoise, CompleteDropoutAndInvalidParametersAreExplicit) {
     const auto k = small();
     DepthNoise noise;

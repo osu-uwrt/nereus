@@ -1,3 +1,5 @@
+// "ros.pose" motion provider: generic manual control over a PoseStamped setpoint topic, a SetBool
+// enable service and a Bool enabled-feedback topic.
 #include "ros_runtime.hpp"
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <std_msgs/msg/bool.hpp>
@@ -5,6 +7,7 @@
 
 namespace nereus::ros_viewer::panels {
 namespace {
+// Position-only motion adapter; mode changes need no service call and complete on the next spin.
 class StandardMotion final : public RosMotion {
   public:
     StandardMotion(std::shared_ptr<RosRuntime> rt, const YAML::Node &cfg, const Context &ctx)
@@ -21,6 +24,8 @@ class StandardMotion final : public RosMotion {
             });
         startTimer();
     }
+
+    // Unlike the base class, enabling is an async SetBool(true) call; the reply sets `enabled`.
     void enable() override {
         std::lock_guard<std::mutex> lock(mutex);
         if (value.pending || value.competing)
@@ -55,9 +60,11 @@ class StandardMotion final : public RosMotion {
     }
 
   private:
+    // Publishes the setpoint in the command frame; other modes publish nothing.
     void send(const Pose &pose, Mode mode) override {
         if (mode != Mode::Position)
             return;
+
         const auto world = commandFromFixed * pose;
         const auto q = glm::normalize(glm::quat_cast(world));
         geometry_msgs::msg::PoseStamped msg;
@@ -72,6 +79,8 @@ class StandardMotion final : public RosMotion {
         msg.pose.orientation.z = q.z;
         publisher->publish(msg);
     }
+
+    // While not enabled, sends a single SetBool(false) (disableSent latches it until the next request).
     void report() override {
         if (value.enabled || value.pending || disableSent || !client->service_is_ready())
             return;
@@ -87,15 +96,19 @@ class StandardMotion final : public RosMotion {
                                              })
                         .request_id;
     }
+
     bool modeReady() override {
         return client->service_is_ready();
     }
+
+    // No mode service: complete the request from a 1 ms one-shot timer on the ROS thread.
     void requestMode(uint64_t epoch, Mode mode, const Pose &pose) override {
         modeTimer = runtime->node->create_wall_timer(std::chrono::milliseconds(1), [this, epoch, mode, pose] {
             modeTimer->cancel();
             complete(epoch, mode, pose, true, "");
         });
     }
+
     void cancelRequest() override {
         if (requestId)
             client->remove_pending_request(requestId);
@@ -104,6 +117,7 @@ class StandardMotion final : public RosMotion {
             modeTimer->cancel();
         disableSent = false;
     }
+
     bool disableSent = false;
     int64_t requestId = 0;
     rclcpp::TimerBase::SharedPtr modeTimer;
@@ -112,6 +126,8 @@ class StandardMotion final : public RosMotion {
     rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr client;
 };
 } // namespace
+
+// Registers "ros.pose" with config validation (timeouts in seconds; heartbeat_period at most 1 s).
 void registerStandardMotion(Registry &registry, const RuntimeFactory &runtime) {
     registry.providers.emplace(
         "ros.pose",

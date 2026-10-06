@@ -1,3 +1,5 @@
+// MarineDynamics and ThrusterDynamics unit tests: Coriolis properties, added mass and current terms, damping,
+// buoyancy, energy behaviour, and actuator delay, lag, limits and watchdog.
 #include <gtest/gtest.h>
 
 #include "detail/marine_dynamics.hpp"
@@ -49,12 +51,15 @@ using nereus::simulation::detail::ThrusterDynamics;
 using nereus::simulation::detail::ThrusterParameters;
 
 namespace {
+// At rest 10 m deep with identity orientation.
 State13d restingState() {
     State13d x = State13d::Zero();
     x[2] = -10;
     x[3] = 1;
     return x;
 }
+
+// Neutrally buoyant: 10 kg displacing 0.01 m^3 of 1000 kg/m^3 water, with 2x identity added mass.
 MarineDynamics neutralModel() {
     MarineDynamics d;
     d.configure(10., Eigen::Matrix3d::Identity(), Matrix6d::Identity() * 2.);
@@ -62,12 +67,14 @@ MarineDynamics neutralModel() {
     return d;
 }
 } // namespace
+
 TEST(MarineDynamics, CoordinateCurrentDerivativeHasNoRigidBodyInertiaTerm) {
     MarineDynamics d;
     d.configure(10., Eigen::Matrix3d::Identity(), Matrix6d::Zero());
     const Vector6d v = Vector6d::Random(), r = Vector6d::Random(), dc = Vector6d::Random();
     EXPECT_TRUE(d.acceleration(v, r, Vector6d::Zero(), dc).isApprox(d.acceleration(v, r, Vector6d::Zero()), 1e-12));
 }
+
 TEST(MarineDynamics, AddedMassCurrentDerivativeCoefficient) {
     MarineDynamics d;
     Matrix6d added = Matrix6d::Zero();
@@ -77,6 +84,7 @@ TEST(MarineDynamics, AddedMassCurrentDerivativeCoefficient) {
     dc[0] = 3;
     EXPECT_NEAR(d.acceleration(Vector6d::Zero(), Vector6d::Zero(), Vector6d::Zero(), dc)[0], 1., 1e-12);
 }
+
 TEST(MarineDynamics, CoriolisMatchesIndependentMomentumCrossProducts) {
     Matrix6d a = Matrix6d::Random();
     a = (a.transpose() * a).eval();
@@ -85,6 +93,7 @@ TEST(MarineDynamics, CoriolisMatchesIndependentMomentumCrossProducts) {
     expected.tail<3>() = v.head<3>().cross(p.head<3>()) + v.tail<3>().cross(p.tail<3>());
     EXPECT_TRUE((MarineDynamics::coriolis(a, v) * v).isApprox(expected, 1e-12));
 }
+
 TEST(MarineDynamics, NeutralBodyFollowsUniformAcceleratingFluid) {
     auto d = neutralModel();
     const Eigen::Vector3d acceleration(.3, -.2, .1);
@@ -92,6 +101,7 @@ TEST(MarineDynamics, NeutralBodyFollowsUniformAcceleratingFluid) {
     EXPECT_TRUE(dx.segment<3>(7).isApprox(acceleration, 1e-12));
     EXPECT_LT(dx.tail<3>().norm(), 1e-12);
 }
+
 TEST(MarineDynamics, RotatingBodyDriftingWithUniformWaterHasNoSpuriousInertialForce) {
     auto d = neutralModel();
     auto x = restingState();
@@ -101,6 +111,7 @@ TEST(MarineDynamics, RotatingBodyDriftingWithUniformWaterHasNoSpuriousInertialFo
     Eigen::Vector3d inertial = dx.segment<3>(7) + x.tail<3>().cross(x.segment<3>(7));
     EXPECT_LT(inertial.norm(), 1e-12);
 }
+
 TEST(MarineDynamics, DampingAtOffsetCenterCannotAddEnergy) {
     auto d = neutralModel();
     Matrix6d a = Matrix6d::Random();
@@ -112,6 +123,7 @@ TEST(MarineDynamics, DampingAtOffsetCenterCannotAddEnergy) {
     }
     EXPECT_DOUBLE_EQ(d.dampingWrench(Vector6d::Zero()).norm(), 0.);
 }
+
 TEST(MarineDynamics, BuoyancyIncludesOrientationAndMovingWetCentroid) {
     auto d = neutralModel();
     d.configureHydrostatics(1000, .01, {0, 0, .05}, {.2, .4, .2});
@@ -128,6 +140,7 @@ TEST(MarineDynamics, BuoyancyIncludesOrientationAndMovingWetCentroid) {
         d.submergedFraction({0, 0, 0}, Eigen::Quaterniond(Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitY()))), .5,
         1e-12);
 }
+
 TEST(MarineDynamics, UnforcedCoupledMotionConservesEnergy) {
     auto d = neutralModel();
     Matrix6d added = Matrix6d::Random();
@@ -141,6 +154,7 @@ TEST(MarineDynamics, UnforcedCoupledMotionConservesEnergy) {
     EXPECT_NEAR(.5 * x.tail<6>().dot(d.mass() * x.tail<6>()), energy, 1e-9);
     EXPECT_NEAR(x.segment<4>(3).norm(), 1., 1e-12);
 }
+
 TEST(MarineDynamics, DragDecaysEnergyAndStepRefinementConverges) {
     auto d = neutralModel();
     d.configureDamping(Matrix6d::Identity(), Vector6d::Ones() * 8);
@@ -157,6 +171,7 @@ TEST(MarineDynamics, DragDecaysEnergyAndStepRefinementConverges) {
     }
     EXPECT_LT((coarse - fine).norm(), 1e-7);
 }
+
 TEST(MarineDynamics, RejectsNaNsNegativeAddedMassAndImpossibleInertia) {
     MarineDynamics d;
     Matrix6d added = Matrix6d::Zero();
@@ -167,6 +182,7 @@ TEST(MarineDynamics, RejectsNaNsNegativeAddedMassAndImpossibleInertia) {
                  std::invalid_argument);
     EXPECT_THROW(d.configureDamping(Matrix6d::Identity(), -Vector6d::Ones()), std::invalid_argument);
 }
+
 TEST(Thrusters, ExactDelayAndLagIndependentOfStepPartition) {
     ThrusterParameters p;
     p.delay = .1;
@@ -178,6 +194,8 @@ TEST(Thrusters, ExactDelayAndLagIndependentOfStepPartition) {
     Eigen::VectorXd cmd = Eigen::VectorXd::Constant(1, 10);
     a.command(cmd);
     b.command(cmd);
+
+    // The command lands exactly at the 0.1 s delay, then lags with tau = 0.2 s however the steps are split.
     a.advance(.1);
     EXPECT_NEAR(a.forces()[0], 0., 1e-12);
     a.advance(.1);
@@ -186,6 +204,7 @@ TEST(Thrusters, ExactDelayAndLagIndependentOfStepPartition) {
     EXPECT_NEAR(a.forces()[0], 10 * (1 - exp(-.1 / .2)), 1e-12);
     EXPECT_NEAR(a.forces()[0], b.forces()[0], 1e-11);
 }
+
 TEST(Thrusters, AsymmetricLimitsFailuresSlewAndWatchdog) {
     ThrusterParameters p;
     p.delay = 0;
@@ -197,6 +216,8 @@ TEST(Thrusters, AsymmetricLimitsFailuresSlewAndWatchdog) {
     p.efficiency = .5;
     ThrusterDynamics a;
     a.configure({p}, .2);
+
+    // 100 N saturates at 20 N and efficiency halves it to 10 N; the 10 N/s slew allows 1 N per 0.1 s.
     a.command(Eigen::VectorXd::Constant(1, 100));
     a.advance(.1);
     EXPECT_NEAR(a.forces()[0], 1, 1e-12);
@@ -204,17 +225,21 @@ TEST(Thrusters, AsymmetricLimitsFailuresSlewAndWatchdog) {
     EXPECT_NEAR(a.forces()[0], 1, 1e-12); // watchdog at .2, coast to zero
     a.advance(.2);
     EXPECT_NEAR(a.forces()[0], 0, 1e-12);
+
+    // Reverse: saturated at the 10 N reverse limit and halved, with no slew limit.
     p.slew = 0;
     a.configure({p}, 0);
     a.command(Eigen::VectorXd::Constant(1, -100));
     a.advance(.01);
     EXPECT_NEAR(a.forces()[0], -5, 1e-12);
+
     p.efficiency = 0;
     a.configure({p}, 0);
     a.command(Eigen::VectorXd::Constant(1, 100));
     a.advance(.1);
     EXPECT_DOUBLE_EQ(a.forces()[0], 0);
 }
+
 TEST(Thrusters, KillClearsDelayedCommandsAndRejectsNonfiniteInput) {
     ThrusterDynamics a;
     a.configure({ThrusterParameters{}}, 0);

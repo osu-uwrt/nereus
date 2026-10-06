@@ -20,6 +20,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# Where the frozen <scenario>_resolved.json.in fixtures live.
 FIXTURES = ROOT / "libraries" / "session" / "tests" / "fixtures"
 PLACEHOLDER = "@NEREUS_SOURCE_DIR@/"
 
@@ -32,11 +33,14 @@ def freeze(source: Path, scenario: str) -> Path:
         command = [sys.executable, "-m", "nereus.packs", "resolve", str(pack), "-o", str(resolved)]
         subprocess.run(command, check=True)
         text = resolved.read_text()
+
+    # Swap absolute source paths for the placeholder; any path left over would not relocate.
     if PLACEHOLDER.rstrip("/") in text:
         raise SystemExit(f"{scenario}: the document already contains {PLACEHOLDER}")
     text = text.replace(f"{source}/", PLACEHOLDER)
     if str(source) in text:
         raise SystemExit(f"{scenario}: a path into {source} is not under it with a separator")
+
     output = FIXTURES / f"{scenario}_resolved.json.in"
     output.write_text(json.dumps(json.loads(text), indent=1) + "\n")
     return output

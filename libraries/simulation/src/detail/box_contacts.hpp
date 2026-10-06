@@ -1,4 +1,6 @@
 #pragma once
+// Sequential-impulse box contact solver for the BoxScene model: the robot's box proxies against static world
+// boxes.
 #include "marine_dynamics.hpp"
 #include <memory>
 #include <nereus/simulation/contacts.hpp>
@@ -15,6 +17,9 @@ class BoxContacts {
     ~BoxContacts();
     BoxContacts(const BoxContacts &) = delete;
     BoxContacts &operator=(const BoxContacts &) = delete;
+
+    // Returns `state` (13-element body state, see State13d) with contact impulses applied; inverse_mass is
+    // the 6x6 inverse mass in body axes.
     State13d resolve(State13d state, const Matrix6d &inverse_mass) const;
 
   private:

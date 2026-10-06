@@ -1,3 +1,5 @@
+// BoxContacts against the original (legacy) static-box solver: single resolves and whole plant trajectories,
+// compared with recorded CSV fixtures.
 #include "detail/box_contacts.hpp"
 #include <algorithm>
 #include <array>
@@ -9,10 +11,14 @@
 
 using namespace nereus::simulation::detail;
 namespace {
+// One contact scenario: body proxies, world boxes and the 13-element state passed to resolve().
 struct Case {
     std::vector<BoxProxy> body, world;
     State13d state;
 };
+
+// Scenarios 0-10 (fixture rows) of a hull + probe body near a floor and a wall: 3 has no world boxes, 6 an
+// unnormalized quaternion, 7 a tilted wall, 8 a separating contact, 9 nothing in reach, 10 a rotated hull.
 Case contactCase(int scenario) {
     std::vector<BoxProxy> body{{"hull", {.6, .4, .3}, {.05, -.02, .03}}, {"probe", {.2, .05, .05}, {.4, -.2, -.1}}};
     if (scenario == 10)
@@ -43,11 +49,14 @@ Case contactCase(int scenario) {
     return {std::move(body), std::move(world), state};
 }
 } // namespace
+
 TEST(BoxContacts, MatchesOriginalStaticBoxImpulseAndDepenetration) {
     std::ifstream fixture(std::string(NEREUS_FIXTURES) + "/legacy_box_contacts.csv");
     ASSERT_TRUE(fixture);
     std::string row;
     ASSERT_TRUE(std::getline(fixture, row));
+
+    // Mass model of the fixture capture: unit added mass with surge/pitch coupling.
     MarineDynamics dynamics;
     Matrix6d added = Matrix6d::Identity();
     added(0, 4) = added(4, 0) = .2;
@@ -59,6 +68,8 @@ TEST(BoxContacts, MatchesOriginalStaticBoxImpulseAndDepenetration) {
         const auto &state = input.state;
         BoxContacts contacts(body, world);
         const auto result = contacts.resolve(state, dynamics.inverseMass());
+
+        // Fixture row: scenario, then the 13 resolved state values.
         ASSERT_TRUE(std::getline(fixture, row));
         std::istringstream fields(row);
         std::string value;
@@ -68,6 +79,7 @@ TEST(BoxContacts, MatchesOriginalStaticBoxImpulseAndDepenetration) {
             ASSERT_TRUE(std::getline(fields, value, ','));
             EXPECT_NEAR(result[i], std::stod(value), 2e-12);
         }
+
         if (scenario == 8) {
             EXPECT_GT(result[2], state[2]);
             EXPECT_EQ(result.tail<6>(), state.tail<6>()); // Separating: correction, no impulse.
@@ -78,6 +90,7 @@ TEST(BoxContacts, MatchesOriginalStaticBoxImpulseAndDepenetration) {
     }
     EXPECT_FALSE(std::getline(fixture, row));
 }
+
 TEST(BoxContacts, RejectsInvalidGeometryAndCoefficients) {
     BoxProxy box;
     box.id = "box";
@@ -114,6 +127,7 @@ TEST(BoxContacts, PlantMatchesOriginalPreAndPostIntegrationContactSequence) {
     }
     for (int scenario = 0; scenario < 11; ++scenario) {
         const auto input = contactCase(scenario);
+        // Same mass model, no buoyancy and BoxScene contacts; 50 ticks per scenario.
         nereus::simulation::PlantParameters p;
         p.body.inertia = Eigen::Vector3d(.3, .4, .5).asDiagonal();
         p.body.added_mass = Matrix6d::Identity();
@@ -129,6 +143,7 @@ TEST(BoxContacts, PlantMatchesOriginalPreAndPostIntegrationContactSequence) {
         initial.linear_velocity = input.state.segment<3>(7);
         initial.angular_velocity = input.state.tail<3>();
         nereus::simulation::Plant plant(p, initial);
+
         for (int tick = 1; tick <= 50; ++tick) {
             SCOPED_TRACE("case=" + std::to_string(scenario) + " tick=" + std::to_string(tick));
             const auto result = plant.advance();
@@ -137,6 +152,7 @@ TEST(BoxContacts, PlantMatchesOriginalPreAndPostIntegrationContactSequence) {
             actual << body.position, body.orientation.w(), body.orientation.x(), body.orientation.y(),
                 body.orientation.z(), body.linear_velocity, body.angular_velocity;
             ASSERT_TRUE(actual.allFinite());
+            // Track the error against both fixtures; the better-matching one must be within tolerance.
             for (std::size_t candidate = 0; candidate < fixtures.size(); ++candidate) {
                 ASSERT_TRUE(std::getline(fixtures[candidate], row));
                 std::istringstream fields(row);
@@ -154,6 +170,7 @@ TEST(BoxContacts, PlantMatchesOriginalPreAndPostIntegrationContactSequence) {
             EXPECT_EQ(result.elapsed.count(), tick * 2000000LL);
         }
     }
+
     for (auto &fixture : fixtures)
         EXPECT_FALSE(std::getline(fixture, row));
     EXPECT_LE(std::min(maximum_error[0], maximum_error[1]), kReferenceTolerance)

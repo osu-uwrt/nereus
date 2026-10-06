@@ -34,10 +34,13 @@ from ._documents import (
 )
 from ._mapping import ClassMap
 
+# Format tags of the two files a plan writes (job.json for the renderer, job/export.json)
 JOB_FORMAT = "nereus.dataset_job.v1"
 EXPORT_FORMAT = "nereus.dataset_export.v1"
+# Name of the spec's background block (samples with no task in view)
 BACKGROUND = "background"
 
+# Defaults for the spec's optional blocks; the spec's values are merged over them
 IMAGE_DEFAULTS: dict[str, Any] = {
     "resolution_px": "native",
     "crop": "center",
@@ -87,6 +90,8 @@ class Overrides:
 
 @dataclass
 class Plan:
+    """What ``plan`` wrote: the job, its path, the exporter settings, and label-pack warnings."""
+
     job: dict[str, Any]
     job_path: Path
     export: dict[str, Any]
@@ -94,6 +99,7 @@ class Plan:
 
 
 def parse_resolution(text: str) -> str | list[int]:
+    """``--resolution``: "native", or "WIDTHxHEIGHT" as [width, height]."""
     if text == "native":
         return "native"
     width, separator, height = text.lower().partition("x")
@@ -121,6 +127,8 @@ def apply_overrides(dataset: dict[str, Any], overrides: Overrides) -> dict[str, 
     """The spec with CLI overrides applied: only selected blocks remain."""
     data = copy.deepcopy(dataset)
     tasks: dict[str, Any] = data.get("tasks", {})
+
+    # --task: keep only the named task blocks (and the background block if named)
     if overrides.tasks is not None:
         known = [*tasks, *([BACKGROUND] if "background" in data else [])]
         unknown = [name for name in overrides.tasks if name not in known]
@@ -131,6 +139,8 @@ def apply_overrides(dataset: dict[str, Any], overrides: Overrides) -> dict[str, 
         data["tasks"] = {name: block for name, block in tasks.items() if name in overrides.tasks}
         if BACKGROUND not in overrides.tasks:
             data.pop("background", None)
+
+    # --count and sampler overrides apply to every remaining block
     blocks = [
         *data.get("tasks", {}).values(),
         *([data["background"]] if "background" in data else []),
@@ -148,6 +158,8 @@ def apply_overrides(dataset: dict[str, Any], overrides: Overrides) -> dict[str, 
             raise PackError(f"{option}: no selected task has a sampler of type {sampler_type}")
         for sampler in targets:
             sampler[key] = value
+
+    # Image and seed overrides
     if overrides.resolution is not None:
         data.setdefault("image", {})["resolution_px"] = parse_resolution(overrides.resolution)
     if overrides.supersample is not None:
@@ -160,6 +172,7 @@ def apply_overrides(dataset: dict[str, Any], overrides: Overrides) -> dict[str, 
 
 
 def _write_json(path: Path, document: Any) -> None:
+    """Write JSON atomically: temp file in the same folder, then rename over ``path``."""
     text = json.dumps(document, indent=2, allow_nan=False) + "\n"
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
@@ -182,9 +195,12 @@ def _resolved_document(resolved: ResolvedScenario) -> dict[str, Any]:
 
 def _refuse_mixing(out: Path, job: dict[str, Any], documents: list[dict[str, Any]]) -> None:
     """The renderer resumes into existing records: never let a different job resume them."""
+    # Nothing rendered yet: any job may be planned here
     records = out / "records"
     if not records.is_dir() or not any(records.iterdir()):
         return
+
+    # Otherwise the job and every resolved scenario must be identical to what is on disk
     try:
         same = json.loads((out / "job.json").read_text("utf-8")) == job and all(
             json.loads((out / "job" / f"scenario_{index}.json").read_text("utf-8")) == document
@@ -202,6 +218,8 @@ def _refuse_mixing(out: Path, job: dict[str, Any], documents: list[dict[str, Any
 def _randomize(randomize: dict[str, Any], overrides: Overrides) -> dict[str, Any]:
     """Job randomization: placement and indicators, plus every environment fully merged."""
     found, mode = environments.expand(randomize)
+
+    # CLI environment filter and mode
     if overrides.environments is not None:
         known = ", ".join(item["id"] for item in found)
         found = environments.select(found, overrides.environments)
@@ -219,6 +237,8 @@ def _randomize(randomize: dict[str, Any], overrides: Overrides) -> dict[str, Any
     found = [item for item in found if item["weight"] > 0]
     if not found:
         raise PackError("randomize.environments: every selected environment has weight 0")
+
+    # Placement and indicator settings; the environment groups were folded into ``found``
     kept = {key: value for key, value in randomize.items() if key in RANDOMIZE_DEFAULTS}
     result = merged(RANDOMIZE_DEFAULTS, kept)
     result["environments"] = found
@@ -227,6 +247,7 @@ def _randomize(randomize: dict[str, Any], overrides: Overrides) -> dict[str, Any
 
 
 def _job_parts(parts: Document, place: Course) -> dict[str, Any]:
+    """parts.yaml for the renderer: absolute texture/mask paths, mask value -> part name."""
     textures = []
     for item in parts.data.get("textures", []):
         textures.append(
@@ -257,6 +278,7 @@ def _job_parts(parts: Document, place: Course) -> dict[str, Any]:
 
 def plan(dataset_path: Path, out: Path, overrides: Overrides | None = None) -> Plan:
     """Validate everything the spec selects and write ``out/job.json`` (+ ``out/job/``)."""
+    # The spec, re-checked after CLI overrides, and the label pack it names
     dataset = load_document(dataset_path, "dataset")
     data = apply_overrides(dataset.data, overrides or Overrides())
     problems = check_data("dataset", data)
@@ -265,6 +287,7 @@ def plan(dataset_path: Path, out: Path, overrides: Overrides | None = None) -> P
     labels = load_document(canonical(dataset.root / data["labels"], "labels"), "labels")
     model = data["model"]
 
+    # Resolve every scenario; they must all use one tasks pack, which holds parts.yaml
     resolved: list[ResolvedScenario] = []
     for entry in data["scenarios"]:
         resolved.append(resolve_scenario(dataset.root / entry))
@@ -279,6 +302,7 @@ def plan(dataset_path: Path, out: Path, overrides: Overrides | None = None) -> P
         raise PackError(f"{place.folder}: no parts.yaml next to tasks.yaml")
     parts = load_document(place.parts_file, "parts")
 
+    # Cross-check parts, labels, model camera and dataset against that tasks pack
     problems = check_parts(parts, place)
     problems += check_labels(labels, parts, place)
     for item in resolved:
@@ -288,6 +312,7 @@ def plan(dataset_path: Path, out: Path, overrides: Overrides | None = None) -> P
         raise PackError(problems)
     classes = ClassMap(labels.data, model)
 
+    # Image settings; "native" takes the camera's resolution, which all scenarios must share
     image = merged(IMAGE_DEFAULTS, data.get("image", {}))
     if image["resolution_px"] == "native":
         sizes = {tuple(native_resolution(item, classes.camera)) for item in resolved}
@@ -295,6 +320,7 @@ def plan(dataset_path: Path, out: Path, overrides: Overrides | None = None) -> P
             raise PackError(f"{dataset.path}: scenario cameras differ in native resolution")
         image["resolution_px"] = list(sizes.pop())
 
+    # Sample blocks in spec order, background last ("task": None)
     samples = [
         {"task": task, "count": block["count"], "sampler": block["sampler"]}
         for task, block in data.get("tasks", {}).items()
@@ -307,6 +333,7 @@ def plan(dataset_path: Path, out: Path, overrides: Overrides | None = None) -> P
     if sum(item["count"] for item in samples) == 0:
         raise PackError(f"{dataset.path}: no samples selected")
 
+    # Each scenario's resolved document is written to job/scenario_<index>.json
     out = Path(out).resolve()
     documents = [_resolved_document(item) for item in resolved]
     scenarios = [
@@ -351,6 +378,8 @@ def plan(dataset_path: Path, out: Path, overrides: Overrides | None = None) -> P
         "scenarios": [str(item.path) for item in resolved],
         "split": merged(SPLIT_DEFAULTS, data.get("split", {})),
     }
+
+    # Write: resolved scenarios, exporter settings, then the job itself
     job_path = out / "job.json"
     _refuse_mixing(out, job, documents)
     (out / "job").mkdir(parents=True, exist_ok=True)
@@ -375,6 +404,8 @@ def describe(job: dict[str, Any]) -> list[str]:
             f"  {name:<12} {block['count']:>6}  {indices}  {block['sampler']['type']}{where}"
         )
         start = end
+
+    # Environment selection: the cycle for sweep mode, or each environment's share by weight
     randomize = job["randomize"]
     found = randomize["environments"]
     if randomize["environment_mode"] == "sweep":

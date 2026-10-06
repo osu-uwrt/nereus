@@ -1,3 +1,5 @@
+// "ros.bagging" provider: drives bag_recorder's scripts on each configured target (this computer or the robot)
+// from per-target worker threads and lists the ROS graph's topics for the bagging panel.
 #include "ros_runtime.hpp"
 #include <algorithm>
 #include <condition_variable>
@@ -7,22 +9,28 @@
 
 namespace nereus::ros_viewer::panels {
 namespace {
+
 // ros2 bag record on each target through bag_recorder's scripts: one worker thread per target runs them (bash
 // locally, ssh to the robot), polling the target's status between commands. The topic list is the viewer node's
 // own view of the graph.
 class RosBagging final : public Bagging {
     enum class Op { Status, Start, Stop, Kill };
+
+    // A queued request for a target's worker; Status is the default (a plain poll).
     struct Command {
         Op op = Op::Status;
         BagRequest request;
     };
+
+    // One machine: its connection, the state shown to the panel and its worker's command queue.
+    // Everything but `worker` is guarded by RosBagging::mutex.
     struct Target {
         BagHost host;
-        bool stopOnExit = false;
+        bool stopOnExit = false; // send Stop when the viewer closes (default: local targets only)
         BagTargetState value;
         std::deque<Command> commands;
-        Steady::time_point nextPoll{}, polledAt{};
-        uint64_t generation = 0; // bumped by setHost: replies from the previous host are dropped
+        Steady::time_point nextPoll{}, polledAt{}; // when to poll next; when `elapsed` was last reported
+        uint64_t generation = 0;                   // bumped by setHost: replies from the previous host are dropped
         std::thread worker;
     };
 
@@ -30,6 +38,7 @@ class RosBagging final : public Bagging {
     RosBagging(std::shared_ptr<RosRuntime> runtime, const YAML::Node &cfg, const Context &ctx)
         : runtime(runtime), stopWait(cfg["stop_timeout"].as<double>(10)),
           requestTimeout(cfg["request_timeout"].as<double>(30)) {
+        // Targets from the configuration (validated by the factory below).
         for (const auto &entry : cfg["targets"]) {
             auto target = std::make_unique<Target>();
             target->value.id = entry["id"].as<std::string>();
@@ -56,11 +65,15 @@ class RosBagging final : public Bagging {
             }
             presets.push_back(std::move(preset));
         }
+
+        // Start the workers and refresh the topic list every 2 s.
         for (auto &target : targets)
             target->worker = std::thread([this, t = target.get()] { run(*t); });
         timer = runtime->node->create_wall_timer(std::chrono::seconds(2), [this] { listTopics(); });
         listTopics();
     }
+
+    // Drops queued work, queues the exit stops, then waits for every worker to finish.
     ~RosBagging() override {
         timer->cancel();
         {
@@ -77,6 +90,8 @@ class RosBagging final : public Bagging {
             if (target->worker.joinable())
                 target->worker.join();
     }
+
+    // Snapshot for the panel; a running recording's elapsed time advances between polls.
     BaggingState state() override {
         std::lock_guard<std::mutex> lock(mutex);
         BaggingState value;
@@ -90,6 +105,8 @@ class RosBagging final : public Bagging {
         value.presets = presets;
         return value;
     }
+
+    // start/stop/kill queue a command for the target's worker when its state allows it, else do nothing.
     void start(const std::string &id, const BagRequest &request) override {
         std::lock_guard<std::mutex> lock(mutex);
         auto *target = find(id);
@@ -98,12 +115,14 @@ class RosBagging final : public Bagging {
             return;
         queue(*target, {Op::Start, request}, "Starting " + request.name + "...");
     }
+
     void stop(const std::string &id) override {
         std::lock_guard<std::mutex> lock(mutex);
         auto *target = find(id);
         if (target && !target->value.pending && (target->value.recording || target->value.stopping))
             queue(*target, {Op::Stop, {}}, "Stopping (closing the bag)...");
     }
+
     void kill(const std::string &id) override {
         std::lock_guard<std::mutex> lock(mutex);
         auto *target = find(id);
@@ -111,6 +130,7 @@ class RosBagging final : public Bagging {
             queue(*target, {Op::Kill, {}}, "Killing the recorder...");
     }
 
+    // Points a remote target at another ssh destination (not while it records) and polls it at once.
     void setHost(const std::string &id, const std::string &host) override {
         std::lock_guard<std::mutex> lock(mutex);
         auto *target = find(id);
@@ -119,6 +139,8 @@ class RosBagging final : public Bagging {
             return;
         ++target->generation;
         target->host.host = host;
+
+        // Forget everything learned from the previous host.
         auto &v = target->value;
         v.host = host;
         v.known = v.reachable = false;
@@ -135,12 +157,15 @@ class RosBagging final : public Bagging {
     }
 
   private:
+    // Caller holds `mutex`.
     Target *find(const std::string &id) {
         for (auto &target : targets)
             if (target->value.id == id)
                 return target.get();
         return nullptr;
     }
+
+    // Marks the target pending and wakes its worker; caller holds `mutex`.
     void queue(Target &target, Command command, const std::string &message) {
         target.value.pending = true;
         target.value.message = message;
@@ -148,6 +173,8 @@ class RosBagging final : public Bagging {
         target.commands.push_back(std::move(command));
         wake.notify_all();
     }
+
+    // The node's view of the graph, sorted by name (the panel binary-searches it); refreshed by the 2 s timer.
     void listTopics() {
         std::vector<std::pair<std::string, std::string>> found;
         for (const auto &[name, types] : runtime->node->get_topic_names_and_types())
@@ -156,6 +183,8 @@ class RosBagging final : public Bagging {
         std::lock_guard<std::mutex> lock(mutex);
         topics = std::move(found);
     }
+
+    // Worker loop: wait for a command or the next poll time, run the script without the lock, apply its report.
     void run(Target &target) {
         std::unique_lock<std::mutex> lock(mutex);
         for (;;) {
@@ -167,11 +196,15 @@ class RosBagging final : public Bagging {
                 command = std::move(target.commands.front());
                 target.commands.pop_front();
             }
+
+            // Copy what the script needs, then release the lock while it runs.
             BagHost host = target.host;
             const auto generation = target.generation;
             if (!command.request.directory.empty())
                 host.directory = command.request.directory;
             lock.unlock();
+
+            // Status polls get at most 15 s; a stop also gets its wait for the recorder to close the bag.
             std::string script;
             double timeout = requestTimeout;
             switch (command.op) {
@@ -196,10 +229,14 @@ class RosBagging final : public Bagging {
             if (generation != target.generation)
                 continue; // the target moved to another host meanwhile; poll that one
             apply(target, command.op, result);
+
+            // Poll every 2 s while recording, 5 s when idle and reachable, 10 s when unreachable.
             const bool busy = target.value.recording || target.value.stopping;
             target.nextPoll = Steady::now() + std::chrono::seconds(busy ? 2 : target.value.reachable ? 5 : 10);
         }
     }
+
+    // Updates the target from a script's report; caller holds `mutex`.
     void apply(Target &target, Op op, const ProcessResult &result) {
         auto &v = target.value;
         const auto report = parseBagReport(result.output);
@@ -216,6 +253,8 @@ class RosBagging final : public Bagging {
             v.failed = true;
             return;
         }
+
+        // The script ran: copy the reported recording, last bag and free space.
         const bool wasRecording = v.recording || v.stopping;
         const bool wasUnreachable = !v.reachable;
         v.reachable = true;
@@ -232,6 +271,8 @@ class RosBagging final : public Bagging {
         v.lastNote = report.get("last_note");
         v.lastBytes = report.number("last_bytes");
         v.lastComplete = report.has("last_complete");
+
+        // Message for the outcome; a routine status poll leaves the current message alone.
         const auto saved = [&] {
             return "Saved " + v.lastBag + " (" + byteSize(v.lastBytes) + ")" +
                    (v.lastComplete ? "" : ", without metadata.yaml: ros2 bag reindex can rebuild it");
@@ -260,6 +301,8 @@ class RosBagging final : public Bagging {
             v.failed = false;
         }
     }
+
+    // The last non-blank line of a command's output (usually its error).
     static std::string lastLine(const std::string &text) {
         std::string line, last;
         std::istringstream lines(text);
@@ -268,17 +311,21 @@ class RosBagging final : public Bagging {
                 last = line;
         return last;
     }
+
     std::shared_ptr<RosRuntime> runtime;
-    std::mutex mutex;
-    std::condition_variable wake;
-    std::atomic<bool> closing{false};
-    double stopWait, requestTimeout;
+    std::mutex mutex;                 // guards targets' state and queues, and `topics`
+    std::condition_variable wake;     // new command or shutdown
+    std::atomic<bool> closing{false}; // set by the destructor; also cancels running commands
+    double stopWait, requestTimeout;  // seconds
     std::vector<std::unique_ptr<Target>> targets;
     std::vector<BagPreset> presets;
     std::vector<std::pair<std::string, std::string>> topics;
     rclcpp::TimerBase::SharedPtr timer;
 };
+
 } // namespace
+
+// Registers the "ros.bagging" provider and its configuration checks.
 void registerRosBagging(Registry &registry, const RuntimeFactory &runtime) {
     registry.providers.emplace(
         "ros.bagging",
@@ -321,4 +368,5 @@ void registerRosBagging(Registry &registry, const RuntimeFactory &runtime) {
                 return std::make_shared<RosBagging>(runtime(ctx), cfg, ctx);
             }});
 }
+
 } // namespace nereus::ros_viewer::panels

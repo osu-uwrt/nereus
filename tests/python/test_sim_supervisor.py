@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# The supervisor is a launch script, not a package module: load it from its path.
 _spec = importlib.util.spec_from_file_location(
     "sim_supervisor", ROOT / "integrations/uwrt/launch/sim_supervisor.py"
 )
@@ -19,6 +21,7 @@ _spec.loader.exec_module(supervisor)
 
 
 def water(**overrides: Any) -> dict[str, Any]:
+    """A minimal resolved scenario holding only pool water parameters, with overrides."""
     parameters = {
         "water_density_kg_m3": 998.2,
         "water_level_m": 0.0,
@@ -32,6 +35,7 @@ def water(**overrides: Any) -> dict[str, Any]:
 
 class SimSupervisorTests(unittest.TestCase):
     def test_pools_and_folders(self) -> None:
+        """Short pool names and scenario folder paths resolve; a non-scenario folder raises."""
         self.assertEqual(supervisor.scenario_folder("rpac").name, "talos_uwrt_rpac")
         folder = ROOT / "content/packs/scenarios/talos_uwrt"
         self.assertEqual(supervisor.scenario_folder(str(folder)), folder.resolve())
@@ -39,10 +43,12 @@ class SimSupervisorTests(unittest.TestCase):
             supervisor.scenario_folder(str(ROOT / "content/packs"))
 
     def test_run_folders(self) -> None:
+        """The first run uses the output folder as given; later runs get a -N suffix."""
         self.assertEqual(supervisor.output_for("/tmp/run", 1), "/tmp/run")
         self.assertEqual(supervisor.output_for("/tmp/run", 3), "/tmp/run-3")
 
     def test_water_changes(self) -> None:
+        """water_changes lists the water parameters that differ in effect between two pools."""
         # a frequency without an oscillating current changes nothing
         self.assertEqual(
             supervisor.water_changes(water(), water(current_oscillation_frequency_hz=0.0)), []
@@ -58,6 +64,7 @@ class SimSupervisorTests(unittest.TestCase):
         )
 
     def test_both_uwrt_pools_resolve_with_the_same_water(self) -> None:
+        """Switching between the RoboSub and RPAC pools needs no water change."""
         with tempfile.TemporaryDirectory() as directory:
             robosub = supervisor.resolve(
                 supervisor.scenario_folder("robosub"), Path(directory) / "a.json"
@@ -82,6 +89,8 @@ class SimSupervisorTests(unittest.TestCase):
                 "time.sleep(60)\n"
             )
             fake.chmod(0o755)
+
+            # Start, then stop + restart from a short-lived thread, and check the child outlived it.
             simulator = supervisor.Simulator([str(fake), "--no-cameras"], f"{directory}/run")
             simulator.start("first.json")
             thread = threading.Thread(
@@ -93,6 +102,7 @@ class SimSupervisorTests(unittest.TestCase):
             self.assertIsNone(
                 simulator.process.poll(), "the restarted simulator died with the thread"
             )
+
             simulator.stop()
             self.assertEqual(simulator.process.returncode, 0)  # SIGINT: a clean exit
             self.assertEqual(

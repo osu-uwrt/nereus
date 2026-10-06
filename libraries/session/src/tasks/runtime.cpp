@@ -13,9 +13,10 @@ namespace nereus::session {
 using namespace tasks;
 
 namespace {
-constexpr double kMaxPayloadAgeS = 30.0;
+constexpr double kMaxPayloadAgeS = 30.0; // a projectile still flying after this long counts as a miss
 constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
 
+// Task-pack event types this runtime can produce (robot contacts arrive separately through record()).
 const std::set<std::string> kEventTypes = {
     "pass_through",    "hit",         "payload_landing", "drop_into",       "activate",
     "rotation_judged", "attach",      "detach",          "surface_reached", "surface_lost",
@@ -30,12 +31,14 @@ void checkTimeValue(std::int64_t time_ns) {
         invalid("time_ns must be a nonnegative integer");
 }
 
+// An event in the layout documented in tasks.hpp.
 Event makeEvent(const std::string &id, const std::string &type, const std::string &task, const std::string &region,
                 std::int64_t time_ns, Json data) {
     return {{"id", id},         {"type", type},       {"task", task},
             {"region", region}, {"time_ns", time_ns}, {"data", std::move(data)}};
 }
 
+// A scenario placement (`position_m` + `yaw_deg` about world z) as a pose.
 Pose placementPose(const Json &config) {
     const double yaw = config.at("yaw_deg").get<double>() * kDegToRad / 2;
     Pose pose;
@@ -44,6 +47,7 @@ Pose placementPose(const Json &config) {
     return ownedPose(pose);
 }
 
+// The robot's fixed frame tree from its `frames` document.
 spatial::FixedFrames framesOf(const Json &frames) {
     std::vector<spatial::FixedFrame> edges;
     for (const auto &entry : frames.at("transforms"))
@@ -52,6 +56,7 @@ spatial::FixedFrames framesOf(const Json &frames) {
     return spatial::FixedFrames(frames.at("root").get<std::string>(), std::move(edges));
 }
 
+// Robot scoring envelope in the reference frame: the corners of the listed collision boxes plus extra points.
 std::vector<Vec3> envelopeOf(const Json &robot) {
     const auto frames = framesOf(robot.at("frames"));
     const Pose reference_from_root = spatial::inverse(frames.fromRoot(robot.at("reference_frame").get<std::string>()));
@@ -78,6 +83,7 @@ std::vector<Vec3> envelopeOf(const Json &robot) {
     return vertices;
 }
 
+// Tip of the one mechanism of `mechanism_type`, in the robot reference frame (what touches a proximity target).
 Vec3 probePoint(const Json &robot, const std::string &mechanism_type) {
     std::vector<const Json *> found;
     for (const auto &item : robot.at("mechanisms"))
@@ -93,6 +99,7 @@ Vec3 probePoint(const Json &robot, const std::string &mechanism_type) {
     return spatial::apply(pose, vec3(found[0]->at("parameters").at("tip_position_m"), "tip_position_m"));
 }
 
+// True when no float anywhere in `value` is NaN or infinite (checks what the rules return).
 bool finiteJson(const Json &value) {
     if (value.is_number_float())
         return std::isfinite(value.get<double>());
@@ -101,15 +108,17 @@ bool finiteJson(const Json &value) {
     return true;
 }
 
+// A released projectile as the task runtime tracks it.
 struct Projectile {
-    std::string mechanism;
+    std::string mechanism; // launcher | dropper
     double radius{0}, length{0};
     std::int64_t released_ns{0};
-    std::set<std::string> tasks;
-    std::set<std::pair<std::string, std::string>> entered;
-    bool active{true}, scored{false};
+    std::set<std::string> tasks;                           // tasks that saw the release (and get a miss event)
+    std::set<std::pair<std::string, std::string>> entered; // (task, crate region) it has come down into
+    bool active{true}, scored{false};                      // scored: a hit, landing or miss was already reported
 };
 
+// A tracker together with the task and region it judges.
 template <class T> struct Keyed {
     std::string task, region;
     T value;
@@ -117,45 +126,55 @@ template <class T> struct Keyed {
 } // namespace
 
 struct TaskRuntime::Impl {
+    // A compiled Rules implementation selected by the task pack's `scoring_rules`.
     struct ScoringRules {
         std::string name;
         RulesFactory factory;
         Json parameters;
     };
 
-    std::vector<std::string> order;
-    std::map<std::string, Json> tasks;
-    Json options;
+    // Configuration.
+    std::vector<std::string> order;    // selected task ids
+    std::map<std::string, Json> tasks; // task id -> owned copy of its definition
+    Json options;                      // run option defaults
     bool auto_start{false};
     Json seed;
     double surface_z{0}, floor_z{0}, pool_length{0}, pool_width{0}; // floor_z: the deepest floor
     Pose pool_from_world;
     simulation::PoolFloor floor;
+
     // Floor height under a world point.
     double floorZAt(const Vec3 &world) const {
         const Vec3 local = spatial::apply(pool_from_world, world);
         return surface_z - floor.depthAt(Eigen::Vector2d(local[0], local[1]));
     }
+
+    // Geometric observers built from the selected tasks' regions.
     std::vector<Keyed<PortalTracker>> portals;
     std::vector<Keyed<PerforatedPanel>> panels;
     std::vector<Keyed<OpenCrate>> crates;
     std::vector<Keyed<ProximityTarget>> targets;
     std::vector<Keyed<SurfaceTracker>> surfaces;
     std::vector<Keyed<TurnTracker>> turns;
+
+    // Scoring: the tasks' own `event_points` rules (task id, rule), then the compiled rules and their instances.
     std::vector<std::pair<std::string, Json>> score_rules;
     std::vector<ScoringRules> scoring;
-    std::vector<std::unique_ptr<Rules>> instances;
+    std::vector<std::unique_ptr<Rules>> instances; // one per `scoring` entry, recreated by reset()
 
+    // Run state.
     Json state; // {run, scores, history, tasks, environment, latched}
-    std::map<std::pair<std::string, std::string>, int> award_counts;
+    std::map<std::pair<std::string, std::string>, int> award_counts; // (task, rule id) -> times awarded
     std::map<int, Projectile> projectiles;
     std::int64_t last_time{0};
     bool failed{false};
 
+    // A task's declared events, which bind tracker outputs to event ids.
     const Json &bindings(const std::string &task) const {
         return tasks.at(task).at("events");
     }
 
+    // Mirror the proximity targets' latch states into state.latched ("task/region" -> bool).
     void refreshLatched() {
         Json latched = Json::object();
         for (const auto &t : targets)
@@ -171,6 +190,7 @@ struct TaskRuntime::Impl {
             invalid("task time cannot go backwards without reset");
     }
 
+    // Fresh rules instances and trackers, empty scores and history; the run starts running only with auto_start.
     void reset(std::int64_t time_ns) {
         checkTimeValue(time_ns);
         instances.clear();
@@ -209,6 +229,8 @@ struct TaskRuntime::Impl {
         }
     }
 
+    // An event emitted by rules must have the standard layout, name a selected task, and fall within the time
+    // span of the input events.
     void validateEvent(const Json &event, const Events &inputs) const {
         static const std::set<std::string> keys = {"id", "type", "task", "region", "time_ns", "data"};
         bool ok = event.is_object() && event.size() == keys.size();
@@ -233,9 +255,13 @@ struct TaskRuntime::Impl {
             invalid("rules event time must belong to the input interval");
     }
 
+    // Score a batch of events and return them followed by any events the rules derived; both are appended to the
+    // history. Scores are committed only if every rules call succeeds.
     Events evaluate(const Events &events) {
         if (events.empty())
             return {};
+
+        // Events named as restart triggers restart their turn trackers.
         for (auto &tracker : turns) {
             bool restart = false;
             for (const auto &event : events)
@@ -249,6 +275,8 @@ struct TaskRuntime::Impl {
         try {
             Json scores = committed_scores;
             auto counts = award_counts;
+
+            // Built-in event_points rules award points while a run is open, up to max_awards per rule.
             const Json &run = state.at("run");
             if (run.at("running").get<bool>() && !run.at("ended").get<bool>()) {
                 for (const auto &entry : score_rules) {
@@ -269,6 +297,8 @@ struct TaskRuntime::Impl {
                     }
                 }
             }
+
+            // Compiled rules, in order: each sees the scores so far and may set rows and emit events.
             Events emitted;
             for (std::size_t i = 0; i < scoring.size(); ++i) {
                 state["scores"] = scores;
@@ -292,6 +322,8 @@ struct TaskRuntime::Impl {
                     emitted.push_back(event);
                 }
             }
+
+            // Commit.
             state["scores"] = scores;
             award_counts = std::move(counts);
             Events all = events;
@@ -305,6 +337,8 @@ struct TaskRuntime::Impl {
         }
     }
 
+    // Portal tracker output -> task events: attempt summaries pass straight through, passages go to every
+    // pass_through binding for this region and direction.
     Events portalEvents(const std::string &task, const std::string &region, const PortalEvent &event) const {
         Events out;
         const Json data = event.data();
@@ -321,6 +355,7 @@ struct TaskRuntime::Impl {
         return out;
     }
 
+    // Tracker facts -> task events, via the bindings of the same type and region.
     Events factEvents(const std::string &task, const std::string &region, std::int64_t time_ns,
                       const std::vector<Fact> &facts) const {
         Events out;
@@ -336,6 +371,8 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
                          const std::vector<std::string> *task_ids)
     : impl_(std::make_unique<Impl>()) {
     Impl &m = *impl_;
+
+    // Select the tasks (all of them by default).
     std::map<std::string, const Json *> definitions;
     std::vector<std::string> defined;
     for (const auto &task : scenario.task_definitions) {
@@ -353,6 +390,8 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
     }
     for (const auto &id : m.order)
         m.tasks[id] = *definitions.at(id); // owned copy
+
+    // Run settings and the pool geometry used for floor and wall checks.
     m.options = scenario.run_options.is_null() ? Json::object() : scenario.run_options;
     m.auto_start = scenario.scenario.at("run").at("auto_start").get<bool>();
     m.seed = scenario.scenario.at("seed");
@@ -367,6 +406,8 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
     m.state = Json::object();
     m.state["environment"] = {{"surface_z_m", m.surface_z}, {"floor_z_m", m.floor_z}};
     m.state["tasks"] = Json::object();
+
+    // Build each task's observers from its regions, then check its events and scoring are supported.
     const auto envelope = envelopeOf(scenario.robot);
     std::map<std::string, Pose> placements;
     for (const auto &item : scenario.scenario.at("task_placements"))
@@ -383,6 +424,7 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
         if (!placements.count(id))
             invalid("task " + id + " has no placement");
         const Pose &base = placements.at(id);
+        // World pose of a region: the task placement, composed with the region's `frame` when it names one.
         auto placed = [&](const Json &parameters) -> Pose {
             if (!parameters.contains("frame"))
                 return base;
@@ -440,6 +482,8 @@ TaskRuntime::TaskRuntime(const ResolvedScenario &scenario, const RulesRegistry &
             m.score_rules.emplace_back(id, rule);
         }
     }
+
+    // Compiled rules named by the task pack, looked up in the registry.
     for (const auto &entry : scenario.tasks.at("scoring_rules")) {
         const std::string name = entry.at("name").get<std::string>();
         const auto found = rules.find(name);
@@ -456,6 +500,7 @@ void TaskRuntime::reset(std::int64_t time_ns) {
     impl_->reset(time_ns);
 }
 
+// Start a scored run: reset, then apply the chosen options over the defaults.
 void TaskRuntime::start(std::int64_t time_ns, const Json &options) {
     Impl &m = *impl_;
     m.checkTime(time_ns);
@@ -472,6 +517,7 @@ void TaskRuntime::start(std::int64_t time_ns, const Json &options) {
     run["started_ns"] = time_ns;
 }
 
+// Stop the run; open gate attempts are finished (and scored) first.
 Events TaskRuntime::stop(std::int64_t time_ns) {
     Impl &m = *impl_;
     m.checkTime(time_ns);
@@ -496,6 +542,7 @@ Json TaskRuntime::snapshot() const {
     return impl_->state;
 }
 
+// Merge every rules instance's describe() fields.
 Json TaskRuntime::describe() const {
     Impl &m = *impl_;
     Json fields = Json::object();
@@ -510,6 +557,7 @@ Json TaskRuntime::describe() const {
     return fields;
 }
 
+// Concatenate every rules instance's feed() records.
 Json TaskRuntime::feed(const Events &events, const Json &context) const {
     Impl &m = *impl_;
     Json items = Json::array();
@@ -524,6 +572,7 @@ Json TaskRuntime::feed(const Events &events, const Json &context) const {
     return items;
 }
 
+// One entry per proximity target: its face pose, latch state and indicator colours.
 Json TaskRuntime::indicators() const {
     Json out = Json::array();
     for (const auto &t : impl_->targets) {
@@ -541,6 +590,7 @@ Json TaskRuntime::indicators() const {
     return out;
 }
 
+// Normalise externally produced events (a missing or non-string region becomes "") and evaluate them.
 Events TaskRuntime::record(std::int64_t time_ns, const Events &events) {
     Impl &m = *impl_;
     m.checkTime(time_ns);
@@ -560,6 +610,7 @@ Events TaskRuntime::record(std::int64_t time_ns, const Events &events) {
     return result;
 }
 
+// Feed one robot pose to every pose tracker (portals, proximity targets, surfaces, turns) and evaluate the result.
 Events TaskRuntime::observe(std::int64_t time_ns, const spatial::Pose &world_reference) {
     Impl &m = *impl_;
     m.checkTime(time_ns);
@@ -598,6 +649,9 @@ Events TaskRuntime::releaseProjectile(std::int64_t time_ns, int id, const std::s
         invalid("projectile radius must be positive and finite");
     if (!std::isfinite(length_m) || length_m <= 0)
         invalid("projectile length must be positive and finite");
+
+    // Announce the release to each task that can judge it: panels with a `hit` binding for this mechanism type
+    // (with the release distance), else crates with a matching `payload_landing` binding. One event per task.
     Events events;
     std::set<std::string> tasks;
     for (const auto &panel : m.panels) {
@@ -639,6 +693,8 @@ Events TaskRuntime::releaseProjectile(std::int64_t time_ns, int id, const std::s
         }
     }
     Events result = m.guarded([&] { return m.evaluate(events); });
+
+    // Track it for stepProjectile().
     Projectile projectile;
     projectile.mechanism = mechanism_type;
     projectile.radius = radius_m;
@@ -650,6 +706,8 @@ Events TaskRuntime::releaseProjectile(std::int64_t time_ns, int id, const std::s
     return result;
 }
 
+// Judge the segment a projectile's centre swept this step against the panels, crates, pool floor and walls.
+// Panels and crates may stop or deflect it; the corrected position/velocity are returned only when they changed.
 ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const Eigen::Vector3d &start_center,
                                            const Eigen::Vector3d &end_center, const Eigen::Vector3d &axis_in,
                                            const Eigen::Vector3d &velocity_in) {
@@ -675,6 +733,8 @@ ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const E
     Events events;
     Vec3 new_position = end, current = velocity;
     bool stop = false;
+
+    // Panels: a blocked hit stops the projectile at the panel; every hit is reported via matching bindings.
     for (const auto &panel : m.panels) {
         const auto hit = panel.value.intersect(start, end, axis, radius);
         if (!hit)
@@ -700,6 +760,8 @@ ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const E
                                             {"stop_projectile", p.at("stop_projectile")}}));
         }
     }
+
+    // Crates: deflect off walls, and report the first landing (inside / blocked) once.
     for (const auto &crate : m.crates) {
         const std::pair<std::string, std::string> key{crate.task, crate.region};
         const CrateStep step =
@@ -730,6 +792,9 @@ ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const E
                                         {"region_class", crate.value.crateClass()}}));
         }
     }
+
+    // Pool floor (with the projectile's vertical half extent), pool walls and the age limit end the flight; if
+    // nothing scored it yet, every task that saw the release gets a miss.
     const double vertical = radius + std::max(0.0, state.length / 2 - radius) * std::abs(axis[2]);
     std::string reason;
     const double floor_limit = m.floorZAt(new_position) + vertical;
@@ -753,6 +818,7 @@ ProjectileStep TaskRuntime::stepProjectile(std::int64_t time_ns, int id, const E
             events.push_back(makeEvent("payload_miss", "miss", task, "", time_ns,
                                        {{"projectile_id", id}, {"mechanism_type", mechanism}, {"reason", reason}}));
     }
+
     ProjectileStep result;
     result.events = m.guarded([&] { return m.evaluate(events); });
     state.active = !stop;

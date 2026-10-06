@@ -8,6 +8,8 @@ from nereus.packs import resolve_scenario
 from test_packs_rejections import PackRejectionCase
 
 ROBOT_FILE = "robot/robot.yaml"
+
+# Generic robot lines that measure_from_datum rewrites to frame-based placements.
 T0 = "- {id: t0, type: lagged_force, position_m: [-0.3, 0.2, 0], direction: [1, 0, 0], parameters:"
 TARGET = "parameters: {target_position_body_m: [0, 0, -0.05], noise:"
 HULL = "- {id: hull, size_m: [0.6, 0.4, 0.3], center_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}"
@@ -23,6 +25,7 @@ frames:
   - {{parent: base_link, child: imu_mount, position_m: [0.1, 0, 0], orientation_wxyz: [1, 0, 0, 0]}}
   - {{parent: datum, child: thruster_t0, position_m: [0.3, -0.05, -0.125], orientation_wxyz: {YAW}}}
 """
+# The generic robot's own frames block, rooted at the COM.
 COM_FRAMES = """\
 frames:
   root: com
@@ -36,6 +39,7 @@ def from_root(frames: dict[str, Any]) -> dict[str, list[float]]:
     """Frame positions in the root frame (every rotation in these packs is a yaw)."""
     edges = {item["child"]: item for item in frames["transforms"]}
 
+    # Position and accumulated yaw of a frame, composed recursively up to the root.
     def pose(name: str) -> tuple[list[float], float]:
         if name == frames["root"]:
             return [0.0, 0.0, 0.0], 0.0
@@ -52,6 +56,7 @@ def from_root(frames: dict[str, Any]) -> dict[str, list[float]]:
 
 class DatumRootedRobotTests(PackRejectionCase):
     def assert_close(self, actual: Any, expected: Any, where: str = "") -> None:
+        """Compare nested dicts/lists exactly, floats to 1e-12; `where` names the failing path."""
         if isinstance(expected, dict):
             self.assertEqual(sorted(actual), sorted(expected), where)
             for key in expected:
@@ -66,6 +71,7 @@ class DatumRootedRobotTests(PackRejectionCase):
             self.assertEqual(actual, expected, where)
 
     def measure_from_datum(self) -> None:
+        """Re-author the generic robot from `datum`: frames, thruster, altitude target and hull."""
         self.edit(ROBOT_FILE, COM_FRAMES, DATUM_FRAMES)
         self.edit(ROBOT_FILE, T0, "- {id: t0, type: lagged_force, frame: thruster_t0, parameters:")
         self.edit(ROBOT_FILE, TARGET, "parameters: {target_frame: base_link, noise:")
@@ -77,14 +83,19 @@ class DatumRootedRobotTests(PackRejectionCase):
         )
 
     def test_resolves_to_the_com_rooted_geometry(self) -> None:
+        """Resolution re-roots the frame tree at the body frame and matches the COM-rooted pack."""
         expected = resolve_scenario(self.scenario).robot
         self.measure_from_datum()
         robot = resolve_scenario(self.scenario).robot
+
+        # Everything but the frames block matches exactly.
         frames = robot.pop("frames")
         expected_frames = expected.pop("frames")
         self.assert_close(robot, expected)  # thruster, hull box and altitude target among the rest
         self.assertEqual(frames["root"], "com")
         self.assertNotIn("body", frames)
+
+        # Frame positions: datum now hangs off com, and the shared frames sit where they did.
         positions = from_root(frames)
         self.assertEqual(set(positions), {"com", "datum", "base_link", "imu_mount", "thruster_t0"})
         self.assert_close(positions["datum"], [-0.25, 0.5, 0.125])
@@ -99,6 +110,7 @@ class DatumRootedRobotTests(PackRejectionCase):
         self.assertEqual(robot["collision_boxes"][0]["center_m"], [0, 0, 0])
 
     def test_frame_references_are_checked(self) -> None:
+        """Unknown frames, and frame-plus-explicit-pose placements, are rejected."""
         self.measure_from_datum()
         for old, new, fragment in (
             ("  body: com\n", "  body: ghost\n", "/frames/body: unknown frame 'ghost'"),
@@ -119,7 +131,7 @@ class DatumRootedRobotTests(PackRejectionCase):
             with self.subTest(new=new):
                 self.edit(ROBOT_FILE, old, new)
                 self.assert_load_rejects("robot", fragment)
-                self.edit(ROBOT_FILE, new, old)
+                self.edit(ROBOT_FILE, new, old)  # undo for the next case
 
     def test_thruster_needs_a_placement(self) -> None:
         self.edit(

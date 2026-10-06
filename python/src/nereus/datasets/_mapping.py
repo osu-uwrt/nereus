@@ -13,6 +13,7 @@ from nereus.packs._document import plain, read_yaml
 
 from ._documents import mapping_parts
 
+# Export defaults when the label pack's ``export`` block omits them (see export.py)
 DEFAULT_MIN_VISIBLE_PX = 25
 DEFAULT_FRAGMENTS = "reject"
 DEFAULT_MIN_FRAGMENT_PX = 25
@@ -20,6 +21,8 @@ DEFAULT_MIN_FRAGMENT_PX = 25
 
 @dataclass(frozen=True)
 class Rule:
+    """One class of a task's mapping: part-name globs, optionally only in one indicator state."""
+
     name: str
     patterns: tuple[str, ...]
     indicator: str | None
@@ -39,12 +42,16 @@ class ClassMap:
         self.camera: str = models[model]["camera"]
         self.names: list[str] = list(models[model]["classes"])
         self.max_range_m = float(models[model]["max_range_m"])
+
+        # Pack-wide export options and per-class options (``shape: outer`` fills holes)
         export = labels.get("export", {})
         self.min_visible_px = int(export.get("min_visible_px", DEFAULT_MIN_VISIBLE_PX))
         self.fragments: str = export.get("fragments", DEFAULT_FRAGMENTS)
         self.min_fragment_px = int(export.get("min_fragment_px", DEFAULT_MIN_FRAGMENT_PX))
         options = labels.get("classes", {})
         self.outer = {name for name, item in options.items() if item.get("shape") == "outer"}
+
+        # Rules per task, in the pack's order: the first matching rule decides the class
         self.rules: dict[str, list[Rule]] = {}
         for task, classes in labels["tasks"].items():
             rules = []
@@ -82,6 +89,7 @@ def yolo_class_maps(path: Path) -> dict[str, list[str]]:
     data = plain(read_yaml(path))
     found: dict[str, list[str]] = {}
 
+    # Search the whole document: the maps may sit under any node/ros__parameters nesting
     def visit(node: Any) -> None:
         if isinstance(node, dict):
             for key, value in node.items():
@@ -95,6 +103,7 @@ def yolo_class_maps(path: Path) -> dict[str, list[str]]:
 
 
 def _id_map(path: Path, key: str, text: str) -> list[str]:
+    """Parse a ``"{0: 'gate', 1: ...}"`` string into class names in id order (ids 0..n-1)."""
     try:
         value = ast.literal_eval(text.strip())
     except (SyntaxError, ValueError):
@@ -115,6 +124,7 @@ def class_order_problems(labels: dict[str, Any], config: Path) -> tuple[list[str
     notes: list[str] = []
     for name, model in labels["models"].items():
         camera = model["camera"]
+        # Prefer the camera's map; fall back to one named after the model
         deployed = maps.get(camera, maps.get(name))
         if deployed is None:
             notes.append(f"model '{name}': {config} has no {camera}_class_id_map")
@@ -123,6 +133,8 @@ def class_order_problems(labels: dict[str, Any], config: Path) -> tuple[list[str
             notes.append(f"model '{name}': {len(deployed)} classes match {camera}_class_id_map")
             continue
         problems.append(f"model '{name}': classes differ from {camera}_class_id_map")
+
+        # List every id where the two orders disagree ("-" = missing on that side)
         for index in range(max(len(deployed), len(model["classes"]))):
             ours = model["classes"][index] if index < len(model["classes"]) else "-"
             theirs = deployed[index] if index < len(deployed) else "-"

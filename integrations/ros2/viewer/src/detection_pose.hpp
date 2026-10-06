@@ -1,3 +1,5 @@
+// World placement of detection markers: TF lookups at the acquisition stamp, per-observation pose caching,
+// and which placements (truth / estimate) to show.
 #pragma once
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -9,6 +11,8 @@
 #include <visualization_msgs/msg/marker.hpp>
 
 namespace nereus::ros_viewer::host {
+// Rotation taking optical-frame vectors (x right, y down, z forward) into the camera link frame
+// (x forward, y left, z up).
 inline glm::mat4 opticalToLink() {
     glm::mat4 m(0);
     m[0] = {0, -1, 0, 0};
@@ -26,6 +30,7 @@ inline glm::mat4 opticalToLink() {
 inline bool resolveDetectionPose(const visualization_msgs::msg::Marker &marker, const std::string &fixedFrame,
                                  tf2_ros::Buffer &tf, glm::mat4 &worldPose, const std::string &sourceFrame = "",
                                  const glm::mat4 *acquisitionPose = nullptr) {
+    // The frame the marker pose is expressed in: the saved acquisition pose, else TF at the marker stamp.
     glm::mat4 frame(1);
     const rclcpp::Time stamp(marker.header.stamp);
     if (acquisitionPose && stamp.nanoseconds() != 0) {
@@ -42,6 +47,8 @@ inline bool resolveDetectionPose(const visualization_msgs::msg::Marker &marker, 
             return false;
         }
     }
+
+    // Compose the marker's own pose in that frame.
     const auto &p = marker.pose.position;
     const auto &q = marker.pose.orientation;
     worldPose = frame * glm::translate(glm::mat4(1), glm::vec3(p.x, p.y, p.z)) *
@@ -54,6 +61,7 @@ inline bool resolveDetectionPose(const visualization_msgs::msg::Marker &marker, 
 // frame_locked and zero-stamped detections must not follow subsequent TF.
 class DetectionPose {
   public:
+    // Resolve the world pose once (see resolveDetectionPose); later calls keep the first result.
     bool place(const visualization_msgs::msg::Marker &marker, const std::string &fixedFrame, tf2_ros::Buffer &tf,
                const std::string &sourceFrame = "", const glm::mat4 *acquisitionPose = nullptr) {
         if (!placed_)
@@ -72,6 +80,8 @@ class DetectionPose {
             return placed_ = true;
         if (rclcpp::Time(marker.header.stamp).nanoseconds() == 0 || age < retryWindow)
             return false;
+
+        // Retry window expired: fall back to the latest transform.
         auto latest = marker;
         latest.header.stamp = builtin_interfaces::msg::Time();
         placed_ = resolveDetectionPose(latest, fixedFrame, tf, world_);
@@ -96,6 +106,8 @@ class DetectionPose {
 
 // Which placements of a detection to show. PoseSource follows the viewer's pose source.
 enum class DetectionMode { PoseSource, Truth, Estimate, Both };
+
+// Parse the host yaml / --detections placement string; throws on anything else.
 inline DetectionMode parseDetectionMode(const std::string &text) {
     if (text == "pose_source" || text.empty())
         return DetectionMode::PoseSource;
@@ -107,10 +119,13 @@ inline DetectionMode parseDetectionMode(const std::string &text) {
         return DetectionMode::Both;
     throw std::invalid_argument("detections placement must be pose_source|truth|estimate|both, got '" + text + "'");
 }
+
+// The placements actually drawn after resolving the requested mode.
 struct DetectionShow {
     bool truth = false, estimate = false;
     bool downgraded = false; // truth/both was requested but no simulator truth exists: estimate only
 };
+
 // Truth placement needs simulator truth; without it (real robot) truth/both collapse to the estimate.
 inline DetectionShow resolveDetectionMode(DetectionMode requested, bool truthAvailable, bool truthActive) {
     DetectionShow show;

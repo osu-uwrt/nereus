@@ -1,3 +1,5 @@
+// Sensor models sampled by the runtime. Each model has a Reading type, reset(seed, id) and
+// sample(motion, elapsed_seconds) returning a value or an unavailable reason.
 #pragma once
 
 #include "nereus/sensors/readings.hpp"
@@ -7,11 +9,13 @@
 #include <random>
 
 namespace nereus::sensors {
+// Where a sensor sits on the body: offset from the COM and sensor -> body rotation.
 struct Mount {
     Eigen::Vector3d position_body = Eigen::Vector3d::Zero(); // From COM, metres.
     Eigen::Quaterniond sensor_to_body = Eigen::Quaterniond::Identity();
 };
 
+// Per-axis noise: constant bias, white noise per acquisition, and a random walk.
 struct NoiseParameters {
     Eigen::Vector3d bias = Eigen::Vector3d::Zero();
     Eigen::Vector3d white_stddev = Eigen::Vector3d::Zero(); // Per acquisition, not density.
@@ -34,6 +38,7 @@ class Noise3 {
     std::normal_distribution<double> normal_;
 };
 
+// IMU reporting options that change what is published, not the generated noise.
 struct ImuReporting {
     // Measurement-only gravity calibration; direction still comes from the environment.
     std::optional<double> gravity_magnitude; // m/s^2; absent uses physical gravity unchanged.
@@ -41,6 +46,7 @@ struct ImuReporting {
     std::optional<Eigen::Vector3d> force_variance, angular_variance;
 };
 
+// Specific force and angular rate at the mount point, in the sensor frame.
 class Imu {
   public:
     using Reading = ImuReading;
@@ -55,6 +61,7 @@ class Imu {
     ImuReporting reporting_;
 };
 
+// Attitude noise: random-axis angle noise plus a deterministic heading drift over time.
 struct AttitudeParameters {
     double angle_stddev = 0;       // rad, normally distributed angle about an isotropic axis.
     double heading_drift_rate = 0; // rad/s, deterministic rotation about heading_axis_world.
@@ -77,11 +84,13 @@ class Attitude {
     std::normal_distribution<double> normal_;
 };
 
+// AHRS = IMU + attitude parameters sharing one mount.
 struct AhrsParameters {
     NoiseParameters acceleration_noise, gyro_noise;
     ImuReporting inertial_reporting;
     AttitudeParameters attitude;
 };
+
 // Composes two independent models using one mount and one scheduled acquisition.
 class Ahrs {
   public:
@@ -95,6 +104,7 @@ class Ahrs {
     Attitude attitude_;
 };
 
+// Fibre-optic gyro: angular rate projected onto one to three sensor-frame axes.
 class Fog {
   public:
     using Reading = FogReading;
@@ -110,10 +120,13 @@ class Fog {
     std::optional<Eigen::Vector3d> reported_variance_; // Sensor axes, before projection.
 };
 
+// Result of a bottom ray cast: distance along the ray and the bottom's world velocity.
 struct BottomHit {
     double distance; // Along the unit ray, metres.
     Eigen::Vector3d velocity_world = Eigen::Vector3d::Zero();
 };
+
+// Ray-cast callback used by the DVL: (origin, unit direction) in world -> hit or nullopt.
 using BottomQuery = std::function<std::optional<BottomHit>(const Eigen::Vector3d &origin_world,
                                                            const Eigen::Vector3d &direction_world)>;
 // Finite, stationary pool floor. Geometry is copied; no plant or renderer ownership.
@@ -130,6 +143,8 @@ class PoolBottom {
     Eigen::Matrix2d world_to_pool_;
     double boundary_tolerance_{0};
 };
+
+// DVL configuration; returns unavailable outside [minimum_range, maximum_range] metres.
 struct DvlParameters {
     Mount mount;
     Eigen::Vector3d bottom_axis = -Eigen::Vector3d::UnitZ(); // Unit ray in sensor frame.
@@ -137,6 +152,7 @@ struct DvlParameters {
     NoiseParameters velocity_noise;
 };
 
+// Bottom-tracking DVL: needs a BottomQuery (e.g. PoolBottom) to find the floor.
 class Dvl {
   public:
     using Reading = DvlReading;
@@ -155,6 +171,7 @@ struct InclinationLimit {
     Eigen::Vector3d reference_axis_world = -Eigen::Vector3d::UnitZ();
     double maximum_angle = 0; // rad; zero permits only aligned axes. Absence disables the gate.
 };
+
 struct ReferenceVelocityParameters {
     Mount mount;
     Eigen::Vector3d reference_velocity_world = Eigen::Vector3d::Zero();
@@ -176,9 +193,11 @@ class ReferenceVelocity {
     Noise3 noise_;
 };
 
+// Scalar version of NoiseParameters for single-value sensors.
 struct ScalarNoiseParameters {
     double bias = 0, white_stddev = 0, walk_stddev = 0;
 };
+
 struct ReferenceAltitudeParameters {
     Mount mount;
     std::optional<Eigen::Vector3d> target_position_body; // COM-local metres; absent uses mount.
@@ -199,6 +218,7 @@ class ReferenceAltitude {
     Noise3 noise_;
 };
 
+// Pressure sensor configuration; reference_* values convert measured pressure to depth.
 struct PressureParameters {
     Mount mount;
     ScalarNoiseParameters noise;                         // Pa, Pa per acquisition, Pa/sqrt(s).
@@ -207,6 +227,8 @@ struct PressureParameters {
     double reference_gravity = 9.80665;                  // m/s^2.
     double minimum_pressure = 0, maximum_pressure = 1e7; // Inclusive operating range, Pa.
 };
+
+// Environment callback: absolute pressure (Pa) at a world position, or nullopt if unavailable.
 using PressureQuery = std::function<std::optional<double>(const Eigen::Vector3d &position_world)>;
 // Constant-density fluid below a horizontal surface; constant atmospheric pressure above it.
 class HydrostaticPressure {
@@ -218,6 +240,8 @@ class HydrostaticPressure {
   private:
     double level_, surface_pressure_, gradient_;
 };
+
+// Absolute-pressure sensor that also reports depth below the calibration reference pressure.
 class Pressure {
   public:
     using Reading = PressureReading;

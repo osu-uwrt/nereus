@@ -12,11 +12,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def run(args: list[str | Path], *, cwd: Path, env: dict[str, str]) -> None:
+    """Echo a command shell-style, then run it; a non-zero exit raises."""
     print("+ " + " ".join(map(str, args)), flush=True)
     subprocess.run(list(map(str, args)), cwd=cwd, env=env, check=True)
 
 
 def main() -> None:
+    # A clean environment that still finds this interpreter's tools (ruff, mypy, pytest, build).
     interpreter = Path(sys.executable).absolute()
     env = {
         "HOME": os.environ["HOME"],
@@ -25,6 +27,8 @@ def main() -> None:
         "LC_ALL": "C.UTF-8",
         "PIP_DISABLE_PIP_VERSION_CHECK": "1",
     }
+
+    # Lint, format-check and type-check the package, its tests and the typed tools.
     tools = ["tools/check_python.py", "tools/freeze_session_scenarios.py"]
     paths = ["python", "tests/python", *tools]
     run([interpreter, "-m", "ruff", "check", *paths], cwd=ROOT, env=env)
@@ -34,12 +38,17 @@ def main() -> None:
         cwd=ROOT,
         env=env,
     )
+
+    # Tests run against the source tree.
     tests_env = dict(env, PYTHONPATH=str(ROOT / "python/src"))
     run(
         [interpreter, "-m", "pytest", "-q", "-p", "no:cacheprovider"],
         cwd=ROOT / "tests/python",
         env=tests_env,
     )
+
+    # Build a wheel, install it into a fresh venv and validate the Talos scenario with it
+    # (-I: isolated mode, so only the installed wheel can be imported).
     with tempfile.TemporaryDirectory(prefix="nereus-python-") as directory:
         temp = Path(directory)
         run(

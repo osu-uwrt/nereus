@@ -1,5 +1,7 @@
 # rclcpp simulator bridge (nereus-sim) over nereus_session. nereus_bridge_core is middleware free (rosidl introspection only) and is
 # tested against a fake session; the executable adds rclcpp, TF and the real Session adapter.
+
+# ROS packages of the message types the bridge maps, plus TF and the estimator's SetPose service.
 find_package(rclcpp REQUIRED)
 find_package(rcpputils REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -15,6 +17,7 @@ find_package(builtin_interfaces REQUIRED)
 find_package(rosidl_typesupport_introspection_cpp REQUIRED)
 find_package(robot_localization REQUIRED)
 
+# Bridge core: everything but the rclcpp node and the camera sink, shared by nereus-sim and the tests.
 add_library(nereus_bridge_core STATIC
   src/native.cpp src/ros_types.cpp src/mapping.cpp src/visual.cpp src/core.cpp
   src/session_adapter.cpp src/records.cpp)
@@ -25,6 +28,7 @@ target_link_libraries(nereus_bridge_core PUBLIC nereus_session rclcpp::rclcpp rc
   ${sensor_msgs_TARGETS} ${nav_msgs_TARGETS})
 nereus_project_options(nereus_bridge_core)
 
+# The nereus-sim node; camera acquisition is compiled in only when the session cameras library exists.
 add_executable(nereus-sim src/main.cpp src/node.cpp src/camera_sink.cpp)
 target_link_libraries(nereus-sim PRIVATE nereus_bridge_core nereus_rules tf2_ros::tf2_ros
   ${tf2_msgs_TARGETS} ${rosgraph_msgs_TARGETS})
@@ -40,6 +44,7 @@ if(BUILD_TESTING)
   include(GoogleTest)
   # The session library's frozen resolved Talos scenario (configured from its tests/fixtures).
   set(nereus_resolved_talos ${CMAKE_BINARY_DIR}/session_fixtures/talos_uwrt_resolved.json)
+  # One gtest executable per tests/*_test.cpp.
   file(GLOB nereus_bridge_tests CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/*_test.cpp)
   foreach(test_source ${nereus_bridge_tests})
     get_filename_component(test_name ${test_source} NAME_WE)

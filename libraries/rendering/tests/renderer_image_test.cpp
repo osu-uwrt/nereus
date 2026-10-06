@@ -23,6 +23,7 @@ namespace r = nereus::rendering;
 namespace fs = std::filesystem;
 
 namespace {
+// Hidden 64x64 GLFW window with a current OpenGL 3.3 core context; window stays null if none can be made.
 struct Context {
     GLFWwindow *window = nullptr;
     Context() {
@@ -133,6 +134,7 @@ r::View lookDown(const Eigen::Vector3f &eye) {
     return v;
 }
 
+// Scene holding one untransformed instance of the mesh.
 r::Scene scene(std::shared_ptr<const r::MeshAsset> mesh) {
     r::Scene s;
     r::Instance instance;
@@ -141,6 +143,7 @@ r::Scene scene(std::shared_ptr<const r::MeshAsset> mesh) {
     return s;
 }
 
+// Lighting effects off so images are deterministic.
 r::Appearance plain() {
     r::Appearance a;
     a.caustics = 0;
@@ -149,6 +152,7 @@ r::Appearance plain() {
     return a;
 }
 
+// Index into a capture with row 0 at the bottom (OpenGL readback order).
 std::size_t index(const r::ImageCapture &image, int column, int row_from_bottom) {
     return std::size_t(row_from_bottom) * image.width + column;
 }
@@ -162,6 +166,7 @@ r::Scene tiltedQuad(const Eigen::Vector4f &tint) {
     return s;
 }
 
+// Appearance rendering at n x n samples per output pixel.
 r::Appearance supersampled(int n, r::Appearance a = plain()) {
     a.supersample = n;
     return a;
@@ -175,6 +180,7 @@ int toneMapped(float c, float exposure = 1) {
 }
 } // namespace
 
+// Shares one Context and Renderer across the suite; each test gets a temporary directory for PNGs.
 class RendererImage : public ::testing::Test {
   protected:
     static void SetUpTestSuite() {
@@ -182,25 +188,30 @@ class RendererImage : public ::testing::Test {
         if (context->window)
             renderer = std::make_unique<r::Renderer>(NEREUS_RENDERING_SHADERS);
     }
+
     static void TearDownTestSuite() {
         renderer.reset();
         context.reset();
     }
+
     void SetUp() override {
         if (!renderer)
             GTEST_SKIP() << "no OpenGL 3.3 context (DISPLAY unavailable)";
         directory = fs::temp_directory_path() / ("nereus_renderer_image_" + std::to_string(::getpid()));
         fs::create_directories(directory);
     }
+
     void TearDown() override {
         if (!directory.empty())
             fs::remove_all(directory);
     }
+
     static inline std::unique_ptr<Context> context;
     static inline std::unique_ptr<r::Renderer> renderer;
     fs::path directory;
 };
 
+// captureImage() throws before the first draw and skips RGB or depth when not requested.
 TEST_F(RendererImage, CaptureImageRequiresAFrameAndOmitsUnrequestedOutputs) {
     r::Renderer fresh(NEREUS_RENDERING_SHADERS);
     EXPECT_THROW(fresh.captureImage(), std::logic_error);
@@ -215,6 +226,7 @@ TEST_F(RendererImage, CaptureImageRequiresAFrameAndOmitsUnrequestedOutputs) {
     EXPECT_EQ(depth_only.depth.size(), 33u * 17);
 }
 
+// captureImage() RGB/depth equal capture()'s final RGBA/opaque depth and it resets GL_PACK_ALIGNMENT to 1.
 TEST_F(RendererImage, CaptureImageMatchesFullCaptureFinalRgbAndOpaqueDepth) {
     renderer->draw(scene(quad()), view(1.2f, 33.f / 17), plain(), 3, 33, 17);
     glPixelStorei(GL_PACK_ALIGNMENT, 8); // Hostile caller state must not skew RGB8 rows.
@@ -251,6 +263,7 @@ TEST_F(RendererImage, TextureRowsAreFlippedLikeTheOriginalAndReadBackBottomUp) {
     EXPECT_GT(bottom[2], bottom[0]);
 }
 
+// A UV cutout punches a hole through colour and depth (and the shadow pass) without shader changes.
 TEST_F(RendererImage, UvCutoutsRemoveColorAndDepthUsingTheUnchangedShaders) {
     renderer->draw(scene(quad({}, {{{.5f, .5f}, .2f}})), view(), plain(), 0, 64, 64);
     const auto cut = renderer->captureImage(false, true);
@@ -265,6 +278,7 @@ TEST_F(RendererImage, UvCutoutsRemoveColorAndDepthUsingTheUnchangedShaders) {
     EXPECT_NO_THROW(renderer->draw(scene(quad({}, {{{.5f, .5f}, .2f}})), view(), shadowed, 0, 32, 32));
 }
 
+// Lane stripes come from PoolGeometry.markings, so a pool without markings has a plain floor.
 TEST_F(RendererImage, PoolStripesArePaintedFromDataNotTheShader) {
     // 4 m square pool, 2 m deep; the camera is 1 m under water looking down at the floor centre.
     r::PoolGeometry pool;
@@ -304,6 +318,7 @@ TEST_F(RendererImage, PoolStripesArePaintedFromDataNotTheShader) {
     EXPECT_THROW(r::makePoolScene(pool), std::invalid_argument) << "zero-length stripe";
 }
 
+// Texels with alpha below 0.4 are discarded, leaving background depth.
 TEST_F(RendererImage, TransparentTexelsBelowTheOriginalThresholdAreDiscarded) {
     std::vector<std::uint8_t> pixels(4 * 4 * 4, 255);
     for (std::size_t i = 3; i < pixels.size(); i += 4)
@@ -315,6 +330,8 @@ TEST_F(RendererImage, TransparentTexelsBelowTheOriginalThresholdAreDiscarded) {
     EXPECT_EQ(image.depth[index(image, 16, 16)], 1.f);
 }
 
+// Bad cutouts and unreadable, 16-bit, oversized (> 16384 wide) or truncated PNGs throw and invalidate the
+// frame; the next valid draw works.
 TEST_F(RendererImage, InvalidCutoutsAndTexturesAreRejectedAndTheRendererRecovers) {
     const auto rejects = [&](std::shared_ptr<r::MeshAsset> mesh) {
         EXPECT_THROW(renderer->draw(scene(mesh), view(), plain(), 0, 16, 16), std::invalid_argument);
@@ -346,6 +363,7 @@ TEST_F(RendererImage, InvalidCutoutsAndTexturesAreRejectedAndTheRendererRecovers
     EXPECT_NO_THROW(renderer->captureImage());
 }
 
+// Two meshes with the same texture path share one GL texture, which is deleted once no mesh uses it.
 TEST_F(RendererImage, SharedTexturesAreReusedAndReleasedWithTheirMeshes) {
     std::vector<std::uint8_t> pixels(2 * 2 * 3, 128);
     const auto file = directory / "shared.png";
@@ -367,6 +385,7 @@ TEST_F(RendererImage, SharedTexturesAreReusedAndReleasedWithTheirMeshes) {
     EXPECT_EQ(released, 1) << "exactly one shared upload, released with its last mesh";
 }
 
+// The RoboSub torpedo COLLADA asset loads with a texture and renders on screen.
 TEST_F(RendererImage, ImportedTaskAssetWithTextureRenders) {
     const fs::path asset = fs::path(NEREUS_PACK_CONTENT) / "tasks/robosub_2026/assets/torpedo/model.dae";
     if (!fs::exists(asset))
@@ -382,6 +401,7 @@ TEST_F(RendererImage, ImportedTaskAssetWithTextureRenders) {
     EXPECT_LT(image.depth[index(image, 48, 30)], 1.f) << "board must occupy the image centre";
 }
 
+// drawLabels() uses its own target: it neither requires nor disturbs the colour frame or later draws.
 TEST_F(RendererImage, LabelPassBetweenDrawsLeavesFramesAndCapturesUnchanged) {
     std::vector<std::uint8_t> pixels = {255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255};
     const auto file = directory / "quadrants.png";
@@ -421,6 +441,8 @@ TEST_F(RendererImage, LabelPassBetweenDrawsLeavesFramesAndCapturesUnchanged) {
     EXPECT_EQ(image.depth, expected.depth);
 }
 
+// abandonContext() drops CPU-side references (e.g. meshes) without touching GL and leaves the renderer
+// unusable.
 TEST_F(RendererImage, AbandonContextReleasesCpuOwnersWithoutAContextAndIsTerminal) {
     r::Renderer lost(NEREUS_RENDERING_SHADERS);
     auto mesh = quad();
@@ -444,6 +466,7 @@ TEST_F(RendererImage, AbandonContextReleasesCpuOwnersWithoutAContextAndIsTermina
     glfwMakeContextCurrent(context->window);
 }
 
+// Each output pixel is the tone-mapped average of its n x n block of linear HDR samples.
 TEST_F(RendererImage, SupersamplingAveragesEachBlockInLinearHdrBeforeToneMapping) {
     const int w = 40, h = 30;
     const auto frame =
@@ -500,6 +523,7 @@ TEST_F(RendererImage, SupersamplingGivesHardEdgesIntermediateValues) {
     EXPECT_GT(between(2), 40);
 }
 
+// Supersampling a smooth (untextured) floor changes no channel by more than one 8-bit level.
 TEST_F(RendererImage, SupersamplingKeepsSmoothShadingWithinOneLevel) {
     r::PoolGeometry pool;
     pool.dimensions = {4, 4, 2};
@@ -562,6 +586,7 @@ TEST_F(RendererImage, SupersampledDepthIsOneSampleNearestThePixelCentre) {
     }
 }
 
+// Supersample must be 1..4 and fit the maximum texture size; preview frames also render at n x size.
 TEST_F(RendererImage, SupersampleIsValidatedAndPreviewsHonourIt) {
     GLint maximum = 0;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maximum);

@@ -10,11 +10,13 @@ from pathlib import Path
 
 import cairosvg
 
+# Output directories: the docs images (SVG logos) and the viewer's icon directory (PNGs).
 DOCS, ICONS = Path(sys.argv[1]), Path(sys.argv[2])
 CYAN, DEEP, FOAM = "#52dbd1", "#061118", "#e6fbf8"
 
 
 def arc(cx, cy, r, a0, a1):
+    """SVG path of an arc about (cx, cy) from a0 to a1 degrees, counter-clockwise on screen (90 = up)."""
     x0, y0 = cx + r * math.cos(math.radians(a0)), cy - r * math.sin(math.radians(a0))
     x1, y1 = cx + r * math.cos(math.radians(a1)), cy - r * math.sin(math.radians(a1))
     return f"M {x0:.1f} {y0:.1f} A {r} {r} 0 0 0 {x1:.1f} {y1:.1f}"
@@ -29,6 +31,7 @@ def mark(small=False):
         f'stroke-width="{ping_width}" stroke-linecap="round" opacity="{o}"/>'
         for r, o in rings
     )
+    # A thin outline around the tile, dropped at small sizes where it would blur.
     border = (
         ""
         if small
@@ -81,15 +84,19 @@ def glyph(part):
 """
 
 
+# Create the output directories, then the docs logos (full and small-size variants as SVG).
 DOCS.mkdir(parents=True, exist_ok=True)
 ICONS.mkdir(parents=True, exist_ok=True)
 (DOCS / "logo.svg").write_text(mark())
 (DOCS / "logo-small.svg").write_text(mark(small=True))
+
+# App icons at every size, switching to the heavier small mark at 48 px and below.
 for size in (16, 24, 32, 48, 64, 128, 256, 512):
     svg = mark(small=size <= 48)
     (ICONS / f"nereus-{size}.png").write_bytes(
         cairosvg.svg2png(bytestring=svg.encode(), output_width=size, output_height=size)
     )
+
 for part in ("trident", "sonar"):  # white masks the viewer tints (its title bar)
     (ICONS / f"nereus-{part}-128.png").write_bytes(
         cairosvg.svg2png(bytestring=glyph(part).encode(), output_width=128, output_height=128)

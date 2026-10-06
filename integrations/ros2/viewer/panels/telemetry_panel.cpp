@@ -1,7 +1,9 @@
+// "telemetry" panel: the robot's telemetry readings as header / toolbar readouts or a sidebar list.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "status_chip.hpp"
 #include <imgui.h>
+
 namespace nereus::ros_viewer::panels {
 namespace {
 // Header / toolbar form: one readout per reading ("FOG 41.2°C": dot, label, value), coloured by level, details on
@@ -16,6 +18,8 @@ class TelemetryPanel final : public Panel {
                : level == Level::Ok                          ? palette().text
                                                              : palette().muted;
     }
+
+    // One readout per reading on a single line, with label, level and detail in the hover tooltip.
     void chips(const TelemetryState &s) {
         for (std::size_t i = 0; i < s.readings.size(); ++i) {
             const auto &reading = s.readings[i];
@@ -36,6 +40,8 @@ class TelemetryPanel final : public Panel {
         if (telemetry)
             chips(telemetry->state());
     }
+
+    // Same readouts, starting a new line when they don't fit next to the previous toolbar item.
     void toolbar() override {
         if (!telemetry)
             return;
@@ -46,6 +52,7 @@ class TelemetryPanel final : public Panel {
         sameLineIfFits(width);
         chips(s);
     }
+
     void draw() override {
         if (!telemetry) {
             emptyState("Connected, this lists the robot's telemetry readings.");
@@ -64,6 +71,7 @@ class TelemetryPanel final : public Panel {
     }
 };
 } // namespace
+
 void registerTelemetryPanel(Registry &r) {
     r.panels.emplace("telemetry",
                      ViewFactory<Panel>{Kind::Telemetry, [](const YAML::Node &n) { keys(n, {}, "telemetry panel"); },

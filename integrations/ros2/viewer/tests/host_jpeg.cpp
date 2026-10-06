@@ -7,6 +7,7 @@
 
 using namespace nereus::ros_viewer::host;
 namespace {
+// Encodes a packed RGB8 image (w x h) as a quality-95 JPEG in memory with libjpeg.
 std::vector<std::uint8_t> encode(int w, int h, const std::vector<std::uint8_t> &rgb) {
     jpeg_compress_struct info;
     jpeg_error_mgr error;
@@ -15,18 +16,22 @@ std::vector<std::uint8_t> encode(int w, int h, const std::vector<std::uint8_t> &
     unsigned char *buffer = nullptr;
     unsigned long size = 0;
     jpeg_mem_dest(&info, &buffer, &size);
+
     info.image_width = unsigned(w);
     info.image_height = unsigned(h);
     info.input_components = 3;
     info.in_color_space = JCS_RGB;
     jpeg_set_defaults(&info);
     jpeg_set_quality(&info, 95, TRUE);
+
     jpeg_start_compress(&info, TRUE);
     while (info.next_scanline < info.image_height) {
         JSAMPROW row = const_cast<JSAMPROW>(rgb.data() + std::size_t(info.next_scanline) * std::size_t(w) * 3);
         jpeg_write_scanlines(&info, &row, 1);
     }
     jpeg_finish_compress(&info);
+
+    // libjpeg malloc'd the output buffer; copy it out and free it.
     std::vector<std::uint8_t> out(buffer, buffer + size);
     jpeg_destroy_compress(&info);
     free(buffer);
@@ -34,6 +39,7 @@ std::vector<std::uint8_t> encode(int w, int h, const std::vector<std::uint8_t> &
 }
 } // namespace
 
+// Decoding keeps colours in place, DCT-scales down to (at least) the requested width, and rejects bad data.
 TEST(HostJpeg, DecodesColorsAndScalesToTheRequestedWidth) {
     const int w = 256, h = 128;
     std::vector<std::uint8_t> rgb(std::size_t(w) * std::size_t(h) * 3);
@@ -45,21 +51,26 @@ TEST(HostJpeg, DecodesColorsAndScalesToTheRequestedWidth) {
             p[2] = x < w / 2 ? 20 : 230;
         }
     const auto data = encode(w, h, rgb);
+
     DecodedImage full, small;
     ASSERT_TRUE(decodeJpeg(data.data(), data.size(), 256, full));
     ASSERT_EQ(full.width, 256);
     ASSERT_EQ(full.height, 128);
     EXPECT_GT(full.rgb[(10 * 256 + 10) * 3], 200);      // red on the left
     EXPECT_GT(full.rgb[(10 * 256 + 200) * 3 + 2], 200); // blue on the right
+
     ASSERT_TRUE(decodeJpeg(data.data(), data.size(), 64, small));
     EXPECT_EQ(small.width, 64); // 1/4 scale keeps at least the requested width
     EXPECT_EQ(small.height, 32);
     EXPECT_GT(small.rgb[(5 * 64 + 5) * 3], 200);
+
     EXPECT_FALSE(decodeJpeg(data.data(), 10, 64, small)); // truncated header
     const std::uint8_t garbage[] = {1, 2, 3, 4, 5, 6, 7, 8};
     EXPECT_FALSE(decodeJpeg(garbage, sizeof(garbage), 64, small));
 }
 
+// The worker-thread decoder has a single slot: a burst of submits replaces older frames (counted as dropped),
+// the newest one is eventually decoded, and every submit ends up decoded, dropped or failed.
 TEST(HostJpeg, AsyncDecoderKeepsOnlyTheNewestFrameAndNeverBlocksTheCaller) {
     const int w = 128, h = 64;
     std::vector<std::uint8_t> red(std::size_t(w) * std::size_t(h) * 3, 20), blue = red;
@@ -68,6 +79,7 @@ TEST(HostJpeg, AsyncDecoderKeepsOnlyTheNewestFrameAndNeverBlocksTheCaller) {
         blue[i + 2] = 230;
     }
     const auto redJpeg = encode(w, h, red), blueJpeg = encode(w, h, blue);
+
     AsyncJpegDecoder decoder(64);
     DecodedImage image;
     EXPECT_FALSE(decoder.take(image)); // nothing before the first submit
@@ -77,6 +89,7 @@ TEST(HostJpeg, AsyncDecoderKeepsOnlyTheNewestFrameAndNeverBlocksTheCaller) {
     decoder.submit(blueJpeg);
     for (int i = 0; i < 400 && decoder.decoded() == 0; ++i)
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
     // Wait for the worker to reach the newest frame, whatever it decoded in between.
     bool sawBlue = false;
     for (int i = 0; i < 400 && !sawBlue; ++i) {
@@ -87,6 +100,8 @@ TEST(HostJpeg, AsyncDecoderKeepsOnlyTheNewestFrameAndNeverBlocksTheCaller) {
     EXPECT_TRUE(sawBlue);
     EXPECT_EQ(image.width, 64);
     EXPECT_FALSE(decoder.take(image)); // an image is handed out once
+
+    // A bad frame counts as failed; 50 red + 1 blue + 1 bad = 52 submits in all.
     decoder.submit({1, 2, 3, 4, 5, 6});
     for (int i = 0; i < 400 && decoder.failed() == 0; ++i)
         std::this_thread::sleep_for(std::chrono::milliseconds(5));

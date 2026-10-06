@@ -8,6 +8,7 @@
 
 namespace nereus::simulation::detail {
 namespace {
+// Ids must be unique and non-empty, sizes positive, and poses finite with a nonzero quaternion.
 void validate(const std::vector<BoxProxy> &proxies) {
     std::set<std::string> ids;
     if (proxies.size() > 4096)
@@ -19,6 +20,9 @@ void validate(const std::vector<BoxProxy> &proxies) {
             throw std::invalid_argument("invalid collision box identity, size or pose");
     }
 }
+
+// A proxy posed in the world, with its eight vertices precomputed. Body proxies are placed by the COM
+// position and orientation; static proxies use the identity defaults.
 struct Box {
     Eigen::Vector3d size, center;
     Eigen::Quaterniond orientation;
@@ -37,6 +41,8 @@ struct Box {
         if (!vertices.allFinite())
             throw std::invalid_argument("collision box transformed vertices overflow");
     }
+
+    // Extreme vertex along `axis`: largest projection when `maximum`, else smallest.
     Eigen::Vector3d vertex(const Eigen::Vector3d &axis, bool maximum) const {
         Eigen::Index index = 0;
         const Eigen::Matrix<double, 8, 1> projection = vertices.transpose() * axis;
@@ -46,19 +52,29 @@ struct Box {
             projection.minCoeff(&index);
         return vertices.col(index);
     }
+
+    // Inclusive point-in-box test.
     bool contains(const Eigen::Vector3d &point) const {
         return ((orientation.conjugate() * (point - center)).cwiseAbs().array() <= size.array() / 2).all();
     }
+
+    // Closest point of the box to `point`.
     Eigen::Vector3d clamp(const Eigen::Vector3d &point) const {
         const Eigen::Vector3d local = orientation.conjugate() * (point - center);
         return orientation * local.cwiseMax(-size / 2).cwiseMin(size / 2) + center;
     }
 };
+
+// Penetration of a body box into a world box: depth along `normal` (pointing from the world box toward the
+// body) and a contact point.
 struct Contact {
     bool collided{false};
     double depth{0};
     Eigen::Vector3d normal{Eigen::Vector3d::UnitX()}, point{Eigen::Vector3d::Zero()};
 };
+
+// Separating-axis test over the 15 box/box axes (3 + 3 face normals, 9 edge cross products); the axis of
+// least overlap gives the contact normal and depth.
 Contact collide(const Box &body, const Box &world) {
     Eigen::Matrix<double, 3, 15> axes;
     axes.leftCols<3>() = body.rotation;
@@ -85,6 +101,9 @@ Contact collide(const Box &body, const Box &world) {
                 return {};
         }
     }
+
+    // Contact point: the other box's deepest vertex against the face whose axis best matches the normal. If it
+    // isn't inside both boxes, alternating clamps pull it into the overlap.
     Eigen::Matrix<double, 3, 6> box_axes;
     box_axes << body.rotation, world.rotation;
     Eigen::Index index = 0;
@@ -100,11 +119,13 @@ Contact collide(const Box &body, const Box &world) {
     return {true, depth, -minimum, point};
 }
 } // namespace
+
 struct BoxContacts::Impl {
     std::vector<BoxProxy> body;
     std::vector<Box> world; // Static geometry prepared once, outside integration.
     double restitution = .1, friction = .4;
 };
+
 BoxContacts::BoxContacts(std::vector<BoxProxy> body, std::vector<BoxProxy> world, double restitution, double friction)
     : impl_(std::make_unique<Impl>()) {
     validate(body);
@@ -120,7 +141,11 @@ BoxContacts::BoxContacts(std::vector<BoxProxy> body, std::vector<BoxProxy> world
     impl_->restitution = restitution;
     impl_->friction = friction;
 }
+
 BoxContacts::~BoxContacts() = default;
+
+// Sequential impulses in input order (proxy, then obstacle): push the body out along the normal, then, when
+// the contact point is approaching, apply a restitution impulse and Coulomb friction.
 State13d BoxContacts::resolve(State13d state, const Matrix6d &inverse_mass) const {
     const Eigen::Quaterniond raw_orientation(state[3], state[4], state[5], state[6]);
     const Eigen::Quaterniond q = raw_orientation.normalized();
@@ -129,11 +154,14 @@ State13d BoxContacts::resolve(State13d state, const Matrix6d &inverse_mass) cons
             const auto contact = collide(Box(proxy, state.head<3>(), raw_orientation), obstacle);
             if (!contact.collided)
                 continue;
+            // Normal speed of the contact point (world frame); the positional push-out always applies.
             const Eigen::Vector3d offset = contact.point - state.head<3>();
             const double speed = (q * state.segment<3>(7) + (q * state.tail<3>()).cross(offset)).dot(contact.normal);
             state.head<3>() += contact.normal * contact.depth;
             if (speed >= 0)
                 continue;
+
+            // Normal impulse through the 6x6 inverse mass (body axes), with restitution.
             const Eigen::Vector3d normal = q.conjugate() * contact.normal;
             const Eigen::Vector3d arm = q.conjugate() * offset;
             Vector6d jacobian;
@@ -143,6 +171,8 @@ State13d BoxContacts::resolve(State13d state, const Matrix6d &inverse_mass) cons
                 continue;
             const double impulse = -(1 + impl_->restitution) * speed / effective;
             state.tail<6>() += inverse_mass * jacobian * impulse;
+
+            // Coulomb friction against the remaining tangential slip, capped at what stops it.
             const Eigen::Vector3d velocity = state.segment<3>(7) + state.tail<3>().cross(arm);
             Eigen::Vector3d tangent = velocity - normal * velocity.dot(normal);
             if (tangent.norm() > 1e-9) {

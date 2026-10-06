@@ -1,3 +1,4 @@
+// TF frame visibility tree for the TF window: parent links from TF, per-frame and per-branch show / hide.
 #pragma once
 
 #include <map>
@@ -12,13 +13,16 @@ class TfTree {
   public:
     struct Frame {
         std::string parent;
-        bool enabled = true;
-        bool available = false;
+        bool enabled = true;    // shown in the TF overlay
+        bool available = false; // resolvable this frame (set by the caller after update())
     };
-    std::map<std::string, Frame> frames;
+
+    std::map<std::string, Frame> frames; // every frame ever seen, by name
     std::map<std::string, std::vector<std::string>> children;
     std::vector<std::string> roots;
 
+    // Rebuild the hierarchy from child -> parent links. New frames take the last select-all state; known frames
+    // keep their selection.
     void update(const std::map<std::string, std::string> &parents) {
         children.clear();
         roots.clear();
@@ -42,6 +46,8 @@ class TfTree {
                 current = treeParents.at(current);
             }
         }
+
+        // Frames whose parent is unknown (or cut) are roots.
         for (const auto &[name, parent] : treeParents) {
             if (parent.empty() || !parents.count(parent))
                 roots.push_back(name);
@@ -50,6 +56,7 @@ class TfTree {
         }
     }
 
+    // Show or hide every frame, including frames that appear later.
     void selectAll(bool enabled) {
         defaultEnabled = enabled;
         for (auto &[name, frame] : frames)
@@ -58,6 +65,7 @@ class TfTree {
 
     enum class Selection { Hidden, Shown, Mixed };
 
+    // Combined state of `name` and all its descendants.
     Selection branchSelection(const std::string &name) const {
         bool any = false, all = true;
         std::set<std::string> visited;
@@ -77,6 +85,7 @@ class TfTree {
         return all ? Selection::Shown : any ? Selection::Mixed : Selection::Hidden;
     }
 
+    // Show or hide `name` and all its descendants.
     void selectBranch(const std::string &name, bool enabled) {
         std::set<std::string> visited;
         std::vector<std::string> pending{name};

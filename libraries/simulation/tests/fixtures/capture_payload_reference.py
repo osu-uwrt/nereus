@@ -14,6 +14,7 @@ import sys
 
 import numpy as np
 
+# Pinned commit and path of the original Python payload model.
 REVISION = "07647eebe706f96ea7b76db3cc9802735a146698"
 SOURCE = "c_simulator/scripts/payload_model.py"
 FIELDS = (
@@ -33,9 +34,12 @@ FIELDS = (
 
 
 def capture(repository, output):
+    """Write the reference CSV: 16 cases (8 variants x 2 models) of 101 states each."""
     source = subprocess.check_output(["git", "-C", str(repository), "show", f"{REVISION}:{SOURCE}"])
     original = {}
     exec(compile(source, f"{REVISION}:{SOURCE}", "exec"), original)
+
+    # Baseline projectile parameters shared by every case.
     cfg = dict(
         mass=0.01222,
         displaced_volume=1.2e-5,
@@ -51,6 +55,8 @@ def capture(repository, output):
         spring_energy=0.047,
         water_level=0.0,
     )
+
+    # Header rows: the original's identity and hash, then the case and state column names.
     buffer = io.StringIO(newline="")
     writer = csv.writer(buffer, lineterminator="\n")
     writer.writerow(["# original", REVISION, SOURCE, hashlib.sha256(source).hexdigest()])
@@ -86,6 +92,8 @@ def capture(repository, output):
             "world_wz",
         ]
     )
+
+    # Cases 0-7 use the fixed-axis model and 8-15 the finned one, with the same 8 variants.
     for case in range(16):
         model = int(case >= 8)
         variant = case % 8
@@ -96,6 +104,7 @@ def capture(repository, output):
         ry = np.array([[np.cos(b), 0, np.sin(b)], [0, 1, 0], [-np.sin(b), 0, np.cos(b)]])
         rz = np.array([[np.cos(c), -np.sin(c), 0], [np.sin(c), np.cos(c), 0], [0, 0, 1]])
         r = rz @ ry @ rx
+        # Shared initial state; the variants below adjust height, velocity, step or parameters.
         p, v, omega = (
             np.array([-0.2, 0.3, -0.6]),
             np.array([2.3, -0.7, 0.4]),
@@ -132,6 +141,8 @@ def capture(repository, output):
                 dt,
             ]
         )
+
+        # 101 states per case: the initial state, then 100 caller steps of the original model.
         for tick in range(101):
             values = np.concatenate((p, v, r.ravel(), omega))
             if not np.isfinite(values).all():

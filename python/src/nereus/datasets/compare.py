@@ -27,6 +27,8 @@ from .preview import Image, overlay, read_image
 from .render import render
 
 VARIANTS = ("min", "mid", "max")
+
+# Sheet layout (px) and colours (BGR)
 TILE_WIDTH = 640
 SETTINGS_WIDTH = 560
 RATIO = (110, 215, 255)  # BGR amber: multiples of the pool's calibrated values
@@ -42,6 +44,7 @@ DIM = (150, 150, 150)
 
 
 def _number(value: Any) -> bool:
+    """A JSON number (bools excluded)."""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
@@ -107,11 +110,13 @@ def apply_settings(environment: dict[str, Any], settings: list[tuple[str, Any]])
 
 
 def split_range(value: list[float], count: int) -> list[list[float]]:
+    """[low, high] cut into ``count`` equal, consecutive sub-ranges."""
     low, high = float(value[0]), float(value[1])
     step = (high - low) / count
     return [[low + index * step, low + (index + 1) * step] for index in range(count)]
 
 
+# Sampler type -> the distance range its views are spread over (other types repeat the block)
 _SPLIT_KEY = {"approach": "range_m", "overhead": "altitude_m"}
 
 
@@ -151,6 +156,7 @@ def _shard_logs(folder: Path) -> dict[str, dict[str, Any]]:
 
 
 def _reasons(log: dict[str, Any] | None) -> str:
+    """Why a sample has no record: its shard log's rejection counts, else its status."""
     if log is None:
         return "not rendered"
     reasons = log.get("reasons") or {}
@@ -161,6 +167,8 @@ def _reasons(log: dict[str, Any] | None) -> str:
 
 @dataclass
 class View:
+    """One stage-1 view: the task, its slice index, the sampler slice and the rendered record."""
+
     task: str
     index: int
     sampler: dict[str, Any]
@@ -168,11 +176,13 @@ class View:
 
     @property
     def pose(self) -> dict[str, Any]:
+        """The robot pose the view was rendered from, replayed by stage 2's fixed sampler."""
         pose: dict[str, Any] = self.record["robot"]["world_from_root"]
         return pose
 
     @property
     def target_frame(self) -> str | None:
+        """The task frame the view aimed at, if the record names one."""
         frame = self.record.get("target_frame")
         if frame is None:
             frame = self.record.get("randomization", {}).get("target_frame")
@@ -203,6 +213,7 @@ def grid_job(
 
     Returns the job and, per sample index, the (view, variant index) it renders.
     """
+    # Same job, one scenario, no placement jitter, the variants as the environment list
     job = copy.deepcopy(base)
     job["output"] = str(output)
     job["scenarios"] = [base["scenarios"][scenario]]
@@ -210,6 +221,8 @@ def grid_job(
     randomize["environments"] = variants
     randomize["environment_mode"] = "weighted"
     job["randomize"] = randomize
+
+    # Each view replays its pose once per variant, forcing that variant's environment
     samples = []
     layout = []
     for view in views:
@@ -229,16 +242,19 @@ def grid_job(
 
 # ------------------------------------------------------------------ sheets
 
+# Settings panel text scale and line height (px)
 _FONT_SCALE = 0.58
 _LINE = 24
 
 
 def _put(image: Image, text: str, x: int, y: int, ink: tuple[int, int, int], scale: float) -> None:
+    """Anti-aliased text with its baseline at (x, y)."""
     cv2 = cv2_module()
     cv2.putText(image, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale, ink, 1, cv2.LINE_AA)
 
 
 def _numbers(values: Any, digits: int = 3) -> str:
+    """A number or vector with fixed decimals; "-" when the record lacks the value."""
     if isinstance(values, list):
         return " ".join(f"{float(value):.{digits}f}" for value in values)
     if isinstance(values, (int, float)):
@@ -301,6 +317,7 @@ def settings_lines(
 
 
 def settings_panel(title: str, lines: list[tuple[str, str]], height: int) -> Image:
+    """Left-hand panel of a row: section headers, then label / value / pool-ratio columns."""
     panel = np.full((height, SETTINGS_WIDTH, 3), BACKGROUND, dtype=np.uint8)
     _put(panel, title, 12, 30, INK, 0.8)
     y = 30 + _LINE + 4
@@ -320,6 +337,7 @@ def settings_panel(title: str, lines: list[tuple[str, str]], height: int) -> Ima
 
 
 def _blank(height: int, text: str) -> Image:
+    """Placeholder tile with a wrapped message, for a cell that produced no record."""
     tile = np.full((height, TILE_WIDTH, 3), (45, 45, 60), dtype=np.uint8)
     for index, line in enumerate(_wrap(text, 52)):
         _put(tile, line, 16, height // 2 - 10 + 26 * index, (120, 160, 255), 0.65)
@@ -327,6 +345,7 @@ def _blank(height: int, text: str) -> Image:
 
 
 def _wrap(text: str, width: int) -> list[str]:
+    """Greedy word wrap to ``width`` characters."""
     words, lines, line = text.split(" "), [], ""
     for word in words:
         if line and len(line) + 1 + len(word) > width:
@@ -338,6 +357,7 @@ def _wrap(text: str, width: int) -> list[str]:
 
 
 def _caption(tile: Image, text: str) -> None:
+    """Text on a dark strip in the tile's bottom-left corner."""
     cv2 = cv2_module()
     (width, height), baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
     y = tile.shape[0] - 8
@@ -347,6 +367,8 @@ def _caption(tile: Image, text: str) -> None:
 
 @dataclass
 class Cell:
+    """One grid render: where it lives, its sample name, its record (None if rejected), log."""
+
     folder: Path
     name: str
     record: dict[str, Any] | None
@@ -355,6 +377,8 @@ class Cell:
 
 @dataclass
 class Row:
+    """One sheet row: an environment at one variant, with a cell per view."""
+
     environment: str
     variant: str
     cells: list[Cell] = field(default_factory=list)
@@ -369,6 +393,7 @@ def sheet(
     pools: dict[int, dict[str, Any]] | None = None,
 ) -> tuple[Image, list[dict[str, Any]]]:
     """One task's grid; also the settings each row used (for settings.json)."""
+    # Tile height from the first rendered record's aspect ratio (960x600 if none rendered)
     tile_height = round(TILE_WIDTH * 600 / 960)
     for row in rows:
         for cell in row.cells:
@@ -376,6 +401,8 @@ def sheet(
                 camera = cell.record["camera"]
                 tile_height = round(TILE_WIDTH * camera["height"] / camera["width"])
                 break
+
+    # Header: task name over the settings column, then each view's heading
     columns = len(views)
     width = SETTINGS_WIDTH + columns * (TILE_WIDTH + GAP) + GAP
     blocks: list[Image] = []
@@ -385,6 +412,8 @@ def sheet(
         x = SETTINGS_WIDTH + GAP + column * (TILE_WIDTH + GAP)
         _put(header, view.heading, x + 4, 38, INK, 0.62)
     blocks.append(header)
+
+    # One row per environment variant; a thicker grey rule between environments
     pools = pools or {}
     summary = []
     previous = None
@@ -415,6 +444,7 @@ def sheet(
 
 
 def _cell_tile(cell: Cell, row: Row, classes: Any, labels: bool, height: int) -> Image:
+    """A cell's image scaled to the tile width (label overlay optional), cut or padded to height."""
     cv2 = cv2_module()
     if cell.record is None:
         return _blank(height, f"{row.environment}:{row.variant} rejected: {_reasons(cell.log)}")
@@ -440,6 +470,8 @@ def _cell_tile(cell: Cell, row: Row, classes: Any, labels: bool, height: int) ->
 
 @dataclass
 class Options:
+    """Settings of the ``environments`` command (see its argparse help in __main__)."""
+
     tasks: list[str] | None = None
     views: int = 3
     environments: list[str] | None = None
@@ -473,6 +505,8 @@ def compare(dataset: Path, out: Path, options: Options) -> list[Path]:
     """Render the views and the grid; write one JPEG per task and settings.json."""
     cv2 = cv2_module()
     out = Path(out).resolve()
+
+    # Validate the arguments before anything is rendered
     spec = load_document(dataset, "dataset")
     tasks = options.tasks or list(spec.data.get("tasks", {}))
     unknown = [task for task in tasks if task not in spec.data.get("tasks", {})]
@@ -507,8 +541,11 @@ def compare(dataset: Path, out: Path, options: Options) -> list[Path]:
     job["randomize"] = _calm(job["randomize"])
     job["randomize"]["environments"] = [variant(chosen[0], "mid")]
     _write_json(planned.job_path, job)
+
     print(f"stage 1: {len(blocks)} views of {', '.join(tasks)} -> {views_dir}")
     render(views_dir, workers=options.workers, renderer=options.renderer)
+
+    # Samples are named "<task>_<global sample index>"; a missing record was rejected
     by_name = {record["name"]: record for record in records(views_dir)}
     logs = _shard_logs(views_dir)
     views: list[View] = []
@@ -546,6 +583,7 @@ def compare(dataset: Path, out: Path, options: Options) -> list[Path]:
                 folder, name, found.get(name), logs.get(name)
             )
 
+    # One sheet per task; settings.json records every row's settings and each view's pose
     sheets = []
     report: dict[str, Any] = {"dataset_file": str(spec.path), "tasks": {}}
     for task in tasks:

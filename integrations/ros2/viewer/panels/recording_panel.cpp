@@ -1,3 +1,5 @@
+// Recording panel: per-camera SVO recording start/stop and still-image capture on the robot, with a REC chip per
+// recording camera in the header row.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/pins.hpp"
@@ -5,7 +7,11 @@
 #include <cstdio>
 #include <ctime>
 #include <imgui.h>
+
 namespace nereus::ros_viewer::panels {
+
+// "<base>[_<stamp>]_<camera>.svo2" on the robot: a leading ~ becomes `home`, and a .svo2/.svo extension on `base`
+// is kept (moved to the end).
 std::string recordingFile(const std::string &base, const std::string &camera, const std::string &stamp,
                           const std::string &home) {
     std::string stem = base, extension = ".svo2";
@@ -21,13 +27,18 @@ std::string recordingFile(const std::string &base, const std::string &camera, co
     }
     return stem + (stamp.empty() ? "" : "_" + stamp) + "_" + camera + extension;
 }
+
 namespace {
+
+// Elapsed time as MM:SS.
 std::string clock(double seconds) {
     char text[32];
     const int total = int(seconds);
     std::snprintf(text, sizeof(text), "%02d:%02d", total / 60, total % 60);
     return text;
 }
+
+// The local time as YYYYmmdd_HHMMSS.
 std::string localStamp() {
     char text[32];
     const std::time_t now = std::time(nullptr);
@@ -36,12 +47,13 @@ std::string localStamp() {
     std::strftime(text, sizeof(text), "%Y%m%d_%H%M%S", &local);
     return text;
 }
+
 // SVO recording per camera and still capture (the RViz mapping panel's recording and picture taker tools).
 // The path is on the robot; header form: a red REC chip per camera while it records.
 class RecordingPanel final : public Panel {
     std::shared_ptr<Recording> recording;
-    char path[512]{};
-    std::string home;
+    char path[512]{}; // base path on the robot, being edited
+    std::string home; // the robot user's home, for expanding ~ (option `home`, default /home/ros)
     bool timestamp = true;
 
   public:
@@ -50,6 +62,7 @@ class RecordingPanel final : public Panel {
           home(b.options["home"].as<std::string>("/home/ros")), timestamp(b.options["timestamp"].as<bool>(true)) {
         std::snprintf(path, sizeof(path), "%s", b.options["path"].as<std::string>("~/svos/run").c_str());
     }
+
     void header() override {
         if (!recording)
             return;
@@ -66,10 +79,13 @@ class RecordingPanel final : public Panel {
                 ImGui::PopID();
             }
     }
+
     void draw() override {
         auto s = recording ? recording->state() : RecordingState{};
         if (!recording)
             emptyState("Connected, this records SVO video and still images on the robot.");
+
+        // Shared path settings, then a block per camera.
         sectionTitle("SVO recording");
         ImGui::TextUnformatted("Path on the robot");
         ImGui::SetNextItemWidth(-1);
@@ -89,6 +105,8 @@ class RecordingPanel final : public Panel {
                 ImGui::TextColored(levelColor(Level::Error), "REC %s", clock(camera.elapsed).c_str());
             else
                 ImGui::TextDisabled("%s", camera.stopReady || camera.startReady ? "idle" : "service unavailable");
+
+            // The file a Start now would write (the running recording's own file is shown instead while recording).
             const auto file = recordingFile(path, camera.id, timestamp ? localStamp() : "", home);
             ImGui::BeginDisabled(!s.svoSupported || !camera.startReady || camera.pending || camera.recording ||
                                  !path[0]);
@@ -106,6 +124,7 @@ class RecordingPanel final : public Panel {
             if (!camera.message.empty())
                 ImGui::TextWrapped("%s", camera.message.c_str());
         }
+
         sectionTitle("Still images");
         ImGui::BeginDisabled(!recording || !s.captureReady || s.capturing);
         if (pins::Button(s.capturing ? "Capturing...###capture" : "Capture image###capture", {-1, ui(36)}))
@@ -119,7 +138,10 @@ class RecordingPanel final : public Panel {
             ImGui::TextWrapped("%s", s.captureMessage.c_str());
     }
 };
+
 } // namespace
+
+// Registers the "recording" panel type; options: path, home, timestamp.
 void registerRecordingPanel(Registry &r) {
     r.panels.emplace("recording",
                      ViewFactory<Panel>{Kind::Recording,
@@ -131,4 +153,5 @@ void registerRecordingPanel(Registry &r) {
                                         },
                                         [](const Binding &b) { return std::make_unique<RecordingPanel>(b); }});
 }
+
 } // namespace nereus::ros_viewer::panels

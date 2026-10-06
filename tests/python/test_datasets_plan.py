@@ -19,8 +19,10 @@ PACKS = ROOT / "content" / "packs"
 SCENARIO = PACKS / "scenarios" / "talos_uwrt"
 FFC = PACKS / "datasets" / "uwrt_ffc_2026"
 DFC = PACKS / "datasets" / "uwrt_dfc_2026"
+# The real UWRT specs and label pack are optional content; RealSpecTests skips without them.
 HAS_CONTENT = (FFC / "dataset.yaml").is_file() and (PACKS / "labels/uwrt/labels.yaml").is_file()
 
+# A small label pack: ffc and dfc models, a glob, and an indicator-conditioned rule.
 LABELS = """\
 kind: labels
 id: test_labels
@@ -37,6 +39,7 @@ tasks:
 
 
 def _dataset(scenario: str) -> str:
+    """A dataset spec covering three samplers and a background block, for one scenario path."""
     return f"""\
 kind: dataset
 id: test_ffc
@@ -65,12 +68,16 @@ randomize:
 
 
 class PlanTests(unittest.TestCase):
+    """plan() on a fixture spec: labels/ and spec/ folders next to each other in a temp dir."""
+
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
         self.root = Path(self.directory.name)
         (self.root / "labels").mkdir()
         (self.root / "labels" / "labels.yaml").write_text(LABELS)
         (self.root / "spec").mkdir()
+
+        # The spec names the real scenario by a path relative to its own folder.
         scenario = Path(os.path.relpath(SCENARIO, self.root / "spec")).as_posix()
         (self.root / "spec" / "dataset.yaml").write_text(_dataset(scenario))
         self.out = self.root / "out"
@@ -79,6 +86,7 @@ class PlanTests(unittest.TestCase):
         self.directory.cleanup()
 
     def test_job_from_a_fixture_spec(self) -> None:
+        """The written job.json: camera defaults, sample blocks, labelled parts and acceptance."""
         result = plan(self.root / "spec", self.out)
         job = result.job
         self.assertEqual(json.loads((self.out / "job.json").read_text()), job)
@@ -103,6 +111,7 @@ class PlanTests(unittest.TestCase):
             [("torpedo", 7), ("slalom", 3), ("table", 2), (None, 4)],
         )
         self.assertEqual(job["samples"][1]["sampler"]["frame"], ["slalom_front", "slalom_back"])
+
         # Globs expand to parts; pill is not an ffc class; the magnet counts in any indicator state.
         self.assertEqual(
             job["labelled"],
@@ -113,12 +122,16 @@ class PlanTests(unittest.TestCase):
                 {"task": "bins", "part": "magnet_cover"},
             ],
         )
+
+        # Acceptance: max range from the model, unset values from the defaults.
         self.assertEqual(job["acceptance"]["max_range_m"], 4.5)
         self.assertEqual(job["acceptance"]["min_target_px"], 40)
         self.assertEqual(job["acceptance"]["max_attempts"], 200)
         self.assertEqual(job["acceptance"]["fragments"], "reject")  # the label pack default
         self.assertEqual(job["acceptance"]["min_fragment_px"], 25)
         self.assertEqual(job["acceptance"]["min_visible_px"], 25)
+
+        # Randomization: no environments listed, so a single default one.
         randomize = job["randomize"]
         self.assertEqual(
             sorted(randomize),
@@ -136,12 +149,15 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(randomize["environment_mode"], "weighted")
         self.assertEqual(randomize["indicators"], {"latched_probability": 0.5})
         self.assertEqual(randomize["placement"]["groups"], [])
+
+        # The export settings saved for `nereus-dataset export` later.
         export = json.loads((self.out / "job" / "export.json").read_text())
         self.assertEqual(export["model"], "ffc")
         self.assertEqual(export["labels"], str((self.root / "labels/labels.yaml").resolve()))
         self.assertEqual(export["split"], {"train": 0.5, "val": 0.25, "test": 0.25})
 
     def test_scenarios_parts_and_paths(self) -> None:
+        """The job carries the resolved scenario and absolute part-mask/texture paths."""
         job = plan(self.root / "spec" / "dataset.yaml", self.out).job
         (scenario,) = job["scenarios"]
         self.assertEqual(scenario["id"], "talos_uwrt_repair_2026")
@@ -149,6 +165,8 @@ class PlanTests(unittest.TestCase):
         expected = resolve_scenario(SCENARIO).manifest()
         self.assertEqual(resolved["content_sha256"], expected["content_sha256"])
         self.assertIn("asset_paths", resolved)
+
+        # Texture parts: absolute resolved paths and mask values -> part names.
         textures = {Path(item["texture"]).name: item for item in job["parts"]["textures"]}
         torpedo = textures["Task4_ver1_Fixed.png"]
         self.assertTrue(Path(torpedo["texture"]).is_absolute())
@@ -156,12 +174,15 @@ class PlanTests(unittest.TestCase):
         self.assertTrue(Path(torpedo["mask"]).is_file())
         self.assertEqual(torpedo["values"]["1"], "icon_fire")
         self.assertIsNone(torpedo["task"])
+
+        # Visual parts: the slalom pole mesh is labelled per material.
         slalom = next(item for item in job["parts"]["visuals"] if item["task"] == "slalom")
         self.assertEqual(slalom["split"], "none")
         self.assertEqual(slalom["materials"]["Material.001"], "pole_red")
         self.assertIsNone(slalom["part"])
 
     def test_cli_overrides(self) -> None:
+        """CLI overrides pick tasks, set counts and sampler ranges only where they apply."""
         arguments = ["plan", str(self.root / "spec"), "--out", str(self.out)]
         arguments += ["--task", "torpedo", "--task", "table", "--count", "4", "--range-m", "1", "2"]
         arguments += [
@@ -177,6 +198,8 @@ class PlanTests(unittest.TestCase):
         arguments += ["--resolution", "960x600", "--seed", "3"]
         with contextlib.redirect_stdout(io.StringIO()) as stdout:
             self.assertEqual(main(arguments), 0)
+
+        # --count applies per task; range/bearing go to the approach, altitude to the overhead.
         self.assertIn("planned test_ffc: 8 samples, ffc 960x600, seed 3", stdout.getvalue())
         job = json.loads((self.out / "job.json").read_text())
         torpedo, table = job["samples"]
@@ -189,10 +212,13 @@ class PlanTests(unittest.TestCase):
         self.assertNotIn("range_m", table["sampler"])
         self.assertEqual(job["camera"]["resolution_px"], [960, 600])
         self.assertEqual(job["seed"], 3)
+
         supersampled = plan(self.root / "spec", self.out, Overrides(supersample=3)).job
         self.assertEqual(supersampled["camera"]["supersample"], 3)
 
     def test_override_rejections(self) -> None:
+        """Overrides that don't fit the spec are reported; --task background keeps only it."""
+
         def fails(overrides: Overrides) -> list[str]:
             with self.assertRaises(PackError) as caught:
                 plan(self.root / "spec", self.out, overrides)
@@ -203,6 +229,7 @@ class PlanTests(unittest.TestCase):
         self.assertIn("range low", fails(Overrides(range_m=[3, 1]))[0])
         self.assertIn("--resolution", fails(Overrides(resolution="wide"))[0])
         self.assertIn("--supersample", fails(Overrides(supersample=5))[0])
+
         only_background = apply_overrides(
             {"tasks": {"t": {"count": 1, "sampler": {"type": "free"}}}, "background": {}},
             Overrides(tasks=["background"]),
@@ -211,6 +238,7 @@ class PlanTests(unittest.TestCase):
         self.assertIn("background", only_background)
 
     def test_replanning_never_mixes_renders(self) -> None:
+        """Re-planning over existing renders is allowed only for the identical job."""
         plan(self.root / "spec", self.out)
         (self.out / "records").mkdir()
         (self.out / "records" / "torpedo_000000.json").write_text("{}")
@@ -220,6 +248,7 @@ class PlanTests(unittest.TestCase):
         self.assertIn("holds renders of a different job", caught.exception.problems[0])
 
     def test_environments_list_sweep_and_overrides(self) -> None:
+        """list x sweep expands to every combination, keeping the list's relative weights."""
         spec = self.root / "spec" / "dataset.yaml"
         text = spec.read_text().split("randomize:")[0]
         spec.write_text(
@@ -236,6 +265,8 @@ class PlanTests(unittest.TestCase):
       lighting.exposure: [0.7, 1.3]
 """
         )
+
+        # Weights keep the 3:1 ratio, normalized to a mean of 1 over the expanded environments.
         job = plan(spec, self.out).job
         found = job["randomize"]["environments"]
         self.assertEqual(
@@ -256,6 +287,7 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(murky["lighting"]["profile"], "outdoor")
         self.assertEqual(sorted(nominal), ["id", "image", "lighting", "time_s", "water", "weight"])
 
+        # --environment globs select expanded environments; a pattern matching none fails.
         overrides = Overrides(environments=["murky*"], environment_mode="sweep")
         job = plan(spec, self.root / "murky", overrides).job
         self.assertEqual(len(job["randomize"]["environments"]), 2)
@@ -264,12 +296,14 @@ class PlanTests(unittest.TestCase):
             plan(spec, self.root / "none", Overrides(environments=["clear"]))
         self.assertIn("match none of nominal/lighting.exposure=0.7", caught.exception.problems[0])
 
+        # A misspelled sweep key is a schema error.
         spec.write_text(spec.read_text().replace("lighting.exposure", "lighting.exposur"))
         with self.assertRaises(PackError) as caught:
             plan(spec, self.root / "typo")
         self.assertIn("'exposur' was unexpected", "\n".join(caught.exception.problems))
 
     def test_weight_zero_environments_are_dropped(self) -> None:
+        """Weight-0 environments are dropped, and can't be selected by --environment either."""
         randomize = {
             "environments": {"mode": "sweep", "list": [{"id": "on"}, {"id": "off", "weight": 0}]}
         }
@@ -280,6 +314,7 @@ class PlanTests(unittest.TestCase):
             _randomize(randomize, Overrides(environments=["off"]))
 
     def test_environment_layers(self) -> None:
+        """Environment values layer over the base; absolute and scale forms replace each other."""
         found, mode = expand(
             {
                 "water": {"tint_rgb": [0.1, 0.2, 0.3]},
@@ -294,15 +329,19 @@ class PlanTests(unittest.TestCase):
         self.assertNotIn("tint_scale", found[0]["water"])
         self.assertEqual(found[1]["water"]["tint_scale"], 1.1)  # the higher layer's form wins
         self.assertNotIn("tint_rgb", found[1]["water"])
+
+        # A sweep with no list sweeps an implicit "base" environment.
         sweep_only, _ = expand({"environments": {"sweep": {"time_s": [0, 300]}}})
         self.assertEqual([item["id"] for item in sweep_only], ["base/time_s=0", "base/time_s=300"])
 
     def test_bad_frame_and_model(self) -> None:
+        """Planning cross-checks sampler frames against the course and the model against labels."""
         spec = self.root / "spec" / "dataset.yaml"
         spec.write_text(spec.read_text().replace("slalom_back]", "gate_repair]"))
         with self.assertRaises(PackError) as caught:
             plan(spec, self.out)
         self.assertIn("task 'slalom' has no frame 'gate_repair'", caught.exception.problems[0])
+
         spec.write_text(spec.read_text().replace("model: ffc", "model: bfc"))
         with self.assertRaises(PackError) as caught:
             plan(spec, self.out)
@@ -311,7 +350,10 @@ class PlanTests(unittest.TestCase):
 
 @unittest.skipUnless(HAS_CONTENT, "UWRT dataset specs not present")
 class RealSpecTests(unittest.TestCase):
+    """The shipped UWRT ffc/dfc dataset specs plan cleanly with the expected labels."""
+
     def _plan(self, spec: Path, **overrides: Any) -> dict[str, Any]:
+        """Plan a spec into a throwaway folder and return the job."""
         with tempfile.TemporaryDirectory() as directory:
             return plan(spec, Path(directory), Overrides(**overrides)).job
 
@@ -325,6 +367,8 @@ class RealSpecTests(unittest.TestCase):
         for item in found:  # pool-relative water: never an absolute scattering
             self.assertNotIn("scattering", item["water"], item["id"])
         self.assertEqual(job["acceptance"]["fragments"], "reject")
+
+        # Background block last; pole_white and the pill (dfc only) are unlabelled.
         tasks = [block["task"] for block in job["samples"]]
         self.assertEqual(tasks[-1], None)
         self.assertIn("torpedo", tasks)
@@ -333,6 +377,7 @@ class RealSpecTests(unittest.TestCase):
         self.assertIn(("bins", "magnet_cover"), labelled)
         self.assertNotIn(("slalom", "pole_white"), labelled)
         self.assertNotIn(("table", "icon_pill"), labelled)
+
         small = self._plan(FFC, tasks=["torpedo"], count=4, resolution="960x600")
         self.assertEqual([(b["task"], b["count"]) for b in small["samples"]], [("torpedo", 4)])
 

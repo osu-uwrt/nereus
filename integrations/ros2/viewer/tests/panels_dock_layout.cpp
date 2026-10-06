@@ -12,17 +12,20 @@
 
 using namespace nereus::ros_viewer;
 namespace {
+// A stand-in viewer window: its "Title###id" name, preset dock area, tab options and open flag.
 struct Win {
     std::string name;
     Dock area;
     bool stacked = false, selected = false, open = true;
 };
+
 ImGuiWindow *find(const std::string &name) {
     return ImGui::FindWindowByName(name.c_str());
 }
 } // namespace
 
 int main() {
+    // Headless ImGui with docking, a 1600 x 900 display and a built font atlas.
     ImGui::CreateContext();
     auto &io = ImGui::GetIO();
     io.IniFilename = nullptr;
@@ -32,6 +35,7 @@ int main() {
     unsigned char *pixels;
     int w, h;
     io.Fonts->GetTexDataAsRGBA32(&pixels, &w, &h);
+
     const ImGuiID dockspace = ImHashStr("test_dockspace");
     const std::string pool = "Pool view###pool";
     std::vector<Win> windows{{"Motion###panel.motion", Dock::LeftTop},
@@ -47,9 +51,11 @@ int main() {
             flags.emplace_back(window.name.substr(window.name.find("###") + 3), &window.open);
         return flags;
     });
-    states.install();
+    states.install(); // the [Nereus][Windows] ini handler
     std::string pendingPreset = "standard", pendingIni;
     ImGuiDockNodeFlags dockFlags = 0;
+
+    // One viewer frame: apply a pending ini / preset, then the dock space, the pool view and the open windows.
     const auto frame = [&] {
         if (!pendingIni.empty()) { // as the viewer: between frames, before NewFrame
             ImGui::LoadIniSettingsFromMemory(pendingIni.c_str(), pendingIni.size());
@@ -76,16 +82,21 @@ int main() {
         states.update();
         ImGui::Render();
     };
+
+    // Docking settles over a few frames.
     const auto settle = [&] {
         for (int i = 0; i < 4; ++i)
             frame();
     };
     const auto node = [&](const std::string &name) { return find(name)->DockNode; };
+    // The window is the visible tab of its dock node.
     const auto shown = [&](const std::string &name) {
         auto *window = find(name);
         return window && window->DockNode && window->DockNode->TabBar &&
                window->DockNode->TabBar->VisibleTabId == window->TabId;
     };
+
+    // The "standard" preset: panels on the left (24 % wide), pool view central, feeds and map stacked right.
     const auto checkStandard = [&] {
         assert(node(pool) && node(pool)->IsCentralNode());
         for (int i = 0; i < 6; ++i)
@@ -102,6 +113,7 @@ int main() {
         assert(ffc->Pos.y < dfc->Pos.y && dfc->Pos.y < map->Pos.y);
         assert(std::abs(ffc->Size.y - dfc->Size.y) < 4); // stacked: even shares
     };
+
     settle();
     checkStandard();
     // Lock layout (the viewer's dock space flags) keeps the arrangement as it is.
@@ -117,12 +129,14 @@ int main() {
     assert(!windowInFront(windows[1].name.c_str())); // a tab behind Autonomy
     assert(windowInFront(windows[6].name.c_str()) && !windowInFront("nothing###none"));
     ImGui::EndFrame();
+
     // Right-click on a docked window's tab opens a context menu called right after its Begin.
     {
         const auto *motion = find(windows[0].name); // alone in its node, its tab still shown
         const ImVec2 tab((motion->DC.DockTabItemRect.Min.x + motion->DC.DockTabItemRect.Max.x) / 2,
                          (motion->DC.DockTabItemRect.Min.y + motion->DC.DockTabItemRect.Max.y) / 2);
         bool opened = false;
+        // A frame where every window offers a context menu on its tab, as the viewer does.
         const auto menuFrame = [&] {
             ImGui::NewFrame();
             ImGui::DockSpaceOverViewport(dockspace, ImGui::GetMainViewport(), dockFlags);
@@ -243,6 +257,8 @@ int main() {
     assert(saved.find("camera.gone=1") != std::string::npos && saved.find("map=0") != std::string::npos);
     assert(states.saved("camera.gone") && !states.saved("nothing"));
 
+    // Saved layout files: names are sanitised into file stems, listed alphabetically (only *.ini), and kept
+    // under $XDG_CONFIG_HOME/nereus.
     assert(layoutFileStem("  Pool day / 2 ") == "Pool day  2");
     assert(layoutFileStem("../..") == "" && layoutFileStem("a_b-c") == "a_b-c");
     const auto dir = std::filesystem::temp_directory_path() / ("nereus_layouts_" + std::to_string(::getpid()));
@@ -255,6 +271,7 @@ int main() {
     setenv("XDG_CONFIG_HOME", "/tmp/xdg", 1);
     assert(configDirectory() == "/tmp/xdg/nereus");
     assert(findPreset("standard") && findPreset("wide") && findPreset("cameras") && !findPreset("nope"));
+
     ImGui::DestroyContext();
     std::cout << "PASS: dock presets, tab selection, window states in the ini, mid-session restore\n";
 }

@@ -17,6 +17,7 @@ FROZEN_TALOS = ROOT / "libraries" / "session" / "tests" / "fixtures" / "talos_uw
 
 
 def frozen_scenario(path: Path = FROZEN_TALOS) -> dict[str, Any]:
+    """Load a frozen resolved scenario, filling in the CMake source-dir placeholder."""
     text = path.read_text("utf-8").replace("@NEREUS_SOURCE_DIR@/", f"{ROOT}/")
     document: dict[str, Any] = json.loads(text)
     return document
@@ -24,8 +25,11 @@ def frozen_scenario(path: Path = FROZEN_TALOS) -> dict[str, Any]:
 
 IDENTITY = [1, 0, 0, 0]
 ORIGIN = [0, 0, 0]
+# A one-triangle OBJ: the smallest mesh the asset loader accepts.
 MESH = b"o hull\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
 
+# YAML fragments GenericCameraFieldTests.setUp splices into the generic packs. CAMERA_FRAMES
+# replaces "collision_boxes:", so its first two lines extend the transforms list above it.
 ASSET = "assets:\n- {id: hull_mesh, path: assets/hull.obj}\n"
 CAMERA_FRAMES = """\
   - {parent: base_link, child: cam_left, position_m: [0.2, 0, 0], orientation_wxyz: [0.5, -0.5, 0.5, -0.5]}
@@ -73,6 +77,7 @@ lighting:
 
 
 def mutate(text: str, old: str, new: str) -> str:
+    """Replace the single occurrence of `old`; fails if it is missing or ambiguous."""
     assert text.count(old) == 1, f"expected exactly one {old!r}, found {text.count(old)}"
     return text.replace(old, new)
 
@@ -90,8 +95,11 @@ class TalosCameraFieldTests(unittest.TestCase):
         cls.pool = frozen["pool"]
 
     def test_visuals_use_present_assets_at_their_initial_configuration(self) -> None:
+        """Every visual names a known asset, and the meshes hang off the expected frames."""
         present = {item["id"] for item in self.robot["assets"]}
         placed: dict[str, list[str]] = {}
+
+        # Check each visual's asset and pose, grouping asset ids by the frame they hang off.
         for visual in self.robot["visuals"]:
             self.assertIn(visual["asset"], present)
             magnet = next(item for item in self.robot["mechanisms"] if item["type"] == "magnet")
@@ -104,6 +112,8 @@ class TalosCameraFieldTests(unittest.TestCase):
             )
             self.assertEqual(visual["orientation_wxyz"], IDENTITY)
             placed.setdefault(visual["frame"], []).append(visual["asset"])
+
+        # Hull and rotors on origin, the claw meshes on the claw frame, the magnet on its mount.
         rotors = [f"rotor_{item['id']}" for item in self.robot["thrusters"]]
         self.assertEqual(sorted(placed["origin"]), sorted(["body_mesh", *rotors]))
         claw = next(item for item in self.robot["mechanisms"] if item["type"] == "claw")
@@ -124,6 +134,7 @@ class TalosCameraFieldTests(unittest.TestCase):
         self.assertEqual(set(placed), {"origin", claw["frame"]})
 
     def test_stereo_cameras_are_enabled_with_rectified_right_eyes(self) -> None:
+        """Both stereo cameras are on, and each right eye sits at [baseline, 0, 0], unrotated."""
         transforms = {item["child"]: item for item in self.robot["frames"]["transforms"]}
         cameras = [item for item in self.robot["sensors"] if item["type"] == "stereo_camera"]
         self.assertEqual({item["id"] for item in cameras}, {"ffc", "dfc"})
@@ -139,6 +150,8 @@ class TalosCameraFieldTests(unittest.TestCase):
                 self.assertEqual(right["parent"], camera["frame"])
                 self.assertEqual(right["position_m"], [parameters["baseline_m"], 0, 0])
                 self.assertEqual(right["orientation_wxyz"], IDENTITY)
+
+        # The frozen calibrated baselines, to the last bit.
         baselines = {item["id"]: item["parameters"]["baseline_m"] for item in cameras}
         self.assertEqual(baselines, {"ffc": 0.04975591649077412, "dfc": 0.05030758651145167})
 
@@ -159,6 +172,7 @@ class TalosCameraFieldTests(unittest.TestCase):
         )
 
     def test_unedited_packs_save_byte_exact(self) -> None:
+        """Loading and re-dumping the live Talos and 2026 pool packs reproduces their files."""
         for relative, name in (("robots/talos", "robot.yaml"), ("pools/robosub_2026", "pool.yaml")):
             with self.subTest(pack=relative):
                 folder = CONTENT / relative
@@ -174,6 +188,8 @@ class GenericCameraFieldTests(unittest.TestCase):
         self.root = Path(temporary.name) / "packs"
         self.root.mkdir()
         self.scenario = write_generic_packs(self.root)
+
+        # Give the robot a hull mesh, camera frames and a stereo camera; the pool its appearance.
         (self.root / "robot" / "assets").mkdir()
         (self.root / "robot" / "assets" / "hull.obj").write_bytes(MESH)
         self.edit("robot", "assets: []\n", ASSET)
@@ -183,10 +199,12 @@ class GenericCameraFieldTests(unittest.TestCase):
         pool.write_text(pool.read_text("utf-8") + APPEARANCE, encoding="utf-8")
 
     def edit(self, pack: str, old: str, new: str) -> None:
+        """Apply one exact text replacement to a pack's YAML file."""
         target = self.root / pack / f"{pack}.yaml"
         target.write_text(mutate(target.read_text("utf-8"), old, new), encoding="utf-8")
 
     def rejects(self, pack: str, old: str, new: str, fragment: str) -> None:
+        """Apply the edit and assert loading the pack fails with `fragment` in the message."""
         self.edit(pack, old, new)
         with self.assertRaises(PackError) as caught:
             load_pack(self.root / pack)
@@ -201,6 +219,8 @@ class GenericCameraFieldTests(unittest.TestCase):
                 self.assertEqual(document.dumps(), source)
                 copy = document.save(self.root / pack / "copy.yaml")
                 self.assertEqual(copy.read_text("utf-8"), source)
+
+        # Spot-check that the new fields survive into the plain documents.
         robot = load_pack(self.root / "robot").plain()
         self.assertEqual(robot["visuals"][0]["asset"], "hull_mesh")
         self.assertEqual(robot["sensors"][-1]["parameters"]["right_frame"], "cam_right")
@@ -209,6 +229,7 @@ class GenericCameraFieldTests(unittest.TestCase):
         self.assertEqual(pool["water_optics"]["tint_rgb"], [0.025, 0.22, 0.29])
 
     def test_optional_fields_may_be_omitted(self) -> None:
+        """right_frame may go once no right-eye output is listed; tint_rgb may always go."""
         self.edit("robot", "    right_frame: cam_right\n", "")
         self.edit("robot", "rgb_right, camera_info_right", "rgb_right")
         with self.assertRaises(PackError):  # right outputs still listed
@@ -244,10 +265,11 @@ class GenericCameraFieldTests(unittest.TestCase):
         ]
         for old, new, fragment in cases:
             with self.subTest(fragment=fragment):
-                self.setUp()
+                self.setUp()  # fresh packs for every case
                 self.rejects("robot", old, new, fragment)
 
     def test_right_eye_must_be_the_rectified_baseline(self) -> None:
+        """right_frame must be a direct child of the left eye at [baseline_m, 0, 0], unrotated."""
         cases = [
             ("    right_frame: cam_right\n", "", "right-eye outputs require right_frame"),
             ("    right_frame: cam_right\n", "    right_frame: ghost\n", "must be a child"),
@@ -274,6 +296,7 @@ class GenericCameraFieldTests(unittest.TestCase):
                 self.rejects("robot", old, new, fragment)
 
     def test_camera_values_outside_native_invariants_are_rejected(self) -> None:
+        """Python validation rejects camera values the C++ renderer would refuse."""
         cases = [
             ("resolution_px: [64, 48]", "resolution_px: [4097, 48]", "resolution_px"),
             ("resolution_px: [64, 48]", "resolution_px: [64, 0]", "resolution_px"),
@@ -295,6 +318,7 @@ class GenericCameraFieldTests(unittest.TestCase):
                 self.rejects("robot", old, new, fragment)
 
     def test_pool_appearance_outside_original_ranges_is_rejected(self) -> None:
+        """Out-of-range, missing and unknown water_optics/lighting keys are rejected."""
         cases = [
             ("tint_rgb: [0.025, 0.22, 0.29]", "tint_rgb: [0.025, 1.2, 0.29]", "tint_rgb"),
             ("tint_rgb: [0.025, 0.22, 0.29]", "tint_rgb: [0.025, 0.22]", "tint_rgb"),

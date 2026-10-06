@@ -11,10 +11,13 @@
 #include <string>
 
 namespace nereus::session {
+// Water the props sit in: uniform current (world frame, m/s) and density (kg/m^3).
 struct Water {
     Eigen::Vector3d velocity_world{Eigen::Vector3d::Zero()};
     double density{998.2};
 };
+
+// A prop's reported pose and where it is (held by a mechanism, resting in a basket).
 struct PropState {
     Eigen::Vector3d position;       // mesh origin in world
     Eigen::Quaterniond orientation; // world from mesh
@@ -23,6 +26,7 @@ struct PropState {
     std::string basket;       // basket region id when resting in one
 };
 
+// Contact world for one task's props; `mechanism_id` names the claw whose jaws take part (empty: none).
 class PropWorld {
   public:
     PropWorld(const ResolvedScenario &scenario, const std::string &task, const std::string &mechanism_id = {});
@@ -35,12 +39,15 @@ class PropWorld {
     Events step(double dt_s, std::int64_t time_ns, const spatial::Pose &robot_root_pose,
                 const Eigen::Vector3d &linear_velocity_world, const Eigen::Vector3d &angular_velocity_world,
                 const std::array<double, 2> &claw_joint_positions, const Water &water, bool enabled);
+    // Props back to their initial poses; nothing held.
     void reset();
+
     const std::string &task() const;
     const std::string &mechanismId() const;
     std::map<std::string, PropState> props() const;
     std::map<std::string, std::string> basketContents() const;
     double jawPosition() const; // physical jaw travel (lags the mechanism while blocked)
+
     // Robot-side contacts for the plant: the claw pads and a
     // held prop move with the robot and push it back from this task's scenery, the pool boxes and
     // props resting on scenery. Updated by step()/reset(); install with Runtime::setContactResolver.

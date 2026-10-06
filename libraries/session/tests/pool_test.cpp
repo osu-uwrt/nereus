@@ -1,3 +1,4 @@
+// Tests for building the pool model (floor profile, contact boxes, fixtures) from pool pack JSON.
 #include <nereus/session/pool.hpp>
 
 #include <gtest/gtest.h>
@@ -9,6 +10,7 @@ using nereus::session::Json;
 using nereus::session::poolFloor;
 using nereus::session::poolModel;
 
+// A flat pool keeps its own boxes; a floor_profile replaces the floor box with one box per profile segment.
 TEST(PoolFloor, ProfiledPoolsGenerateFlaggedFloorBoxes) {
     auto pool = Json::parse(R"({
         "parameters": {"length_m": 20, "width_m": 8, "depth_m": 5, "water_level_m": 0},
@@ -29,6 +31,8 @@ TEST(PoolFloor, ProfiledPoolsGenerateFlaggedFloorBoxes) {
     EXPECT_TRUE(flat.floor.isFlat());
     EXPECT_DOUBLE_EQ(flat.floor.depthAt({10, 4}), 5);
     EXPECT_DOUBLE_EQ(poolFloor(pool).depthAt({10, 4}), 5);
+
+    // Replace the floor box with a profile along x: one generated floor box per profile segment.
     pool["collision_boxes"].erase(1);
     pool["parameters"]["floor_profile"] = {{"along", "x"}, {"points_m", {{0, 5}, {8, 5}, {14, 3}, {20, 3}}}};
     const auto model = poolModel(pool);
@@ -54,6 +58,7 @@ TEST(PoolFloor, ProfiledPoolsGenerateFlaggedFloorBoxes) {
               1 + both.floor.profiles()[0].polyline().size() - 1 + both.floor.profiles()[1].polyline().size() - 1);
 }
 
+// Fixture boxes and meshes without a z sit on the (sloped) floor; only fixtures with contact: true collide.
 TEST(PoolFloor, FixtureBoxesRestOnTheFloorAndCanCollide) {
     const auto pool = Json::parse(R"({
         "parameters": {"length_m": 20, "width_m": 8, "depth_m": 5, "water_level_m": 0.5,

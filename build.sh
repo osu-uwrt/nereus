@@ -7,10 +7,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Pick the preset: the first argument, else ros-viewer inside a sourced ROS 2 environment, else datasets.
 preset=${1:-}
 if [[ -z $preset ]]; then
     if [[ -n ${ROS_DISTRO:-} ]]; then preset=ros-viewer; else preset=datasets; fi
 fi
+
+# Size the parallel jobs from available memory (see the header), clamped to [1, nproc].
 available_gb=$(awk '/MemAvailable/ {print int($2 / 1048576)}' /proc/meminfo)
 jobs=$(((available_gb - 4) / 3))
 ((jobs > $(nproc))) && jobs=$(nproc)

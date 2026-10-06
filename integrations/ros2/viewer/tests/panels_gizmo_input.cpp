@@ -1,9 +1,12 @@
+// The pose gizmo overlay's mouse input (headless ImGui): dragging a translation arrow moves the commanded pose
+// along its own body axis, and dragging a rotation ring turns it smoothly, with the camera still or moving.
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panels/pose_math.hpp"
 #include <cassert>
 #include <imgui.h>
 using namespace nereus::ros_viewer::panels;
 namespace {
+// A Motion provider that records the gizmo's drag commands and does nothing else.
 struct MotionProbe : Motion {
     MotionState s;
     int commands = 0;
@@ -19,10 +22,15 @@ struct MotionProbe : Motion {
         ++commands;
     }
 };
+
+// Screen position (pixels, top-left origin) of a world point.
 glm::vec2 project(const Viewport &v, glm::vec3 point) {
     auto clip = v.projection * v.view * glm::vec4(point, 1);
     return v.origin + glm::vec2(clip.x / clip.w * .5f + .5f, .5f - clip.y / clip.w * .5f) * v.size;
 }
+
+// Drags the gizmo's `axis` arrow 10 cm outwards (optionally moving the camera mid-drag) and returns the new
+// commanded position.
 // `display`: Viewport::displayFromCommand (gizmo drawn re-rooted, e.g. at the simulator truth robot). Drags
 // are made on the displayed gizmo and must still move the command along its own body axis.
 glm::vec3 dragAxis(Registry &registry, int axis, bool cameraMoves, const glm::mat4 &display = glm::mat4(1)) {
@@ -33,6 +41,7 @@ glm::vec3 dragAxis(Registry &registry, int axis, bool cameraMoves, const glm::ma
     motion->s.commanded = initial;
     const glm::vec3 direction(initial[axis]);
     auto overlay = registry.overlays.at("pose_gizmo").create({motion, YAML::Node(), {}, {}});
+
     Viewport view;
     view.eye = {2, -3, 2};
     view.view = glm::lookAt(view.eye, glm::vec3(0), glm::vec3(0, 0, 1));
@@ -44,6 +53,7 @@ glm::vec3 dragAxis(Registry &registry, int axis, bool cameraMoves, const glm::ma
     view.eye = glm::vec3(display * glm::vec4(view.eye, 1));
     view.view = glm::lookAt(view.eye, glm::vec3(display[3]), glm::vec3(display * glm::vec4(0, 0, 1, 0)));
     const auto shown = [&](float along) { return glm::vec3(display * glm::vec4(direction * along, 1)); };
+    // Grab the arrow 0.43 m out and pull it to 0.53 m.
     const auto start = project(view, shown(.43f)), end = project(view, shown(.53f));
     auto frame = [&](glm::vec2 cursor, bool pressed) {
         auto &io = ImGui::GetIO();
@@ -57,6 +67,7 @@ glm::vec3 dragAxis(Registry &registry, int axis, bool cameraMoves, const glm::ma
         ImGui::End();
         ImGui::Render();
     };
+
     frame(start, false);
     frame(start, true);
     if (cameraMoves) {
@@ -67,6 +78,7 @@ glm::vec3 dragAxis(Registry &registry, int axis, bool cameraMoves, const glm::ma
     frame(end, true);
     frame(end, false);
     assert(motion->commands > 0);
+
     // A 10 cm body-axis drag must transform into the corresponding world
     // displacement, even while Follow translates the viewing camera.
     const auto local = glm::transpose(glm::mat3(initial)) * glm::vec3(motion->s.commanded[3]);
@@ -75,10 +87,13 @@ glm::vec3 dragAxis(Registry &registry, int axis, bool cameraMoves, const glm::ma
     for (int i = 0; i < 3; ++i)
         if (i != axis)
             assert(std::abs(local[i]) < 1e-5f);
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 3; ++i) // orientation untouched
         assert(glm::length(motion->s.commanded[i] - initial[i]) < 1e-5f);
     return glm::vec3(motion->s.commanded[3]);
 }
+
+// Turns the gizmo's `axis` ring two full turns in `direction` (+1 / -1), checking every step against the
+// expected rotation, then the centre dead zone and Escape.
 void rotateRing(Registry &registry, int axis, float direction, bool cameraMoves) {
     auto motion = std::make_shared<MotionProbe>();
     motion->s.enabled = motion->s.fresh = motion->s.hasCommand = true;
@@ -97,6 +112,8 @@ void rotateRing(Registry &registry, int axis, float direction, bool cameraMoves)
     view.size = {800, 600};
     view.interactive = view.focused = true;
     const auto frozenView = view;
+
+    // The cursor on the ring (radius .345 m) `angle` radians past the grab point, projected in the starting view.
     const auto cursor = [&](float angle) {
         const float phase = .65f + angle;
         return project(frozenView, .345f * (std::cos(phase) * reference + std::sin(phase) * side));
@@ -115,6 +132,7 @@ void rotateRing(Registry &registry, int axis, float direction, bool cameraMoves)
         ImGui::End();
         ImGui::Render();
     };
+
     frame(cursor(0), false);
     frame(cursor(0), true);
     auto previous = glm::mat3(initial);
@@ -140,6 +158,7 @@ void rotateRing(Registry &registry, int axis, float direction, bool cameraMoves)
         previous = actual;
     }
     assert(motion->commands >= 144);
+
     // Moving through the undefined center pauses and re-anchors the angle.
     const auto held = motion->s.commanded;
     const auto commands = motion->commands;
@@ -150,6 +169,7 @@ void rotateRing(Registry &registry, int axis, float direction, bool cameraMoves)
         assert(glm::length(motion->s.commanded[col] - held[col]) < 1e-5f);
     frame(cursor(direction * 13.1f), true);
     assert(motion->commands > commands);
+
     // Escape restores the exact starting pose, including after multiple turns.
     frame(cursor(direction * 13.f), true, true);
     for (int col = 0; col < 4; ++col)
@@ -157,19 +177,22 @@ void rotateRing(Registry &registry, int axis, float direction, bool cameraMoves)
     frame(cursor(0), false);
 }
 } // namespace
+
 int main() {
     ImGui::CreateContext();
     auto &io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.DisplaySize = {800, 600};
     io.DeltaTime = 1.f / 60;
-    io.ConfigInputTrickleEventQueue = false;
+    io.ConfigInputTrickleEventQueue = false; // apply each frame's queued move + button events together
     unsigned char *pixels;
     int width, height;
     io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
     Registry registry;
     registerPanels(registry);
     registerHostPlaceholders(registry);
+
+    // Each translation arrow: the camera still, following mid-drag, and with a re-rooted display.
     for (int axis = 0; axis < 3; ++axis) {
         const auto stationary = dragAxis(registry, axis, false);
         const auto following = dragAxis(registry, axis, true);
@@ -179,6 +202,8 @@ int main() {
         const auto rerooted = dragAxis(registry, axis, false, offset);
         assert(glm::length(stationary - rerooted) < 1e-4f);
     }
+
+    // Each rotation ring, both directions, camera still and moving.
     for (int axis = 0; axis < 3; ++axis)
         for (float direction : {-1.f, 1.f})
             for (bool cameraMoves : {false, true})

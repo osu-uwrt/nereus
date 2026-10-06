@@ -1,3 +1,4 @@
+# Rigid poses and fixed-frame trees; depends only on Eigen.
 add_library(nereus_spatial src/frames.cpp)
 add_library(Nereus::spatial ALIAS nereus_spatial)
 set_target_properties(nereus_spatial PROPERTIES EXPORT_NAME spatial)
@@ -6,9 +7,13 @@ target_include_directories(nereus_spatial PUBLIC
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(nereus_spatial PUBLIC Eigen3::Eigen)
 nereus_project_options(nereus_spatial)
+
+# Install the library and its public headers into the Nereus export set.
 install(TARGETS nereus_spatial EXPORT NereusTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+# Unit tests.
 if(BUILD_TESTING)
   find_package(GTest REQUIRED CONFIG)
   include(GoogleTest)

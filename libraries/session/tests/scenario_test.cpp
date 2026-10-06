@@ -1,9 +1,11 @@
+// Tests for loading the resolved (fully merged) scenario JSON document.
 #include <nereus/session/scenario.hpp>
 
 #include <gtest/gtest.h>
 
 using nereus::session::loadResolvedScenario;
 
+// Robot, task and asset lookups work on the Talos document, and asset paths are made absolute.
 TEST(ResolvedScenario, LoadsTheTalosDocumentWithAbsoluteAssets) {
     const auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     EXPECT_EQ(scenario.robot.at("id"), "talos");

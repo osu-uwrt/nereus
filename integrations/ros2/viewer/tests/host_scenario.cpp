@@ -4,6 +4,7 @@
 
 using namespace nereus::ros_viewer::host;
 namespace {
+// A small scenario document covering every section the host reads.
 const char *kDocument = R"json({
  "scenario": {"id": "s1", "robot": "../r", "pool": "../p", "tasks": "../t", "bridge": "../b", "world_frame": "map",
    "pool_placement": {"position_m": [1, 2, 0.5], "yaw_deg": 90},
@@ -51,6 +52,7 @@ const char *kDocument = R"json({
 })json";
 } // namespace
 
+// parseScenario(document, viewer config, ...) resolves everything into base_link / world frames.
 TEST(HostScenario, ReadsFramesCamerasMechanismsAndLandmarks) {
     const auto config = YAML::Load("cameras: {cam: {title: FRONT, model: TESTCAM}}\nui: {focus: [Course], extra: 1}");
     const auto s = parseScenario(kDocument, config, {});
@@ -59,6 +61,7 @@ TEST(HostScenario, ReadsFramesCamerasMechanismsAndLandmarks) {
     EXPECT_EQ(s.truthBaseFrame, "simulator/bot/base_link");
     EXPECT_EQ(s.estimateBaseFrame, "bot/base_link"); // not listed in frame_names: namespace/base id
     EXPECT_EQ(s.thrusterOrder, (std::vector<std::string>{"A", "B"}));
+
     // Thruster mounts in base_link, keeping their ROS array index and bridge input scale. A: resolved form
     // (body frame = the tree root `com`); B: a named frame's +X; C (not in the bridge order) is left out.
     ASSERT_EQ(s.thrusterMounts.size(), 2u);
@@ -74,6 +77,7 @@ TEST(HostScenario, ReadsFramesCamerasMechanismsAndLandmarks) {
     EXPECT_NEAR(b.position.x, .1, 1e-6); // cad sits +0.1 from base_link
     EXPECT_NEAR(b.position.z, .3, 1e-6);
     EXPECT_NEAR(b.axis.y, 1, 1e-5); // yawed 90 deg: the force axis is base +Y
+
     // Pool placement: yaw 90 about Z at (1,2); water level raised by the placement height.
     EXPECT_NEAR(s.waterLevel, .5, 1e-6);
     const auto corner = s.poolToWorld * glm::vec4(10, 0, 0, 1);
@@ -82,6 +86,7 @@ TEST(HostScenario, ReadsFramesCamerasMechanismsAndLandmarks) {
     EXPECT_NEAR(glm::distance(glm::vec3(s.worldToPool * corner), glm::vec3(10, 0, 0)), 0, 1e-5);
     EXPECT_TRUE(s.appearance.outdoor);
     EXPECT_NEAR(s.appearance.water.scattering, .4, 1e-6);
+
     // Camera: display names from config, ROS frames from the bridge, topics namespaced unless absolute.
     ASSERT_EQ(s.cameras.size(), 1u);
     const auto &c = s.cameras[0];
@@ -95,16 +100,19 @@ TEST(HostScenario, ReadsFramesCamerasMechanismsAndLandmarks) {
     EXPECT_NEAR(c.maxRange, 4, 1e-9);
     EXPECT_NEAR(c.mountInBase[3].x, .4, 1e-6); // cad is at -base offset; mount at +0.3 in cad
     EXPECT_NEAR(c.mountInBase[3].z, .1, 1e-6);
+
     // Robot visuals are resolved through asset_paths and expressed in base_link.
     ASSERT_EQ(s.robotVisuals.size(), 1u);
     EXPECT_EQ(s.robotVisuals[0].path, "/abs/body.glb");
     EXPECT_NEAR(s.robotVisuals[0].inBase[3].x, .1, 1e-6);
+
     // Mechanism slots in base_link; projectile size from the pack.
     const auto *launcher = s.mechanism("launcher");
     ASSERT_TRUE(launcher);
     ASSERT_EQ(launcher->slotsInBase.size(), 1u);
     EXPECT_NEAR(launcher->slotsInBase[0][3].y, .2, 1e-6);
     EXPECT_NEAR(launcher->projectileLength, .08, 1e-6);
+
     // Task placement -> landmark and visual world transform (yaw 180).
     ASSERT_TRUE(s.landmarks.count("gate"));
     ASSERT_TRUE(s.landmarks.count("gate_left"));
@@ -112,13 +120,18 @@ TEST(HostScenario, ReadsFramesCamerasMechanismsAndLandmarks) {
     EXPECT_NEAR(s.landmarks.at("gate_left").world[3].y, 1, 1e-5); // task y=-1 flipped by yaw 180
     ASSERT_EQ(s.taskVisuals.size(), 1u);
     EXPECT_EQ(s.taskVisuals[0].path, "/abs/gate.dae");
+
     // ui: configured fallback survives when the task pack carries none.
     EXPECT_TRUE(s.ui["extra"]);
+
+    // Relative topics resolve under the bridge namespace; absolute ones are kept.
     EXPECT_EQ(s.absolute("x/y"), "/bot/x/y");
     EXPECT_EQ(s.absolute("/z"), "/z");
 }
 
+// A task pack's ui block wins per key over the viewer config's; keys it doesn't set keep the configured value.
 TEST(HostScenario, TaskPackUiOverridesConfiguredUiKeyByKey) {
+    // Inject a ui block into the tasks section of the fixture.
     auto text = std::string(kDocument);
     const std::string needle = R"("tasks": {"id": "t",)";
     text.replace(text.find(needle), needle.size(), R"("tasks": {"ui": {"focus": ["Vehicle"]}, "id": "t",)");

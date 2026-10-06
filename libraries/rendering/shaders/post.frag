@@ -1,4 +1,6 @@
 #version 330 core
+// Final pass: supersample resolve (or light edge smoothing), sun glare, bloom, exposure and tone mapping
+// from the HDR composite to the 8-bit output.
 in vec2 uv;
 out vec4 frag;
 uniform sampler2D sceneColor,sceneDepth,bloomColor;
@@ -9,7 +11,10 @@ uniform vec2 texel;
 uniform float exposure;
 // Supersampling factor: sceneColor/sceneDepth hold samples x samples texels per output pixel.
 uniform int samples;
+
+// Rec. 601 luma, used for the edge-contrast measure.
 float luma(vec3 c){return dot(c,vec3(.299,.587,.114));}
+
 void main(){
   vec3 c;
   ivec2 block=ivec2(gl_FragCoord.xy)*samples;
@@ -28,6 +33,8 @@ void main(){
       for(int x=0;x<samples;++x)c+=texelFetch(sceneColor,block+ivec2(x,y),0).rgb;
     c/=float(samples*samples);
   }
+
+  // Outdoor sun disc and halo along the view ray.
   if(glare>0.){
     vec4 farPoint=inverseViewProjection*vec4(uv*2.-1.,1,1);
     vec3 ray=normalize(farPoint.xyz/farPoint.w-eye);
@@ -45,6 +52,8 @@ void main(){
   // Camera bloom applies to full-brightness LEDs indoors too. HDR emission
   // spreads beyond each package without changing geometry, projection or depth.
   c+=texture(bloomColor,uv).rgb*(.60+.48*glare);
+
+  // Exposure, ACES filmic tone-mapping curve (Narkowicz fit), then gamma 2.2 encoding.
   c*=exposure;
   c=clamp((c*(2.51*c+.03))/(c*(2.43*c+.59)+.14),0.,1.);
   frag=vec4(pow(c,vec3(1./2.2)),1);

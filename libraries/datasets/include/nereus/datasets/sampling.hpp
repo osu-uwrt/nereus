@@ -15,6 +15,7 @@
 namespace nereus::datasets {
 using spatial::Pose;
 
+// SplitMix64 mixing function (seeds the per-sample streams).
 std::uint64_t splitmix64(std::uint64_t x);
 
 // A sample's random stream: mt19937_64 seeded with splitmix64(seed ^ splitmix64(k)). Every draw of the sample
@@ -23,6 +24,7 @@ std::uint64_t splitmix64(std::uint64_t x);
 class Stream {
   public:
     Stream(std::uint64_t seed, std::int64_t sample);
+
     std::uint64_t bits() {
         return engine_();
     }
@@ -33,12 +35,14 @@ class Stream {
     double uniform(const Range &r) {
         return uniform(r.lo, r.hi);
     }
+    // Uniform in [-half, half).
     double symmetric(double half) {
         return uniform(-half, half);
     }
     bool chance(double p) {
         return uniform() < p;
     }
+    // Uniform index in [0, n); the min guards against rounding up to n.
     std::size_t index(std::size_t n) {
         return std::min(n - 1, static_cast<std::size_t>(uniform() * static_cast<double>(n)));
     }
@@ -57,6 +61,7 @@ struct PoolFrame {
     static PoolFrame fromScenario(const session::ResolvedScenario &);
     Eigen::Vector3d toPool(const Eigen::Vector3d &world) const;
     Eigen::Vector3d toWorld(const Eigen::Vector3d &pool) const;
+    // Pool-local z of the floor at a pool-local (x, y).
     double floorZ(const Eigen::Vector2d &pool_xy) const {
         return surface_z - floor.depthAt(pool_xy);
     }
@@ -72,9 +77,10 @@ Eigen::Quaterniond attitude(double yaw, double pitch_up, double roll);
 // A drawn robot pose. `reason` is set when the attempt failed before rendering.
 struct PoseDraw {
     std::optional<Pose> world_from_root;
-    std::string frame; // the target frame picked
-    std::string reason;
+    std::string frame;  // the target frame picked
+    std::string reason; // rejection reason (e.g. "altitude_infeasible") when world_from_root is empty
 };
+
 // world_from_frames: the sample's target task frames ("task" and the task's own frames) in the world, after
 // placement jitter. Background (free) samples ignore it.
 PoseDraw samplePose(const Sampler &, Stream &, const std::map<std::string, Pose> &world_from_frames, const PoolFrame &,
@@ -83,5 +89,6 @@ PoseDraw samplePose(const Sampler &, Stream &, const std::map<std::string, Pose>
 // Intrinsics for an output of (width, height) keeping the field of view: s = max(w'/w, h'/h), centre crop.
 cameras::Intrinsics scaleIntrinsics(const cameras::Intrinsics &native, int width, int height);
 
+// {"position_m": [x, y, z], "orientation_wxyz": [w, x, y, z]} as written to records.
 Json poseJson(const Pose &);
 } // namespace nereus::datasets

@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
+    """Run the benchmark executable, check its modes agree, and write results plus identity."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
     parser.add_argument("scenario", type=Path)
@@ -20,6 +21,8 @@ def main():
     args = parser.parse_args()
     executable = args.executable.resolve(strict=True)
     scenario = args.scenario.resolve(strict=True)
+
+    # The benchmark prints one JSON line per mode; both must end on the same trajectory.
     results = [
         json.loads(line)
         for line in subprocess.check_output(
@@ -33,12 +36,16 @@ def main():
         raise RuntimeError(
             "benchmark modes did not finish with the same physical trajectory checksum"
         )
+
+    # Machine identity: the lscpu fields that affect timing.
     fields = {"Architecture:", "CPU(s):", "Vendor ID:", "Model name:", "CPU max MHz:"}
     cpu = [
         item
         for item in json.loads(subprocess.check_output(["lscpu", "--json"], text=True))["lscpu"]
         if item["field"] in fields
     ]
+
+    # Build identity: compiler and flags from the CMake cache next to the executable.
     cache = (executable.parent / "CMakeCache.txt").read_text()
     build_keys = {
         "CMAKE_BUILD_TYPE",
@@ -50,6 +57,8 @@ def main():
     for line in cache.splitlines():
         if ":" in line and "=" in line and line.split(":", 1)[0] in build_keys:
             build[line.split(":", 1)[0]] = line.split("=", 1)[1]
+
+    # Hashes pin the exact code, build and content the measurements came from.
     metadata = {
         "scope": "Bundled headless scenario; no renderer/cameras/ROS/tasks. Construction excluded; 3 warmup runs per mode.",
         "machine": {"platform": platform.platform(), "cpu": cpu},
@@ -76,6 +85,7 @@ def main():
         "iterations": args.iterations,
         "measurements": results,
     }
+
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(metadata, indent=2) + "\n")
     print(json.dumps(results, indent=2))

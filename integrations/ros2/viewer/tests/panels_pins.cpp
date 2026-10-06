@@ -21,8 +21,11 @@ int main() {
     int w, h;
     io.Fonts->GetTexDataAsRGBA32(&pixels, &w, &h);
     pins::install();
+
     int fired = 0, started = 0, mode = 0;
     bool armed = false, fireDisabled = false, panelShown = true;
+
+    // The panel's controls; their pin keys are "panel.a/<id>" ("###id" when given, else the label).
     const auto panel = [&] {
         ImGui::BeginDisabled(fireDisabled);
         if (pins::Button("Fire###fire"))
@@ -34,6 +37,8 @@ int main() {
         if (pins::Button("Start FFC###start"))
             ++started;
     };
+
+    // One viewer frame: the toolbar with the pinned copies, the panel (or its off-screen run), the pin menu.
     const auto frame = [&] {
         ImGui::NewFrame();
         pins::newFrame();
@@ -69,6 +74,7 @@ int main() {
         frame();
         io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
     };
+
     frame();
     assert(!pins::any() && !pins::needsDrawing("panel.a"));
 
@@ -156,6 +162,7 @@ int main() {
     pins::requestCensus();
     assert(pins::needsDrawing("panel.a"));
     (void)mode;
+
     ImGui::DestroyContext();
     std::cout
         << "PASS: pinned buttons, checkboxes, scoped keys, disabled state, off-screen panels, ini, search index\n";

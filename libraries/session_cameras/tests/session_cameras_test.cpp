@@ -1,3 +1,5 @@
+// SessionCameras tests: seed derivation, pack configuration, demand, scheduling, invalidation, reset and cost.
+// Tests that render skip when no EGL/GL device is available.
 #include <nereus/session_cameras/session_cameras.hpp>
 
 #include <gtest/gtest.h>
@@ -14,6 +16,7 @@ namespace sp = nereus::spatial;
 using namespace std::chrono_literals;
 
 namespace {
+// Talos resolved fixture, loaded once per test binary.
 const rs::ResolvedScenario &talos() {
     static const auto resolved = rs::loadResolvedScenario(NEREUS_RESOLVED_TALOS);
     return resolved;
@@ -24,15 +27,18 @@ struct Sink {
     std::mutex mutex;
     std::condition_variable condition;
     std::vector<sc::Products> products;
+
     void operator()(sc::Products &&p) {
         std::lock_guard<std::mutex> lock(mutex);
         products.push_back(std::move(p));
         condition.notify_all();
     }
+
     bool waitFor(std::size_t count, std::chrono::seconds timeout = 60s) {
         std::unique_lock<std::mutex> lock(mutex);
         return condition.wait_for(lock, timeout, [&] { return products.size() >= count; });
     }
+
     std::size_t size() {
         std::lock_guard<std::mutex> lock(mutex);
         return products.size();
@@ -46,6 +52,7 @@ sp::Pose poolPose() {
     return pose;
 }
 
+// Builds SessionCameras on the Talos fixture; nullptr when no EGL/GL device is available (callers skip).
 std::unique_ptr<sc::SessionCameras> make(sc::Options options = {}) {
     try {
         return std::make_unique<sc::SessionCameras>(talos(), options);
@@ -63,10 +70,12 @@ TEST(SessionCamerasSeeds, Sha256AndDerivation) {
     EXPECT_EQ(digest[0], 0xba);
     EXPECT_EQ(digest[1], 0x78);
     EXPECT_EQ(digest[31], 0xad);
+
     // Two-block message (56 bytes forces a second padding block).
     const auto two = sc::sha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq");
     EXPECT_EQ(two[0], 0x24);
     EXPECT_EQ(two[31], 0xc1); // 248d6a61...19db06c1
+
     // Recorded reference seeds.
     EXPECT_EQ(sc::deriveSeed(0, "front", "left"), 3562221999u);
     EXPECT_EQ(sc::deriveSeed(12345, "front", "right"), 737816300u);
@@ -77,6 +86,7 @@ TEST(SessionCameras, ConfigurationFromPack) {
     auto cameras = make();
     if (!cameras)
         GTEST_SKIP() << "no EGL";
+    // Talos: two stereo cameras, left RGB + depth at 15 Hz, no right RGB.
     const auto ids = cameras->cameraIds();
     ASSERT_EQ(ids.size(), 2u);
     for (const auto &id : ids) {
@@ -90,10 +100,14 @@ TEST(SessionCameras, ConfigurationFromPack) {
         EXPECT_LT(right.p[3], 0.0); // Tx = -fx * baseline
         EXPECT_DOUBLE_EQ(left.k[0], left.p[0]);
     }
+
+    // Unconfigured outputs and unknown cameras are rejected.
     EXPECT_THROW(cameras->setDemand(ids[0], sc::Output::RgbRight, true), std::invalid_argument);
     EXPECT_THROW(cameras->setDemand("nope", sc::Output::RgbLeft, true), std::invalid_argument);
+
     EXPECT_TRUE(cameras->describe().at("scene").contains("cutouts"));
     EXPECT_EQ(cameras->describe().at("supersample"), 1) << "off by default (it costs GPU time per frame)";
+    // Supersample outside 1..4 is rejected.
     for (const int bad : {0, 5}) {
         sc::Options options;
         options.supersample = bad;
@@ -118,6 +132,7 @@ TEST(SessionCameras, OnlyDemandedOutputsAreProduced) {
     EXPECT_EQ(stats.captured, 0u);
     EXPECT_EQ(sink.size(), 0u);
 
+    // With a consumer for left RGB only, exactly that output is produced.
     auto again = make();
     Sink second;
     again->setDemand(id, sc::Output::RgbLeft, true, "viewer");
@@ -136,6 +151,7 @@ TEST(SessionCameras, OnlyDemandedOutputsAreProduced) {
         EXPECT_EQ(p.left->rgb.size(), 1920u * 1200u * 3u);
         EXPECT_GT(p.render_ms, 0);
     }
+
     // A second consumer adds depth; dropping the first consumer leaves the second's interest.
     again->setDemand(id, sc::Output::DepthLeft, true, "planner");
     again->setDemand(id, sc::Output::RgbLeft, false, "viewer");
@@ -144,10 +160,12 @@ TEST(SessionCameras, OnlyDemandedOutputsAreProduced) {
     const auto &p = second.products[1];
     EXPECT_TRUE(p.left->rgb.empty());
     ASSERT_EQ(p.left->depth.size(), 1920u * 1200u);
+
     std::size_t valid = 0;
     for (const float z : p.left->depth)
         valid += std::isfinite(z) && z > 0.05f;
     EXPECT_GT(valid, p.left->depth.size() / 10) << "the pool should fill much of the depth image";
+
     again->close();
     EXPECT_EQ(again->stats().at(id).delivered, 2u);
 }
@@ -162,6 +180,7 @@ TEST(SessionCameras, ScheduleFollowsSensorPeriod) {
     // Not started: jobs only queue, so the schedule is observable through stats.
     for (std::int64_t t = 0; t <= 210'000'000; t += 10'000'000)
         cameras->request(t, t, poolPose());
+
     for (const auto &id : cameras->cameraIds()) {
         const auto s = cameras->stats().at(id);
         EXPECT_EQ(s.requested,
@@ -181,6 +200,7 @@ TEST(SessionCameras, InvalidateDiscardsPendingAndStaleResults) {
     cameras->invalidate();
     for (const auto &id : cameras->cameraIds())
         EXPECT_EQ(cameras->stats().at(id).discarded_stale, 1u);
+
     cameras->start([&](sc::Products &&p) { sink(std::move(p)); });
     cameras->request(100'000'000, 2, poolPose());
     ASSERT_TRUE(sink.waitFor(2));
@@ -188,6 +208,7 @@ TEST(SessionCameras, InvalidateDiscardsPendingAndStaleResults) {
         EXPECT_EQ(p.ros_stamp_ns, 2); // only post-invalidation work is delivered
         EXPECT_EQ(p.revision, 1u);
     }
+
     // In-flight work at invalidation is dropped at delivery (or delivered before it, never after).
     const auto before = sink.size();
     cameras->request(300'000'000, 3, poolPose());
@@ -210,6 +231,8 @@ TEST(SessionCameras, FullResetRestoresNoiseStreams) {
     const auto id = cameras->cameraIds()[0];
     Sink sink;
     cameras->start([&](sc::Products &&p) { sink(std::move(p)); });
+
+    // Requests one tick and returns this camera's product for it.
     const auto grab = [&](std::int64_t t) {
         const auto count = sink.size();
         cameras->request(t, t, poolPose());
@@ -220,10 +243,13 @@ TEST(SessionCameras, FullResetRestoresNoiseStreams) {
         ADD_FAILURE() << "no product for " << id;
         return sc::Products{};
     };
+
     const auto first = grab(0);
     const auto second = grab(100'000'000); // advances the stream
     cameras->invalidate(7);                // scenario seed: restores every eye's stream and the schedule
     const auto third = grab(0);
+
+    // Same seed, pose and time after the reset: the noisy depth must match bit for bit.
     ASSERT_EQ(first.left->depth.size(), third.left->depth.size());
     std::size_t different = 0, same = 0;
     for (std::size_t i = 0; i < first.left->depth.size(); ++i) {
@@ -245,19 +271,23 @@ TEST(SessionCameras, JpegAndCostReport) {
     auto probe = make(options);
     if (!probe)
         GTEST_SKIP() << "no EGL";
+    // Probe once for a camera id, then rebuild with JPEG enabled for that camera only.
     const auto id = probe->cameraIds()[0];
     probe.reset();
     options.jpeg_quality[id] = 90;
     auto cameras = make(options);
     Sink sink;
     cameras->start([&](sc::Products &&p) { sink(std::move(p)); });
+
     constexpr int frames = 6;
     for (int i = 0; i < frames; ++i) {
         cameras->request(std::int64_t(i) * 100'000'000, i, poolPose());
         ASSERT_TRUE(sink.waitFor(std::size_t(2 * (i + 1)))); // one product per camera
     }
+
     cameras->close();
     ASSERT_GE(sink.size(), std::size_t(frames));
+
     // Cameras render on parallel workers, so the last delivery may be the camera without JPEG.
     const auto last = std::find_if(sink.products.rbegin(), sink.products.rend(),
                                    [&](const sc::Products &q) { return q.camera == id; });
@@ -266,6 +296,7 @@ TEST(SessionCameras, JpegAndCostReport) {
     ASSERT_GT(p.left->jpeg.size(), 1000u);
     EXPECT_EQ(p.left->jpeg[0], 0xff);
     EXPECT_EQ(p.left->jpeg[1], 0xd8);
+
     double render = 0, process = 0;
     for (const auto &q : sink.products) {
         render += q.render_ms;
@@ -283,6 +314,8 @@ TEST(SessionCameras, RequestNeverWaitsForRendering) {
         GTEST_SKIP() << "no EGL";
     Sink sink;
     cameras->start([&](sc::Products &&p) { sink(std::move(p)); });
+
+    // request() must return quickly while the workers are busy rendering.
     double worst = 0;
     for (int i = 0; i < 40; ++i) {
         const auto start = std::chrono::steady_clock::now();

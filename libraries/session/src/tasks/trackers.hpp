@@ -37,36 +37,46 @@ Pose poseFrom(const Json &position_m, const Json &orientation_wxyz);
 Mat3 rotationMatrix(const Pose &pose);
 Json toJson(const Vec3 &v);
 
+// A gate passage (`pass_through`) or, when the attempt ends, its summary (`attempt_finished`).
 struct PortalEvent {
     std::string kind, from_side, to_side;
     std::int64_t time_ns{0};
-    std::optional<Vec3> crossing_point_local;
-    double envelope_top_world{0};
-    Vec3 rotation_vector_body{Vec3::Zero()};
+    std::optional<Vec3> crossing_point_local; // where the reference origin crossed the plane, task frame
+    double envelope_top_world{0};             // highest envelope vertex z
+    Vec3 rotation_vector_body{Vec3::Zero()};  // rotation accumulated near the gate during the attempt
     int attempt_id{0};
-    std::optional<bool> depth_overlap;
-    Json data() const; // asdict() minus kind and time_ns
+    std::optional<bool> depth_overlap; // envelope overlaps depth_band_m at the crossing (set only with a band)
+    Json data() const;                 // asdict() minus kind and time_ns
 };
 
+// Gate passage through a task-frame x plane: tracks which side the robot is on, checks that its envelope fits
+// the opening (|y| and z bounds, optional floor clearance) when it changes side, and groups passages into
+// attempts that start within approach_radius_m of the gate and end when the robot leaves that radius.
 class PortalTracker {
   public:
     PortalTracker(const Json &parameters, const Pose &world_from_task,
                   const std::vector<Vec3> &envelope_reference_vertices, double floor_z);
     void reset();
+    // End the current attempt now, reporting its passages.
     std::vector<PortalEvent> finishAttempt(std::int64_t time_ns);
     std::vector<PortalEvent> observe(std::int64_t time_ns, const Pose &world_reference);
 
   private:
+    // One robot pose sample, in the world and in the task frame.
     struct Observation {
         Vec3 position, local_position;
         Mat3 rotation, local_rotation;
         double top;
     };
+
+    // Time spent near the gate; keeps the latest passage per from_side.
     struct Attempt {
         int identifier;
         Vec3 turns;
         std::vector<std::pair<std::string, PortalEvent>> passages; // insertion ordered
     };
+
+    // The state advance() computes for observe() to commit.
     struct Advance {
         std::vector<PortalEvent> events;
         int entry;
@@ -79,6 +89,7 @@ class PortalTracker {
     Advance advance(std::int64_t time_ns, const Observation &current, const std::vector<Vec3> &world,
                     const std::vector<Vec3> &local) const;
 
+    // Configuration.
     double floor_, offset_, width_, top_, radius_, max_step_;
     bool floor_check_;
     std::optional<std::pair<double, double>> band_;
@@ -90,23 +101,28 @@ class PortalTracker {
     // state
     std::optional<std::int64_t> time_ns_;
     std::optional<Observation> previous_;
-    int entry_side_{0}; // 0 = none
+    int entry_side_{0}; // 0 = none, else the side (+1 / -1) the robot was last fully on
     std::optional<Vec3> crossing_;
     std::optional<Attempt> attempt_;
     int next_attempt_{1};
 };
 
+// Where a projectile met a perforated panel, and through which hole if it passed.
 struct PanelHit {
     std::string outcome; // pass | blocked
     Vec3 point_local;
     std::string hole_id, hole_class, hole_size;
 };
 
+// A square panel in a task-frame x plane with round holes (positions and radii in uv units of the panel).
+// A projectile passes a hole when its radius, widened by 1 / cos of its incidence angle, fits inside it.
 class PerforatedPanel {
   public:
     PerforatedPanel(const Json &parameters, const Pose &world_from_task);
     Vec3 worldPoint(const Vec3 &point_local) const;
+    // Distance of a point from the panel plane.
     double releaseDistance(const Vec3 &tip_world) const;
+    // Judge the segment a projectile swept this step; nullopt when it did not reach the panel square.
     std::optional<PanelHit> intersect(const Vec3 &start_world, const Vec3 &end_world, const Vec3 &axis_world,
                                       double radius_m) const;
 
@@ -116,11 +132,13 @@ class PerforatedPanel {
         Eigen::Vector2d center;
         double radius;
     };
+
     Pose world_from_task_, task_from_world_;
     double offset_, half_, min_cosine_;
     std::vector<Hole> holes_;
 };
 
+// A projectile's state after one OpenCrate::step.
 struct CrateStep {
     Vec3 position, velocity;
     bool entered{false};
@@ -128,6 +146,8 @@ struct CrateStep {
     std::string detail;  // floor | rim for a blocked landing
 };
 
+// An open-topped box: a payload that comes down through the inner opening is `entered`,
+// walls deflect it (damped and tangential only), and it ends on the floor (inside / blocked) or on the rim.
 class OpenCrate {
   public:
     OpenCrate(const Json &parameters, const Pose &world_from_crate);
@@ -139,27 +159,33 @@ class OpenCrate {
 
   private:
     std::string class_;
-    double outer_, inner_, height_;
+    double outer_, inner_, height_; // outer and inner (liner) half widths, inner depth above the base
     Mat3 rotation_;
     Vec3 origin_;
 };
 
+// Touch target: latches `activate` once the robot's probe point (reference frame) stays within
+// trigger_distance_m of the face sensor for dwell_s.
 class ProximityTarget {
   public:
     ProximityTarget(const Json &parameters, const Pose &world_from_frame, const Vec3 &probe_reference);
     void reset();
     std::vector<Fact> observe(std::int64_t time_ns, const Pose &world_reference);
+
     bool latched{false};
     Pose face_world;
-    std::map<std::string, std::string> indicator;
+    std::map<std::string, std::string> indicator; // viewer indicator description, filled by the runtime
 
   private:
     double distance_, dwell_ns_;
-    Vec3 sensor_, probe_;
+    Vec3 sensor_, probe_; // sensor point in the world, probe point in the reference frame
     std::optional<std::int64_t> time_;
     std::int64_t dwell_{0};
 };
 
+// Surfacing inside a regular octagon: after being fully submerged, the envelope must break the surface while
+// entirely inside the octagon for dwell_s (`surface_reached`); then facing one of the targets for facing.dwell_s
+// gives `facing_reached`. Breaking the surface outside the octagon is a one-time `breach`.
 class SurfaceTracker {
   public:
     SurfaceTracker(const Json &parameters, const Pose &world_from_frame,
@@ -170,7 +196,9 @@ class SurfaceTracker {
 
   private:
     void clear();
+    // Heading (body +x in the horizontal plane) against the nearest target bearing.
     std::vector<Fact> facingStep(const Vec3 &position, const Mat3 &rotation, std::int64_t dt);
+
     double apothem_, margin_, dwell_ns_, max_step_, tolerance_, facing_ns_, surface_;
     std::vector<std::pair<std::string, Vec3>> targets_; // insertion (facing.targets) order
     std::vector<Vec3> vertices_;
@@ -185,17 +213,22 @@ class SurfaceTracker {
     std::optional<std::string> facing_, achieved_;
 };
 
+// Yaw rotation judged within radius_m of a frame: unwrapped yaw travel from the start to the peak is reported
+// as whole turns (`rotation_judged`) when the robot stops turning (settles for dwell_s), reverses, or leaves.
 class TurnTracker {
   public:
     TurnTracker(const Json &parameters, const Pose &world_from_frame);
     void reset();
+    // Start counting afresh on the next sample (triggered by one of `restart_events`).
     void restart();
     std::vector<Fact> observe(std::int64_t time_ns, const Pose &world_reference);
     std::vector<std::pair<std::string, std::string>> restart_events; // (task, id)
 
   private:
     void clear();
+    // A rotation_judged fact when the travel since start reaches min_travel_deg.
     std::vector<Fact> judge(const std::string &reason) const;
+
     double radius_, max_step_, tolerance_, settle_, reversal_, minimum_, dwell_ns_;
     Pose frame_from_world_;
     std::optional<std::int64_t> time_;

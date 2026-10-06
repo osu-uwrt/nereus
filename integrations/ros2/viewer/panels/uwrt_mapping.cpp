@@ -1,3 +1,5 @@
+// "uwrt.mapping" provider: riptide mapping target / lock, mapping reset, and (when chameleon_tf_msgs is
+// available at build time) the tag calibration action.
 #include "ros_runtime.hpp"
 #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
 #include <chameleon_tf_msgs/action/model_frame.hpp>
@@ -15,6 +17,8 @@ using Goal = rclcpp_action::ClientGoalHandle<Cal>;
 #endif
 using Target = riptide_msgs2::srv::MappingTarget;
 using Reset = std_srvs::srv::Trigger;
+
+// All state is guarded by `mutex`; service and action callbacks run on the runtime's executor thread.
 class UwrtMapping final : public Mapping {
   public:
     UwrtMapping(std::shared_ptr<RosRuntime> runtime, const YAML::Node &cfg, const Context &ctx)
@@ -25,8 +29,11 @@ class UwrtMapping final : public Mapping {
         cal =
             rclcpp_action::create_client<Cal>(runtime->node, expand(cfg["calibration_action"].as<std::string>(), ctx));
 #endif
+
         resetClient = runtime->node->create_client<Reset>(expand(cfg["reset_service"].as<std::string>(), ctx));
         targetClient = runtime->node->create_client<Target>(expand(cfg["target_service"].as<std::string>(), ctx));
+
+        // The mapping node's current target and lock; the panel shows this observed state.
         status = runtime->node->create_subscription<riptide_msgs2::msg::MappingTargetInfo>(
             expand(cfg["status_topic"].as<std::string>(), ctx), 10,
             [this](const riptide_msgs2::msg::MappingTargetInfo &msg) {
@@ -35,8 +42,10 @@ class UwrtMapping final : public Mapping {
                 value.locked = msg.lock_map;
                 lastStatus = Steady::now();
             });
+
         timer = runtime->node->create_wall_timer(std::chrono::milliseconds(100), [this] { tick(); });
     }
+
     ~UwrtMapping() override {
         // The host stops the executor before destroying providers. Cancel only
         // our accepted goal, with no callback that could outlive this instance.
@@ -45,10 +54,14 @@ class UwrtMapping final : public Mapping {
             cal->async_cancel_goal(goal);
 #endif
     }
+
     MappingState state() override {
         std::lock_guard<std::mutex> lock(mutex);
         return value;
     }
+
+    // Starts the ModelFrame action: collect `samples` (1..65535) of the parent -> child transform.
+    // A Cancel pressed before acceptance is applied when the goal response arrives.
     void calibrate(const std::string &parent, const std::string &child, unsigned samples) override {
 #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
         std::lock_guard<std::mutex> lock(mutex);
@@ -61,6 +74,7 @@ class UwrtMapping final : public Mapping {
         value.calibrationMessage = "Starting tag calibration...";
         calSince = Steady::now();
         awaiting = true;
+
         Cal::Goal request;
         request.monitor_parent = parent;
         request.monitor_child = child;
@@ -103,6 +117,7 @@ class UwrtMapping final : public Mapping {
         (void)samples; // calibration action interface not built
 #endif
     }
+
     void cancelCalibration() override {
         std::lock_guard<std::mutex> lock(mutex);
         if (value.calibrating) {
@@ -110,6 +125,8 @@ class UwrtMapping final : public Mapping {
             cancelLocked();
         }
     }
+
+    // Calls the mapping reset Trigger service; one request at a time.
     void reset() override {
         std::lock_guard<std::mutex> lock(mutex);
         if (value.resetting || !resetClient->service_is_ready())
@@ -133,6 +150,8 @@ class UwrtMapping final : public Mapping {
                                            })
                       .request_id;
     }
+
+    // Requests a new mapping target and map lock. The reply carries no result; success shows in the status topic.
     void setTarget(const std::string &target, bool locked) override {
         std::lock_guard<std::mutex> lock(mutex);
         if (value.settingTarget || !targetClient->service_is_ready())
@@ -159,6 +178,7 @@ class UwrtMapping final : public Mapping {
     }
 
   private:
+    // Cancels our accepted calibration goal (mutex held); before acceptance only the message changes.
     void cancelLocked() {
 #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
         value.calibrationMessage = goal ? "Canceling calibration..." : "Cancel requested; awaiting goal response";
@@ -170,6 +190,8 @@ class UwrtMapping final : public Mapping {
             });
 #endif
     }
+
+    // 10 Hz: readiness flags, status freshness, and request timeouts.
     void tick() {
         std::lock_guard<std::mutex> lock(mutex);
         const auto now = Steady::now();
@@ -182,6 +204,8 @@ class UwrtMapping final : public Mapping {
         value.resetReady = resetClient->service_is_ready();
         value.targetReady = targetClient->service_is_ready();
         value.fresh = elapsed(lastStatus) < statusTimeout;
+
+        // Calibration gets request_timeout to be accepted, then calibration_timeout to finish.
         if (value.calibrating && !value.canceling && elapsed(calSince) > (awaiting ? timeout : calibrationTimeout)) {
             value.canceling = true;
             cancelLocked();
@@ -200,10 +224,13 @@ class UwrtMapping final : public Mapping {
             value.targetMessage = "Target request timed out; result unknown";
         }
     }
+
     std::shared_ptr<RosRuntime> runtime;
     std::mutex mutex;
     MappingState value;
+    // Seconds.
     double timeout, calibrationTimeout, statusTimeout;
+    // A calibration goal was sent and has not been accepted or rejected yet.
     bool awaiting = false;
     uint64_t resetEpoch = 0, targetEpoch = 0;
     int64_t resetId = 0, targetId = 0;
@@ -218,6 +245,9 @@ class UwrtMapping final : public Mapping {
     rclcpp::TimerBase::SharedPtr timer;
 };
 } // namespace
+
+// Registers "uwrt.mapping" (calibration_timeout up to 600 s; calibration_action is required even when
+// the action interface is not built).
 void registerUwrtMapping(Registry &registry, const RuntimeFactory &runtime) {
     registry.providers.emplace(
         "uwrt.mapping",

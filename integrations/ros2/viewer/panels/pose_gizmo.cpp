@@ -1,21 +1,28 @@
+// Pose gizmo overlay: a translate/rotate handle drawn at the commanded pose in the pool view. Dragging it streams
+// new targets to the bound Motion provider; Esc restores the pose the drag started from.
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panels/pose_math.hpp"
 #include <glm/gtc/constants.hpp>
 #include <imgui.h>
+
 namespace nereus::ros_viewer::panels {
 namespace {
+
+// Handles: 0 the centre square (drag in the body XY plane), 1..3 the X/Y/Z arrows, 4..6 the roll/pitch/yaw rings.
 class PoseGizmo final : public Overlay {
     std::shared_ptr<Motion> control;
-    int targetDrag = -1;
+    int targetDrag = -1;               // handle being dragged, -1 when idle
     Pose dragStart{1}, dragDisplay{1}; // gesture start (display space) and its frozen display offset
     Pose shownDisplay{1};              // display offset held for the current command revision
     uint64_t shownRevision = 0;
     bool haveShown = false, adoptNext = false; // adoptNext: our own Esc restore is not a new command
+
+    // Per-gesture state, frozen when the drag starts.
     glm::mat4 dragProjectionView{1};
     glm::vec2 dragOrigin{0}, dragSize{1};
     glm::vec3 dragRpy{0}, dragPoint{0}, dragDirection{0}, dragNormal{0};
     glm::vec2 dragMouse{0}, dragTangent{0};
-    float dragAxis = 0, dragAngle = 0, sizeMetres, hitPixels;
+    float dragAxis = 0, dragAngle = 0, sizeMetres, hitPixels; // options size_metres, hit_pixels
     glm::vec3 dragRadial{0};
     bool dragInPlane = false, dragRadialValid = false;
 
@@ -23,21 +30,29 @@ class PoseGizmo final : public Overlay {
     explicit PoseGizmo(const Binding &b)
         : control(std::dynamic_pointer_cast<Motion>(b.provider)), sizeMetres(b.options["size_metres"].as<float>(.3f)),
           hitPixels(b.options["hit_pixels"].as<float>(20)) {}
+
     void cancelInteraction() override {
         targetDrag = -1;
     }
+
     bool input(const Viewport &v) override {
         return update(v, false);
     }
+
     void draw(const Viewport &v) override {
         update(v, true);
     }
+
+    // Shared by input() and draw(): builds the handles and hit-tests the mouse; then either draws them (`draw`) or
+    // starts / continues / ends a drag. Returns whether the input was consumed.
     bool update(const Viewport &view, bool draw) {
         const ImVec2 origin(view.origin.x, view.origin.y);
         const float width = view.size.x, height = view.size.y;
         const bool hovered = view.interactive;
         if (!control)
             return false;
+
+        // Only usable while the robot takes position commands right now.
         const auto state = control->state();
         if (state.mode != Mode::Position || !state.enabled || !state.fresh || state.blocked || state.pending) {
             targetDrag = -1;
@@ -47,6 +62,7 @@ class PoseGizmo final : public Overlay {
         // Hold the display offset per command: re-capture on a new command (not mid-drag) or a large change
         // (anchor switch, reset), never for small frame-to-frame noise, so an unchanged command stays still.
         const glm::mat4 delta = glm::inverse(shownDisplay) * view.displayFromCommand;
+        // Large: more than 25 cm, or the x axis turned by more than about 10 degrees (cos 10 deg ~ .985).
         const bool jump = glm::length(glm::vec3(delta[3])) > .25f || glm::vec3(delta[0]).x < .985f;
         if (adoptNext && state.revision != shownRevision) {
             shownRevision = state.revision;
@@ -61,6 +77,8 @@ class PoseGizmo final : public Overlay {
         // Drags are made in display space and sent in the command frame, through the offset frozen at
         // the start of the gesture so drift between the two frames cannot move the target mid-drag.
         const auto send = [&](const Pose &display) { control->drag(glm::inverse(dragDisplay) * display); };
+
+        // Geometry in display space: the commanded position, its body axes and one colour per handle.
         const glm::vec3 p(commanded[3]);
         const float length = sizeMetres;
         const glm::vec3 axes[] = {glm::normalize(glm::vec3(commanded[0])), glm::normalize(glm::vec3(commanded[1])),
@@ -69,6 +87,8 @@ class PoseGizmo final : public Overlay {
                                 IM_COL32(80, 145, 255, 255), IM_COL32(235, 75, 75, 255), IM_COL32(90, 215, 110, 255),
                                 IM_COL32(80, 145, 255, 255)};
         const auto angles = glm::eulerAngles(glm::quat_cast(commanded));
+
+        // World point to screen pixels; false when it lies outside the view frustum.
         const auto project = [&](const glm::vec3 &point, ImVec2 &pixel) {
             const auto clip = vp * glm::vec4(point, 1);
             if (clip.w <= 0)
@@ -77,6 +97,8 @@ class PoseGizmo final : public Overlay {
                      origin.y + (.5f - clip.y / clip.w * .5f) * height};
             return std::abs(clip.x) <= clip.w && std::abs(clip.y) <= clip.w && std::abs(clip.z) <= clip.w;
         };
+
+        // A projected line piece of a handle: screen end points, offsets from p, and the handle it belongs to.
         struct Segment {
             ImVec2 first, second;
             glm::vec3 a, b;
@@ -85,6 +107,9 @@ class PoseGizmo final : public Overlay {
         std::vector<Segment> rings, arrows;
         ImVec2 center;
         const bool centerVisible = project(p, center);
+
+        // Per axis: a 96-segment ring (radius 1.15 x size) about its RPY rotation axis, and an arrow each way along
+        // the body axis (0.2 to 1.5 x size). Only fully visible segments are kept.
         for (int axis = 0; axis < 3; ++axis) {
             const auto normal = nereus::ros_viewer::rpyAxis(angles, axis);
             const auto a = nereus::ros_viewer::rpyReference(angles, axis) * length * 1.15f;
@@ -107,6 +132,8 @@ class PoseGizmo final : public Overlay {
                     arrows.push_back(segment);
             }
         }
+
+        // Hit test: the nearest segment within 0.6 x hit_pixels, then the centre square (10 px) on top.
         auto &io = ImGui::GetIO();
         const glm::vec2 mouse(io.MousePos.x, io.MousePos.y);
         int hit = -1;
@@ -137,6 +164,8 @@ class PoseGizmo final : public Overlay {
             hit = 0;
         if (!hovered)
             hit = -1;
+
+        // Draw pass: rings (fainter on the far side), arrows, the centre square, and a tooltip for the hot handle.
         if (draw) {
             auto *list = ImGui::GetWindowDrawList();
             list->PushClipRect(origin, {origin.x + width, origin.y + height}, true);
@@ -178,11 +207,14 @@ class PoseGizmo final : public Overlay {
             }
             return false;
         }
-        // Keep cursor-to-world conversion stable while the Follow camera moves.
+
+        // Input pass. Keep cursor-to-world conversion stable while the Follow camera moves.
         const auto ray = targetDrag >= 0
                              ? nereus::ros_viewer::screenRay(dragProjectionView, mouse - dragOrigin, dragSize)
                              : nereus::ros_viewer::screenRay(vp, mouse - view.origin, view.size);
         bool consumed = targetDrag >= 0;
+
+        // Press on a handle: record how this gesture maps the cursor (ring angle, plane point or axis parameter).
         if (targetDrag < 0 && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             if (hit >= 0) {
                 consumed = true;
@@ -219,6 +251,7 @@ class PoseGizmo final : public Overlay {
                     dragDirection = axes[hit - 1];
                     valid = nereus::ros_viewer::axisHit(ray, p, dragDirection, dragAxis);
                 }
+                // Freeze the pose, display offset and projection for the whole gesture.
                 if (valid) {
                     targetDrag = hit;
                     dragStart = commanded;
@@ -229,6 +262,8 @@ class PoseGizmo final : public Overlay {
                 }
             }
         }
+
+        // During a drag: Esc restores the start pose, release (or losing focus) ends it, else send the new pose.
         if (targetDrag >= 0) {
             if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
                 send(dragStart);
@@ -241,6 +276,8 @@ class PoseGizmo final : public Overlay {
                 glm::mat4 next = dragStart;
                 glm::vec3 point;
                 float along;
+
+                // Rings: rotate one RPY angle by the accumulated drag angle about the start position.
                 if (targetDrag >= 4) {
                     const bool moved = glm::length(glm::vec2(io.MouseDelta.x, io.MouseDelta.y)) > 0;
                     bool changed = false;
@@ -273,11 +310,13 @@ class PoseGizmo final : public Overlay {
                     }
                 } else if (targetDrag == 0 &&
                            nereus::ros_viewer::planeHit(ray, glm::vec3(dragStart[3]), dragNormal, point)) {
+                    // Centre: translate in the plane through the start position normal to the body z axis.
                     next[3] += glm::vec4(point - dragPoint, 0);
                     if (glm::length(glm::vec2(io.MouseDelta.x, io.MouseDelta.y)) > 0)
                         send(next);
                 } else if (targetDrag > 0 && targetDrag < 4 &&
                            nereus::ros_viewer::axisHit(ray, glm::vec3(dragStart[3]), dragDirection, along)) {
+                    // Arrows: translate along the body axis.
                     next[3] += glm::vec4(dragDirection * (along - dragAxis), 0);
                     if (glm::length(glm::vec2(io.MouseDelta.x, io.MouseDelta.y)) > 0)
                         send(next);
@@ -287,7 +326,10 @@ class PoseGizmo final : public Overlay {
         return consumed;
     }
 };
+
 } // namespace
+
+// Registers the "pose_gizmo" overlay (a Motion provider); options: size_metres (<= 10), hit_pixels (<= 40).
 void registerPoseGizmo(Registry &r) {
     r.overlays.emplace("pose_gizmo",
                        ViewFactory<Overlay>{Kind::Motion,
@@ -298,4 +340,5 @@ void registerPoseGizmo(Registry &r) {
                                             },
                                             [](const Binding &b) { return std::make_unique<PoseGizmo>(b); }});
 }
+
 } // namespace nereus::ros_viewer::panels

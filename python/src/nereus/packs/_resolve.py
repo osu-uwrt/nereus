@@ -25,10 +25,12 @@ from ._document import (
 from ._frames import express_in_body
 from ._placements import resolve_placements
 
+# Identity of the resolved manifest written by ``ResolvedScenario.dump`` and read by the runtime
 FORMAT = "nereus.resolved_scenario"
 FORMAT_VERSION = 1
 
 
+# Prefix problems ("/json/pointer: message") with the file they were found in
 def _prefixed(path: Path, problems: list[str]) -> list[str]:
     return [f"{path}:{problem}" for problem in problems]
 
@@ -54,6 +56,7 @@ def _includes(document: PackDocument, data: dict[str, Any], hashes: dict[Path, s
             continue
         problems += _prefixed(include.path, semantics.task(include.plain(), asset_ids))
         document.includes.append(include)
+
     semantics.duplicates((item.plain()["id"] for item in document.includes), "task", problems)
     return problems
 
@@ -64,6 +67,8 @@ def _check(document: PackDocument, hashes: dict[Path, str]) -> list[str]:
     problems = schema_problems(document.kind, data)
     if problems:
         return _prefixed(document.path, problems)
+
+    # Semantics run only on schema-valid data; each kind has its own checks
     kind = document.kind
     if kind not in ("task", "scenario"):
         problems += semantics.assets(data, document.root, hashes)
@@ -80,12 +85,15 @@ def _check(document: PackDocument, hashes: dict[Path, str]) -> list[str]:
     elif kind == "equipment":
         problems += semantics.equipment(data)
     problems = _prefixed(document.path, problems)
+
+    # A tasks pack's includes are loaded only when the pack itself is clean
     if kind == "tasks" and not problems:
         problems += _includes(document, data, hashes)
     return problems
 
 
 def _open(path: Path, hashes: dict[Path, str]) -> PackDocument:
+    """Read, kind-check and validate one document, recording its digest in ``hashes``."""
     given = Path(path)
     file = canonical_file(given).resolve()
     source = read_source(file)
@@ -95,6 +103,7 @@ def _open(path: Path, hashes: dict[Path, str]) -> PackDocument:
         raise PackError(f"{file}: unknown or missing kind {kind!r}")
     if given.is_dir() and file.stem != kind:
         raise PackError(f"{file}: folder canonical file declares kind '{kind}'")
+
     document = PackDocument(file, kind, data, source=source)
     hashes[file] = source.sha256
     problems = _check(document, hashes)
@@ -160,6 +169,7 @@ class ResolvedScenario:
         return result
 
     def manifest(self) -> dict[str, Any]:
+        """The runtime document, with a ``content_sha256`` over its canonical JSON."""
         base = self.path.parent
         body = {
             "format": FORMAT,
@@ -181,6 +191,8 @@ class ResolvedScenario:
                 for source in self.sources
             ],
         }
+
+        # Digest of the body in canonical form (sorted keys, no whitespace), before it is added
         canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), allow_nan=False)
         body["content_sha256"] = hashlib.sha256(canonical.encode()).hexdigest()
         return body
@@ -195,6 +207,8 @@ class ResolvedScenario:
             raise PackError(
                 [f"{source}: changed since the scenario was resolved" for source in changed]
             )
+
+        # Atomic write: temp file in the target folder, then rename over the target
         target = Path(path)
         text = json.dumps(self.manifest(), indent=2, allow_nan=False) + "\n"
         descriptor, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
@@ -208,6 +222,7 @@ class ResolvedScenario:
         return target
 
 
+# Seconds to the nearest whole nanosecond
 def _nanoseconds(seconds: float) -> int:
     return round(seconds * 1e9)
 
@@ -229,6 +244,7 @@ def _override_thrusters(data: dict[str, Any], robot: dict[str, Any]) -> list[str
     overrides = data.get("thruster_overrides", [])
     if not overrides:
         return []
+
     problems: list[str] = []
     ids = [item["id"] for item in robot["thrusters"]]
     for index, override in enumerate(overrides):
@@ -238,6 +254,8 @@ def _override_thrusters(data: dict[str, Any], robot: dict[str, Any]) -> list[str
             for name in selected
             if name not in ids
         ]
+
+        # Later overrides apply on top of earlier ones
         for item in robot["thrusters"]:
             if item["id"] not in selected:
                 continue
@@ -250,6 +268,8 @@ def _override_thrusters(data: dict[str, Any], robot: dict[str, Any]) -> list[str
                 item["parameters"] = {**item["parameters"], **parameters}
     if problems:
         return problems
+
+    # Semantics assume a schema-valid robot, so they only run when the schema passes
     result = schema_problems("robot", robot) or semantics.robot(robot)
     return [f"/thruster_overrides: overridden robot {problem}" for problem in result]
 
@@ -261,6 +281,8 @@ def resolve_scenario(path: Path) -> ResolvedScenario:
     if scenario.kind != "scenario":
         raise PackError(f"{scenario.path}: expected a scenario, found kind '{scenario.kind}'")
     data = scenario.plain()
+
+    # Open every pack the scenario selects, each under its role; bridge and equipment are optional
     problems: list[str] = []
     documents: dict[str, PackDocument] = {}
     for role in ("robot", "pool", "tasks", "bridge", "equipment"):
@@ -278,6 +300,7 @@ def resolve_scenario(path: Path) -> ResolvedScenario:
     if problems:
         raise PackError(problems)
 
+    # Plain copies of the selected packs; the robot is rewritten in place from here on
     tasks_document = documents["tasks"]
     tasks_data = tasks_document.plain()
     definitions = [include.plain() for include in tasks_document.includes]
@@ -285,6 +308,8 @@ def resolve_scenario(path: Path) -> ResolvedScenario:
     problems += _prefixed(scenario.path, _override_thrusters(data, robot))
     if problems:
         raise PackError(problems)
+
+    # Runtime-ready robot geometry and times, then cross-pack checks against that robot
     express_in_body(robot)
     _add_runtime_times(data, robot)
     bridge = documents["bridge"].plain() if "bridge" in documents else None
@@ -298,6 +323,8 @@ def resolve_scenario(path: Path) -> ResolvedScenario:
     problems += _prefixed(scenario.path, semantics.scenario_pool(data, documents["pool"].plain()))
     if problems:
         raise PackError(problems)
+
+    # Placements last: they need valid task ids and the equipment pack's items
     equipment = documents["equipment"].plain() if "equipment" in documents else None
     task_ids = [item["id"] for item in definitions]
     problems += _prefixed(scenario.path, resolve_placements(data, task_ids, equipment))

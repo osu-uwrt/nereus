@@ -1,4 +1,6 @@
 #pragma once
+// Fossen-style 6-DOF marine body model (rigid-body + added mass, Coriolis, damping, ellipsoid buoyancy),
+// integrated by the plant.
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
@@ -14,9 +16,13 @@ using State13d = Eigen::Matrix<double, 13, 1>;
 class MarineDynamics {
   public:
     MarineDynamics();
+    // Rigid-body mass and inertia about the COM plus the 6x6 added mass; caches the inverse total mass.
     void configure(double mass, const Eigen::Matrix3d &rigid_inertia, const Matrix6d &added_mass);
+    // Linear and quadratic damping acting at `center` (body frame, offset from the COM).
     void configureDamping(const Matrix6d &linear, const Vector6d &quadratic,
                           const Eigen::Vector3d &center = Eigen::Vector3d::Zero());
+    // Buoyancy of an ellipsoid with semi-axes buoyancy_radii centred at cob (body frame); the immersed
+    // fraction of it scales the displaced volume.
     void configureHydrostatics(double density, double volume, const Eigen::Vector3d &cob,
                                const Eigen::Vector3d &buoyancy_radii, double gravity = 9.80665,
                                double water_level = 0.);
@@ -25,10 +31,15 @@ class MarineDynamics {
     // dc/dt is the BODY coordinate derivative of inertial water velocity.
     Vector6d acceleration(const Vector6d &velocity, const Vector6d &relative_velocity, const Vector6d &body_wrench,
                           const Vector6d &current_derivative = Vector6d::Zero()) const;
+    // Damping wrench at the COM for a through-water (relative) velocity.
     Vector6d dampingWrench(const Vector6d &relative_velocity) const;
+    // Weight plus buoyancy as a body-axes wrench at the COM.
     Vector6d restoringWrench(const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation) const;
+    // Immersed volume fraction of the buoyancy ellipsoid; optionally its wet centre (body frame, from COM).
     double submergedFraction(const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation,
                              Eigen::Vector3d *wet_center = nullptr) const;
+    // State derivative for a body-frame propulsion wrench at the COM, in water moving at world-frame
+    // velocity/acceleration.
     State13d derivative(const State13d &state, const Vector6d &propulsion,
                         const Eigen::Vector3d &water_velocity = Eigen::Vector3d::Zero(),
                         const Eigen::Vector3d &water_acceleration = Eigen::Vector3d::Zero()) const;
@@ -36,9 +47,12 @@ class MarineDynamics {
     State13d step(const State13d &state, const Vector6d &propulsion, double dt,
                   const Eigen::Vector3d &water_velocity = Eigen::Vector3d::Zero(),
                   const Eigen::Vector3d &water_acceleration = Eigen::Vector3d::Zero()) const;
+
+    // Cross-product matrix, momentum-form Coriolis matrix, and the finite/nonzero-quaternion check.
     static Eigen::Matrix3d skew(const Eigen::Vector3d &vector);
     static Matrix6d coriolis(const Matrix6d &mass, const Vector6d &velocity);
     static void validateState(const State13d &state);
+
     const Matrix6d &rigidBodyMass() const {
         return rigid_body_mass_;
     }

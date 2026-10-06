@@ -12,6 +12,8 @@
 
 namespace nereus::ros_bridge {
 
+// What the format encoders read: the session, the scenario and callbacks into the core (ROS clock,
+// reference pose, scenario JSON).
 struct VisualContext {
     SessionPort &session;
     const session::ResolvedScenario &resolved;
@@ -21,6 +23,7 @@ struct VisualContext {
     std::function<std::string()> scenario_json;
 };
 
+// Encoders of one format stream; `timed` streams publish `state()` at their rate_hz.
 struct FormatStream {
     bool timed{false};
     // json event streams: message from text. Timed streams: `state` builds the current message.

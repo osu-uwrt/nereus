@@ -1,8 +1,10 @@
+// Per-sample appearance environment: which environment a sample uses and the values drawn from it.
 #include <nereus/datasets/environment.hpp>
 
 #include <algorithm>
 
 namespace nereus::datasets {
+
 std::size_t selectEnvironment(const Job &job, std::int64_t k, Stream &rng) {
     const auto &list = job.randomize.environments;
     if (const auto forced = job.block(k).environment) // §11.1: the block's environment, no draw
@@ -12,6 +14,8 @@ std::size_t selectEnvironment(const Job &job, std::int64_t k, Stream &rng) {
     if (job.randomize.sweep)
         return static_cast<std::size_t>(((k - job.blockStart(k)) / static_cast<std::int64_t>(job.scenarios.size())) %
                                         static_cast<std::int64_t>(list.size()));
+
+    // Weighted: one uniform draw against the cumulative weights.
     double total = 0;
     for (const auto &item : list)
         total += item.weight;
@@ -35,6 +39,11 @@ EnvironmentDraw drawEnvironment(const Environment &e, const rendering::Appearanc
     auto &a = d.appearance;
     auto &water = a.water;
     const auto draw = [&](const std::optional<Range> &range) { return float(rng.uniform(*range)); };
+
+    // Each value set consumes one draw (tint/absorption: one per channel). The order is fixed: reordering these
+    // changes every sample's values for a given seed.
+
+    // Water: absolute override, else a scale of the pool pack's value.
     if (e.tint_rgb)
         for (int c = 0; c < 3; ++c)
             water.tint[c] = float(rng.uniform((*e.tint_rgb)[std::size_t(c)])); // validated to [0, 1]
@@ -52,6 +61,8 @@ EnvironmentDraw drawEnvironment(const Environment &e, const rendering::Appearanc
         water.scattering *= draw(e.scattering_scale);
     if (e.distance_scale_scale)
         water.distance_scale *= draw(e.distance_scale_scale);
+
+    // Lighting.
     if (e.caustics)
         a.caustics = draw(e.caustics);
     if (e.exposure)
@@ -68,9 +79,13 @@ EnvironmentDraw drawEnvironment(const Environment &e, const rendering::Appearanc
         a.glare = draw(e.glare);
     if (e.profile)
         a.outdoor = *e.profile == "outdoor";
+
+    // Time and image post-processing (0 = off when absent).
     d.time = e.time_s ? draw(e.time_s) : 0.f;
     d.noise_sigma = e.noise_sigma ? rng.uniform(*e.noise_sigma) : 0.0;
     d.blur_px = e.blur_px ? rng.uniform(*e.blur_px) : 0.0;
+
+    // The record holds the resulting values (not the ranges) so a sample can be reproduced from it.
     const auto vec = [](const Eigen::Vector3f &v) { return Json{v.x(), v.y(), v.z()}; };
     d.record = {{"water",
                  {{"tint_rgb", vec(water.tint)},
@@ -90,4 +105,5 @@ EnvironmentDraw drawEnvironment(const Environment &e, const rendering::Appearanc
                 {"image", {{"noise_sigma", d.noise_sigma}, {"blur_px", d.blur_px}}}};
     return d;
 }
+
 } // namespace nereus::datasets

@@ -1,3 +1,5 @@
+// Plant against the pinned legacy stage dynamics (surface, submerged and water-entry starts with an oscillating
+// current, propeller immersion and thruster delay), plus validation and replay determinism.
 #include <array>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -7,6 +9,7 @@
 
 using namespace nereus::simulation;
 namespace {
+// Body, oscillating current and one partially immersible thruster, as in the fixture capture.
 PlantParameters parameters() {
     PlantParameters p;
     p.body.inertia = Eigen::Vector3d(.3, .4, .5).asDiagonal();
@@ -24,6 +27,8 @@ PlantParameters parameters() {
     p.thrusters.push_back(t);
     return p;
 }
+
+// Scenario 0 starts at the surface, 1 submerged, 2 above the water (it enters).
 BodyState initial(int scenario) {
     BodyState state;
     state.position = {5, 5, scenario == 0 ? -.025 : scenario == 1 ? -2 : .2};
@@ -33,6 +38,7 @@ BodyState initial(int scenario) {
     return state;
 }
 } // namespace
+
 TEST(StageReference, MatchesPinnedLegacySurfaceSubmergedAndEntryMotion) {
     std::ifstream fixture(std::string(NEREUS_FIXTURES) + "/legacy_stage_dynamics.csv");
     ASSERT_TRUE(fixture);
@@ -53,6 +59,8 @@ TEST(StageReference, MatchesPinnedLegacySurfaceSubmergedAndEntryMotion) {
             EXPECT_EQ(expected[0], scenario);
             EXPECT_EQ(expected[1], tick);
             SCOPED_TRACE("case=" + std::to_string(scenario) + " tick=" + std::to_string(tick));
+
+            // Compare state, thruster force and accelerations with fixture columns 2..21.
             const auto observed = plant.motion();
             const auto &body = observed.state.body;
             Eigen::Matrix<double, 20, 1> actual;
@@ -63,8 +71,10 @@ TEST(StageReference, MatchesPinnedLegacySurfaceSubmergedAndEntryMotion) {
                 EXPECT_NEAR(actual[i], expected[static_cast<std::size_t>(i) + 2], 2e-12);
             EXPECT_EQ(observed.state.elapsed.count(), tick * 2000000LL);
             ++rows;
+
             if (tick == 250)
                 break;
+            // Command steps at ticks 0 (12 N), 100 (-6 N) and 200 (0 N).
             if (tick == 0 || tick == 100 || tick == 200)
                 plant.command(Eigen::VectorXd::Constant(1, tick == 0 ? 12 : tick == 100 ? -6 : 0));
             plant.advance();
@@ -90,17 +100,20 @@ TEST(StageReference, InvalidImmersionAndFlowParametersRejectBeforeRuntime) {
     EXPECT_THROW(Plant(p, initial(0)), std::invalid_argument);
 }
 
+// Batched and single-tick advances must match bit for bit, and so must a replay after reset().
 TEST(StageReference, CurrentPhaseAndImmersionReplayAcrossBatchingAndReset) {
     Plant batched(parameters(), initial(0)), stepped(parameters(), initial(0));
     const auto force = Eigen::VectorXd::Constant(1, 12).eval();
     batched.command(force);
     stepped.command(force);
+
     const auto expected = batched.advance(100);
     for (int i = 0; i < 100; ++i)
         stepped.advance();
     EXPECT_EQ(expected.body.position, stepped.observe().body.position);
     EXPECT_EQ(expected.body.orientation.coeffs(), stepped.observe().body.orientation.coeffs());
     EXPECT_EQ(batched.motion().acceleration_body, stepped.motion().acceleration_body);
+
     batched.reset(initial(0));
     batched.command(force);
     const auto replay = batched.advance(100);

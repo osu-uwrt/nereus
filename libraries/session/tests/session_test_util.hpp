@@ -9,6 +9,7 @@
 #include <sstream>
 
 namespace nereus::session::testing {
+// Parses a JSON fixture from the session test fixtures directory.
 inline Json loadFixture(const std::string &name) {
     std::ifstream stream(std::string(NEREUS_SESSION_FIXTURES) + "/" + name);
     if (!stream)
@@ -23,9 +24,12 @@ template <class Matrix> Json flat(const Matrix &m) { // row-major, like numpy ra
             out.push_back(m(r, c));
     return out;
 }
+
+// Quaternion as [w, x, y, z].
 inline Json quat(const Eigen::Quaterniond &q) {
     return Json::array({q.w(), q.x(), q.y(), q.z()});
 }
+
 inline Json bodyJson(const simulation::BodyState &b) {
     return {{"position", flat(b.position)},
             {"orientation", quat(b.orientation)},
@@ -81,6 +85,8 @@ inline std::string diff(const Json &expected, const Json &actual, const std::str
     return expected == actual ? "" : path + ": " + expected.dump() + " != " + actual.dump();
 }
 
+// Latest delivered sample of every non-camera pack sensor as JSON (null while unavailable), in the same
+// layout as the recorded fixtures.
 inline Json sensorsJson(sensors::Runtime &runtime, const PackRuntime &pack) {
     using namespace sensors;
     Json out = Json::object();
@@ -126,6 +132,8 @@ inline Json sensorsJson(sensors::Runtime &runtime, const PackRuntime &pack) {
     }
     return out;
 }
+
+// Discards buffered samples on every pack sensor stream so queues stay bounded between checkpoints.
 inline void drain(sensors::Runtime &runtime, const PackRuntime &pack) {
     using namespace sensors;
     for (const auto &id : pack.sensor_ids) {
@@ -140,9 +148,12 @@ inline void drain(sensors::Runtime &runtime, const PackRuntime &pack) {
             runtime.stream<AltitudeReading>(id)->drain();
     }
 }
+
 inline Json resultJson(const CommandResult &r) {
     return {{"accepted", r.accepted}, {"message", r.message}};
 }
+
+// Mechanism state (time, arming, release and claw states) as fixture JSON.
 inline Json mechJson(const MechanismState &s) {
     Json releases = Json::object(), claws = Json::object();
     for (const auto &[k, v] : s.releases)
@@ -155,6 +166,8 @@ inline Json mechJson(const MechanismState &s) {
     return {
         {"time_ns", s.time_ns}, {"armed", s.armed}, {"any_busy", s.any_busy}, {"releases", releases}, {"claws", claws}};
 }
+
+// Ids of the scenario's robot sensors, excluding stereo cameras.
 inline std::vector<std::string> sensorNames(const ResolvedScenario &scenario) {
     std::vector<std::string> ids;
     for (const auto &s : scenario.robot.at("sensors"))

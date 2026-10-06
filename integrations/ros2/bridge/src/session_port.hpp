@@ -15,23 +15,28 @@
 
 namespace nereus::ros_bridge {
 
+// One drained sensor sample; acquired_ns is native (session) time.
 struct SensorSample {
     std::string sensor;
     std::int64_t acquired_ns{0};
     std::optional<Value> reading; // nullopt: the sample was unavailable
 };
 
+// Result of one advance(): the new snapshot and the task events it raised.
 struct StepResult {
     simulation::Snapshot snapshot;
     session::Events task_events;
 };
 
+// World pose of one task prop, for the viewer markers.
 struct PropVisual {
     std::string task, id;
     Eigen::Vector3d position;
     Eigen::Quaterniond orientation; // world from mesh
     bool held{false};
 };
+
+// A launcher/dropper payload drawn as a cylinder: in flight, or still `loaded` at its slot (world pose).
 struct PayloadVisual {
     std::string mechanism_id, mechanism_type;
     int id{0};
@@ -44,6 +49,7 @@ struct PayloadVisual {
 class SessionPort {
   public:
     virtual ~SessionPort() = default;
+    // Stepping and observation.
     virtual StepResult advance() = 0; // exactly one physics tick
     virtual simulation::Snapshot observe() const = 0;
     virtual const simulation::Snapshot &lastSnapshot() const = 0;
@@ -56,6 +62,7 @@ class SessionPort {
     virtual std::shared_ptr<const spatial::FixedFrames> frames() const = 0;
     virtual spatial::Pose referencePose(const simulation::BodyState &body) const = 0;
 
+    // Commands.
     virtual void commandThrusters(const Eigen::VectorXd &forces_native_order) = 0;
     virtual void setKilled(bool killed) = 0;
     virtual bool killed() const = 0;
@@ -67,6 +74,7 @@ class SessionPort {
     virtual session::CommandResult fire(const std::string &id, session::Events &events) = 0;
     virtual std::optional<session::MechanismState> mechanismState() const = 0;
 
+    // Placement and resets.
     // May throw std::invalid_argument for an invalid placement.
     virtual simulation::Snapshot place(const simulation::BodyState &com_state, bool clear_actuators) = 0;
     virtual const simulation::BodyState &startState() const = 0;
@@ -74,6 +82,7 @@ class SessionPort {
     virtual simulation::Snapshot fullReset() = 0;
     virtual std::uint64_t seed() const = 0;
 
+    // Runs, the task feed and viewer state.
     virtual session::CommandResult runStart(const Json &options) = 0;
     virtual session::CommandResult runStop() = 0;
     virtual session::CommandResult runAdjust(double points) = 0;

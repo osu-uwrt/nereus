@@ -1,3 +1,4 @@
+// Headless EGL (surfaceless Mesa platform) host that runs a Renderer without a window.
 #include "nereus/rendering/offscreen.hpp"
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -7,12 +8,16 @@
 
 namespace nereus::rendering {
 namespace {
+
 // GLEW has process-global function pointers. Serialize initialization and all capture
 // hosts as well as context migration; the renderer itself remains caller-context-owned.
 std::mutex host_mutex;
+
+// Exception carrying the failed operation and the current EGL error code.
 std::runtime_error eglError(const char *operation) {
     return std::runtime_error(std::string(operation) + " failed (EGL " + std::to_string(eglGetError()) + ")");
 }
+
 EGLDisplay sharedDisplay() {
     // EGL initialization is not reference-counted. Keep the process-wide display
     // initialized so destroying a host cannot invalidate another EGL user's context.
@@ -34,12 +39,16 @@ EGLDisplay sharedDisplay() {
     display = next;
     return display;
 }
+
+// RAII: makes the host context current for one call, then restores the caller's previous EGL
+// context and client API on destruction.
 struct Binding {
     EGLDisplay display, previous_display = eglGetCurrentDisplay();
     EGLContext previous_context = eglGetCurrentContext();
     EGLSurface previous_draw = eglGetCurrentSurface(EGL_DRAW);
     EGLSurface previous_read = eglGetCurrentSurface(EGL_READ);
     EGLenum previous_api = eglQueryAPI();
+
     Binding(EGLDisplay d, EGLSurface surface, EGLContext context) : display(d) {
         if (!eglBindAPI(EGL_OPENGL_API))
             throw eglError("bind OpenGL API");
@@ -49,6 +58,7 @@ struct Binding {
             throw error;
         }
     }
+
     ~Binding() {
         eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         eglBindAPI(previous_api);
@@ -56,13 +66,16 @@ struct Binding {
             eglMakeCurrent(previous_display, previous_draw, previous_read, previous_context);
     }
 };
+
 } // namespace
+
 struct OffscreenRenderer::Impl {
     EGLDisplay display = EGL_NO_DISPLAY;
     EGLContext context = EGL_NO_CONTEXT;
     EGLSurface surface = EGL_NO_SURFACE;
     std::unique_ptr<Renderer> renderer;
-    std::string device;
+    std::string device; // GL_RENDERER string of the context.
+
     // Constructed/destroyed under host_mutex. Tear down every partially-created resource.
     ~Impl() {
         if (display == EGL_NO_DISPLAY)
@@ -84,11 +97,15 @@ struct OffscreenRenderer::Impl {
             eglDestroyContext(display, context);
     }
 };
+
 OffscreenRenderer::OffscreenRenderer(const std::filesystem::path &shader_directory) {
     std::lock_guard<std::mutex> lock(host_mutex);
     auto next = std::make_unique<Impl>();
     next->display = sharedDisplay();
     const auto display = next->display;
+
+    // RGB8 + 24-bit depth desktop-OpenGL config and a 1x1 pbuffer to bind the context to;
+    // all drawing goes to the renderer's own framebuffers.
     const EGLint attributes[] = {EGL_SURFACE_TYPE,
                                  EGL_PBUFFER_BIT,
                                  EGL_RENDERABLE_TYPE,
@@ -110,6 +127,8 @@ OffscreenRenderer::OffscreenRenderer(const std::filesystem::path &shader_directo
     next->surface = eglCreatePbufferSurface(display, config, surface_attributes);
     if (next->surface == EGL_NO_SURFACE)
         throw eglError("create offscreen surface");
+
+    // Core-profile OpenGL 3.3 context; the caller's EGL client API is restored afterwards.
     const auto api = eglQueryAPI();
     if (!eglBindAPI(EGL_OPENGL_API))
         throw eglError("select OpenGL API");
@@ -125,6 +144,8 @@ OffscreenRenderer::OffscreenRenderer(const std::filesystem::path &shader_directo
     eglBindAPI(api);
     if (next->context == EGL_NO_CONTEXT)
         throw std::runtime_error("create OpenGL 3.3 context failed (EGL " + std::to_string(context_error) + ")");
+
+    // Load GL entry points and create the renderer while the new context is current.
     {
         Binding binding(display, next->surface, next->context);
         glewExperimental = GL_TRUE;
@@ -135,6 +156,7 @@ OffscreenRenderer::OffscreenRenderer(const std::filesystem::path &shader_directo
             throw std::runtime_error("initialize OpenGL functions failed: " + std::to_string(status));
         if (!GLEW_VERSION_3_3)
             throw std::runtime_error("OpenGL 3.3 is unavailable in the offscreen context");
+        // Drain errors glewInit may leave (e.g. core-profile GL_INVALID_ENUM) so checkGl starts clean.
         while (glGetError() != GL_NO_ERROR) {
         }
         const auto *name = glGetString(GL_RENDERER);
@@ -143,10 +165,12 @@ OffscreenRenderer::OffscreenRenderer(const std::filesystem::path &shader_directo
     }
     impl_ = std::move(next);
 }
+
 OffscreenRenderer::~OffscreenRenderer() {
     std::lock_guard<std::mutex> lock(host_mutex);
     impl_.reset();
 }
+
 ImageCapture OffscreenRenderer::capture(const Scene &scene, const View &view, const Appearance &appearance, float time,
                                         int width, int height, bool color, bool depth) {
     std::lock_guard<std::mutex> lock(host_mutex);
@@ -154,13 +178,16 @@ ImageCapture OffscreenRenderer::capture(const Scene &scene, const View &view, co
     impl_->renderer->draw(scene, view, appearance, time, width, height);
     return impl_->renderer->captureImage(color, depth);
 }
+
 LabelCapture OffscreenRenderer::captureLabels(const Scene &scene, const std::vector<InstanceLabel> &labels,
                                               const View &view, int width, int height) {
     std::lock_guard<std::mutex> lock(host_mutex);
     Binding binding(impl_->display, impl_->surface, impl_->context);
     return impl_->renderer->drawLabels(scene, labels, view, width, height);
 }
+
 const std::string &OffscreenRenderer::device() const {
     return impl_->device;
 }
+
 } // namespace nereus::rendering

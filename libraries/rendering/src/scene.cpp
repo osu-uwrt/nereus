@@ -1,3 +1,5 @@
+// CPU-side pool scene construction: floor (flat or profiled), walls, deck, coping, recesses, painted
+// markings, boxes and the water surface, all as render Instances. No OpenGL.
 #include "nereus/rendering/scene.hpp"
 #include <Eigen/Geometry>
 #include <Eigen/LU>
@@ -11,12 +13,16 @@
 
 namespace nereus::rendering {
 namespace {
+
 Eigen::Matrix4f eigen(const glm::mat4 &m) {
     return Eigen::Map<const Eigen::Matrix4f>(glm::value_ptr(m));
 }
+
+// Finite RGB with every channel in [0, 1].
 bool unitColor(const Eigen::Vector3f &c) {
     return c.allFinite() && (c.array() >= 0).all() && (c.array() <= 1).all();
 }
+
 // Depth of one floor profile (see PoolGeometry::floor_profiles) at a position along its axis.
 float profileDepth(const std::vector<Eigen::Vector2f> &profile, float s) {
     if (!(s > profile.front().x()))
@@ -26,8 +32,10 @@ float profileDepth(const std::vector<Eigen::Vector2f> &profile, float s) {
     const auto upper = std::upper_bound(profile.begin(), profile.end(), s,
                                         [](float value, const Eigen::Vector2f &v) { return value < v.x(); });
     const Eigen::Vector2f &a = *(upper - 1), &b = *upper;
+    // Linear interpolation inside the segment containing s.
     return a.y() + (b.y() - a.y()) * (s - a.x()) / (b.x() - a.x());
 }
+
 // Depth of a profiled floor under pool-local (x, y): the shallowest profile there.
 float floorDepth(const PoolGeometry &p, float x, float y) {
     float depth = std::numeric_limits<float>::max();
@@ -35,13 +43,15 @@ float floorDepth(const PoolGeometry &p, float x, float y) {
         depth = std::min(depth, profileDepth(profile.polyline, profile.along_x ? x : y));
     return depth;
 }
+
 // Up normal of a profiled floor from its depth slopes (z = -depth).
 Eigen::Vector3f floorNormal(const PoolGeometry &p, float x, float y) {
-    constexpr float h = .05f;
+    constexpr float h = .05f; // Central-difference step, metres.
     const float dx = (floorDepth(p, x + h, y) - floorDepth(p, x - h, y)) / (2 * h);
     const float dy = (floorDepth(p, x, y + h) - floorDepth(p, x, y - h)) / (2 * h);
     return Eigen::Vector3f(dx, dy, 1).normalized();
 }
+
 // Grid lines of a profiled floor: the pool edges and every profile vertex, per axis.
 std::pair<std::vector<float>, std::vector<float>> floorGrid(const PoolGeometry &p) {
     std::vector<float> xs{0, p.dimensions.x()}, ys{0, p.dimensions.y()};
@@ -54,6 +64,7 @@ std::pair<std::vector<float>, std::vector<float>> floorGrid(const PoolGeometry &
     }
     return {xs, ys};
 }
+
 // A box whose top face (top_l x top_w) is smaller than its base (l x w): four sides sloping in, centred on
 // the origin, z from -h/2 to h/2. Top and sides are separate submeshes so they can differ in colour.
 std::shared_ptr<const MeshAsset> frustumMesh(const Eigen::Vector3f &base, const Eigen::Vector2f &top,
@@ -75,6 +86,7 @@ std::shared_ptr<const MeshAsset> frustumMesh(const Eigen::Vector3f &base, const 
         for (auto i : {0U, 1U, 2U, 0U, 2U, 3U})
             mesh.indices.push_back(start + i);
     };
+
     quad(topFace, t[0], t[1], t[2], t[3]);
     for (int k = 0; k < 4; ++k)
         quad(sides, b[k], b[(k + 1) % 4], t[(k + 1) % 4], t[k]);
@@ -84,6 +96,7 @@ std::shared_ptr<const MeshAsset> frustumMesh(const Eigen::Vector3f &base, const 
     result->maximum = base / 2;
     return result;
 }
+
 // Floor mesh over a profiled floor, exact for its profiles' polylines. The grid runs through every profile
 // vertex, so on each cell every profile is a plane; the cell splits into convex pieces, one per profile, where
 // that profile is the shallowest. A crease between profiles then lies on piece edges instead of being cut
@@ -96,12 +109,14 @@ std::shared_ptr<const MeshAsset> floorMesh(const PoolGeometry &p) {
             return a + bx * q.x() + by * q.y();
         }
     };
+
     auto result = std::make_shared<MeshAsset>();
     Submesh mesh;
     std::vector<Plane> planes(p.floor_profiles.size());
     for (std::size_t j = 0; j + 1 < ys.size(); ++j)
         for (std::size_t i = 0; i + 1 < xs.size(); ++i) {
             const float x0 = xs[i], x1 = xs[i + 1], y0 = ys[j], y1 = ys[j + 1];
+            // Each profile's plane over this cell (linear between the cell's grid lines).
             for (std::size_t k = 0; k < planes.size(); ++k) {
                 const auto &profile = p.floor_profiles[k];
                 const float s0 = profile.along_x ? x0 : y0, s1 = profile.along_x ? x1 : y1;
@@ -109,6 +124,9 @@ std::shared_ptr<const MeshAsset> floorMesh(const PoolGeometry &p) {
                 const float slope = (d1 - d0) / (s1 - s0);
                 planes[k] = profile.along_x ? Plane{d0 - slope * s0, slope, 0} : Plane{d0 - slope * s0, 0, slope};
             }
+
+            // Clip the cell to where each profile is the shallowest (Sutherland-Hodgman against every other
+            // profile's plane), then fan-triangulate the convex piece.
             for (std::size_t k = 0; k < planes.size(); ++k) {
                 // Counter-clockwise seen from above; clipping keeps the order.
                 std::vector<Eigen::Vector2f> piece{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}};
@@ -129,6 +147,7 @@ std::shared_ptr<const MeshAsset> floorMesh(const PoolGeometry &p) {
                     }
                     piece = std::move(clipped);
                 }
+
                 if (piece.size() < 3)
                     continue;
                 const auto start = static_cast<std::uint32_t>(mesh.vertices.size());
@@ -139,6 +158,7 @@ std::shared_ptr<const MeshAsset> floorMesh(const PoolGeometry &p) {
                         mesh.indices.push_back(index);
             }
         }
+
     result->minimum = {0, 0, -p.dimensions.z()};
     result->maximum = {p.dimensions.x(), p.dimensions.y(), 0};
     for (const auto &v : mesh.vertices) {
@@ -148,6 +168,7 @@ std::shared_ptr<const MeshAsset> floorMesh(const PoolGeometry &p) {
     result->submeshes.push_back(std::move(mesh));
     return result;
 }
+
 // Decal quads for one pool side, one submesh per colour, in pool-local coordinates relative to the water
 // surface. Each quad extends kPad past its stripe so the Marking shader can fade the edge. Over a profiled
 // floor (`profiled`), floor quads are split along their length and each vertex sits on the floor below it.
@@ -158,12 +179,15 @@ std::shared_ptr<const MeshAsset> stripeMesh(const std::vector<PoolStripe> &strip
     auto result = std::make_shared<MeshAsset>();
     result->minimum.setConstant(std::numeric_limits<float>::max());
     result->maximum.setConstant(std::numeric_limits<float>::lowest());
+
     for (const auto &stripe : stripes) {
         if ((stripe.side == PoolSide::Floor) != floor)
             continue;
         const Eigen::Vector2f along = stripe.to - stripe.from;
         const float half = along.norm() / 2, halfWidth = stripe.width / 2;
         const Eigen::Vector2f u = along / (2 * half), across(-u.y(), u.x()), center = (stripe.from + stripe.to) / 2;
+
+        // Maps stripe-plane coordinates onto its side (just off the surface) and sets the matching normal.
         Eigen::Vector3f normal;
         const auto place = [&](Eigen::Vector2f q) -> Eigen::Vector3f {
             switch (stripe.side) {
@@ -185,6 +209,8 @@ std::shared_ptr<const MeshAsset> stripeMesh(const std::vector<PoolStripe> &strip
             }
             throw std::invalid_argument("unknown pool side");
         };
+
+        // Stripes of one colour share a submesh.
         auto found = std::find_if(result->submeshes.begin(), result->submeshes.end(), [&](const Submesh &part) {
             return part.material.base_color.head<3>() == stripe.color;
         });
@@ -194,8 +220,12 @@ std::shared_ptr<const MeshAsset> stripeMesh(const std::vector<PoolStripe> &strip
             result->submeshes.push_back(std::move(part));
             found = std::prev(result->submeshes.end());
         }
+
+        // UVs reach +-1 at the painted edge and a little beyond it at the padded quad corners.
         const auto start = static_cast<std::uint32_t>(found->vertices.size());
         const Eigen::Vector2f uv((half + kPad) / half, (halfWidth + kPad) / halfWidth);
+
+        // Over a profiled floor: a strip of short quads, each vertex dropped onto the floor below it.
         if (floor && profiled) {
             const int pieces = std::max(1, static_cast<int>(std::ceil(2 * (half + kPad) / kPiece)));
             for (int i = 0; i <= pieces; ++i)
@@ -216,6 +246,8 @@ std::shared_ptr<const MeshAsset> stripeMesh(const std::vector<PoolStripe> &strip
             }
             continue;
         }
+
+        // Otherwise a single flat quad.
         for (Eigen::Vector2f corner :
              {Eigen::Vector2f(-1, -1), Eigen::Vector2f(1, -1), Eigen::Vector2f(1, 1), Eigen::Vector2f(-1, 1)}) {
             const Eigen::Vector3f position =
@@ -227,14 +259,18 @@ std::shared_ptr<const MeshAsset> stripeMesh(const std::vector<PoolStripe> &strip
         for (auto i : {0U, 1U, 2U, 0U, 2U, 3U})
             found->indices.push_back(start + i);
     }
+
     if (result->submeshes.empty())
         return nullptr;
     return result;
 }
+
 } // namespace
+
 std::shared_ptr<const MeshAsset> makeBoxMesh() {
     auto result = std::make_shared<MeshAsset>();
     Submesh mesh;
+    // One quad per face (normal +-axis), spanned by the next two axes so it winds outward.
     for (int axis = 0; axis < 3; ++axis)
         for (int sign : {-1, 1}) {
             Eigen::Vector3f n = Eigen::Vector3f::Zero(), u = n, w = n;
@@ -253,6 +289,7 @@ std::shared_ptr<const MeshAsset> makeBoxMesh() {
     result->maximum.setConstant(.5f);
     return result;
 }
+
 Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
     if (!p.dimensions.allFinite() || (p.dimensions.array() <= 0).any() || !std::isfinite(p.water_level) ||
         !std::isfinite(p.deck_height) || p.deck_height < 0 || !p.local_to_world.allFinite() ||
@@ -263,6 +300,8 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
              .isApprox(Eigen::Matrix3f::Identity(), 1e-5f) ||
         std::abs(p.local_to_world.topLeftCorner<3, 3>().determinant() - 1) > 1e-5f)
         throw std::invalid_argument("pool appearance requires positive dimensions and a horizontal rigid frame");
+
+    // Validate the finish, markings, floor profiles, boxes and recesses before building anything.
     if (!unitColor(p.tile_color) || !unitColor(p.waterline_color) || !std::isfinite(p.tile_size) || p.tile_size < 0 ||
         !p.waterline_band.allFinite())
         throw std::invalid_argument("pool finish requires unit colours, a non-negative tile size and a finite band");
@@ -297,10 +336,14 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
         if (r.side == PoolSide::Floor || !r.from.allFinite() || !r.to.allFinite() || r.from.x() == r.to.x() ||
             r.from.y() == r.to.y() || !std::isfinite(r.depth) || r.depth <= 0)
             throw std::invalid_argument("pool recesses need a wall, distinct finite corners and a positive depth");
+
+    // Everything but the floor, markings and frustum boxes shares one unit-cube mesh, scaled per instance.
     Scene scene;
     const auto geometry = makeBoxMesh();
     const float length = p.dimensions.x(), width = p.dimensions.y(), depth = p.dimensions.z(), deck = p.deck_height;
     const auto pool = glm::make_mat4(p.local_to_world.data());
+
+    // Pool-local (x, y, z relative to the water surface) -> world transform.
     const auto at = [&](float x, float y, float z) {
         return pool * glm::translate(glm::mat4(1), {x, y, z + p.water_level});
     };
@@ -313,6 +356,8 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
         instance.material = material;
         scene.instances.push_back(std::move(instance));
     };
+
+    // Floor: a 24 cm tiled slab under a flat floor, or the profiled floor mesh.
     const bool profiled = !p.floor_profiles.empty();
     if (!profiled) {
         box(at(length / 2, width / 2, -depth - .12f), {length, width, .24f}, p.tile_color, SurfaceMaterial::Tiles);
@@ -324,6 +369,7 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
         instance.material = SurfaceMaterial::Tiles;
         scene.instances.push_back(std::move(instance));
     }
+
     // Each wall reaches the deepest floor along its foot (the floor hides any of it lying below).
     float yMin = depth, yMax = depth, xMin = depth, xMax = depth;
     if (profiled) {
@@ -334,6 +380,7 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
         for (float y : ys)
             xMin = std::max(xMin, floorDepth(p, 0, y)), xMax = std::max(xMax, floorDepth(p, length, y));
     }
+
     // Recesses cut the wall, deck and coping on their side. In a side's frame (along the wall, into it from
     // the pool face, z) a recess removes a box: its opening, `depth` into the wall, open through the deck when
     // it reaches the deck. A side without recesses keeps its boxes exactly; a cut box keeps its first piece in
@@ -345,6 +392,8 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
         SurfaceMaterial material;
     };
     std::vector<Piece> extraWalls;
+
+    // Pool-local <-> side frame (x along the wall, y into the wall from its pool face, z unchanged).
     using Aabb = std::pair<Eigen::Vector3f, Eigen::Vector3f>;
     const auto toSide = [&](PoolSide side, const Eigen::Vector3f &q) -> Eigen::Vector3f {
         switch (side) {
@@ -374,6 +423,8 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
         const Eigen::Vector3f a = map(side, b.first), c = map(side, b.second);
         return {a.cwiseMin(c), a.cwiseMax(c)};
     };
+
+    // The boxes each recess on `side` removes, in that side's frame (open upwards when it reaches the deck).
     const auto holes = [&](PoolSide side) {
         std::vector<Aabb> out;
         for (const auto &r : p.recesses)
@@ -385,6 +436,8 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
             }
         return out;
     };
+
+    // Box-minus-box: splits each overlapping box into up to six slabs around the hole.
     const auto subtract = [](const std::vector<Aabb> &boxes, const Aabb &hole) {
         std::vector<Aabb> out;
         for (auto b : boxes) {
@@ -409,6 +462,8 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
         }
         return out;
     };
+
+    // Adds a box belonging to `side`, cut by that side's recesses (see above for where the pieces go).
     const auto sideBox = [&](PoolSide side, const Eigen::Vector3f &c, const Eigen::Vector3f &s,
                              const Eigen::Vector3f &color, SurfaceMaterial material) {
         const auto cuts = holes(side);
@@ -434,6 +489,8 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
                 extraWalls.push_back({matrix, {size.x(), size.y(), size.z()}, color, material});
         }
     };
+
+    // Walls (0.3 m thick, from the floor up to the deck), then decks (3 m wide slabs), then coping strips.
     const Eigen::Vector3f deckColor(.73f, .76f, .73f), copingColor(.9f, .91f, .86f);
     sideBox(PoolSide::YMin, {length / 2, -.15f, (deck - yMin) / 2}, {length, .3f, yMin + deck}, p.tile_color,
             SurfaceMaterial::Tiles);
@@ -455,6 +512,7 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
     for (float x : {-.10f, length + .10f})
         sideBox(x < 0 ? PoolSide::XMin : PoolSide::XMax, {x, width / 2, deck + .02f}, {.22f, width, .055f}, copingColor,
                 SurfaceMaterial::Asset);
+
     // Line each recess: back, ends, sill and (below the deck) lintel, .3 m thick like the walls. The wall's own
     // .3 m (and the deck's) already bound the opening there, so the lining only covers what lies behind them:
     // overlapping a wall or deck face would make the two fight.
@@ -480,6 +538,8 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
         if (z1 < deck)
             lining(a0, a1, wall, d, z1, z1 + wall);
     }
+
+    // Instance 0 is the floor; 1..12 are the four walls, decks and copings.
     PoolLayout groups;
     groups.floor = {0};
     for (std::size_t i = 1; i <= 12; ++i)
@@ -489,6 +549,8 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
         groups.walls.push_back(scene.instances.size());
         box(piece.matrix, piece.size, piece.color, piece.material);
     }
+
+    // Marking decals: one instance for the floor stripes, one for the wall stripes.
     for (bool floor : {true, false})
         if (auto mesh = stripeMesh(p.markings, floor, length, width, depth, profiled ? &p : nullptr)) {
             Instance instance;
@@ -499,6 +561,8 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
             (floor ? groups.floor : groups.walls).push_back(scene.instances.size());
             scene.instances.push_back(std::move(instance));
         }
+
+    // Boxes: a scaled unit cube, or a frustum mesh when the top is smaller than the base.
     for (const auto &b : p.boxes) {
         (b.on_floor ? groups.floor : groups.walls).push_back(scene.instances.size());
         glm::mat4 rotation(1);
@@ -518,8 +582,11 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
         instance.material = material;
         scene.instances.push_back(std::move(instance));
     }
+
     if (layout)
         *layout = std::move(groups);
+
+    // Water surface: one horizontal quad over the pool at the water level.
     auto surface = std::make_shared<MeshAsset>();
     Submesh mesh;
     mesh.vertices = {{{0, 0, 0}, {0, 0, 1}, {0, 0}},
@@ -540,7 +607,10 @@ Scene makePoolScene(const PoolGeometry &p, PoolLayout *layout) {
     water.level = p.water_level;
     water.local_to_world = p.local_to_world;
     scene.water = std::move(water);
+
+    // The shadow map is centred on the middle of the pool surface.
     scene.lighting_center = (p.local_to_world * Eigen::Vector4f(length / 2, width / 2, p.water_level, 1)).head<3>();
     return scene;
 }
+
 } // namespace nereus::rendering

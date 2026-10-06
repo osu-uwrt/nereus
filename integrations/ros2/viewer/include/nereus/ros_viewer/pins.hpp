@@ -15,6 +15,7 @@ namespace nereus::ros_viewer::pins {
 // widgets below are plain ImGui widgets.
 void beginScope(const std::string &scope, const std::string &title);
 void endScope();
+
 // A nested part of the key for repeated widgets (per camera, per command); also pushes the ImGui ID.
 struct Scope {
     explicit Scope(const std::string &part);
@@ -38,12 +39,14 @@ bool Switch(const char *label, int *current, std::initializer_list<const char *>
 // The search index: every pinnable control drawn so far (in any window, open or not), as last drawn.
 struct Control {
     enum class Kind { Button, Checkbox, Choice };
+    // key: scope/part/id, as pinned.
     std::string key, label, window; // the window's title
     Kind kind = Kind::Button;
     bool checked = false, disabled = false;
     int current = 0;                // a choice's selection
     std::vector<std::string> items; // a choice's options
 };
+
 std::vector<Control> controls();
 // Runs a control as a click on it would (a choice: picks `choice`), the next time its window draws; a window that
 // is closed or behind a tab is drawn off screen for it.
@@ -62,6 +65,7 @@ void drawOffscreen(const std::string &scope, const std::string &title, const std
 void drawPinned();
 // For the toolbar's customization popup: a checkbox per pinned control (untick to unpin).
 void drawCustomization();
+// Whether anything is pinned; clear() unpins everything.
 bool any();
 void clear();
 

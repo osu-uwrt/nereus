@@ -1,7 +1,12 @@
+// registerPanels(): adds every generic panel type, plus the "panels_menu" and "separator" toolbar items, to a
+// composition registry. Providers are registered elsewhere.
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/theme.hpp"
 #include <algorithm>
+
 namespace nereus::ros_viewer::panels {
+
+// Defined in the panel's own source file.
 void registerMotionPanel(Registry &);
 void registerAutonomyPanel(Registry &);
 void registerPoseGizmo(Registry &);
@@ -13,7 +18,9 @@ void registerTelemetryPanel(Registry &);
 void registerRecordingPanel(Registry &);
 void registerElectricalPanel(Registry &);
 void registerBaggingPanel(Registry &);
+
 namespace {
+
 // Toolbar item "panels_menu": a Windows popup that shows or hides windows (drawn by the composition).
 struct PanelsMenu final : Panel {
     std::function<void()> menu;
@@ -24,6 +31,7 @@ struct PanelsMenu final : Panel {
     }
     void draw() override {}
 };
+
 // Toolbar item "separator": a thin divider between toolbar groups (none at the end of a row that wraps).
 struct Separator final : Panel {
     void toolbar() override {
@@ -40,8 +48,11 @@ struct Separator final : Panel {
     }
     void draw() override {}
 };
+
 } // namespace
+
 void registerPanels(Registry &registry) {
+    // Both toolbar items are hosted (no provider) and toolbar-only; Kind is unused for them.
     registry.panels.emplace("panels_menu",
                             ViewFactory<Panel>{Kind::Motion, [](const YAML::Node &n) { keys(n, {}, "panels_menu"); },
                                                [](const Binding &b) { return std::make_unique<PanelsMenu>(b); }, true,
@@ -49,6 +60,7 @@ void registerPanels(Registry &registry) {
     registry.panels.emplace(
         "separator", ViewFactory<Panel>{Kind::Motion, [](const YAML::Node &n) { keys(n, {}, "separator"); },
                                         [](const Binding &) { return std::make_unique<Separator>(); }, true, true});
+
     registerSimulationPanel(registry);
     registerRunPanel(registry);
     registerActuatorPanel(registry);
@@ -61,4 +73,5 @@ void registerPanels(Registry &registry) {
     registerElectricalPanel(registry);
     registerBaggingPanel(registry);
 }
+
 } // namespace nereus::ros_viewer::panels

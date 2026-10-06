@@ -16,17 +16,21 @@
 using namespace nereus::ros_viewer::panels;
 namespace fs = std::filesystem;
 namespace {
+// Writes `text` to `path`, optionally making it executable (for the stand-in scripts).
 void write(const fs::path &path, const std::string &text, bool executable = false) {
     std::ofstream(path) << text;
     if (executable)
         fs::permissions(path, fs::perms::owner_all, fs::perm_options::add);
 }
+
 std::string read(const fs::path &path) {
     std::ifstream in(path);
     std::stringstream text;
     text << in.rdbuf();
     return text.str();
 }
+
+// Polls `done` every 20 ms; false if it is still not true after `seconds`.
 bool waitFor(const std::function<bool()> &done, double seconds) {
     const auto end = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
     while (!done()) {
@@ -36,6 +40,7 @@ bool waitFor(const std::function<bool()> &done, double seconds) {
     }
     return true;
 }
+
 // ros2 bag record stand-in: writes its arguments into the bag, appends data until SIGINT, then closes the bag after
 // close_delay seconds by writing metadata.yaml. Files beside it change its behaviour: die (fail at once with the
 // file's text), exit_after (exit on its own after that many ticks), close_delay.
@@ -64,6 +69,7 @@ done
 } // namespace
 
 int main(int argc, char **argv) {
+    // A scratch tree: bin/ros2 (the stand-in recorder), ssh / ssh_down stand-ins, and the robot's home.
     char pattern[] = "/tmp/nereus_bagging_XXXXXX";
     const fs::path root = mkdtemp(pattern);
     const fs::path bin = root / "bin", robotHome = root / "robot_home";
@@ -93,11 +99,15 @@ int main(int argc, char **argv) {
                                        "NEREUS_BAG bytes 12\nNEREUS_BAG empty\n");
     assert(report.get("state") == "recording" && report.get("bag") == "/a b" && report.number("bytes") == 12);
     assert(report.has("empty") && report.get("empty").empty() && report.number("missing", -1) == -1);
+
+    // A remote target wraps the script in ssh <options> <host> 'bash -c ...'; a local one runs bash directly.
     BagHost robot{"ros@orin2", "~/bags", setup, {(root / "ssh").string()}, {"--max-cache-size", "100"}};
     const auto command = bagCommand(robot, "echo hi");
     assert(command.front() == (root / "ssh").string() && command[command.size() - 2] == "ros@orin2" &&
            command.back() == "bash -c 'echo hi'");
     assert(bagCommand(BagHost{}, "echo hi") == (std::vector<std::string>{"bash", "-c", "echo hi"}));
+
+    // runProcess: output up to a timeout.
     const auto timed = runProcess({"sh", "-c", "echo started; sleep 5"}, .3);
     assert(timed.timedOut && timed.output == "started\n");
     // A child left holding the output (as an ssh connection master does) does not hold up the result.
@@ -108,6 +118,7 @@ int main(int argc, char **argv) {
     // Scripts on this computer.
     const fs::path hostBags = root / "host_bags";
     BagHost host{"", hostBags.string(), setup, {"ssh"}, {}};
+    // Runs a recorder script on `h` and parses its NEREUS_BAG report lines.
     auto run = [](const BagHost &h, const std::string &script) {
         const auto result = runProcess(bagCommand(h, script), 20);
         assert(!result.timedOut);
@@ -115,6 +126,8 @@ int main(int argc, char **argv) {
     };
     auto r = run(host, bagStatusScript(host));
     assert(r.get("state") == "idle" && r.number("free") > 0 && !r.has("last_bag"));
+
+    // Start (topics plus an exclude regex), refuse a second start, stop cleanly, refuse an existing bag name.
     BagRequest request{"first", "", false, {"/talos/odometry/filtered", "/tf"}, "image|point cloud"};
     r = run(host, bagStartScript(host, request));
     const auto firstBag = (hostBags / "first").string();
@@ -130,11 +143,13 @@ int main(int argc, char **argv) {
     r = run(host, bagStatusScript(host));
     assert(r.get("state") == "idle" && r.get("last_state") == "stopped" && r.number("last_bytes") > 0);
     assert(run(host, bagStartScript(host, request)).get("error").find("already exists") != std::string::npos);
+
     // ros2 failing at once: its output comes back.
     write(bin / "die", "unknown storage");
     r = run(host, bagStartScript(host, {"dies", "", true, {}, ""}));
     assert(r.get("state") == "error" && r.get("error").find("boom: unknown storage") != std::string::npos);
     fs::remove(bin / "die");
+
     // A recorder that exits on its own is reported as died, with its last words.
     write(bin / "exit_after", "4");
     assert(run(host, bagStartScript(host, {"short", "", true, {}, ""})).get("error").find("disk full") !=
@@ -147,6 +162,7 @@ int main(int argc, char **argv) {
     r = run(host, bagStatusScript(host));
     assert(r.get("state") == "idle" && r.get("last_state") == "died" &&
            r.get("last_note").find("disk full") != std::string::npos && !r.has("last_complete"));
+
     // Slow to close: stopping until it finishes; a second stop does not interrupt it.
     write(bin / "close_delay", "1.5");
     assert(run(host, bagStartScript(host, {"slow", "", true, {}, ""})).get("state") == "recording");
@@ -154,6 +170,7 @@ int main(int argc, char **argv) {
     assert(run(host, bagStatusScript(host)).get("state") == "stopping");
     assert(run(host, bagStopScript(host, 5)).get("state") == "stopped");
     assert(fs::exists(hostBags / "slow" / "metadata.yaml"));
+
     // Never closing: kill.
     write(bin / "close_delay", "100");
     assert(run(host, bagStartScript(host, {"stuck", "", true, {}, ""})).get("state") == "recording");
@@ -176,6 +193,7 @@ int main(int argc, char **argv) {
     assert(unreachable.status == 255 && unreachable.output.find("No route to host") != std::string::npos);
 
     // The provider and panel.
+    // A private ROS domain and a per-process namespace keep parallel test runs apart.
     setenv("ROS_DOMAIN_ID", "185", 1);
     setenv("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp", 1);
     rclcpp::init(argc, argv);
@@ -200,6 +218,8 @@ panels:
 header:
   - {id: bag_chips, type: bagging, provider: bags}
 )");
+
+    // Point the three targets at the scratch tree and the stand-in ssh commands.
     auto targets = config["providers"]["bags"]["options"]["targets"];
     targets[0]["directory"] = hostBags.string();
     for (int i = 0; i < 3; ++i)
@@ -210,6 +230,8 @@ header:
     auto composition = std::make_unique<Composition>(config, ctx, registry);
     auto bagging = std::dynamic_pointer_cast<Bagging>(composition->providers().at("bags"));
     ros.start();
+
+    // The current state of one target, by id.
     auto target = [&](const std::string &id) {
         for (const auto &t : bagging->state().targets)
             if (t.id == id)
@@ -217,6 +239,8 @@ header:
         assert(false);
         return BagTargetState{};
     };
+
+    // Presets resolve relative topics under the namespace; every target gets polled (and "down" is unreachable).
     assert(bagging->state().presets.size() == 1 &&
            bagging->state().presets[0].topics == (std::vector<std::string>{"/" + ns + "/odometry/filtered", "/tf"}));
     assert(waitFor([&] { return target("host").known && target("robot").known && target("down").known; }, 10));
@@ -224,6 +248,7 @@ header:
     assert(target("down").message.find("Can't reach ros@down") != std::string::npos &&
            target("down").message.find("No route to host") != std::string::npos);
     assert(target("robot").lastBag == (robotHome / "bags" / "remote").string());
+
     // Another machine for the robot target: it starts over there (the stand-in ssh logs the destination);
     // this computer has no destination to change.
     bagging->setHost("host", "ros@elsewhere");
@@ -236,6 +261,7 @@ header:
     assert(target("robot").reachable && read(root / "ssh_hosts").find("ros@orin3") != std::string::npos);
     bagging->setHost("robot", "ros@orin2");
     assert(waitFor([&] { return target("robot").known; }, 10));
+
     // Invalid requests are refused.
     bagging->start("robot", {"bad name", "", true, {}, ""});
     bagging->start("robot", {"none", "", false, {}, ""});
@@ -249,6 +275,7 @@ header:
     assert(target("robot").bag == (robotHome / "bags" / "nav").string() && target("robot").message == "Recording");
     bagging->setHost("robot", "ros@orin3"); // not while it records
     assert(target("robot").host == "ros@orin2" && target("robot").recording);
+
     // Draw the panel (both target choices) and the header chips.
     ImGui::CreateContext();
     auto &io = ImGui::GetIO();
@@ -268,10 +295,12 @@ header:
     };
     for (int frame = 0; frame < 3; ++frame)
         draw();
+
     // Elapsed time keeps counting between polls.
     const double before = target("robot").elapsed;
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
     assert(target("robot").elapsed >= before + .25);
+
     // A restarted viewer finds the robot's recording; this computer's ended with the old viewer.
     ros.stop();
     composition.reset();
@@ -285,6 +314,8 @@ header:
     assert(!target("host").recording && target("host").lastBag == (hostBags / "local").string());
     for (int frame = 0; frame < 3; ++frame)
         draw();
+
+    // Stopping the found recording saves it with the namespaced preset topics.
     bagging->stop("robot");
     assert(waitFor([&] { return !target("robot").recording && !target("robot").pending; }, 10));
     const auto stopped = target("robot");
@@ -292,6 +323,7 @@ header:
     assert(read(robotHome / "bags" / "nav" / "args") == "/" + ns + "/odometry/filtered\n/tf\n");
     for (int frame = 0; frame < 2; ++frame)
         draw();
+
     ImGui::DestroyContext();
     ros.stop();
     composition.reset();

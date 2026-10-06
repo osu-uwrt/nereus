@@ -12,6 +12,7 @@ import fnmatch
 import itertools
 from typing import Any
 
+# Parameter groups of an environment (plus the top-level ``time_s`` range)
 GROUPS = ("water", "lighting", "image")
 # absolute key -> its pool-relative scale key
 EXCLUSIVE = {
@@ -21,6 +22,7 @@ EXCLUSIVE = {
         "scattering": "scattering_scale",
     }
 }
+# Base randomization ranges ([low, high]) under every spec
 DEFAULTS: dict[str, Any] = {
     # Scales of the calibrated pool optics (robosub_2026: scattering 0.458), never absolute.
     "water": {
@@ -39,6 +41,7 @@ DEFAULTS: dict[str, Any] = {
     "image": {"noise_sigma": [0, 4], "blur_px": [0, 0.8]},
     "time_s": [0, 600],
 }
+# How the renderer picks an environment per sample: by weight, or cycling evenly
 MODES = ("weighted", "sweep")
 
 
@@ -49,6 +52,8 @@ def _apply(environment: dict[str, Any], layer: dict[str, Any]) -> None:
             continue
         values = layer[group]
         target = environment.setdefault(group, {})
+
+        # Setting one form of an exclusive quantity drops the other from lower layers
         for absolute, scale in EXCLUSIVE.get(group, {}).items():
             if absolute in values and scale not in values:
                 target.pop(scale, None)
@@ -60,6 +65,7 @@ def _apply(environment: dict[str, Any], layer: dict[str, Any]) -> None:
 
 
 def _sweep_layer(key: str, value: Any) -> dict[str, Any]:
+    """A sweep key ("group.name" or "time_s") and value as a layer for ``_apply``."""
     if key == "time_s":
         return {"time_s": value}
     group, _, name = key.partition(".")
@@ -67,6 +73,7 @@ def _sweep_layer(key: str, value: Any) -> dict[str, Any]:
 
 
 def _format(value: Any) -> str:
+    """Compact text of a sweep value for environment ids (lists as "[a;b]")."""
     if isinstance(value, str):
         return value
     if isinstance(value, bool):
@@ -92,11 +99,15 @@ def expand(randomize: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
     spec = randomize.get("environments")
     if not spec:
         return [_entry("default", 1.0, common)], "weighted"
+
+    # Cartesian product of the sweep values; one empty point when there is no sweep
     entries = spec.get("list") or [{"id": "base"}]
     sweep = spec.get("sweep", {})
     points = list(
         itertools.product(*([(key, value) for value in values] for key, values in sweep.items()))
     )
+
+    # Each entry (over the base) x each sweep point; the entry's weight is split over its points
     result = []
     for entry in entries:
         weight = float(entry.get("weight", 1.0)) / len(points)
@@ -112,6 +123,7 @@ def expand(randomize: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
 
 
 def _entry(name: str, weight: float, environment: dict[str, Any]) -> dict[str, Any]:
+    """One environment as written to the job: id, weight and every group."""
     return {
         "id": name,
         "weight": weight,

@@ -107,9 +107,10 @@ class Simulator:
     def __init__(self, command: list[str], output: str) -> None:
         self.binary, self.extra = command[0], command[1:]
         self.base = output
-        self.run = 0
+        self.run = 0  # runs started so far; run N writes to output_for(base, N)
         self.process: subprocess.Popen[bytes] | None = None
-        self.stopping = False
+        self.stopping = False  # set once a stop was requested (or an exit reported) for this run
+        # Start requests for _starter: the command and a future for the started process.
         self._starts: queue.Queue[tuple[list[str], Future[subprocess.Popen[bytes]]]] = queue.Queue()
         threading.Thread(target=self._starter, daemon=True).start()
 
@@ -124,6 +125,7 @@ class Simulator:
                 result.set_exception(error)
 
     def start(self, resolved: str) -> str:
+        """Starts the next run on `resolved`; returns its output folder."""
         self.run += 1
         output = output_for(self.base, self.run)
         Path(output).parent.mkdir(parents=True, exist_ok=True)
@@ -134,6 +136,7 @@ class Simulator:
         return output
 
     def stop(self, timeout: float = 15) -> None:
+        """Stops the running simulator with SIGINT, killing it after `timeout` seconds."""
         process, self.stopping = self.process, True
         if process is None or process.poll() is not None:
             return
@@ -146,6 +149,7 @@ class Simulator:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parses the arguments, starts the first run and serves load_scenario requests until shutdown."""
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -161,11 +165,14 @@ def main(argv: list[str] | None = None) -> int:
     if not command:
         parser.error("missing the nereus-sim command after --")
 
+    # ROS is imported only once the arguments are valid.
     import rclpy
     from rclpy.executors import ExternalShutdownException
     from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
     from std_msgs.msg import String
 
+    # The node, its latched status topic, and the state shared by the callbacks and the switcher thread:
+    # `lock` is held for a whole switch; `current` and `document` describe the running scenario.
     rclpy.init()
     node = rclpy.create_node("sim_supervisor")
     latched = QoSProfile(
@@ -178,6 +185,7 @@ def main(argv: list[str] | None = None) -> int:
     current: dict[str, Any] = {"scenario": str(Path(args.scenario).resolve())}
     document = json.loads(Path(args.resolved).read_text())
 
+    # Publish the latched status (see the module docstring) and log it.
     def publish(state: str, message: str = "") -> None:
         status = {
             "state": state,
@@ -189,6 +197,8 @@ def main(argv: list[str] | None = None) -> int:
         status_publisher.publish(String(data=json.dumps(status)))
         node.get_logger().info(f"{state}: {status['pool']} {message}".rstrip())
 
+    # Resolve the requested scenario first (a bad request leaves the running simulator alone), then
+    # restart the simulator on it.
     def switch(name: str) -> None:
         nonlocal document
         try:
@@ -220,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
 
     threading.Thread(target=switcher, daemon=True).start()
 
+    # load_scenario callback: one switch at a time; requests during a switch are dropped.
     def requested(message: String) -> None:
         if lock.locked() or not requests.empty():
             node.get_logger().warning(
@@ -240,6 +251,8 @@ def main(argv: list[str] | None = None) -> int:
             lock.release()
 
     node.create_timer(1.0, watch)
+
+    # First run on the scenario sim.launch.py already resolved, then serve requests until shutdown.
     simulator.start(args.resolved)
     publish("running")
     try:

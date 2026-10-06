@@ -1,3 +1,6 @@
+"""The UWRT navigation (EKF) and control stack for Talos on the simulation clock, plus the world -> map
+chameleon_tf, for the controller/EKF hold acceptance (hold.py) against a separately launched simulator."""
+
 from ament_index_python.packages import get_package_share_directory as share
 from launch import LaunchDescription
 from launch.actions import GroupAction, IncludeLaunchDescription
@@ -10,6 +13,7 @@ def generate_launch_description():
         [
             GroupAction(
                 [
+                    # Every node on sim time; never write feedforward autotune results back to config.
                     SetParameter(name="use_sim_time", value=True),
                     SetParameter(name="write_ff_autotune", value=False),
                     IncludeLaunchDescription(

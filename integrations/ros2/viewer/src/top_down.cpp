@@ -1,3 +1,4 @@
+// CPU rasterizer for the course map's top-down images, and their outlined mip chain.
 #include "top_down.hpp"
 #include <algorithm>
 #include <cmath>
@@ -6,16 +7,19 @@
 
 namespace nereus::ros_viewer::host {
 namespace {
+// A decoded diffuse texture (RGBA8, top row first); width 0 when it could not be read.
 struct Texture {
     std::vector<unsigned char> rgba;
     int width = 0, height = 0;
 };
+
 // Linear base colour to the sRGB the textures and the screen use.
 float toSrgb(float c) {
     return std::pow(std::clamp(c, 0.f, 1.f), 1 / 2.2f);
 }
 } // namespace
 
+// Union of each mesh's bounding-box corners projected into the plane.
 std::pair<glm::vec2, glm::vec2> topDownBounds(const std::vector<TopDownPart> &parts) {
     glm::vec2 low(std::numeric_limits<float>::max()), high(std::numeric_limits<float>::lowest());
     for (const auto &part : parts)
@@ -37,14 +41,21 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
     const glm::vec2 size = high - low;
     if (size.x <= 0 || size.y <= 0)
         return image;
+
+    // Image size: pixelsPerMetre, reduced so the longer side fits maximumSide. `high` is rounded out to whole
+    // pixels.
     const float scale = std::min(pixelsPerMetre, float(maximumSide) / std::max(size.x, size.y));
     image.width = std::max(1, int(std::ceil(size.x * scale)));
     image.height = std::max(1, int(std::ceil(size.y * scale)));
     image.low = low;
     image.high = {low.x + float(image.width) / scale, low.y + float(image.height) / scale};
+
+    // Colour plus a height buffer (plane z, larger is higher) for the highest-surface-wins test.
     const std::size_t pixels = std::size_t(image.width) * std::size_t(image.height);
     image.rgba.assign(pixels * 4, 0);
     std::vector<float> depth(pixels, std::numeric_limits<float>::lowest());
+
+    // Textures by path, read once (failed reads are remembered as empty).
     std::map<std::filesystem::path, Texture> textures;
     const auto texture = [&](const std::filesystem::path &path) -> const Texture * {
         auto [found, fresh] = textures.try_emplace(path);
@@ -52,6 +63,7 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
             found->second = {};
         return found->second.width > 0 ? &found->second : nullptr;
     };
+
     for (const auto &part : parts) {
         if (!part.mesh)
             continue;
@@ -63,12 +75,16 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
             const glm::vec3 flat = map ? glm::vec3(1) : glm::vec3(toSrgb(base.x()), toSrgb(base.y()), toSrgb(base.z()));
             if (!map && base.w() < .05f)
                 continue;
+
+            // Vertices in the plane (metres) and in image pixels (x right, y down, z kept for the height test).
             std::vector<glm::vec3> placed(submesh.vertices.size()), plane(submesh.vertices.size());
             for (std::size_t i = 0; i < placed.size(); ++i) {
                 const auto &p = submesh.vertices[i].position;
                 plane[i] = glm::vec3(part.planeFromAsset * glm::vec4(p.x(), p.y(), p.z(), 1));
                 placed[i] = {(plane[i].x - low.x) * scale, (image.high.y - plane[i].y) * scale, plane[i].z}; // pixels
             }
+
+            // Rasterize each triangle over its pixel bounding box with barycentric weights at pixel centres.
             for (std::size_t t = 0; t + 2 < submesh.indices.size(); t += 3) {
                 const std::uint32_t ia = submesh.indices[t], ib = submesh.indices[t + 1], ic = submesh.indices[t + 2];
                 if (ia >= placed.size() || ib >= placed.size() || ic >= placed.size())
@@ -92,6 +108,8 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
                                     wb = ((c.x - px) * (a.y - py) - (c.y - py) * (a.x - px)) / area, wc = 1 - wa - wb;
                         if (wa < 0 || wb < 0 || wc < 0)
                             continue;
+
+                        // Keep only the highest surface at this pixel.
                         const float z = wa * a.z + wb * b.z + wc * c.z;
                         const std::size_t at = std::size_t(y) * std::size_t(image.width) + std::size_t(x);
                         if (z <= depth[at])
@@ -113,6 +131,7 @@ TopDownImage bakeTopDown(const std::vector<TopDownPart> &parts, glm::vec2 low, g
                                 continue;
                             colour = glm::vec3(texel[0], texel[1], texel[2]) / 255.f;
                         }
+
                         depth[at] = z;
                         colour *= shade;
                         for (int k = 0; k < 3; ++k)
@@ -145,6 +164,7 @@ void darkenEdges(TopDownImage &image) {
             }
     image.rgba = std::move(edged);
 }
+
 // Half the size: opaque when any of the (up to) four pixels under it is, their opaque colours averaged.
 TopDownImage halve(const TopDownImage &image) {
     TopDownImage half;

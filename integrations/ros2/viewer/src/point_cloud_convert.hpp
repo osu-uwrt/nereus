@@ -17,6 +17,8 @@ inline std::shared_ptr<rendering::PointData> convertPointCloud(const sensor_msgs
                                                                const Eigen::Vector3f &fallback,
                                                                std::size_t maxPoints = 500000) {
     using Field = sensor_msgs::msg::PointField;
+
+    // Locate the scalar fields by name and check their types and offsets.
     const auto field = [&](const char *name) -> const Field * {
         for (const auto &f : msg.fields)
             if (f.name == name && f.count == 1)
@@ -33,18 +35,25 @@ inline std::shared_ptr<rendering::PointData> convertPointCloud(const sensor_msgs
     if (rgb &&
         ((rgb->datatype != Field::FLOAT32 && rgb->datatype != Field::UINT32) || rgb->offset + 4 > msg.point_step))
         rgb = nullptr;
+
+    // The buffer must hold every row it claims.
     const std::size_t count = std::size_t(msg.width) * msg.height;
     if (msg.point_step == 0 || msg.row_step < std::size_t(msg.width) * msg.point_step ||
         msg.data.size() < std::size_t(msg.row_step) * msg.height)
         return nullptr;
+
+    // Keep every `step`-th point so at most maxPoints remain.
     const std::size_t step = maxPoints && count > maxPoints ? (count + maxPoints - 1) / maxPoints : 1;
     auto out = std::make_shared<rendering::PointData>();
     out->xyzrgb.reserve(6 * (count / step + 1));
+    // Unaligned float32 read.
     const auto read = [](const std::uint8_t *p) {
         float v;
         std::memcpy(&v, p, 4);
         return v;
     };
+
+    // Interleave x, y, z, r, g, b per kept point.
     for (std::size_t i = 0; i < count; i += step) {
         const std::uint8_t *point = msg.data.data() + (i / msg.width) * msg.row_step + (i % msg.width) * msg.point_step;
         const float px = read(point + x->offset), py = read(point + y->offset), pz = read(point + z->offset);

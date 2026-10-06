@@ -12,6 +12,7 @@
 namespace nereus::session {
 using Json = nlohmann::json;
 
+// The resolved documents, split by role. Pack data stays as JSON for the owning component to read.
 struct ResolvedScenario {
     Json scenario, robot, pool, tasks, bridge; // bridge is null when no bridge pack is selected
     Json equipment;                            // null when no equipment pack is selected
@@ -22,10 +23,12 @@ struct ResolvedScenario {
     Json document; // the complete source document, for records and the viewer's scenario topic
 
     const Json &task(const std::string &id) const; // throws std::out_of_range
+    // Absolute path of one asset of a pack role; throws std::out_of_range when it is not present.
     std::filesystem::path asset(const std::string &role, const std::string &id) const;
 };
 
 // Throws std::runtime_error with file/field context.
 ResolvedScenario loadResolvedScenario(const std::filesystem::path &resolved_json);
+// Same, from an already parsed document (the error message has no file name).
 ResolvedScenario parseResolvedScenario(const Json &document);
 } // namespace nereus::session

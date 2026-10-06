@@ -1,4 +1,5 @@
 #pragma once
+// Classic fixed-step RK4 over the 13-element body state.
 #include "marine_dynamics.hpp"
 #include <cmath>
 #include <stdexcept>
@@ -6,6 +7,7 @@
 namespace nereus::simulation::detail {
 // Evaluate all state/time-dependent forces at each stage. Actuator midpoint
 // values may be held by the caller, while geometry/environment remain stage-local.
+// `derivative(stage_state, t)` receives the stage state and its time offset into the step, in seconds.
 template <class Derivative> State13d integrateBodyRk4(const State13d &state, double dt, Derivative derivative) {
     if (!std::isfinite(dt) || dt <= 0 || dt > .1)
         throw std::invalid_argument("RK4 step must be in (0,0.1] seconds");

@@ -20,6 +20,7 @@
 namespace nereus::ros_bridge {
 namespace sc = nereus::session_cameras;
 namespace {
+// One compiled camera stream (image, camera_info or point cloud) of one camera output.
 struct CameraStream {
     std::string id, camera, output;
     bool info{false}, right_eye{false}, jpeg{false}, depth{false}, bgr{false}, cloud{false};
@@ -29,6 +30,7 @@ struct CameraStream {
     std::vector<sc::Output> demand_outputs;
     int stride{1}, every{1}; // point_cloud: pixel step; publish every Nth capture (stream rate = sensor rate / N)
 };
+
 // PCL PointXYZRGB layout, as the ZED driver publishes (point_step 32).
 struct CloudPoint {
     float x, y, z, padding;
@@ -37,22 +39,27 @@ struct CloudPoint {
 };
 static_assert(sizeof(CloudPoint) == 32 && offsetof(CloudPoint, b) == 16);
 
+// Writer sources of camera_info streams (stamp and intrinsics) and of image/cloud headers (stamp only).
 SpecTree infoSources() {
     SpecTree sample(std::map<std::string, SpecTree>{{"time", timeSpec()}});
     SpecTree info(std::map<std::string, SpecTree>{
         {"width", integerSpec()}, {"height", integerSpec()}, {"k", floatArray({9})}, {"p", floatArray({12})}});
     return SpecTree(std::map<std::string, SpecTree>{{"sample", sample}, {"info", info}});
 }
+
 SpecTree sampleSources() {
     SpecTree sample(std::map<std::string, SpecTree>{{"time", timeSpec()}});
     return SpecTree(std::map<std::string, SpecTree>{{"sample", sample}});
 }
 
+// Compiles the camera streams of the selected stereo cameras and turns SessionCameras products into
+// ROS messages in its delivery callback.
 class SessionCameraSink final : public CameraSink {
   public:
     SessionCameraSink(const session::ResolvedScenario &resolved, const std::vector<std::string> &camera_ids,
                       SessionPort &session, const CameraSinkOptions &options)
         : session_(session), resolved_(resolved) {
+        // The selection must be unique, enabled stereo cameras.
         std::map<std::string, Json> sensors;
         for (const auto &sensor : resolved.robot.at("sensors"))
             if (std::find(camera_ids.begin(), camera_ids.end(), sensor.at("id").get<std::string>()) != camera_ids.end())
@@ -62,6 +69,8 @@ class SessionCameraSink final : public CameraSink {
         for (const auto &[id, sensor] : sensors)
             if (sensor.at("type") != "stereo_camera" || !sensor.value("enabled", true))
                 throw MappingError("camera provider must select unique enabled robot cameras");
+
+        // Compile each stream bound to a selected camera (sensor:<camera>.<output>).
         std::map<std::string, int> quality;
         const Json names = resolved.bridge.value("frame_names", Json::object());
         for (const auto &stream : resolved.bridge.at("streams")) {
@@ -96,6 +105,7 @@ class SessionCameraSink final : public CameraSink {
                                             : config.at("frame").get<std::string>();
             if (names.contains(frame) && stream.at("frame_id") != names[frame])
                 throw MappingError("camera stream " + repr(id) + " differs from frame_names");
+
             CameraStream item;
             item.id = id;
             item.camera = camera;
@@ -112,6 +122,8 @@ class SessionCameraSink final : public CameraSink {
             streams_[camera].push_back(item);
             stream_ids_.push_back(id);
         }
+
+        // Only zero delivery latency and the fail/drop_oldest pending policies are supported.
         for (const auto &[id, sensor] : sensors) {
             if (sensor.value("latency_ns", 0) != 0)
                 throw MappingError("camera " + repr(id) + ": nonzero delivery latency is not implemented");
@@ -119,6 +131,8 @@ class SessionCameraSink final : public CameraSink {
                                                     sensor.value("overflow", "drop_oldest") != "drop_oldest"))
                 throw MappingError("camera " + repr(id) + ": invalid pending queue policy");
         }
+
+        // Create the capture runtime with the per-camera JPEG quality.
         sc::Options camera_options;
         camera_options.sensor_ids = camera_ids;
         camera_options.always = options.always;
@@ -126,6 +140,7 @@ class SessionCameraSink final : public CameraSink {
         camera_options.jpeg_quality = quality;
         cameras_ = std::make_unique<sc::SessionCameras>(resolved, camera_options);
         quality_ = quality;
+
         // Payload mesh for dynamic content comes from the projectiles stream options, when declared.
         for (const auto &stream : resolved.bridge.at("streams"))
             if (stream.at("native") == "state:payloads" && stream.contains("options") &&
@@ -147,6 +162,8 @@ class SessionCameraSink final : public CameraSink {
         cameras_->start([this](sc::Products &&products) { deliver(products); });
     }
 
+    // Requests a capture of the current state: props and payloads only when someone wants images, plus
+    // the indicator latch states for LED visuals.
     void acquire(const simulation::Snapshot &snapshot, std::int64_t ros_ns) override {
         const spatial::Pose root{snapshot.body.position, snapshot.body.orientation};
         std::vector<rendering::Instance> dynamic;
@@ -159,6 +176,7 @@ class SessionCameraSink final : public CameraSink {
         cameras_->request(snapshot.elapsed.count(), ros_ns, root, dynamic, {}, latched);
     }
 
+    // Forwards demand for a stream's camera outputs; camera_info streams have none.
     void setDemand(const std::string &stream, bool wanted) override {
         for (const auto &[camera, list] : streams_)
             for (const auto &item : list)
@@ -175,11 +193,13 @@ class SessionCameraSink final : public CameraSink {
     void invalidate(std::optional<std::uint64_t> seed) override {
         cameras_->invalidate(seed);
     }
+
     void close() override {
         if (cameras_)
             cameras_->close();
     }
 
+    // execution.json "cameras": capture setup, pending-queue policy and JPEG quality per camera.
     Json describe() const override {
         Json pending = Json::object();
         for (const auto &sensor : resolved_.robot.at("sensors"))
@@ -198,6 +218,7 @@ class SessionCameraSink final : public CameraSink {
                   {"jpeg_quality", jpeg}}}};
     }
 
+    // summary.json "camera_stats", per camera.
     Json stats() const override {
         Json out = Json::object();
         for (const auto &[camera, item] : cameras_->stats())
@@ -218,6 +239,7 @@ class SessionCameraSink final : public CameraSink {
         return !demanded_.empty() || always_;
     }
 
+    // camera_info: stamp from sample.time, frame from frame_id, intrinsics filled at delivery.
     void compileInfo(CameraStream &item, const Json &stream, const std::string &where, const std::string &frame_id) {
         item.info = true;
         if (stream.at("direction") != "publish" || (item.output != "camera_info" && item.output != "camera_info_right"))
@@ -232,6 +254,7 @@ class SessionCameraSink final : public CameraSink {
         item.header = compileWriter(item.type->members(), fields, infoSources(), frame_id, where);
     }
 
+    // RGB/depth images, raw (rgb8/bgr8/32FC1) or JPEG; all JPEG streams of a camera share one quality.
     void compileImage(CameraStream &item, const Json &stream, const std::string &where, const std::string &frame_id,
                       const std::string &camera, std::map<std::string, int> &quality) {
         const std::string &output = item.output;
@@ -309,6 +332,7 @@ class SessionCameraSink final : public CameraSink {
         item.demand_outputs = {sc::Output::RgbLeft, sc::Output::DepthLeft};
     }
 
+    // Back-projects the decimated pixels with the left intrinsics (pinhole: x = (u - cx) d / fx).
     static void fillCloud(const CameraStream &item, const cameras::Frame &frame, const sc::CameraInfo &info,
                           void *message) {
         const int width = frame.width, height = frame.height;
@@ -324,6 +348,8 @@ class SessionCameraSink final : public CameraSink {
         cloud.is_dense = false;
         cloud.point_step = sizeof(CloudPoint);
         cloud.row_step = cloud.point_step * cloud.width;
+
+        // x, y, z floats and the packed rgb float at offset 16 (PCL convention).
         cloud.fields.clear();
         for (const auto &[name, offset] :
              {std::pair<const char *, std::uint32_t>{"x", 0}, {"y", 4}, {"z", 8}, {"rgb", 16}}) {
@@ -334,6 +360,7 @@ class SessionCameraSink final : public CameraSink {
             field.count = 1;
             cloud.fields.push_back(field);
         }
+
         cloud.data.assign(static_cast<std::size_t>(cloud.row_step) * cloud.height, 0);
         auto *points = reinterpret_cast<CloudPoint *>(cloud.data.data());
         for (int y = 0; y < rows; ++y)
@@ -352,6 +379,7 @@ class SessionCameraSink final : public CameraSink {
             }
     }
 
+    // Mesh instances of props and payloads in the world, for this capture.
     std::vector<rendering::Instance> dynamicInstances() {
         std::vector<rendering::Instance> out;
         const auto &visuals = cameras_->scene().propVisuals();
@@ -366,6 +394,8 @@ class SessionCameraSink final : public CameraSink {
                     instance.transform = pose.cast<float>();
                     out.push_back(std::move(instance));
                 }
+
+        // Payload mesh scaled to length x diameter x diameter, like the marker stream.
         if (payload_mesh_)
             for (const auto &payload : session_.payloadVisuals()) {
                 Eigen::Matrix4d pose = Eigen::Matrix4d::Identity();
@@ -381,6 +411,7 @@ class SessionCameraSink final : public CameraSink {
         return out;
     }
 
+    // Copies one frame into an Image (tight rows) or a CompressedImage; bgr8 swaps the R and B bytes.
     static void fillImage(const CameraStream &item, const cameras::Frame &frame, void *message) {
         if (item.jpeg) {
             if (frame.jpeg.empty())
@@ -415,6 +446,7 @@ class SessionCameraSink final : public CameraSink {
         }
     }
 
+    // SessionCameras callback: publishes every stream of the camera whose output was produced.
     void deliver(const sc::Products &products) {
         const auto found = streams_.find(products.camera);
         if (found == streams_.end())
@@ -455,9 +487,11 @@ class SessionCameraSink final : public CameraSink {
 
     SessionPort &session_;
     const session::ResolvedScenario &resolved_;
+    // Compiled streams per camera id, and every stream id they publish.
     std::map<std::string, std::vector<CameraStream>> streams_;
     std::vector<std::string> stream_ids_;
     std::map<std::string, int> quality_;
+
     std::unique_ptr<sc::SessionCameras> cameras_;
     std::function<void(EncodedImage)> publish_;
     std::optional<std::string> payload_asset_;
@@ -467,6 +501,7 @@ class SessionCameraSink final : public CameraSink {
     bool always_{false};
 
   public:
+    // Render every output regardless of subscribers (CameraSinkOptions::always).
     void setAlways(bool value) {
         always_ = value;
         cameras_->setAlways(value);

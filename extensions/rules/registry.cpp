@@ -1,3 +1,4 @@
+// The standard rules registry: every compiled competition rules module, keyed by its pack name.
 #include "rules/registry.hpp"
 
 #include "rules/robosub_2026/robosub_2026.hpp"

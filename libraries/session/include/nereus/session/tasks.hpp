@@ -13,7 +13,7 @@
 
 namespace nereus::session {
 using Event = Json;
-using Events = std::vector<Event>;
+using Events = std::vector<Event>; // in production order
 
 // Physical correction a task applies to a payload it judged.
 struct ProjectileStep {
@@ -30,10 +30,14 @@ class Rules {
     virtual ~Rules() = default;
     // Returns {"scores": [{row, points}], "events": [...]}.
     virtual Json evaluate(const Json &state, const Events &events, const Json &parameters) = 0;
+
+    // Extra run_score fields for the operator scorecard.
     virtual Json describe(const Json &state, const Json &parameters) {
         (void)state, (void)parameters;
         return Json::object();
     }
+
+    // task_events feed records for `events`; `context` carries per-payload details from the session.
     virtual Json feed(const Events &events, const Json &context, const Json &parameters) {
         (void)events, (void)context, (void)parameters;
         return Json::array();
@@ -45,11 +49,14 @@ class Rules {
         return feed(events, context, parameters);
     }
 };
+
 // Explicit, constructed registry (no global self-registration). Keys are the task pack's
 // `scoring_rules[].name` (e.g. "robosub_2026").
 using RulesFactory = std::function<std::unique_ptr<Rules>()>;
 using RulesRegistry = std::map<std::string, RulesFactory>;
 
+// Every selected task's observers and scoring for one run. Times are nanoseconds that may not go backwards
+// until reset(); a failure while observing or scoring poisons the runtime until reset().
 class TaskRuntime {
   public:
     // task_ids: optional subset; unsupported selected region/event types throw.
@@ -59,8 +66,11 @@ class TaskRuntime {
     TaskRuntime(const TaskRuntime &) = delete;
     TaskRuntime &operator=(const TaskRuntime &) = delete;
 
+    // Clear scores, history and trackers (the run is open again only if the scenario auto-starts).
     void reset(std::int64_t time_ns = 0);
+    // Reset and open a scored run with these run options.
     void start(std::int64_t time_ns, const Json &options = Json::object());
+    // Close the run; returns the events from finishing open gate attempts (plus any the rules derive).
     Events stop(std::int64_t time_ns);
     Json snapshot() const; // {run, scores, history, tasks, environment, latched, ...} as in Python
 
@@ -68,6 +78,8 @@ class TaskRuntime {
     Events observe(std::int64_t time_ns, const spatial::Pose &world_reference);
     // Events produced by another physical owner (prop world) at this time.
     Events record(std::int64_t time_ns, const Events &events);
+
+    // Payloads: announce a release (tip = leading end, world), then judge each step's swept centre segment.
     Events releaseProjectile(std::int64_t time_ns, int id, const std::string &mechanism_type,
                              const Eigen::Vector3d &tip_world, double radius_m, double length_m);
     ProjectileStep stepProjectile(std::int64_t time_ns, int id, const Eigen::Vector3d &start_center,

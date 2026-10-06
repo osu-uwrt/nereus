@@ -15,12 +15,14 @@
 
 namespace nereus::ros_bridge {
 
+// Owns the rclcpp node and its ROS entities; see the file comment for the threading model.
 class BridgeNode {
   public:
     // Creates every ROS entity of the bridge pack (the ROS context must be initialised).
     BridgeNode(BridgeCore &core, CameraSink *cameras = nullptr);
     ~BridgeNode();
 
+    // The executor thread that runs ROS callbacks (they only post work to the stepping thread).
     void startExecutor();
     void stopExecutor();
 
@@ -44,6 +46,7 @@ class BridgeNode {
             over_5ms += ns > 5'000'000;
         }
     };
+
     struct Performance {
         std::int64_t ticks{0}, tick_ns_total{0}, tick_ns_max{0}, wall_ns{0}, sim_ns{0};
         Phase drain, step, publish, cameras, oversleep;   // oversleep: wake-up later than requested
@@ -62,11 +65,13 @@ class BridgeNode {
     std::map<std::string, std::int64_t> skippedPublications() const;
 
   private:
+    // Stepping-thread helpers.
     void send(const std::vector<Publication> &publications);
     void publishClock(std::int64_t ns);
     void broadcast(const std::vector<Transform> &transforms);
     void tick();
     void refreshSubscribers();
+
     struct Impl;
     std::unique_ptr<Impl> impl_;
     BridgeCore &core_;

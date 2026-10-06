@@ -1,11 +1,15 @@
 # Target nereus_viewer_panels: panel composition, providers and panels of the pool viewer.
 # Depends on ROS messages, ImGui, glm and yaml-cpp only; no simulator types.
+
+# Generic panels, providers and the ROS runtime they share.
 set(_panel_sources
   panel_registry.cpp composition.cpp motion_panel.cpp mapping_panel.cpp actuator_panel.cpp
   run_panel.cpp simulation_panel.cpp autonomy_panel.cpp pose_gizmo.cpp telemetry_panel.cpp recording_panel.cpp
   dock_layout.cpp theme.cpp pins.cpp
   electrical_panel.cpp bagging_panel.cpp bag_recorder.cpp
   ros_runtime.cpp ros_bagging.cpp standard_motion.cpp sim_run.cpp simulation_rate.cpp)
+
+# UWRT-specific providers (riptide_msgs2 topics/services) are only built for the UWRT viewer.
 if(NEREUS_ROS_VIEWER_UWRT)
   list(APPEND _panel_sources uwrt_motion.cpp uwrt_autonomy.cpp uwrt_mapping.cpp uwrt_actuators.cpp
     uwrt_telemetry.cpp uwrt_recording.cpp uwrt_electrical.cpp)
@@ -20,6 +24,8 @@ target_link_libraries(nereus_viewer_panels PUBLIC nereus_imgui nereus_glm yaml-c
   rclcpp::rclcpp rclcpp_action::rclcpp_action tf2_ros::tf2_ros
   ${std_msgs_TARGETS} ${std_srvs_TARGETS} ${geometry_msgs_TARGETS} ${nav_msgs_TARGETS}
   ${sensor_msgs_TARGETS} ${visualization_msgs_TARGETS} ${action_msgs_TARGETS} ${rcl_interfaces_TARGETS})
+
+# UWRT build: riptide messages plus optional chameleon (mapping calibration) and ZED (SVO recording) support.
 if(NEREUS_ROS_VIEWER_UWRT)
   target_compile_definitions(nereus_viewer_panels PUBLIC NEREUS_VIEWER_UWRT=1)
   target_link_libraries(nereus_viewer_panels PUBLIC ${riptide_msgs2_TARGETS} ${diagnostic_msgs_TARGETS})
@@ -39,6 +45,8 @@ endif()
 
 if(BUILD_TESTING)
   set(_viewer_config ${PROJECT_SOURCE_DIR}/content/viewer/talos_uwrt_panels.yaml)
+
+  # Test executables; all link the panels library and keep asserts on (-UNDEBUG).
   set(_panel_tests panels_gizmo_input_test panels_composition_test panels_dock_layout_test
     panels_pins_test panels_theme_classic_test panels_theme_heat_sheet_test panels_bagging_test)
   add_executable(panels_gizmo_input_test ../tests/panels_gizmo_input.cpp)
@@ -53,11 +61,14 @@ if(BUILD_TESTING)
     add_executable(panels_operator_test ../tests/panels_operator_panels.cpp)
     list(APPEND _panel_tests panels_panel_ros_test panels_operator_test)
   endif()
+
   foreach(t ${_panel_tests})
     target_link_libraries(${t} PRIVATE nereus_viewer_panels)
     target_compile_options(${t} PRIVATE -UNDEBUG)
     target_compile_definitions(${t} PRIVATE NEREUS_VIEWER_THEMES="${PROJECT_SOURCE_DIR}/content/viewer/themes")
   endforeach()
+
+  # Test registrations; the two ROS-backed UWRT tests run serially.
   add_test(NAME panels_gizmo_input COMMAND panels_gizmo_input_test)
   add_test(NAME panels_composition COMMAND panels_composition_test)
   add_test(NAME panels_dock_layout COMMAND panels_dock_layout_test)

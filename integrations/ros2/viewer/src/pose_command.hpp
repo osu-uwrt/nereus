@@ -7,14 +7,18 @@
 #include <string>
 
 namespace nereus::ros_viewer::host {
+// A pose to hold in the world (map) frame: metres and degrees.
 struct PoseTarget {
     glm::vec3 position{0};
     glm::vec3 degrees{0}; // roll, pitch, yaw (yaw in (-180, 180])
 };
+
+// A parsed move: the resulting target plus a human-readable summary.
 struct PoseCommand {
     PoseTarget target;
     std::string summary; // the move as read back: "forward 0.5 m, turn 30°"
 };
+
 // A move typed in the palette. Not a move (`isMove` false) unless the first word is one of:
 //   forward / back / left / right / up / down <metres>     along the heading (up is +z)
 //   turn [left | right] <degrees>                          yaw, left positive
@@ -30,8 +34,10 @@ struct ParsedMove {
     std::string error;
 };
 ParsedMove parseMove(const std::string &text, const PoseTarget &from);
+
 // One keyboard-drive step: metres forward / left along the heading, up, and degrees of turn (left positive).
 PoseTarget stepped(const PoseTarget &from, float forward, float left, float up, float turn);
+
 // The target as the palette shows it: "x 1.20  y 0.40  z -1.00  yaw 120°" (roll / pitch when not level).
 std::string describe(const PoseTarget &);
 } // namespace nereus::ros_viewer::host

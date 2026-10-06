@@ -1,4 +1,5 @@
 #pragma once
+// Contact geometry for the plant's built-in contact models, and the hook for contact responses owned elsewhere.
 #include <Eigen/Geometry>
 #include <memory>
 #include <string>
@@ -7,13 +8,18 @@
 namespace nereus::simulation {
 // Geometry is data, independent of robots, pools, tasks and rendering.
 // Body proxy poses are COM-local; static proxy poses use simulation-world coordinates.
+// One box proxy: full edge lengths (m), centre and orientation.
 struct BoxProxy {
     std::string id;
     Eigen::Vector3d size{Eigen::Vector3d::Ones()};
     Eigen::Vector3d center{Eigen::Vector3d::Zero()};
     Eigen::Quaterniond orientation{Eigen::Quaterniond::Identity()};
 };
+
+// Disabled: no contacts. SpherePool: a COM-centred sphere against a flat pool's walls and floor. BoxScene: the
+// robot's box proxies against static world boxes.
 enum class ContactModel { Disabled, SpherePool, BoxScene };
+
 struct ContactParameters {
     ContactModel model{ContactModel::SpherePool};
     std::vector<BoxProxy> body_boxes;     // Robot-owned, ordered compound proxies.

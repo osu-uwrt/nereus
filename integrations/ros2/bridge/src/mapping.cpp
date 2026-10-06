@@ -1,3 +1,5 @@
+// Field-map compiler: Writers (native -> ROS) and Readers (ROS -> native) over rosidl introspection.
+
 #include "mapping.hpp"
 
 #include <builtin_interfaces/msg/time.hpp>
@@ -13,15 +15,20 @@
 
 namespace nereus::ros_bridge {
 namespace {
+// Types with special handling: quaternions are mapped per component, Time from native ns.
 constexpr const char *kQuaternion = "geometry_msgs/Quaternion";
 constexpr const char *kTime = "builtin_interfaces/Time";
 
+// Vector3 and Point share the x/y/z double layout and take a native float[3] whole.
 bool isVectorMessage(const RosType &t) {
     return !t.isArray() && (t.base == "geometry_msgs/Vector3" || t.base == "geometry_msgs/Point");
 }
+
 bool isFloatBase(const std::string &b) {
     return b == "float" || b == "double";
 }
+
+// Value range of a ROS integer base type; false for non-integer types.
 bool intRange(const std::string &base, std::int64_t &low, std::uint64_t &high) {
     static const std::map<std::string, std::pair<std::int64_t, std::uint64_t>> table = {
         {"int8", {-128, 127}},       {"uint8", {0, 255}},
@@ -37,11 +44,14 @@ bool intRange(const std::string &base, std::int64_t &low, std::uint64_t &high) {
     high = found->second.second;
     return true;
 }
+
 bool isIntBase(const std::string &b) {
     std::int64_t l;
     std::uint64_t h;
     return intRange(b, l, h);
 }
+
+// Throws when `value` does not fit the ROS integer type `base`.
 void checkRange(const std::string &base, std::int64_t value, const std::string &where) {
     std::int64_t low;
     std::uint64_t high;
@@ -53,8 +63,11 @@ void checkRange(const std::string &base, std::int64_t value, const std::string &
 
 // ------------------------------------------------------------------ native -> ROS
 
+// Writes one native scalar into a ROS scalar or array element.
 using Store = std::function<void(void *element, const Value &value)>;
 
+// Store for a scalar ROS field: floats take Float or Int, integers Int (range-checked on every write),
+// booleans Bool and strings String.
 Store scalarStore(const introspection::MessageMember &member, const RosType &type, const Spec &spec,
                   const std::string &where) {
     using namespace introspection;
@@ -97,6 +110,8 @@ Store scalarStore(const introspection::MessageMember &member, const RosType &typ
 // Setter of a whole field value at the address of the field (or indexed element).
 using Setter = std::function<void(void *target, const Value &value)>;
 
+// Setter for a whole destination field: Time from native ns, Vector3/Point from float[3], numeric
+// arrays from row-major native arrays, and scalars.
 Setter makeSetter(const FieldPath &ros, const Spec &spec, const std::string &where) {
     const RosType &type = ros.type;
     if (type.base == kQuaternion && !type.isArray())
@@ -104,6 +119,7 @@ Setter makeSetter(const FieldPath &ros, const Spec &spec, const std::string &whe
     if (type.base == kTime && !type.isArray()) {
         if (spec != timeSpec())
             throw MappingError(where + ": " + std::string(kTime) + " needs a native time source");
+        // Split ns into sec/nanosec with nanosec in [0, 1e9), also for negative times.
         return [](void *target, const Value &v) {
             const std::int64_t ns = v.asInt();
             std::int64_t sec = ns / 1000000000, rest = ns % 1000000000;
@@ -128,9 +144,12 @@ Setter makeSetter(const FieldPath &ros, const Spec &spec, const std::string &whe
             vec->z = v.a[2];
         };
     }
+
     if (type.isMessage() && !type.isArray())
         throw MappingError(where + ": whole " + type.base + " assignment is not supported; map its fields");
     const auto &member = ros.member();
+
+    // Whole numeric array from a native array; sequences are resized to the value.
     if (type.isArray() && !ros.indexed()) {
         if (type.isMessage() || spec.shape.empty())
             throw MappingError(where + ": cannot assign native " + spec.describe() + " to ROS " + type.base + " array");
@@ -159,11 +178,13 @@ Setter makeSetter(const FieldPath &ros, const Spec &spec, const std::string &whe
             }
         };
     }
+
     if (!spec.shape.empty())
         throw MappingError(where + ": cannot assign native " + spec.describe() + " to scalar " + type.base);
     return scalarStore(member, type, spec, where);
 }
 
+// Native spec of a JSON constant; arrays must be flat numbers (any float makes the array float).
 Spec constantSpec(const Json &value, const std::string &where) {
     if (value.is_boolean())
         return booleanSpec();
@@ -190,6 +211,8 @@ Spec constantSpec(const Json &value, const std::string &where) {
     }
     throw MappingError(where + ": unsupported constant " + pyRepr(value));
 }
+
+// Native value of a JSON constant (arrays as doubles).
 Value constantValue(const Json &value) {
     if (value.is_boolean())
         return Value::boolean(value.get<bool>());
@@ -233,6 +256,8 @@ Writer compileWriter(const introspection::MessageMembers *type, const Json &fiel
     bool stamped = false;
     for (std::uint32_t k = 0; k < type->member_count_; ++k)
         stamped = stamped || std::string(type->members_[k].name_) == "header";
+
+    // Stamped messages: frame_id comes from the stream and header.stamp must be mapped.
     if (frame_id) {
         if (!frame_id->empty() && !stamped)
             throw MappingError(where + ": frame_id " + repr(*frame_id) + " set on unstamped " + type->message_name_);
@@ -247,6 +272,8 @@ Writer compileWriter(const introspection::MessageMembers *type, const Json &fiel
                 {path, [frame](void *target, const Value &) { *static_cast<std::string *>(target) = frame; }});
         }
     }
+
+    // One step per destination: a constant, an enum_map (native string state -> integer), or a source.
     for (const auto &[destination, source] : fields.items()) {
         const std::string at = where + "/" + destination;
         const FieldPath ros = resolveField(type, destination, true);
@@ -264,6 +291,7 @@ Writer compileWriter(const introspection::MessageMembers *type, const Json &fiel
             writer.steps_.push_back({ros, [set, fixed](void *target, const Value &) { set(target, fixed); }});
             continue;
         }
+
         const std::string path = source.at("from").get<std::string>();
         Spec spec;
         const SourceRef ref = SourceRef::compile(sources, path, spec);
@@ -287,6 +315,7 @@ Writer compileWriter(const introspection::MessageMembers *type, const Json &fiel
                                      }});
             continue;
         }
+
         const Setter set = makeSetter(ros, spec, at);
         writer.steps_.push_back(
             {ros, [ref, set](void *target, const Value &values) { set(target, ref.read(values)); }});
@@ -297,6 +326,7 @@ Writer compileWriter(const introspection::MessageMembers *type, const Json &fiel
 // ------------------------------------------------------------------ ROS -> native
 
 namespace {
+// Native spec a ROS field provides: Vector3/Point as float[3], arrays as 1-D (-1 for sequences).
 Spec rosSpec(const FieldPath &field, const std::string &where) {
     const RosType &t = field.type;
     if (t.base == kQuaternion && !t.isArray())
@@ -324,6 +354,7 @@ Spec rosSpec(const FieldPath &field, const std::string &where) {
     return {dtype, {}};
 }
 
+// Reads any ROS numeric field as double (64-bit integers may lose precision).
 double readDouble(std::uint8_t id, const void *p) {
     using namespace introspection;
     if (id == ROS_TYPE_FLOAT)
@@ -348,6 +379,8 @@ double readDouble(std::uint8_t id, const void *p) {
         return static_cast<double>(*static_cast<const std::int64_t *>(p));
     throw MappingError("unsupported ROS numeric type");
 }
+
+// Reads any ROS numeric field as int64; 64-bit types exactly, the others through readDouble.
 std::int64_t readInteger(std::uint8_t id, const void *p) {
     using namespace introspection;
     if (id == ROS_TYPE_UINT64)
@@ -357,6 +390,7 @@ std::int64_t readInteger(std::uint8_t id, const void *p) {
     return static_cast<std::int64_t>(readDouble(id, p));
 }
 
+// Read function for one ROS field producing a native value of `spec`; array sizes are checked on read.
 std::function<Value(const void *)> makeRead(const FieldPath &field, const Spec &spec) {
     const auto *member = &field.member();
     const std::uint8_t id = member->type_id_;
@@ -394,6 +428,7 @@ std::function<Value(const void *)> makeRead(const FieldPath &field, const Spec &
     throw MappingError("unsupported native type " + spec.describe());
 }
 
+// "['a', 'b']" for error messages.
 std::string listRepr(const std::set<std::string> &items) {
     std::string out = "[";
     bool first = true;
@@ -405,6 +440,8 @@ std::string listRepr(const std::set<std::string> &items) {
 }
 } // namespace
 
+// Every native argument must be mapped exactly once from a ROS field ({from: path} only); accept_if
+// conditions become equality filters on scalar fields.
 Reader compileReader(const introspection::MessageMembers *type, const Json &fields,
                      const std::map<std::string, Spec> &arguments, const Json &accept_if, const std::string &where) {
     std::set<std::string> given, wanted, unknown, missing;
@@ -419,6 +456,7 @@ Reader compileReader(const introspection::MessageMembers *type, const Json &fiel
     if (!unknown.empty() || !missing.empty())
         throw MappingError(where + ": native arguments must be exactly " + listRepr(wanted) + " (unknown " +
                            listRepr(unknown) + ", missing " + listRepr(missing) + ")");
+
     Reader reader;
     for (const auto &[argument, source] : fields.items()) {
         const std::string at = where + "/" + argument;
@@ -431,6 +469,8 @@ Reader compileReader(const introspection::MessageMembers *type, const Json &fiel
             throw MappingError(at + ": ROS " + actual.describe() + " does not provide native " + expected.describe());
         reader.steps_.push_back({argument, field, expected, makeRead(field, expected)});
     }
+
+    // accept_if: [{field, equals}] scalar equality filters.
     if (accept_if.is_array()) {
         for (const auto &condition : accept_if) {
             const std::string name = condition.at("field").get<std::string>();
@@ -446,6 +486,7 @@ Reader compileReader(const introspection::MessageMembers *type, const Json &fiel
     return reader;
 }
 
+// True when every accept_if filter matches the message.
 bool Reader::accepts(const void *message) const {
     for (const auto &filter : filters_) {
         const void *p;

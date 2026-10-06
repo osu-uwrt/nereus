@@ -1,3 +1,5 @@
+// Interprets a resolved pool document into PoolModel: the floor (flat or sampled from profiles), placed box
+// and mesh fixtures, and the contact boxes the physics uses.
 #include <nereus/session/pool.hpp>
 
 #include "json_util.hpp"
@@ -9,8 +11,9 @@
 
 namespace nereus::session {
 namespace {
-constexpr double kFlatFloorToleranceM = 1e-3;
+constexpr double kFlatFloorToleranceM = 1e-3; // a box top this close to depth_m counts as the flat floor
 
+// One `floor_profile` entry: depth samples along the pool's x or y axis, smoothed into a curve.
 simulation::FloorProfile profileFrom(const Json &profile) {
     std::vector<Eigen::Vector2d> points;
     for (const auto &point : profile.at("points_m"))
@@ -42,6 +45,8 @@ simulation::PoolFloor poolFloor(const Json &pool) {
     const Json &p = pool.at("parameters");
     if (!p.contains("floor_profile"))
         return simulation::PoolFloor::flat(p.at("depth_m").get<double>(), p.at("length_m").get<double>());
+
+    // One profile or a list of them; PoolFloor takes the shallowest at each point.
     const Json &floor = p.at("floor_profile");
     std::vector<simulation::FloorProfile> profiles;
     if (floor.is_array())
@@ -59,6 +64,7 @@ PoolModel poolModel(const Json &pool) {
     model.profiled = p.contains("floor_profile");
     model.floor = poolFloor(pool);
 
+    // Placed `box` and `mesh` fixtures; other fixture types are ignored here.
     for (const auto &fixture : pool.value("fixtures", Json::array())) {
         const auto type = fixture.at("type").get<std::string>();
         if (type == "box") {
@@ -66,6 +72,7 @@ PoolModel poolModel(const Json &pool) {
             box.id = fixture.at("id").get<std::string>();
             const auto &size = fixture.at("size_m");
             box.size = {size.at(0).get<double>(), size.at(1).get<double>(), size.at(2).get<double>()};
+            // A box on the floor is lifted by half its height so it rests on the floor rather than in it.
             place(fixture, model.floor, model.surface_z, box.size.z() / 2, box.center, box.orientation, box.on_floor);
             box.contact = fixture.value("contact", false);
             model.boxes.push_back(std::move(box));
@@ -93,12 +100,16 @@ PoolModel poolModel(const Json &pool) {
         box.floor = atFlatFloor(box);
         model.contacts.push_back(std::move(box));
     }
+
+    // Box fixtures marked `contact: true` also collide.
     for (const auto &fixture : model.boxes)
         if (fixture.contact) {
             PoolContactBox box{fixture.id, fixture.size, fixture.center, fixture.orientation, false};
             box.floor = atFlatFloor(box);
             model.contacts.push_back(std::move(box));
         }
+
+    // A profiled floor is approximated by generated boxes, one per floor segment.
     if (model.profiled) {
         const auto generated = simulation::floorBoxes(model.floor, p.at("length_m").get<double>(),
                                                       p.at("width_m").get<double>(), model.surface_z);

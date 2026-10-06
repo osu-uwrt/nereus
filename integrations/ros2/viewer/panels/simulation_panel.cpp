@@ -1,15 +1,19 @@
+// "simulation" panel: toolbar toggle and tool window for simulator speed, pause, sync and reset.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/pins.hpp"
 #include <algorithm>
 #include <cmath>
 #include <imgui.h>
+
 namespace nereus::ros_viewer::panels {
 namespace {
 class SimulationPanel final : public Panel {
     std::shared_ptr<Simulation> simulation;
+    // Speed being edited; follows the simulator until the user types (dirty) and resets on apply.
     float draft = 1;
     bool dirty = false, open = false;
+    // Where the window first opens: just below the toolbar toggle.
     ImVec2 anchor{80, 120};
 
   public:
@@ -20,10 +24,12 @@ class SimulationPanel final : public Panel {
         nereus::ros_viewer::windowToggle("Simulation", &open);
         anchor = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y};
     }
+
     void windowMenu() override {
         if (ImGui::MenuItem("Simulation", nullptr, open))
             open = !open;
     }
+
     void drawWindows() override {
         if (!open)
             return;
@@ -33,6 +39,7 @@ class SimulationPanel final : public Panel {
             draw();
         ImGui::End();
     }
+
     void draw() override {
         const auto s = simulation ? simulation->state() : SimulationState{};
         const bool paused = s.rate == 0;
@@ -47,6 +54,8 @@ class SimulationPanel final : public Panel {
             ImGui::Text("Selected speed: %.2fx", paused ? s.resumeRate : s.rate);
             ImGui::EndDisabled();
         }
+
+        // Speed row: edit + Apply (disabled while paused), Pause/Resume, and a 1x shortcut.
         ImGui::BeginDisabled(!simulation || !s.connected || s.pending);
         ImGui::BeginDisabled(paused);
         ImGui::SetNextItemWidth(ui(180));
@@ -74,6 +83,8 @@ class SimulationPanel final : public Panel {
         ImGui::EndDisabled();
         ImGui::Text("Speed range: >0 to %.0fx", s.maxRate);
         ImGui::TextDisabled("Pause preserves the selected speed.");
+
+        // Sync / reset are separate one-shot services with their own pending state and message.
         ImGui::Separator();
         ImGui::BeginDisabled(!simulation || !s.syncReady || s.operationPending);
         if (pins::Button("Sync sim", ui(ImVec2(130, 36))))
@@ -95,6 +106,7 @@ class SimulationPanel final : public Panel {
     }
 };
 } // namespace
+
 void registerSimulationPanel(Registry &registry) {
     registry.panels.emplace(
         "simulation", ViewFactory<Panel>{Kind::Simulation, [](const YAML::Node &n) { keys(n, {}, "simulation tool"); },

@@ -1,3 +1,5 @@
+// nereus_datasets tests: seeding, job parsing, environments, samplers, part resolution, label outputs, and
+// end-to-end GL renders of the resolved Talos fixture (skipped without the fixture or EGL).
 #include <nereus/datasets/environment.hpp>
 #include <nereus/datasets/generator.hpp>
 #include <nereus/datasets/job.hpp>
@@ -20,8 +22,10 @@ using ds::Json;
 using ds::Pose;
 
 namespace {
+
 constexpr double kDeg = M_PI / 180;
 
+// A flat 50 x 25 m pool, 2.1336 m (7 ft) deep, placed so world z = 0 is the water surface.
 ds::PoolFrame flatPool() {
     ds::PoolFrame pool;
     pool.length = 50;
@@ -43,6 +47,7 @@ Pose forwardMount() {
     mount.translation = {.3, 0, .05};
     return mount;
 }
+
 // A down camera: optical +Z along root -Z, slightly off 90 deg.
 Pose downMount() {
     Pose mount;
@@ -55,6 +60,7 @@ Pose downMount() {
     return mount;
 }
 
+// A small valid job: two blocks (3 torpedo approach, 2 background free) and one split material rule.
 Json minimalJob() {
     return Json::parse(R"({
       "format": "nereus.dataset_job.v1", "dataset": "t", "seed": 7, "output": "/tmp/x",
@@ -88,6 +94,7 @@ r::Submesh threeQuads() {
     quad(1, 0); // touches the first quad's x = 1 edge
     return submesh;
 }
+
 } // namespace
 
 TEST(DatasetSeeding, SplitmixReferenceAndStreams) {
@@ -128,6 +135,8 @@ TEST(DatasetJob, ParsesBlocksNamesAndParts) {
     EXPECT_DOUBLE_EQ(job.randomize.environments[0].tint_scale->hi, 1.1);
     EXPECT_TRUE(job.acceptance.reject_fragments);
     EXPECT_EQ(job.acceptance.min_fragment_px, 25);
+
+    // Validation: unknown sampler types and out-of-range supersampling throw.
     auto bad = minimalJob();
     bad["samples"][0]["sampler"]["type"] = "orbit";
     EXPECT_THROW(ds::parseJob(bad), std::runtime_error);
@@ -343,6 +352,8 @@ TEST(DatasetSampler, ApproachLooksAtTargetWithinJitter) {
     board.translation = {10, 3, -1.4};
     board.rotation = Eigen::AngleAxisd(30 * kDeg, Eigen::Vector3d::UnitZ());
     const std::map<std::string, Pose> frames{{"board", board}};
+
+    // Most draws are feasible; every feasible one satisfies the geometry below.
     int drawn = 0;
     for (std::int64_t k = 0; k < 300; ++k) {
         ds::Stream rng(1, k);
@@ -398,6 +409,8 @@ TEST(DatasetSampler, OverheadAndFree) {
         const Eigen::Vector3d axis = camera.rotation * Eigen::Vector3d::UnitZ();
         EXPECT_LT(axis.z(), -std::cos((3 + 2 + 2 + .5) * kDeg));
     }
+
+    // Free: inside the 0.5 m wall margin, within the depth range.
     ds::Sampler free;
     free.type = "free";
     free.depth_m = {.5, 1.5};
@@ -462,6 +475,7 @@ TEST(DatasetParts, MaterialRulesSplitAndCache) {
     EXPECT_EQ(parts.parts[1].piece, 1);
     EXPECT_EQ(parts.parts[2].part, "pole_white");
     EXPECT_EQ(parts.parts[2].piece, 0);
+
     // A second instance of the same mesh reuses the rewrite.
     const auto again = ds::resolveParts(shared, {"slalom", "poles", "pole", "slalom_back"}, job, &cache);
     EXPECT_EQ(again.mesh, parts.mesh);
@@ -576,6 +590,8 @@ TEST(DatasetOutput, LabelStatsIdMapAndPng16) {
     EXPECT_EQ(ids[3], 7);     // top-right
     EXPECT_EQ(ids[4 + 1], 7); // middle row
     EXPECT_EQ(ids[0], 0);     // part-0 key
+
+    // 16-bit PNG round trip through writeAtomic (no temporaries left behind).
     const auto dir = std::filesystem::temp_directory_path() / "nereus_datasets_test";
     std::filesystem::create_directories(dir);
     ds::writeAtomic(dir / "ids.png", ds::encodePng16(ids, 4, 3));
@@ -590,6 +606,8 @@ TEST(DatasetOutput, LabelStatsIdMapAndPng16) {
 // End to end on the real Talos/UWRT scenario: 2 torpedo samples at 320x200, rendered as one shard and as two
 // single-sample generators, must be byte-identical.
 namespace {
+
+// Whole file as bytes.
 std::string slurp(const std::filesystem::path &path) {
     std::ifstream in(path, std::ios::binary);
     std::stringstream text;
@@ -597,6 +615,7 @@ std::string slurp(const std::filesystem::path &path) {
     return text.str();
 }
 
+// A two-sample torpedo job on the resolved Talos fixture, labelling the torpedo board's part map.
 Json talosJob(const std::filesystem::path &out, int supersample = 1) {
     const std::string tasks = std::string(NEREUS_SOURCE_DIR) + "/content/packs/tasks/robosub_2026/assets/torpedo/";
     Json job = {
@@ -639,6 +658,7 @@ Json talosJob(const std::filesystem::path &out, int supersample = 1) {
     return job;
 }
 
+// A generator for `job`, or null when the GL context cannot be created (tests then skip).
 std::unique_ptr<ds::Generator> makeGenerator(const Json &job, ds::GeneratorOptions options = {}) {
     try {
         return std::make_unique<ds::Generator>(ds::parseJob(job), options);
@@ -650,6 +670,7 @@ std::unique_ptr<ds::Generator> makeGenerator(const Json &job, ds::GeneratorOptio
     }
 }
 
+// Every image, id map and record in `a` exists in `b` with identical bytes, and the file counts match.
 void expectSameOutputs(const std::filesystem::path &a, const std::filesystem::path &b) {
     std::size_t files = 0;
     for (const char *folder : {"images", "ids", "records"})
@@ -665,12 +686,14 @@ void expectSameOutputs(const std::filesystem::path &a, const std::filesystem::pa
     EXPECT_GT(files, 0u);
 }
 
+// Empties `dir` and recreates its output folders.
 std::filesystem::path freshOutput(const std::filesystem::path &dir) {
     std::filesystem::remove_all(dir);
     for (const char *folder : {"images", "ids", "records"})
         std::filesystem::create_directories(dir / folder);
     return dir;
 }
+
 } // namespace
 
 TEST(DatasetEndToEnd, TalosTorpedoDeterministicAcrossShards) {
@@ -687,11 +710,14 @@ TEST(DatasetEndToEnd, TalosTorpedoDeterministicAcrossShards) {
         GTEST_SKIP() << "no EGL";
     for (std::int64_t k = 0; k < 2; ++k)
         EXPECT_EQ(single->render(k).at("status"), "accepted");
+
     // Shard split: sample 1 first in its own generator, then sample 0 in another.
     for (const std::int64_t k : {1, 0}) {
         auto shard = makeGenerator(talosJob(two));
         EXPECT_EQ(shard->render(k).at("status"), "accepted");
     }
+
+    // Byte-identical records, images and id maps.
     for (const char *name : {"torpedo_000000", "torpedo_000001"}) {
         const auto a = Json::parse(slurp(one / "records" / (std::string(name) + ".json")));
         auto b = Json::parse(slurp(two / "records" / (std::string(name) + ".json")));
@@ -725,6 +751,7 @@ TEST(DatasetEndToEnd, TalosTorpedoDeterministicAcrossShards) {
                       instance.at("pixels").get<std::int64_t>());
         }
     }
+
     // Resume: a complete sample is skipped without rendering; one missing its image is rendered again, identically.
     EXPECT_EQ(single->render(0).at("status"), "existing");
     const auto image = one / "images" / "torpedo_000000.jpg";
@@ -754,6 +781,8 @@ TEST(DatasetEndToEnd, SupersampledTalosTorpedoDeterministicAcrossShards) {
         EXPECT_EQ(shard->render(k).at("status"), "accepted");
     }
     expectSameOutputs(one, two);
+
+    // Compare with the same job rendered without supersampling.
     auto reference = makeGenerator(talosJob(plain));
     for (std::int64_t k = 0; k < 2; ++k)
         EXPECT_EQ(reference->render(k).at("status"), "accepted");
@@ -799,6 +828,7 @@ TEST(DatasetEndToEnd, AcceptanceScaleDoesNotChangeOutput) {
         job["labelled"].push_back({{"task", "slalom"}, {"part", "pole_red"}});
         return job;
     };
+
     const auto quarter = freshOutput(root / "quarter"), full = freshOutput(root / "full");
     ds::GeneratorOptions reduced, exact;
     reduced.acceptance_scale = .25;
@@ -828,6 +858,8 @@ TEST(DatasetEndToEnd, FixedSamplerReproducesRecordedPose) {
         GTEST_SKIP() << "no EGL";
     ASSERT_EQ(generator->render(0).at("status"), "accepted");
     const auto recorded = Json::parse(slurp(first / "records" / "torpedo_000000.json"));
+
+    // Replay the recorded root pose as a fixed sampler; a third sample is fixed above the water.
     auto job = talosJob(second);
     job["samples"][0]["count"] = 2;
     job["samples"][0]["sampler"] = {
@@ -843,6 +875,7 @@ TEST(DatasetEndToEnd, FixedSamplerReproducesRecordedPose) {
     EXPECT_EQ(again.at("attempts"), 1);
     EXPECT_EQ(again.at("randomization").at("target_frame"), "task");
     EXPECT_EQ(slurp(second / "images" / "torpedo_000000.jpg"), slurp(first / "images" / "torpedo_000000.jpg"));
+
     const auto skipped = fixed->render(2); // above the water
     EXPECT_EQ(skipped.at("status"), "skipped");
     EXPECT_EQ(skipped.at("attempts"), 1);
@@ -870,6 +903,8 @@ TEST(DatasetEndToEnd, PlacementGroupsMoveTogether) {
     EXPECT_EQ(placement.at("surface").at("yaw_deg"), placement.at("table").at("yaw_deg"));
     EXPECT_EQ(placement.at("table").at("pivot_task"), "surface");
     EXPECT_NE(placement.at("gate").at("yaw_deg"), placement.at("surface").at("yaw_deg"));
+
+    // Relative surface -> table pose in the record (via the camera) equals the unjittered one.
     const auto pose = [](const Json &item) {
         Pose p;
         const auto &t = item.at("position_m"), &q = item.at("orientation_wxyz");

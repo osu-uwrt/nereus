@@ -1,3 +1,5 @@
+// RosSide: the viewer's ROS subscriptions, the TF buffer fed from a dedicated thread, display-clock pose sampling
+// and the per-frame placement of detections, point clouds and paths. See ros_side.hpp.
 #include "ros_side.hpp"
 #include "jpeg_decode.hpp"
 #include <algorithm>
@@ -10,17 +12,22 @@
 
 namespace nereus::ros_viewer::host {
 namespace {
+
+// Preview width (px): JPEG previews decode to at least this; depth images are subsampled down toward it.
 constexpr int kPreviewWidth = 480;
 
+// A geometry_msgs pose as a 4x4 matrix (a zero quaternion is taken as identity).
 glm::mat4 poseOf(const geometry_msgs::msg::Pose &p) {
     glm::quat q(float(p.orientation.w), float(p.orientation.x), float(p.orientation.y), float(p.orientation.z));
     if (glm::length(q) < 1e-6f)
         q = glm::quat(1, 0, 0, 0);
     return poseQuat({float(p.position.x), float(p.position.y), float(p.position.z)}, q);
 }
+
 double seconds(const builtin_interfaces::msg::Duration &d) {
     return d.sec + d.nanosec * 1e-9;
 }
+
 // Turbo-like ramp: near = warm, far = cool, invalid = dark.
 void colorize(float metres, float lo, float hi, std::uint8_t *out) {
     if (!std::isfinite(metres) || metres <= 0) {
@@ -35,6 +42,7 @@ void colorize(float metres, float lo, float hi, std::uint8_t *out) {
     for (int c = 0; c < 3; ++c)
         out[c] = std::uint8_t(stops[i][c] + (stops[i + 1][c] - stops[i][c]) * f);
 }
+
 } // namespace
 
 std::filesystem::path resolveMeshResource(const std::string &uri) {
@@ -59,6 +67,8 @@ std::filesystem::path resolveMeshResource(const std::string &uri) {
 RosSide::RosSide(rclcpp::Node::SharedPtr node) : node_(std::move(node)) {
     if (!node_)
         return; // demo: no ROS graph
+
+    // The main node, spun by spin() on the render thread.
     executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
     executor_->add_node(node_);
     buffer_ = std::make_unique<tf2_ros::Buffer>(node_->get_clock());
@@ -66,16 +76,21 @@ RosSide::RosSide(rclcpp::Node::SharedPtr node) : node_(std::move(node)) {
     // and only then feeds the display clocks, so a display time never runs ahead of the buffered data.
     // Lookups never wait (zero timeout).
     buffer_->setUsingDedicatedThread(true);
+
+    // A second node (no parameter services, same use_sim_time) for TF, spun on its own thread.
     rclcpp::NodeOptions options;
     options.start_parameter_services(false).start_parameter_event_publisher(false);
     options.parameter_overrides({rclcpp::Parameter("use_sim_time", node_->get_parameter("use_sim_time").as_bool())});
     timingNode_ =
         std::make_shared<rclcpp::Node>(node_->get_name() + std::string("_timing"), node_->get_namespace(), options);
+
     timingStaticSub_ = timingNode_->create_subscription<tf2_msgs::msg::TFMessage>(
         "/tf_static", rclcpp::QoS(100).reliable().transient_local(), [this](const tf2_msgs::msg::TFMessage &msg) {
             for (const auto &t : msg.transforms)
                 buffer_->setTransform(t, "tf_static", true);
         });
+
+    // /tf: buffer every transform first, then feed each base link's arrival time to its display clock.
     timingSub_ = timingNode_->create_subscription<tf2_msgs::msg::TFMessage>(
         "/tf", rclcpp::QoS(100), [this](const tf2_msgs::msg::TFMessage &msg) {
             const double wall = wallSeconds();
@@ -99,6 +114,7 @@ RosSide::RosSide(rclcpp::Node::SharedPtr node) : node_(std::move(node)) {
                     estimateClock_.observe(stamp, wall);
             }
         });
+
     timingExecutor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
     timingExecutor_->add_node(timingNode_);
     timingThread_ = std::thread([this] { timingExecutor_->spin(); });
@@ -138,6 +154,8 @@ void RosSide::requestScenario(const std::string &topic, const std::string &folde
         return;
     if (!scenarioRequest_ || scenarioRequest_->get_topic_name() != topic)
         scenarioRequest_ = node_->create_publisher<std_msgs::msg::String>(topic, rclcpp::QoS(1).reliable());
+
+    // (Re)create the publisher when the topic changes.
     std_msgs::msg::String message;
     message.data = folder;
     scenarioRequest_->publish(message);
@@ -146,6 +164,7 @@ void RosSide::requestScenario(const std::string &topic, const std::string &folde
 void RosSide::spin() {
     if (node_)
         executor_->spin_some();
+
     // Collect JPEGs the worker finished (newest only) for the GUI to upload.
     for (auto &feed : feeds) {
         DecodedImage image;
@@ -177,9 +196,12 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
         truthFrame_ = scenario.truthBaseFrame;
         estimateFrame_ = scenario.estimateBaseFrame;
     }
+
     lights_ = &lights;
     thrusters_ = &thrusters;
     live_ = live;
+
+    // Drop the previous scenario's subscriptions and feeds.
     subscriptions_.clear();
     feeds.clear();
     // Camera feeds exist even without ROS (demo cards show PREVIEW ONLY).
@@ -187,10 +209,14 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
         feeds.emplace_back();
         feeds.back().camera = &camera;
     }
+
+    // Topics from the host config (`topics:`), resolved in the bridge namespace.
     mpcTopic =
         scenario.absolute(lookup(config, {"topics", "mpc_path"}).as<std::string>("controller/mpc/predicted_path"));
     plannedTopic =
         scenario.absolute(lookup(config, {"topics", "planned_path"}).as<std::string>("controller/mpc/planned_path"));
+
+    // Point cloud layers; capturePointClouds() subscribes the enabled ones.
     pointClouds.clear();
     for (const auto &entry : config["point_clouds"]) {
         PointCloudLayer layer;
@@ -204,16 +230,22 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
                               entry["color"][2].as<float>()};
         pointClouds.push_back(std::move(layer));
     }
+
     detectionTopic = scenario.absolute(
         lookup(config, {"topics", "detections"}).as<std::string>("yolo_orientation/visualization_marker_array"));
     thrustTopic = scenario.absolute(lookup(config, {"topics", "thruster_forces"}).as<std::string>("thruster_forces"));
     thrustSub_.reset(); // captureThrust subscribes again on the new topic
     thrust.clear();
+
+    // Everything below needs a ROS graph.
     if (!live)
         return;
+
     const auto topic = [&](const char *key, const char *fallback) {
         return scenario.absolute(lookup(config, {"topics", key}).as<std::string>(fallback));
     };
+
+    // Realized thruster forces animate the propellers.
     if (!thrusters.rotors.empty())
         subscriptions_.push_back(node_->create_subscription<std_msgs::msg::Float32MultiArray>(
             scenario.absolute(thrusters.topic), 10, [this](const std_msgs::msg::Float32MultiArray &msg) {
@@ -221,6 +253,8 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
                     RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
                                          "Ignoring invalid realized thruster forces for propeller animation");
             }));
+
+    // Status lights: an LED command (UWRT builds) or a plain colour.
     if (lights.input == "riptide_msgs2/msg/LedCommand") {
 #ifdef NEREUS_VIEWER_UWRT
         subscriptions_.push_back(node_->create_subscription<riptide_msgs2::msg::LedCommand>(
@@ -262,11 +296,15 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
                                  UINT32_MAX, now());
             }));
     }
+
+    // The claw's two joint values.
     subscriptions_.push_back(node_->create_subscription<std_msgs::msg::Float64MultiArray>(
         topic("claw_joints", "simulator/claw_joints"), 10, [this](const std_msgs::msg::Float64MultiArray &msg) {
             if (msg.data.size() == 2 && std::isfinite(msg.data[0]) && std::isfinite(msg.data[1]))
                 claw = {float(msg.data[0]), float(msg.data[1])};
         }));
+
+    // Simulator marker arrays: magnet lights, props and projectiles.
     const auto markers = [this](std::map<MarkerKey, MarkerRecord> &target) {
         return [this, &target](const visualization_msgs::msg::MarkerArray &msg) { receiveMarkers(target, msg); };
     };
@@ -276,16 +314,21 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
         topic("task_objects", "simulator/task_objects"), 10, markers(props)));
     subscriptions_.push_back(node_->create_subscription<visualization_msgs::msg::MarkerArray>(
         topic("projectiles", "simulator/projectiles"), 10, markers(projectiles)));
+
     // Same marker array RViz shows; each observation is placed once at its acquisition pose.
     subscriptions_.push_back(node_->create_subscription<visualization_msgs::msg::MarkerArray>(
         detectionTopic, 10, [this](const visualization_msgs::msg::MarkerArray &msg) { receiveDetections(msg); }));
+
+    // Mechanism buttons publish std_msgs/Bool on the scenario's mechanism_controls topics.
     for (const auto &control : scenario.ui["mechanism_controls"])
         mechanismCommands_[scenario.absolute(control["topic"].as<std::string>())] =
             node_->create_publisher<std_msgs::msg::Bool>(scenario.absolute(control["topic"].as<std::string>()), 10);
+
     for (auto &feed : feeds)
         subscribeCamera(feed);
 }
 
+// Creates or drops a feed's RGB and depth subscriptions to match what is wanted; safe to call repeatedly.
 void RosSide::subscribeCamera(CameraFeed &feed) {
     const auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable();
     if (!feed.camera->rgbTopic.empty() && !feed.rgbSub && camerasWanted_ && wantsRos(feed)) {
@@ -305,6 +348,8 @@ void RosSide::subscribeCamera(CameraFeed &feed) {
                 feed.decoder->submit(msg->data);
             });
     }
+
+    // Depth: 32FC1 metres, subsampled and colourised in the callback (on the render thread).
     if (!feed.camera->depthTopic.empty() && feed.wantDepth && camerasWanted_ && !feed.depthSub)
         feed.depthSub = node_->create_subscription<sensor_msgs::msg::Image>(
             feed.camera->depthTopic, qos, [&feed](const sensor_msgs::msg::Image::ConstSharedPtr &msg) {
@@ -328,6 +373,8 @@ void RosSide::subscribeCamera(CameraFeed &feed) {
                 feed.depthHeight = h;
                 feed.depthDirty = true;
             });
+
+    // Drop what is no longer wanted.
     if (!feed.wantDepth || !camerasWanted_)
         feed.depthSub.reset();
     if (!camerasWanted_ || !wantsRos(feed))
@@ -373,6 +420,7 @@ void RosSide::configurePose(PoseSource source, double truthDelay, double otherDe
     usingTruth_ = source != PoseSource::Estimate;
 }
 
+// Seconds on the steady clock since construction (the display clocks' wall time).
 double RosSide::wallSeconds() const {
     return std::chrono::duration<double>(Clock::now() - origin_).count();
 }
@@ -424,6 +472,8 @@ bool RosSide::updatePose(glm::mat4 &body, bool &first) {
         return false;
     probe(truth_, scenario_->truthBaseFrame);
     probe(estimate_, scenario_->estimateBaseFrame);
+
+    // Choose the source.
     bool truth;
     switch (source_) {
     case PoseSource::Truth:
@@ -435,12 +485,14 @@ bool RosSide::updatePose(glm::mat4 &body, bool &first) {
     default: // simulator truth while it is alive, else the estimate; before any pose, truth until proven absent
         truth = truth_.fresh || (!estimate_.fresh && (truth_.seen || !estimate_.seen));
     }
+
     const bool switched = truth != usingTruth_;
     usingTruth_ = truth;
     if (switched) {
         delivered_ = false; // refocus on the new source
         refreshCameras();   // without truth the cards fall back to the ROS image topics
     }
+
     Probe &src = truth ? truth_ : estimate_;
     if (!src.seen) {
         fresh_ = false;
@@ -452,6 +504,7 @@ bool RosSide::updatePose(glm::mat4 &body, bool &first) {
     fresh_ = src.fresh;
     status_ =
         truth ? (src.fresh ? "PHYSICS CONNECTED" : "POSE STALE") : (src.fresh ? "ROBOT (ESTIMATE)" : "ESTIMATE STALE");
+
     // The active source's display clock places the robot; frames of the estimate stream (and the rest of
     // the TF tree) use the estimate clock, each sampled once per frame.
     const double wall = wallSeconds();
@@ -462,9 +515,11 @@ bool RosSide::updatePose(glm::mat4 &body, bool &first) {
     otherTime_ = truth && estimateClock_.valid() ? estimateClock_.at(wall, otherDelay_)
                                                  : truthTime_ - (truth ? otherDelay_ - truthDelay_ : 0.);
     haveTime_ = true;
+
     glm::mat4 pose;
     if (lookupAt(poseFrame(), truth ? truthTime_ : otherTime_, true, pose))
         body = pose;
+
     if (src.changed && !delivered_) {
         first = true;
         delivered_ = true;
@@ -472,6 +527,7 @@ bool RosSide::updatePose(glm::mat4 &body, bool &first) {
     return src.changed;
 }
 
+// Drops records whose marker lifetime has run out (lifetime 0: forever).
 void RosSide::expire(std::map<MarkerKey, MarkerRecord> &records) {
     const auto now = Clock::now();
     for (auto it = records.begin(); it != records.end();) {
@@ -483,6 +539,8 @@ void RosSide::expire(std::map<MarkerKey, MarkerRecord> &records) {
     }
 }
 
+// Applies a MarkerArray to `records` (add / DELETE / DELETEALL). Only markers in the map frame or on a base link
+// (attached: they move with the robot) are kept.
 void RosSide::receiveMarkers(std::map<MarkerKey, MarkerRecord> &records,
                              const visualization_msgs::msg::MarkerArray &msg) {
     using Marker = visualization_msgs::msg::Marker;
@@ -495,10 +553,12 @@ void RosSide::receiveMarkers(std::map<MarkerKey, MarkerRecord> &records,
             records.erase({m.ns, m.id});
             continue;
         }
+
         const bool attached =
             m.header.frame_id == scenario_->estimateBaseFrame || m.header.frame_id == scenario_->truthBaseFrame;
         if (!attached && m.header.frame_id != scenario_->mapFrame)
             continue;
+
         MarkerRecord record;
         record.marker = m;
         record.received = Clock::now();
@@ -513,6 +573,7 @@ void RosSide::receiveMarkers(std::map<MarkerKey, MarkerRecord> &records,
     }
 }
 
+// Stores detection markers; captureDetections() places them.
 void RosSide::receiveDetections(const visualization_msgs::msg::MarkerArray &msg) {
     using Marker = visualization_msgs::msg::Marker;
     const auto now = Clock::now();
@@ -535,6 +596,7 @@ void RosSide::captureDetections(bool show) {
     expire(props);
     expire(projectiles);
     expire(magnetLights);
+
     // Subscription callbacks run even while the overlay is hidden. Expire markers independently of
     // drawing so unique IDs cannot pile up.
     const auto now = Clock::now();
@@ -545,17 +607,21 @@ void RosSide::captureDetections(bool show) {
         else
             ++it;
     }
+
     if (!show || !live_ || !scenario_)
         return;
+
     const DetectionShow shown = detectionShow();
     if (shown.downgraded && !warnedDetectionDowngrade_) {
         warnedDetectionDowngrade_ = true;
         std::cerr << "nereus-viewer: no simulator truth; detection placement truth/both treated as estimate\n";
     }
+
     for (auto &[key, entry] : detectionMarkers_) {
         const auto &m = entry.marker;
         const double age = std::chrono::duration<double>(now - entry.received).count();
         if (shown.truth) {
+            // Truth: through the camera's fixed mount when the marker is in a camera frame, else plain TF.
             const glm::mat4 *baseToCamera = nullptr;
             for (const auto &c : scenario_->cameras) {
                 if (m.header.frame_id == c.rosOpticalFrame)
@@ -584,6 +650,8 @@ void RosSide::captureDetections(bool show) {
             if (placed)
                 placedDetections.push_back({entry.truth.world(), m, PlacedDetection::Kind::Truth});
         }
+
+        // Estimate: TF at the stamp, approximate after the retry window.
         if (shown.estimate && entry.estimate.placeViaTf(m, scenario_->mapFrame, *buffer_, age))
             placedDetections.push_back({entry.estimate.world(), m,
                                         entry.estimate.approximate() ? PlacedDetection::Kind::EstimateApprox
@@ -595,7 +663,10 @@ void RosSide::capturePointClouds() {
     const auto now = Clock::now();
     for (std::size_t index = 0; index < pointClouds.size(); ++index) {
         auto &layer = pointClouds[index];
+
         const bool wanted = layer.enabled && live_ && scenario_;
+
+        // Subscribed while enabled; disabling drops the data.
         if (wanted && !layer.subscription) {
             layer.subscription = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
                 layer.topic, rclcpp::QoS(1).best_effort(), [this, index](const sensor_msgs::msg::PointCloud2 &msg) {
@@ -613,6 +684,7 @@ void RosSide::capturePointClouds() {
             layer.subscription.reset();
             layer.data.reset();
         }
+
         if (!layer.data || layer.placed || !scenario_)
             continue;
         const rclcpp::Time stamp(layer.stamp);
@@ -633,6 +705,8 @@ void RosSide::capturePointClouds() {
                 continue;
             }
         }
+
+        // Else TF at the stamp; after 0.5 s, the latest transform (marked approximate).
         const auto lookup = [&](const rclcpp::Time &at) {
             try {
                 layer.world = matrixOf(buffer_->lookupTransform(scenario_->mapFrame, layer.frame, at).transform);
@@ -670,6 +744,7 @@ bool RosSide::latestInFixed(const std::string &frame, glm::mat4 &world) const {
     }
 }
 
+// The enabled, placed clouds for the renderer.
 std::vector<rendering::PointSet> RosSide::pointSets() const {
     std::vector<rendering::PointSet> sets;
     for (const auto &layer : pointClouds)
@@ -689,6 +764,8 @@ std::vector<rendering::PointSet> RosSide::pointSets() const {
 // place the prediction relative to the estimated base link, then re-root it at the truth base link.
 void RosSide::captureMpc(bool wanted) {
     wanted = wanted && live_ && scenario_;
+
+    // The prediction: the newest message, placed below.
     if (wanted && !mpcSub_) {
         mpcSub_ = node_->create_subscription<nav_msgs::msg::Path>(mpcTopic, 10, [this](const nav_msgs::msg::Path &msg) {
             mpcMessage_ = msg;
@@ -700,6 +777,8 @@ void RosSide::captureMpc(bool wanted) {
         mpcPending_ = false;
         mpcPath.clear();
     }
+
+    // The planned path: latched, cleared when unwanted.
     if (wanted && !plannedSub_) {
         plannedSub_ = node_->create_subscription<nav_msgs::msg::Path>(
             plannedTopic, rclcpp::QoS(1).transient_local(),
@@ -709,6 +788,7 @@ void RosSide::captureMpc(bool wanted) {
         plannedMessage_ = nav_msgs::msg::Path();
         plannedPath.clear();
     }
+
     if (!wanted)
         return;
     // The plan is fixed in the odometry frame: re-place it with the latest TF (empty message: no path).
@@ -726,6 +806,8 @@ void RosSide::captureMpc(bool wanted) {
         } catch (const tf2::TransformException &) {
         } // keep the last placement until TF has the frame
     }
+
+    // The prediction, re-rooted at the active pose source's base link.
     const double age = std::chrono::duration<double>(Clock::now() - mpcReceived_).count();
     if (mpcPending_) {
         // Solves are stamped at compute time; TF can trail that by a few ms. Retry at the stamp briefly
@@ -749,6 +831,7 @@ void RosSide::captureMpc(bool wanted) {
             }
         }
     }
+
     if (age > .5)
         mpcPath.clear(); // controller disabled or gone
 }
@@ -769,14 +852,18 @@ void RosSide::captureThrust(bool wanted) {
             });
     else if (!wanted && thrustSub_)
         thrustSub_.reset();
+
     if (!wanted || std::chrono::duration<double>(Clock::now() - thrustReceived_).count() > .5)
         thrust.clear(); // controller stopped publishing
 }
 
+// Samples the TF overlay for this frame, and the truth-vs-estimate readout when the simulator is the pose source.
 void RosSide::captureTf(bool wanted, TfTree &tree, TfSnapshot &out) {
     out = {};
     if (!wanted || !live_ || !scenario_)
         return;
+
+    // Rebuild the frame tree from the buffer (the map is a root; a parent not yet seen becomes a root).
     const auto &map = scenario_->mapFrame;
     std::map<std::string, std::string> parents;
     parents[map] = "";
@@ -790,6 +877,7 @@ void RosSide::captureTf(bool wanted, TfTree &tree, TfSnapshot &out) {
             parents.try_emplace(parent, "");
     }
     tree.update(parents);
+
     // Freeze the overlay before rendering: looking up each axis during drawing would sample a newer pose
     // than the already-rendered vehicle. Frames are sampled at the same display time as the robot model
     // (truth frames and their static children at the truth delay, everything else at the other delay),
@@ -806,6 +894,7 @@ void RosSide::captureTf(bool wanted, TfTree &tree, TfSnapshot &out) {
         }
         return false;
     };
+
     for (const auto &[name, parent] : parents) {
         auto &frame = tree.frames.at(name);
         glm::mat4 pose;
@@ -818,13 +907,17 @@ void RosSide::captureTf(bool wanted, TfTree &tree, TfSnapshot &out) {
         } else if (frame.enabled)
             ++out.missing;
     }
+
     if (!usingTruth_ || !truth_.seen)
         return; // no simulator: nothing to compare the estimate against
+
     const auto fixed = [](double x, int decimals) {
         char text[32];
         std::snprintf(text, sizeof(text), "%.*f", decimals, x);
         return std::string(text);
     };
+
+    // The readout: the estimate relative to the truth at the newest stamp both have.
     try {
         const auto estimate = buffer_->lookupTransform(map, scenario_->estimateBaseFrame, tf2::TimePointZero);
         const auto truth = buffer_->lookupTransform(map, scenario_->truthBaseFrame, tf2::TimePointZero);
@@ -839,4 +932,5 @@ void RosSide::captureTf(bool wanted, TfTree &tree, TfSnapshot &out) {
         out.difference = "Waiting for matching ROS / simulator poses";
     }
 }
+
 } // namespace nereus::ros_viewer::host
