@@ -147,6 +147,48 @@ to the free camera while it has the mouse.
 **Run <tree>** starts an autonomy tree, under the same rule as the Autonomy panel's Start (the robot it drives
 enabled); **Stop** stops the running one, **Refresh the tree list** asks again.
 
+## Plots
+
+Plot any number from any ROS topic, live, in dock windows like the rest (**Windows › Plots**, *New plot*).
+
+- **Lanes**: a plot stacks lanes on one time axis. Each lane has its own value axis and a results table: the series,
+  its value now (or under the cursor), and its min and max over the span, with the topic and field under each name.
+  A narrow window drops Min / Max and then moves the tables under the plot.
+- **Adding**: the **+** at the right of a lane's head (or *Add series…* in its right-click menu) searches for a
+  field to add to that lane: type part of its name (`odom z`); Shift-click adds several. **+ Lane** in the toolbar
+  starts a new lane the same way. Or drag a field from **Topics** (Windows › Topics) onto a lane or onto the *Drop
+  here for a new lane* strip; double-click a field to add it to the focused plot. Quaternions show as roll / pitch / yaw in degrees; arrays list their elements. Values and rates show
+  while a topic is open in Topics or plotted; nothing else is subscribed.
+- **Plot this**: right-click a row of the Motion table (*Plot Z* gives actual and commanded, then the error; *Add Z
+  to ▸*; *Plot all six axes*) or a temperature / battery readout in the command bar. Pointing at one of those figures
+  shows its last 30 s in the tooltip.
+- **Ctrl+P**: type `plot` and part of a field, a Motion axis or a saved plot. Enter opens a new plot; Shift+Enter adds
+  to the focused one.
+- **Time**: every plot window shares one timeline. **Live / Paused** freezes them all while recording goes on;
+  drag a plot to scrub (it pauses), Ctrl+scroll to zoom around the pointer, double-click to go back to live. The
+  wheel alone scrolls a plot window that holds more lanes than fit. The cursor is one rule through every lane and
+  every plot, and each table reads its time. *··· › Own time span* takes one window off the shared timeline (a long
+  battery plot beside short depth plots).
+- **Time from**: *Header* (the default) plots each sample at its message's `header.stamp`, so truth and estimate
+  line up; messages without a header use the time they arrived. *Receipt* uses arrival time for everything. On the
+  real robot a header stamp is the Orin's clock: a row that says `clock offset 1.2 s` means the clocks disagree.
+- **Moving a series**: drag its row onto another lane (its plot or its table), onto the new-lane strip, or into
+  another plot window. A lane the move empties goes, so dragging a lane's only series onto another merges them.
+- **A series**: point at its row for the remove box (Del also removes it; Ctrl+Z brings back the last series or lane removed); click its
+  line key to hide or show it; right-click for its color (the theme's eight, or *Custom…* with a contrast check
+  for day and night themes), *Move to lane*, *Draw as* steps or lines, *Rename*, *Difference with* (a new lane of
+  one series minus another) and *Remove from plot*. Past eight series in one lane the colors repeat, dashed.
+  Right-click a lane's head to rename it, set its unit or its limits (drawn as its outer ticks), or remove it.
+- **Rows say why** a line stopped: `stale 4.2 s`, `no publisher`, or *Can't read this topic* when its message type is
+  not installed here (source the robot workspace before starting the viewer).
+- **Saving**: *··· › Save as preset* keeps the plot's lanes and series (not the data) as
+  `~/.config/nereus/plots/<name>.yaml`; open it again from Windows › Plots or Ctrl+P, and manage the saved ones
+  from *Manage saved plots…*. Plot windows are also part of the layout (and of named layouts). Closing a plot
+  window hides it and it keeps recording; *··· › Delete plot* removes it. *··· › Export visible span as CSV* writes
+  `~/Documents/Nereus/plots/<plot>-<time>.csv`.
+- Each theme can set its eight plot colors (`plot: series:` in its YAML); without one the plots use a validated set
+  for light or dark windows.
+
 ## Themes
 
 View → *Theme* ▸ **Heat sheet** (the default) and **Timing board** are one world in a day and a night variant,
@@ -180,7 +222,7 @@ warn, error, robot states, bar, enable, ...), as `"#rrggbb"` or `"#rrggbbaa"`. `
 borders, padding and the tabs' look (`tab_rounding`, `tab_border`, `tab_bar_border`, `tab_overline`); a
 `border_shadow` surface makes the theme bevelled (Qt-style raised buttons, sunken status panels, toggle switches as
 pressed buttons); `style: {ruled: true}` rules the heads; a `board` block gives the menu and command bars their
-own colors. Unknown keys are refused, and the viewer reports a file it cannot use and carries on. Whatever a file
+own colors; a `plot` block lists the eight plot line colors (`series`). Unknown keys are refused, and the viewer reports a file it cannot use and carries on. Whatever a file
 says, the viewer holds every theme's text to the legibility floor below. The
 3D scene looks the same in every theme. Its overlays (labels, the controls strip) and the course map follow the
 theme. The course map draws each prop's top-down footprint (true size and heading) under the task dots. Camera

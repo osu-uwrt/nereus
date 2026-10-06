@@ -13,6 +13,10 @@ First version for the team.
 - Viewer **Bagging** panel: `ros2 bag record` on the robot over ssh (any `user@host`, prefilled `ros@orin2`; keeps recording through a dropped link or a
   closed viewer; any viewer picks it up) or on this computer, all topics with an exclude regex or a picked list with
   presets, and a BAG chip in the command bar while recording.
+- Viewer **plots**: live plots of any numeric field of any ROS topic (and of the Motion axes and telemetry readings)
+  in dock windows: lanes on one shared timeline with a results table each, a Topics browser to drag fields from,
+  "Plot this" on Motion rows and readouts, Ctrl+P, a 30 s trend in those figures' tooltips, per-series colors,
+  saved plots (`~/.config/nereus/plots`) and CSV export. Plots decode on their own node and thread.
 - American spelling throughout, keys included: `size_meters` (viewer panels), `meters_per_newton` (viewer host
   config), `background_max_labeled_px` (dataset packs) and the dataset job's `labeled`.
 - Packs: robot, pool, tasks, bridge and scenario YAML with JSON-schema and semantic validation

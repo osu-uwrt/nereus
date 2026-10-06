@@ -147,19 +147,24 @@ void Window::loadFonts(float ui, float titleBar, const Theme &theme, const std::
 
     // Every size scales with the body size (k) and the interface scale; the title bar's with `titleBar`.
     const float k = body / 15;
+    // Latin-1 and general punctuation (dashes, ellipsis, the › of field paths)
+    static const ImWchar ranges[] = {0x0020, 0x00FF, 0x2010, 0x203A, 0};
     if (std::filesystem::exists(font)) {
-        normal = io.Fonts->AddFontFromFileTTF(font.c_str(), 15 * k * ui);
+        const auto add = [&](const char *file, float size) {
+            return io.Fonts->AddFontFromFileTTF(file, size, nullptr, ranges);
+        };
+        normal = add(font.c_str(), 15 * k * ui);
         const auto *heavy = std::filesystem::exists(bold) ? bold.c_str() : font.c_str();
         // large figures (run clock, score, the wordmark): the theme's figure face, else the body's
         const auto *display = figures.empty() ? nullptr : figures.c_str();
-        strong = io.Fonts->AddFontFromFileTTF(heavy, 15 * k * ui);
-        smallStrong = io.Fonts->AddFontFromFileTTF(heavy, 12 * k * ui);
-        small = io.Fonts->AddFontFromFileTTF(font.c_str(), 12 * k * ui);
-        title = io.Fonts->AddFontFromFileTTF(display ? display : heavy, (display ? 23 : 21) * k * ui);
-        number = io.Fonts->AddFontFromFileTTF(display ? display : font.c_str(), (display ? 28 : 25) * k * ui);
+        strong = add(heavy, 15 * k * ui);
+        smallStrong = add(heavy, 12 * k * ui);
+        small = add(font.c_str(), 12 * k * ui);
+        title = add(display ? display : heavy, (display ? 23 : 21) * k * ui);
+        number = add(display ? display : font.c_str(), (display ? 28 : 25) * k * ui);
         // title-bar menus at VS Code's cap height: 13 px in a full-width face (DejaVu, Ubuntu), 16 in the narrow Barlow
-        menu = io.Fonts->AddFontFromFileTTF(font.c_str(), (figures.empty() ? 13 : 16) * k * titleBar);
-        titleSmall = io.Fonts->AddFontFromFileTTF(font.c_str(), (figures.empty() ? 12 : 14) * k * titleBar);
+        menu = add(font.c_str(), (figures.empty() ? 13 : 16) * k * titleBar);
+        titleSmall = add(font.c_str(), (figures.empty() ? 12 : 14) * k * titleBar);
     } else
         normal = small = title = number = menu = strong = smallStrong = titleSmall = io.Fonts->AddFontDefault();
 

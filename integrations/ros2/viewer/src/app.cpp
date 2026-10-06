@@ -10,6 +10,7 @@
 #include "nereus/ros_viewer/panels/ros_providers.hpp"
 #include "nereus/ros_viewer/panels/pose_math.hpp"
 #include "nereus/ros_viewer/pins.hpp"
+#include "nereus/ros_viewer/plots/plots.hpp"
 #include "nereus/ros_viewer/theme.hpp"
 #include "overlay_draw.hpp"
 #include "pose_command.hpp"
@@ -454,7 +455,7 @@ class App {
 
     // --- window layout
     // Where a window is listed in the Windows menu (Help has its own menu).
-    enum class MenuSection { Panels, Cameras, Tools, None };
+    enum class MenuSection { Panels, Cameras, Tools, Plots, None };
     struct WindowEntry {
         std::string key, name, label; // stable key ("panel.<id>", "camera.<id>", "map", ...), ImGui name, title
         bool *open;
@@ -824,6 +825,7 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     defaultOpen_ = {{"map", true}, {"scene_settings", false}, {"display", false}, {"tf", false}, {"help", false}};
     windowStates_.install();
     pins::install();
+    plots::install();
     loadLogo();
     const auto configHome = configDirectory();
     persist_ = opt_.frames == 0 && !configHome.empty();
@@ -994,6 +996,7 @@ App::~App() {
     } catch (const std::exception &error) {
         std::cerr << "nereus-viewer: layout not saved: " << error.what() << '\n';
     }
+    plots::shutdown(); // its node goes before the panels' runtime and rclcpp
     panelRos_.stop();
     composition_.reset();
     model_.reset();
@@ -1314,6 +1317,18 @@ void App::buildPanels() {
             break;
         }
     panelRos_.start();
+
+    // Plots: their own node in the robot namespace, the panels' figures from these providers (no ROS in --demo).
+    if (!demoMode_) {
+        plots::Options options;
+        options.robotNamespace = trimSlashes(scenario_->ns);
+        options.useSimTime = ros_->useSimTime();
+        if (!layoutDir_.empty())
+            options.savedDir = layoutDir_.parent_path() / "plots";
+        if (const char *home = std::getenv("HOME"))
+            options.exportDir = fs::path(home) / "Documents" / "Nereus" / "plots";
+        plots::configure(options, composition_->providers());
+    }
 }
 
 // ----------------------------------------------------------------------------------------- per frame
@@ -2836,6 +2851,7 @@ void App::registerHostItems() {
 // The frame: menu bar and command bar (fixed), then the dock space holding the pool view and every window.
 void App::drawInterface(double time, float dt) {
     pins::newFrame();
+    plots::frame();
     handleShortcuts();
     driveWithKeys();
     drawMenuBar();
@@ -2876,6 +2892,7 @@ void App::drawInterface(double time, float dt) {
             composition_->drawPanels();
             composition_->drawWindows();
         }
+        plots::drawWindows();
     } else if (scenario_)
         drawMapWindows();
 
@@ -3192,6 +3209,10 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
             add(control.window, control.label, control.kind == pins::Control::Kind::Checkbox && control.checked,
                 [key = control.key] { pins::trigger(key); });
     }
+    // Plots: any topic's field, a panel's figure, a saved plot (Shift adds to the focused plot)
+    if (workspace_ == Workspace::Operate)
+        for (auto &command : plots::commands())
+            add(command.group, command.label, false, std::move(command.run));
     return out;
 }
 
@@ -3919,6 +3940,12 @@ void App::drawWindowsMenu() {
         // windows the panels open themselves (Simulation, Run tracking) follow the host's tools
         if (section == MenuSection::Tools && composition_)
             composition_->drawToolMenuItems();
+    }
+    // Plots: the plot windows, the saved plots, New plot
+    ImGui::Separator();
+    if (ImGui::BeginMenu("Plots")) {
+        plots::drawMenu();
+        ImGui::EndMenu();
     }
 }
 
@@ -4806,6 +4833,9 @@ std::vector<App::WindowEntry> App::windowEntries() {
     entries.push_back({"scene_settings", kSceneSettings, "Scene settings", &sceneOpen_});
     entries.push_back({"display", kDisplay, "Display", &displayOpen_});
     entries.push_back({"tf", kTfFrames, "TF frames", &tfOpen_});
+    for (const auto &window : plots::windows())
+        entries.push_back({window.key, window.name, window.label, window.open,
+                           window.plot ? MenuSection::Plots : MenuSection::Tools});
     entries.push_back({"help", kHelp, "Controls & shortcuts", &helpOpen_, MenuSection::None});
     return entries;
 }
@@ -5045,6 +5075,10 @@ void App::applyPreset(const std::string &id) {
     if (composition_)
         for (const auto &panel : composition_->panelWindows())
             windows.push_back({panel.name, panel.dock, false, panel.selected});
+    // open plot windows share a strip under the pool view; the Topics browser joins the lower left panels
+    for (const auto &window : plots::windows())
+        if (*window.open)
+            windows.push_back({window.name, window.plot ? Dock::Bottom : Dock::Left, false, false});
     buildLayout(dockspace_, size, preset, kPoolView, windows);
     layoutReady_ = true;
     layoutMessage_ = preset.label + " layout";

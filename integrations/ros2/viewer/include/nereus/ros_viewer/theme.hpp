@@ -1,6 +1,7 @@
 // Viewer themes: the whole ImGui style plus the few colors the viewer and its panels draw themselves (accent,
 // "on" fills, KILL, robot state, bars). The 3D view and its overlays keep their own colors in every theme.
 #pragma once
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -20,6 +21,9 @@ struct Palette {
     ImVec4 bar, toolbar;                                     // menu / command bar, pool view toolbar strip
     ImVec4 change, changeText;                               // the lamp (a running clock) and its ink
     ImVec4 enable, enableHovered, enablePressed, enableText; // Enable (the robot is off): its own action ink
+    // Plot lines in a fixed order (a theme's `plot: series:`); unset (alpha 0) where the theme gives none, and the
+    // plots then use a validated set for light or dark windows.
+    std::array<ImVec4, 8> series{};
 };
 
 // A theme's identity and fonts, as listed in the theme menu.

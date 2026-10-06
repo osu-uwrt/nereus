@@ -5,6 +5,7 @@
 #include "nereus/ros_viewer/panels/bag_recorder.hpp"
 #include <cstdint>
 #include <glm/glm.hpp>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -167,6 +168,8 @@ enum class Level { Ok, Warn, Error, Stale };
 struct Reading {
     std::string id, label, value = "--", detail = "Waiting for data";
     Level level = Level::Stale;
+    double number = std::numeric_limits<double>::quiet_NaN(); // the value as a number, for plots (NaN: none)
+    std::string unit;                                         // its unit ("°C", "%")
 };
 
 struct TelemetryState {

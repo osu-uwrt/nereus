@@ -4,10 +4,13 @@
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panels/pose_math.hpp"
 #include "nereus/ros_viewer/pins.hpp"
+#include "nereus/ros_viewer/plots/plots.hpp"
 #include <cmath>
 #include <cstdio>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <tuple>
+#include <utility>
 
 namespace nereus::ros_viewer::panels {
 namespace {
@@ -52,6 +55,35 @@ bool targetInput(float *value) {
         draw->PopClipRect();
     }
     return changed;
+}
+
+// A figure in the pose table: its last 30 s in the tooltip, and a right-click opens the row's "Plot this" menu.
+// Hover is the whole cell (`cell`: its top left and width, taken before the value is drawn), not the text, which is
+// right-aligned and narrows when the sign goes; the tooltip shows once the pointer has rested on the cell briefly.
+void figureItem(const std::string &figure, const std::string &title, ImVec2 cell, float width) {
+    static std::string resting;
+    static double since = 0;
+    const ImVec2 end(cell.x + width, cell.y + ImGui::GetFrameHeight());
+    const bool over = ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(cell, end) &&
+                      !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
+    if (!over) {
+        if (resting == figure)
+            resting.clear();
+        return;
+    }
+    if (resting != figure) {
+        resting = figure;
+        since = ImGui::GetTime();
+    }
+    if (ImGui::GetTime() - since > .25)
+        plots::figureTooltip(figure, title);
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        ImGui::OpenPopup("plot");
+}
+
+// Where the current table cell starts and how wide it is, before anything moves the cursor within it.
+std::pair<ImVec2, float> cellStart() {
+    return {ImGui::GetCursorScreenPos(), ImGui::GetContentRegionAvail().x};
 }
 
 class MotionPanel final : public Panel {
@@ -245,20 +277,36 @@ class MotionPanel final : public Panel {
             const auto actualAngles = glm::degrees(glm::eulerAngles(glm::quat_cast(s.actual)));
             const auto sentAngles = glm::degrees(glm::eulerAngles(glm::quat_cast(s.commanded)));
             const char *names[] = {"X", "Y", "Z", "Roll", "Pitch", "Yaw"};
+            const char *ids[] = {"x", "y", "z", "roll", "pitch", "yaw"};
             for (int i = 0; i < 6; ++i) {
                 ImGui::PushID(i);
+                const std::string figure = std::string("motion.") + ids[i];
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::AlignTextToFramePadding();
                 ImGui::TextUnformatted(names[i]);
+                if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                    ImGui::OpenPopup("plot");
                 ImGui::TableNextColumn();
+                ImVec2 cell;
+                float width = 0;
+                std::tie(cell, width) = cellStart();
                 numericValue("actual", i < 3 ? s.actual[3][i] : actualAngles[i - 3], s.fresh);
+                figureItem(figure + ".actual", std::string(names[i]) + " actual", cell, width);
                 ImGui::TableNextColumn();
+                std::tie(cell, width) = cellStart();
                 numericValue("commanded", i < 3 ? s.commanded[3][i] : sentAngles[i - 3], s.hasCommand);
+                figureItem(figure + ".commanded", std::string(names[i]) + " commanded", cell, width);
                 ImGui::TableNextColumn();
                 const float error = i < 3 ? s.commanded[3][i] - s.actual[3][i]
                                           : std::remainder(sentAngles[i - 3] - actualAngles[i - 3], 360.f);
+                std::tie(cell, width) = cellStart();
                 numericValue("error", error, s.fresh && s.hasCommand);
+                figureItem(figure + ".error", std::string(names[i]) + " error", cell, width);
+                if (ImGui::BeginPopup("plot")) {
+                    plots::figureMenuItems(figure);
+                    ImGui::EndPopup();
+                }
                 ImGui::TableNextColumn();
                 ImGui::SetNextItemWidth(-1);
                 ImGui::BeginDisabled(!motion || !s.fresh || s.pending || s.blocked);

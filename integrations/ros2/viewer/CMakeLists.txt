@@ -14,6 +14,8 @@ find_package(sensor_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(action_msgs REQUIRED)
 find_package(rcl_interfaces REQUIRED)
+find_package(rcpputils REQUIRED)
+find_package(rosidl_typesupport_introspection_cpp REQUIRED) # plots: any topic's fields by name
 find_package(yaml-cpp REQUIRED)
 find_package(riptide_msgs2 QUIET)
 find_package(chameleon_tf_msgs QUIET)

@@ -145,11 +145,14 @@ class UwrtTelemetry final : public Telemetry {
         mark(s);
         auto &r = s.reading;
         r.value = celsius(m.temperature);
+        r.number = m.temperature;
+        r.unit = "\u00B0C";
         r.level = threshold(s, m.temperature);
         // The driver's flags, in the order the sensor monitor reports them.
         std::string state = "Connected";
         if (!m.connected) {
             r.value = "--";
+            r.number = std::numeric_limits<double>::quiet_NaN();
             r.level = Level::Error;
             state = "Not connected";
         } else if (!m.temp_good || !m.vsupply_good || !m.sldcurrent_good || !m.diagsignal_good) {
@@ -172,6 +175,8 @@ class UwrtTelemetry final : public Telemetry {
         mark(s);
         auto &r = s.reading;
         r.value = std::to_string(m.soc) + "%";
+        r.number = m.soc;
+        r.unit = "%";
         r.level = threshold(s, m.soc);
         r.detail = "State of charge " + r.value + " (warn below " + number(s.warn) + "%, error below " +
                    number(s.error) + "%)\n" + fixed(m.pack_voltage, 2) + " V, " + fixed(m.pack_current, 2) +
@@ -197,6 +202,8 @@ class UwrtTelemetry final : public Telemetry {
             }
         }
         r.value = found ? celsius(highest) : "--";
+        r.number = found ? highest : std::numeric_limits<double>::quiet_NaN();
+        r.unit = "\u00B0C";
         // The worse of our thresholds and the publisher's own level (its thresholds may differ).
         const Level reported = status.level == DiagnosticStatus::OK      ? Level::Ok
                                : status.level == DiagnosticStatus::WARN  ? Level::Warn

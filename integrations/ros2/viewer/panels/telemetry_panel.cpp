@@ -1,6 +1,7 @@
 // "telemetry" panel: the robot's telemetry readings as header / toolbar readouts or a sidebar list.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
+#include "nereus/ros_viewer/plots/plots.hpp"
 #include "status_chip.hpp"
 #include <imgui.h>
 
@@ -26,10 +27,19 @@ class TelemetryPanel final : public Panel {
             if (i)
                 ImGui::SameLine(0, ui(14));
             ImGui::PushID(int(i));
+            // Hover: the reading's last 30 s and its details; right-click: plot it.
+            const std::string figure = "telemetry." + reading.id;
             if (statusReadout(reading.label.c_str(), reading.value.c_str(), levelColor(reading.level),
                               valueInk(reading.level)))
-                ImGui::SetTooltip("%s: %s\n%s", reading.label.c_str(), levelName(reading.level),
-                                  reading.detail.c_str());
+                plots::figureTooltip(figure, reading.label + ": " + levelName(reading.level), reading.detail);
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                ImGui::OpenPopup("plot");
+            pushPopupColors(Surface::Sheet);
+            if (ImGui::BeginPopup("plot")) {
+                plots::figureMenuItems(figure);
+                ImGui::EndPopup();
+            }
+            popPopupColors();
             ImGui::PopID();
         }
     }

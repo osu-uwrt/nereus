@@ -85,3 +85,6 @@ board:
   frame: "#171718"
   popup: "#121213"
   border: "#373839"
+# Plot lines in order: the same eight hues stepped for the charcoal sheet.
+plot:
+  series: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"]

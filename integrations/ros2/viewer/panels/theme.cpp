@@ -363,7 +363,7 @@ void readColors(const YAML::Node &node, const Keys &keys, Target &target, const 
 Entry parseTheme(const YAML::Node &doc, const std::string &file) {
     only(doc,
          {"id", "label", "description", "order", "fonts", "derive", "shape", "spacing", "style", "surfaces", "palette",
-          "board"},
+          "board", "plot"},
          file);
     Entry entry;
     auto &theme = entry.theme;
@@ -453,6 +453,15 @@ Entry parseTheme(const YAML::Node &doc, const std::string &file) {
             else
                 throw std::runtime_error(file + " board: unknown color '" + key + "'");
         }
+    }
+    if (const auto plot = doc["plot"]) { // the plot lines' colors, in order
+        only(plot, {"series"}, file + " plot");
+        const auto series = plot["series"];
+        if (!series || !series.IsSequence() || series.size() != t.palette.series.size())
+            throw std::runtime_error(file + " plot.series must list " + std::to_string(t.palette.series.size()) +
+                                     " colors");
+        for (std::size_t i = 0; i < t.palette.series.size(); ++i)
+            t.palette.series[i] = color(series[i], file + " plot.series[" + std::to_string(i) + "]");
     }
     entry.spec = [t] { return t; };
     return entry;

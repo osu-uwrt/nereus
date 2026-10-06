@@ -86,3 +86,6 @@ board:
   frame: "#25282c"
   popup: "#212427"
   border: "#444649"
+# Plot lines in order: the validated eight, stepped to 3:1 or better on the white sheet so they hold in glare.
+plot:
+  series: ["#2a78d6", "#e0591f", "#12936a", "#b07800", "#cc5a8a", "#008300", "#4a3aa7", "#d93f3e"]

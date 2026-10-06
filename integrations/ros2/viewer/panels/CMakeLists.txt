@@ -7,7 +7,8 @@ set(_panel_sources
   run_panel.cpp simulation_panel.cpp autonomy_panel.cpp pose_gizmo.cpp telemetry_panel.cpp recording_panel.cpp
   dock_layout.cpp theme.cpp pins.cpp
   electrical_panel.cpp bagging_panel.cpp bag_recorder.cpp
-  ros_runtime.cpp ros_bagging.cpp standard_motion.cpp sim_run.cpp simulation_rate.cpp)
+  ros_runtime.cpp ros_bagging.cpp standard_motion.cpp sim_run.cpp simulation_rate.cpp
+  plots_model.cpp plots_fields.cpp plots_hub.cpp plots_ui.cpp)
 
 # UWRT-specific providers (riptide_msgs2 topics/services) are only built for the UWRT viewer.
 if(NEREUS_ROS_VIEWER_UWRT)
@@ -21,7 +22,7 @@ target_include_directories(nereus_viewer_panels
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(nereus_viewer_panels PUBLIC nereus_imgui nereus_glm yaml-cpp
-  rclcpp::rclcpp rclcpp_action::rclcpp_action tf2_ros::tf2_ros
+  rclcpp::rclcpp rcpputils::rcpputils rclcpp_action::rclcpp_action tf2_ros::tf2_ros
   ${std_msgs_TARGETS} ${std_srvs_TARGETS} ${geometry_msgs_TARGETS} ${nav_msgs_TARGETS}
   ${sensor_msgs_TARGETS} ${visualization_msgs_TARGETS} ${action_msgs_TARGETS} ${rcl_interfaces_TARGETS})
 
@@ -48,7 +49,8 @@ if(BUILD_TESTING)
 
   # Test executables; all link the panels library and keep asserts on (-UNDEBUG).
   set(_panel_tests panels_gizmo_input_test panels_composition_test panels_dock_layout_test
-    panels_pins_test panels_theme_classic_test panels_theme_heat_sheet_test panels_bagging_test)
+    panels_pins_test panels_theme_classic_test panels_theme_heat_sheet_test panels_bagging_test
+    panels_plots_test panels_plots_ros_test)
   add_executable(panels_gizmo_input_test ../tests/panels_gizmo_input.cpp)
   add_executable(panels_composition_test ../tests/panels_panel_composition.cpp)
   add_executable(panels_dock_layout_test ../tests/panels_dock_layout.cpp)
@@ -56,6 +58,8 @@ if(BUILD_TESTING)
   add_executable(panels_theme_classic_test ../tests/panels_theme_classic.cpp)
   add_executable(panels_theme_heat_sheet_test ../tests/panels_theme_heat_sheet.cpp)
   add_executable(panels_bagging_test ../tests/panels_bagging.cpp)
+  add_executable(panels_plots_test ../tests/panels_plots.cpp)
+  add_executable(panels_plots_ros_test ../tests/panels_plots_ros.cpp)
   if(NEREUS_ROS_VIEWER_UWRT) # these two use riptide_msgs2
     add_executable(panels_panel_ros_test ../tests/panels_panel_ros.cpp)
     add_executable(panels_operator_test ../tests/panels_operator_panels.cpp)
@@ -77,6 +81,9 @@ if(BUILD_TESTING)
   add_test(NAME panels_theme_heat_sheet COMMAND panels_theme_heat_sheet_test ${PROJECT_SOURCE_DIR}/content/viewer/fonts)
   add_test(NAME panels_bagging COMMAND panels_bagging_test)
   set_tests_properties(panels_bagging PROPERTIES TIMEOUT 120)
+  add_test(NAME panels_plots COMMAND panels_plots_test)
+  add_test(NAME panels_plots_ros COMMAND panels_plots_ros_test)
+  set_tests_properties(panels_plots_ros PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
   if(NEREUS_ROS_VIEWER_UWRT)
     add_test(NAME panels_ros COMMAND panels_panel_ros_test ${_viewer_config}
       ${CMAKE_CURRENT_SOURCE_DIR}/../tests/panels_standard_example.yaml)
