@@ -51,12 +51,14 @@ std::vector<Window> windows();
 // Windows › Plots: the plots (ticked when shown), the saved plots, New plot, Manage saved plots…
 void drawMenu();
 
-// Ctrl+P entries: Plot <topic field>, Plot <panel figure>, Open plot <saved>, New plot. Running one with Shift held
-// adds to the focused plot instead of opening a new one.
+// Ctrl+P entries. Without `fields`: New plot, the saved plots (Open plot) and "Plot a topic field…", which fills the
+// search with "plot " (`fill`, run is empty). With `fields` (the search starts with "plot "): every numeric topic
+// field, panel figure and Motion axis as well. Running one with Shift held adds to the focused plot.
 struct Command {
     std::string group, label;
     std::function<void()> run;
+    std::string fill;
 };
-std::vector<Command> commands();
+std::vector<Command> commands(bool fields);
 
 } // namespace nereus::ros_viewer::plots

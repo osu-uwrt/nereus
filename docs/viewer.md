@@ -162,8 +162,9 @@ Plot any number from any ROS topic, live, in dock windows like the rest (**Windo
 - **Plot this**: right-click a row of the Motion table (*Plot Z* gives actual and commanded, then the error; *Add Z
   to ▸*; *Plot all six axes*) or a temperature / battery readout in the command bar. Pointing at one of those figures
   shows its last 30 s in the tooltip.
-- **Ctrl+P**: type `plot` and part of a field, a Motion axis or a saved plot. Enter opens a new plot; Shift+Enter adds
-  to the focused one.
+- **Ctrl+P**: the search lists New plot and your saved plots. Fields come only after `plot ` (or *Plot a topic
+  field…*, which types it): `plot odom z`, `plot motion yaw`. Enter opens a new plot; Shift+Enter adds to the
+  focused one.
 - **Time**: every plot window shares one timeline. **Live / Paused** freezes them all while recording goes on;
   drag a plot to scrub (it pauses), Ctrl+scroll to zoom around the pointer, double-click to go back to live. The
   wheel alone scrolls a plot window that holds more lanes than fit. The cursor is one rule through every lane and

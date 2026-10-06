@@ -2512,19 +2512,30 @@ void drawMenu() {
         s.manageOpen = true;
 }
 
-std::vector<Command> commands() {
+std::vector<Command> commands(bool fields) {
     auto &s = state();
     std::vector<Command> out;
     if (!s.hub)
         return out;
-    out.push_back({"Plot", "New plot", [] {
+    out.push_back({"Plot",
+                   "New plot",
+                   [] {
                        PlotSpec spec;
                        spec.title = "Plot " + std::to_string(state().nextId);
                        addPlot(std::move(spec));
-                   }});
+                   },
+                   {}});
+    for (const auto &name : savedPlots())
+        out.push_back({"Open plot", name, [name] { openSaved(name); }, {}});
+    if (!fields) { // the fields only once "plot " is typed: hundreds of them would bury everything else
+        out.push_back({"Plot", "Plot a topic field\u2026", nullptr, "plot "});
+        return out;
+    }
     if (s.motion) {
         for (int i = 0; i < 6; ++i)
-            out.push_back({"Plot", std::string("Motion · ") + kAxisNames[i] + ": actual, commanded, error", [i] {
+            out.push_back({"Plot",
+                           std::string("Motion · ") + kAxisNames[i] + ": actual, commanded, error",
+                           [i] {
                                const auto g = figureGroup(std::string("motion.") + kAxisIds[i]);
                                if (auto *w = ImGui::GetIO().KeyShift ? plotById(state().focused) : nullptr)
                                    addLanes(*w, g->lanes);
@@ -2534,23 +2545,25 @@ std::vector<Command> commands() {
                                    spec.lanes = g->lanes;
                                    addPlot(std::move(spec));
                                }
-                           }});
-        out.push_back({"Plot", "Motion · all six axes", [] {
+                           },
+                           {}});
+        out.push_back({"Plot",
+                       "Motion · all six axes",
+                       [] {
                            const auto g = figureGroup("motion.all");
                            PlotSpec spec;
                            spec.title = g->title;
                            spec.lanes = g->lanes;
                            addPlot(std::move(spec));
-                       }});
+                       },
+                       {}});
     }
     for (const auto &entry : searchIndex()) {
         if (entry.source.kind == Source::Kind::Figure && entry.source.figure.rfind("motion.", 0) == 0)
             continue; // the axes above cover Motion
         const Source source = entry.source;
-        out.push_back({"Plot", entry.text, [source] { plotSource(source); }});
+        out.push_back({"Plot", entry.text, [source] { plotSource(source); }, {}});
     }
-    for (const auto &name : savedPlots())
-        out.push_back({"Open plot", name, [name] { openSaved(name); }});
     return out;
 }
 

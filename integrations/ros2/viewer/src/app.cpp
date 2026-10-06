@@ -3209,10 +3209,20 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
             add(control.window, control.label, control.kind == pins::Control::Kind::Checkbox && control.checked,
                 [key = control.key] { pins::trigger(key); });
     }
-    // Plots: any topic's field, a panel's figure, a saved plot (Shift adds to the focused plot)
-    if (workspace_ == Workspace::Operate)
-        for (auto &command : plots::commands())
-            add(command.group, command.label, false, std::move(command.run));
+    // Plots: New plot, the saved plots and "Plot a topic field…"; once the search starts with "plot ", every
+    // topic field, panel figure and Motion axis too (Shift adds to the focused plot)
+    if (workspace_ == Workspace::Operate) {
+        std::string query = paletteQuery_;
+        query.erase(0, query.find_first_not_of(' '));
+        std::transform(query.begin(), query.end(), query.begin(),
+                       [](unsigned char c) { return char(std::tolower(c)); });
+        for (auto &command : plots::commands(query.rfind("plot ", 0) == 0)) {
+            if (command.run)
+                add(command.group, command.label, false, std::move(command.run));
+            else
+                out.push_back({command.group, command.label, false, nullptr, command.fill});
+        }
+    }
     return out;
 }
 
@@ -4767,6 +4777,7 @@ void App::drawHelpWindow() {
 
         sectionTitle("Shortcuts");
         table("shortcuts", {{"Ctrl+P", "search: windows, layouts, themes, controls, trees; robot moves"},
+                            {"Ctrl+P, plot odom z", "a field or Motion axis in a plot (Shift+Enter: the focused one)"},
                             {"Ctrl+M", "edit the prior map / done"},
                             {"Ctrl+S", "save the prior map"},
                             {"F12", "save a screenshot (Pictures/Nereus)"},
