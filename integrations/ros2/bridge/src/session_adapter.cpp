@@ -205,9 +205,12 @@ session::CommandResult SessionAdapter::moveClaw(const std::string &id, double du
     return impl_->session->moveClaw(id, duration);
 }
 session::CommandResult SessionAdapter::fire(const std::string &id, session::Events &events) {
+    // only what the fire recorded: lastStep() still holds the step's own events, already taken by step()
+    const std::size_t before = impl_->session->lastStep().task_events.size();
     const auto result = impl_->session->fire(id);
-    for (const auto &event : impl_->session->lastStep().task_events)
-        events.push_back(event);
+    const auto &recorded = impl_->session->lastStep().task_events;
+    for (std::size_t i = before; i < recorded.size(); ++i)
+        events.push_back(recorded[i]);
     return result;
 }
 std::optional<session::MechanismState> SessionAdapter::mechanismState() const {

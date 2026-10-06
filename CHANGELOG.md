@@ -117,6 +117,11 @@ First version for the team.
       (`forward 0.5`, `turn 30`, `z -1.5`, `go 2 1 -1.5 90`, `level`) sent from the pose last commanded, keyboard
       driving (WASD, Space / Shift, Q / E, one step a press, `[` / `]` for the step; also the Motion panel's
       Drive with keys, Position control only), and Run / Stop for autonomy trees.
+    - The autonomy tree list (panel and search) offers the source trees only: riptide_autonomy also lists its
+      installed copies (`install/.../share`), each tree twice and deleted ones still installed.
+    - Long runs: the viewer no longer keeps every frame's timing sample (only `--profile` reports them), a pool
+      switch frees the camera cards' textures, and the simulator's fire commands no longer record the step's task
+      events a second time (`tasks.json` had them twice).
     - Theme changes apply between frames (picking one could leave a mix of two themes), tab styles are part of
       theme files, Classic draws switches and status panels with Qt's bevels, robot-frame map origins drag along
       their X / Y arrows, and camera cards no longer jitter at a width right at the edge.

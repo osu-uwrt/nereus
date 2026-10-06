@@ -432,6 +432,7 @@ class App {
     void applyPendingTheme();       // between frames: a theme chosen in the menu
     // Until the scenario is in: the mark pinging over rising water, and what the viewer is waiting for.
     void drawLoadingScreen();
+    void releaseCardTextures(); // the camera cards' GL textures (a new scenario, shutdown)
     // Runs `work` (the scene's build) here while another thread keeps the loading screen moving: that thread has
     // the GL context and ImGui meanwhile, so `work` must touch neither. Only over the loading screen, and not in
     // capture runs (one thread, frame for frame).
@@ -737,6 +738,7 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     loadLogo();
     const auto configHome = configDirectory();
     persist_ = opt_.frames == 0 && !configHome.empty();
+    profiler_.keepInterval(opt_.profile); // only --profile reports intervals
     if (!configHome.empty()) {
         sessionIni_ = configHome / "viewer_layout.ini";
         mapIniFile_ = configHome / "map_layout.ini";
@@ -896,12 +898,7 @@ App::~App() {
     panelRos_.stop();
     composition_.reset();
     model_.reset();
-    for (auto &card : cards_) {
-        if (card.rgb)
-            glDeleteTextures(1, &card.rgb);
-        if (card.depth)
-            glDeleteTextures(1, &card.depth);
-    }
+    releaseCardTextures();
     if (readFbo_)
         glDeleteFramebuffers(1, &readFbo_);
     if (drawFbo_)
@@ -1085,6 +1082,7 @@ void App::loadScenario(const std::string &json) {
     });
     look_.appearance = scenario_->appearance;
     look_.equipment = lookup(config_, {"equipment_visible"}).as<bool>(true);
+    releaseCardTextures(); // the last scenario's cards
     cards_.assign(scenario_->cameras.size(), {});
     cardDue_.assign(cards_.size(), 0.);
     cardVisible_.assign(cards_.size(), 1);
@@ -1128,6 +1126,16 @@ void App::loadScenario(const std::string &json) {
     focus(initial);
     applyInitialView();
     status_ = demoMode_ ? "SCENE PREVIEW" : "WAITING FOR PHYSICS";
+}
+
+void App::releaseCardTextures() {
+    for (auto &card : cards_) {
+        if (card.rgb)
+            glDeleteTextures(1, &card.rgb);
+        if (card.depth)
+            glDeleteTextures(1, &card.depth);
+        card.rgb = card.depth = 0;
+    }
 }
 
 void App::buildPanels() {

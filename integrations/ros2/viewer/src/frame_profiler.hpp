@@ -75,7 +75,8 @@ class FrameProfiler {
             recent_.push_back(current_);
             if (recent_.size() > rolling_)
                 recent_.pop_front();
-            interval_.push_back(current_);
+            if (keepInterval_)
+                interval_.push_back(current_);
         }
         started_ = true;
         hadPos_ = havePos_;
@@ -98,10 +99,17 @@ class FrameProfiler {
     std::size_t pending() const {
         return interval_.size();
     }
+    // Whether frames are kept for takeInterval() (on by default). Off when nobody takes them (no --profile):
+    // kept, they would grow by a sample a frame for as long as the viewer runs.
+    void keepInterval(bool keep) {
+        keepInterval_ = keep;
+        if (!keep)
+            std::vector<FrameSample>().swap(interval_);
+    }
 
   private:
     std::size_t rolling_;
-    bool started_ = false, havePos_ = false, hadPos_ = false;
+    bool started_ = false, havePos_ = false, hadPos_ = false, keepInterval_ = true;
     std::array<double, 3> pos_{}, prevPos_{};
     std::chrono::steady_clock::time_point last_{};
     FrameSample current_;

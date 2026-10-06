@@ -11,6 +11,17 @@ namespace {
 using Execute = riptide_msgs2::action::ExecuteTree;
 using Goal = rclcpp_action::ClientGoalHandle<Execute>;
 using List = riptide_msgs2::srv::ListTrees;
+// The trees to offer: riptide_autonomy lists both its source trees/ and the installed copy (install/<pkg>/share),
+// so every tree twice and deleted ones still installed. Only those outside an install/ folder, unless there are
+// none (a machine with only the install).
+std::vector<std::string> sourceTrees(std::vector<std::string> trees) {
+    const auto installed = [](const std::string &path) { return path.find("/install/") != std::string::npos; };
+    if (!std::all_of(trees.begin(), trees.end(), installed))
+        trees.erase(std::remove_if(trees.begin(), trees.end(), installed), trees.end());
+    std::sort(trees.begin(), trees.end());
+    trees.erase(std::unique(trees.begin(), trees.end()), trees.end());
+    return trees;
+}
 class UwrtAutonomy final : public Autonomy {
   public:
     UwrtAutonomy(std::shared_ptr<RosRuntime> runtime, const YAML::Node &cfg, const Context &ctx)
@@ -166,10 +177,7 @@ class UwrtAutonomy final : public Autonomy {
                                                  if (epoch != refreshEpoch)
                                                      return;
                                                  value.refreshing = false;
-                                                 value.trees = reply.get()->trees;
-                                                 std::sort(value.trees.begin(), value.trees.end());
-                                                 value.trees.erase(std::unique(value.trees.begin(), value.trees.end()),
-                                                                   value.trees.end());
+                                                 value.trees = sourceTrees(reply.get()->trees);
                                                  if (!value.busy)
                                                      value.message = "Ready";
                                              })
