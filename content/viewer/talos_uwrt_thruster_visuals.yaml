@@ -2,14 +2,17 @@
 # Pivots/axes are in the CAD origin frame (the robot pack `origin` frame) where each rotor asset is authored;
 # `thruster` names a robot-pack thruster id (force-array index comes from the bridge thrusters.order),
 # `asset` a robot-pack asset id (rotor meshes are already listed in the pack visuals).
-# Signed RPM = c0 + c1*F + c2*tanh(F) + c3*abs(F)^0.25, separate forward/reverse fits, clamped at idle.
+# Rotor speed inverts the propeller law |F| = K_T * water_density * D^4 * (rpm/60)^2, K_T = a + b*rpm per direction:
+# the Blue Robotics T200 fit riptide_mpc models/talos.yaml uses (hardware.thrust_coefficient_*).
 topic: simulator/actual_thruster_forces
 timeout: 0.5
 force_deadband: 0.01
 speed_scale: 1.0          # 1 = real-time estimated RPM; no display speed cap
-force_to_rpm:
-  forward: [-475.886186, 32.327429, -324.744664, 1443.832105]
-  reverse: [257.460623, 42.948545, -24.402056, -986.338071]
+propeller:
+  diameter_m: 0.076
+  water_density: 998.2
+  thrust_coefficient_forward: [0.3964, 1.48e-5]
+  thrust_coefficient_reverse: [0.3114, 1.25e-5]
 rotors:
   - {id: VUS, thruster: VUS, asset: rotor_VUS, frame: origin, pivot: [-0.134, -0.37158089, 0.24382236], axis: [1.0, 0.0, 0.0], direction: -1}
   - {id: VUP, thruster: VUP, asset: rotor_VUP, frame: origin, pivot: [-0.134, 0.43998086, 0.24382232], axis: [1.0, 0.0, 0.0], direction: 1}

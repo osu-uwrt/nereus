@@ -1,4 +1,4 @@
-// Rotor animation driven by realized thruster forces. Rotor pivots/axes and the force-to-RPM fit come
+// Rotor animation driven by realized thruster forces. Rotor pivots/axes and the propeller thrust law come
 // from a viewer YAML document; the force-array order comes from the bridge document (thrusters.order).
 #pragma once
 #include "math.hpp"
@@ -27,7 +27,9 @@ struct ThrusterVisuals {
     std::string topic;
     std::vector<ThrusterRotor> rotors;
     double timeout = .5, deadband = .01, speedScale = 1;
-    std::array<double, 4> forwardRpm{}, reverseRpm{};
+    // Propeller law |F| = K_T rho D^4 (rpm/60)^2 with K_T = a + b rpm per direction ([a > 0, b >= 0]).
+    std::array<double, 2> forwardKt{}, reverseKt{};
+    double ktScale = 0; // rho D^4 / 3600: newtons per (K_T rpm^2)
 
     ThrusterVisuals() = default;
     // thrusterOrder: thruster ids in force-array order (bridge thrusters.order).
@@ -45,16 +47,19 @@ struct ThrusterVisuals {
                 throw std::invalid_argument("Thruster visual timing/speed settings must be positive and finite");
         if (!std::isfinite(deadband) || deadband < 0)
             throw std::invalid_argument("Thruster visual deadband must be finite and nonnegative");
+        const auto propeller = config["propeller"];
+        const double diameter = propeller["diameter_m"].as<double>(0.), rho = propeller["water_density"].as<double>(0.);
+        if (!std::isfinite(diameter) || diameter <= 0 || !std::isfinite(rho) || rho <= 0)
+            throw std::invalid_argument("Thruster propeller needs a positive diameter_m and water_density");
+        ktScale = rho * std::pow(diameter, 4) / 3600.;
         for (const auto &key : {"forward", "reverse"}) {
-            const auto coefficients = config["force_to_rpm"][key];
-            if (!coefficients.IsSequence() || coefficients.size() != 4)
-                throw std::invalid_argument("Thruster force_to_rpm curves need four coefficients per direction");
-            auto &curve = std::string(key) == "forward" ? forwardRpm : reverseRpm;
-            for (size_t i = 0; i < curve.size(); ++i) {
-                curve[i] = coefficients[i].as<double>();
-                if (!std::isfinite(curve[i]))
-                    throw std::invalid_argument("Thruster RPM coefficients must be finite");
-            }
+            const auto coefficients = propeller[std::string("thrust_coefficient_") + key];
+            if (!coefficients.IsSequence() || coefficients.size() != 2)
+                throw std::invalid_argument("Thruster thrust coefficients need [a, b] per direction");
+            auto &kt = std::string(key) == "forward" ? forwardKt : reverseKt;
+            kt = {coefficients[0].as<double>(), coefficients[1].as<double>()};
+            if (!std::isfinite(kt[0]) || !std::isfinite(kt[1]) || kt[0] <= 0 || kt[1] < 0)
+                throw std::invalid_argument("Thruster thrust coefficients need a > 0 and b >= 0");
         }
         const auto entries = config["rotors"];
         if (!entries.IsSequence() || entries.size() == 0 || entries.size() > 256)
@@ -95,13 +100,22 @@ struct ThrusterVisuals {
         forces.assign(thrusterOrder.size(), 0.f);
     }
 
+    // Inverse of the propeller law: the rotor speed that makes `force`, signed like it.
     double rpm(double force) const {
         if (!std::isfinite(force) || std::abs(force) <= deadband)
             return 0;
-        const auto &c = force > 0 ? forwardRpm : reverseRpm;
-        const double value = c[0] + c[1] * force + c[2] * std::tanh(force) + c[3] * std::pow(std::abs(force), .25);
-        // Empirical fits can cross zero near idle; never reverse due to that intercept.
-        return force > 0 ? std::max(0., value) : std::min(0., value);
+        const auto &[a, b] = force > 0 ? forwardKt : reverseKt;
+        const double target = std::abs(force) / ktScale;
+        // (a + b R) R^2 is convex and increasing for R > 0 and the b = 0 root is at or right of the true one,
+        // so Newton descends monotonically onto it.
+        double r = std::sqrt(target / a);
+        for (int i = 0; i < 50; ++i) {
+            const double step = ((a + b * r) * r * r - target) / ((2 * a + 3 * b * r) * r);
+            r -= step;
+            if (std::abs(step) <= 1e-12 * r)
+                break;
+        }
+        return std::copysign(r, force);
     }
 
     bool receive(const std::vector<float> &values, double now) {
