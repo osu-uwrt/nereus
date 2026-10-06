@@ -48,6 +48,14 @@ const Palette &palette();
 
 // WCAG contrast ratio of two colors (1..21).
 float contrastRatio(ImVec4 a, ImVec4 b);
+// `ink` where it reads on `fill` (at least `ratio`:1), else white or black, whichever reads better: text drawn over
+// a highlight (a selected or hovered row) in any theme, e.g. Classic's black ink on its navy selection.
+inline ImVec4 inkOn(ImVec4 fill, ImVec4 ink, float ratio = 4.5f) {
+    if (contrastRatio(ink, fill) >= ratio)
+        return ink;
+    const ImVec4 white(1, 1, 1, ink.w), black(0, 0, 0, ink.w);
+    return contrastRatio(white, fill) >= contrastRatio(black, fill) ? white : black;
+}
 
 // Interface scale (1 = the viewer's own 100 % sizes): the style's sizes and every fixed size written with ui().
 // Re-applies the current theme; the host rebuilds its fonts at the same scale.

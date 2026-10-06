@@ -3303,21 +3303,37 @@ void App::drawCommandPalette() {
         const auto &command = commands[ranked[std::size_t(row)].second];
         ImGui::PushID(row);
         const ImVec2 at = ImGui::GetCursorScreenPos();
-        if (ImGui::Selectable("##row", row == paletteIndex_, 0, {0, ImGui::GetTextLineHeight() + ui(6)}))
+        const bool selected = row == paletteIndex_;
+        if (ImGui::Selectable("##row", selected, 0, {0, ImGui::GetTextLineHeight() + ui(6)}))
             chosen = &command;
-        if (ImGui::IsItemHovered() && (ImGui::GetIO().MouseDelta.x != 0 || ImGui::GetIO().MouseDelta.y != 0))
+        const bool hovered = ImGui::IsItemHovered(), held = ImGui::IsItemActive();
+        if (hovered && (ImGui::GetIO().MouseDelta.x != 0 || ImGui::GetIO().MouseDelta.y != 0))
             paletteIndex_ = row;
+        // Inks that read on the row's highlight, as the Selectable filled it (Classic's is navy: white ink there).
+        const auto &colors = ImGui::GetStyle().Colors;
+        const bool lit = hovered || selected;
+        const ImVec4 fill = colors[held && hovered ? ImGuiCol_HeaderActive
+                                   : hovered       ? ImGuiCol_HeaderHovered
+                                                   : ImGuiCol_Header];
+        const auto ink = [&](ImVec4 c, float ratio) {
+            if (!lit)
+                return c;
+            const ImVec4 on = inkOn(fill, c, ratio);
+            // a secondary ink that had to change keeps its rank: the new ink, softened
+            return on.x == c.x && on.y == c.y && on.z == c.z ? c : ImVec4(on.x, on.y, on.z, ratio < 4 ? .75f : 1);
+        };
         auto *draw = ImGui::GetWindowDrawList();
         const float y = at.y + ui(3);
-        draw->AddText({at.x + ui(4), y}, ImGui::GetColorU32(palette().muted), command.group.c_str());
+        draw->AddText({at.x + ui(4), y}, ImGui::GetColorU32(ink(palette().muted, 3)), command.group.c_str());
         // a note (nothing to run) in muted ink
+        const bool runnable = command.run || !command.fill.empty();
         draw->AddText({at.x + groupWidth, y},
-                      ImGui::GetColorU32(command.run || !command.fill.empty() ? palette().text : palette().muted),
+                      ImGui::GetColorU32(runnable ? ink(palette().text, 4.5f) : ink(palette().muted, 3)),
                       command.label.c_str());
         if (command.checked) { // the current choice / an option that is on
             const char *on = "on";
             draw->AddText({at.x + ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(on).x - ui(4), y},
-                          ImGui::GetColorU32(palette().accent), on);
+                          ImGui::GetColorU32(ink(palette().accent, 3)), on);
         }
         ImGui::PopID();
     }
