@@ -16,7 +16,8 @@ starts it for you; for the real robot use `ros2 launch integrations/uwrt/launch/
   robot).
 - **Pool view**, in the middle: the 3D scene with its toolbar (camera, focus and display toggles; lit buttons are
   on). The toolbar is yours to arrange, see [The toolbar](#the-toolbar).
-- **Windows** around it: the robot panels (Motion, Autonomy, Mapping, Vision, Recording, Electrical, Actuators),
+- **Windows** around it: the robot panels (Motion, Autonomy, Mapping, Vision, Recording, Bagging, Electrical,
+  Actuators),
   one window per robot camera, and the course map. Every one of them can be moved, see
   [Arranging windows](#arranging-windows).
 
@@ -243,6 +244,32 @@ does kill: use one operator at a time.
 - **Capture image**: the picture taker (`capture_image`) saves the newest front camera frame on the robot; the
   reply lists the saved files.
 
+## Bagging
+
+`ros2 bag record` on the robot or on this computer: pick **Record on** (Robot / This computer), then **Record**.
+
+- **Robot**: runs on the machine in the **ssh** field, prefilled with `ros@orin2`: type another `user@host` and press
+  Enter to record there instead (key login, as `ssh <it>` from a terminal; locked while a bag records). The bag keeps
+  recording if the viewer closes or the link drops; a restarted viewer, or another laptop, shows it and can stop
+  it. The line under the switch says how much disk the robot has left (yellow under 5 GB), or why it can't be
+  reached.
+- **This computer**: runs where the viewer runs and stops when the viewer closes.
+- **Folder** and **Name**: the bag is the folder `<folder>/<name>_<date>_<time>` (untick *Add date and time* to
+  drop the timestamp; an existing bag is never overwritten).
+- **Topics**: *All* records every topic, including ones that appear later; *Leave out* takes a regex (`-x`), for
+  example `image|point_cloud` to skip camera streams. *Selected* records the ticked topics (the live list, with a
+  filter and the configured presets); a ticked topic that is not published yet is recorded once it appears.
+- **Stop** sends Ctrl-C so the recorder closes the bag properly (writes `metadata.yaml`). A recorder that is still
+  closing after 10 s shows **Kill recorder**; a killed bag keeps its data and `ros2 bag reindex` rebuilds its
+  metadata.
+- While a bag records, the command bar shows a red **BAG** chip with its time (hover: where it is and its size).
+  The last bag's path stays in the panel; **Copy path** copies it as `ros@orin2:/home/ros/bags/...` for
+  `scp -r` or `rsync`.
+
+Each machine runs at most one bag from the viewer at a time; its state is in `~/.local/state/nereus/bag/` there
+(`record.log` is the recorder's output). Targets, their `setup` (what is sourced before `ros2`), extra
+`record_args` and the presets are in `talos_uwrt_panels.yaml` under the `bags` provider.
+
 ## Electrical
 
 The RViz electrical panel's tools, on the real robot:
@@ -380,7 +407,7 @@ All of it is YAML in `content/viewer/`:
 | File | Controls |
 | --- | --- |
 | `talos_uwrt_host.yaml` | window size and `title_bar`, default `layout` and `theme`, topics, pose source and delays, estimate ghost/anchors, detections, `point_clouds`, `mapping_markers`, `prior_map`, `thrust_arrows`, focus presets |
-| `talos_uwrt_panels.yaml` | the pool view `toolbar:`, command bar `header:` and the `panels:` windows (order, titles, `dock:` area in the built-in layouts, which start open or as the shown tab), and the providers they talk to (telemetry readings and thresholds, recording services) |
+| `talos_uwrt_panels.yaml` | the pool view `toolbar:`, command bar `header:` and the `panels:` windows (order, titles, `dock:` area in the built-in layouts, which start open or as the shown tab), and the providers they talk to (telemetry readings and thresholds, recording services, bag targets and presets) |
 | `talos_uwrt_thruster_visuals.yaml`, `talos_uwrt_status_lights.yaml` | rotor animation and LED bars |
 
 Toolbar, header and panel items are listed by type; reorder or remove entries to change what is offered, and put a

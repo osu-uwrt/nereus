@@ -1,4 +1,5 @@
 #pragma once
+#include "nereus/ros_viewer/panels/bag_recorder.hpp"
 #include <cstdint>
 #include <glm/glm.hpp>
 #include <memory>
@@ -9,7 +10,7 @@
 
 namespace nereus::ros_viewer::panels {
 using Pose = glm::mat4;
-enum class Kind { Motion, Autonomy, Mapping, Actuators, Run, Simulation, Telemetry, Recording, Electrical };
+enum class Kind { Motion, Autonomy, Mapping, Actuators, Run, Simulation, Telemetry, Recording, Electrical, Bagging };
 enum class Mode { Disabled, Position, Feedforward };
 struct Provider {
     virtual ~Provider() = default;
@@ -198,6 +199,44 @@ struct Electrical : Provider {
     virtual void setPingerEnabled(bool) = 0;
     virtual void setPingerFrequency(int khz) = 0;
     virtual void sendIvc(int header, int command) = 0;
+};
+// Bag recording (ros2 bag record) on the machines of `targets`: this computer, or another (the robot) over ssh. A
+// recording runs detached on its machine, so it outlives the viewer and the link; every viewer polling that machine
+// sees it, whoever started it.
+struct BagTargetState {
+    std::string id, label, host, directory; // host: the ssh destination (setHost), empty for this computer
+    bool known = false;                     // a reply has come back since the viewer started
+    bool reachable = false;                 // the last command reached the machine
+    bool recording = false, stopping = false, pending = false; // pending: a start or stop is under way
+    std::string bag;                        // the running (or finishing) recording's path on that machine
+    double elapsed = 0, bytes = 0, freeBytes = -1; // seconds, bytes; free -1: unknown
+    std::string message;                    // the last outcome or problem
+    bool failed = false;                    // `message` is a problem
+    std::string lastBag, lastNote;          // the most recent recording that ended there (whoever stopped it)
+    double lastBytes = 0;
+    bool lastComplete = true; // its metadata.yaml was written (closed cleanly)
+};
+struct BagPreset {
+    std::string name;
+    std::vector<std::string> topics; // absolute
+};
+struct BaggingState {
+    std::vector<BagTargetState> targets;
+    std::vector<std::pair<std::string, std::string>> topics; // the live graph: name, type; sorted by name
+    std::vector<BagPreset> presets;
+};
+struct Bagging : Provider {
+    Kind kind() const final {
+        return Kind::Bagging;
+    }
+    virtual BaggingState state() = 0;
+    // request.directory empty: the target's configured directory.
+    virtual void start(const std::string &target, const BagRequest &request) = 0;
+    virtual void stop(const std::string &target) = 0;
+    virtual void kill(const std::string &target) = 0; // a recorder that does not finish after Stop
+    // Points a remote target at another ssh destination (user@host); ignored for this computer, while it is
+    // busy, or for an empty destination. The target then starts over with the new machine's state.
+    virtual void setHost(const std::string &target, const std::string &host) = 0;
 };
 // SVO file for `camera`: `base` with a leading ~ replaced by `home`, then _<stamp> (when not empty) and
 // _<camera> before the extension (.svo2 unless `base` ends in .svo or .svo2), so cameras never share a file.

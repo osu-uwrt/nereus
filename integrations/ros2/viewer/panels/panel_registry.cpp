@@ -12,6 +12,7 @@ void registerSimulationPanel(Registry &);
 void registerTelemetryPanel(Registry &);
 void registerRecordingPanel(Registry &);
 void registerElectricalPanel(Registry &);
+void registerBaggingPanel(Registry &);
 namespace {
 // Toolbar item "panels_menu": a Windows popup that shows or hides windows (drawn by the composition).
 struct PanelsMenu final : Panel {
@@ -59,5 +60,6 @@ void registerPanels(Registry &registry) {
     registerTelemetryPanel(registry);
     registerRecordingPanel(registry);
     registerElectricalPanel(registry);
+    registerBaggingPanel(registry);
 }
 } // namespace nereus::ros_viewer::panels

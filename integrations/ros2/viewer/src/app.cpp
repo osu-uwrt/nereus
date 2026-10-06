@@ -4502,7 +4502,8 @@ std::string toolbarLabel(const std::string &type) {
                                                            {"run", "Run tracking"},
                                                            {"motion", "Enable / KILL"},
                                                            {"telemetry", "Telemetry"},
-                                                           {"recording", "Recording"}};
+                                                           {"recording", "Recording"},
+                                                           {"bagging", "Bags"}};
     const auto found = labels.find(type);
     return found == labels.end() ? type : found->second;
 }

@@ -61,6 +61,27 @@ providers:
         - {id: ffc, label: FFC, start_service: ffc/zed_node/start_svo_rec, stop_service: ffc/zed_node/stop_svo_rec}
         - {id: dfc, label: DFC, start_service: dfc/zed_node/start_svo_rec, stop_service: dfc/zed_node/stop_svo_rec}
       capture_service: capture_image
+  bags:
+    type: ros.bagging
+    options:
+      # ros2 bag record on the robot over ssh, or on this computer. A robot bag runs on its own there: it keeps
+      # recording if the viewer closes or the link drops, and any viewer can stop it. This computer's stops with
+      # the viewer (stop_on_exit). Extra recorder arguments per target: record_args: [-s, mcap, ...].
+      targets:
+        - id: robot
+          label: Robot
+          host: ros@orin2  # prefills the panel's ssh field; the operator can point it at another machine
+          directory: ~/bags
+          # As ros_launcher.service, with the launcher's RMW, so the recorder joins the running stack.
+          setup: |
+            source ~/colcon_deploy/install/setup.bash
+            source ~/uwrt_config/source/zenoh_server.bash
+            export RMW_IMPLEMENTATION=rmw_zenoh_cpp
+        - {id: host, label: This computer, directory: ~/bags}
+      # Topic sets for "Selected" (riptide_rviz rosbag_presets.yaml); relative names are under the robot namespace.
+      presets:
+        Random pinger: [/tf, /tf_static, mapping/torpedo, mapping/table, odometry/filtered,
+                        ivc/pinger/selected_freq_amp_stream]
   electrical:
     type: uwrt.electrical
     options:
@@ -137,6 +158,13 @@ panels:
     dock: right_bottom
     open: false
     options: {path: "~/svos/run", home: /home/ros, timestamp: true}
+  - id: bags
+    type: bagging
+    title: Bagging
+    provider: bags
+    dock: right_bottom
+    open: false
+    options: {name: talos, timestamp: true}
   - id: electrical
     type: electrical
     title: Electrical
@@ -183,10 +211,12 @@ toolbar:  # groups: camera | overlays | windows | preview task (separator: a div
   - {type: preview_task}
 # Command bar (always visible, whatever the window layout), right-aligned beside the pose-source pill; the motion
 # panel's Enable / KILL is pinned at its left. Toolbar item types (provider-backed
-# ones draw their compact form): robot temperatures, and a REC chip per camera while it records.
+# ones draw their compact form): robot temperatures, a REC chip per camera while it records, and a BAG chip per
+# machine recording a bag.
 header:
   - {id: telemetry, type: telemetry, provider: telemetry}
   - {id: recording, type: recording, provider: recording}
+  - {id: bagging, type: bagging, provider: bags}
 ownership:
   - motion: motion
     autonomy: mission

@@ -99,6 +99,8 @@ int main(int argc, char **argv) {
             toolbar.push_back(YAML::Clone(item));
     }
     config["toolbar"] = toolbar;
+    for (auto target : config["providers"]["bags"]["options"]["targets"]) // bag targets: never ssh to the robot
+        target["ssh"] = YAML::Load("[\"false\"]");
     config["providers"]["simulation"]["options"]["node"] = "mock";
     config["providers"]["simulation"]["options"]["request_timeout"] = .75;
     node->declare_parameter<double>("real_time_factor", 1.0);

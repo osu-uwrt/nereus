@@ -32,6 +32,7 @@ void registerUwrtElectrical(Registry &, const RuntimeFactory &);
 void registerSimulationRate(Registry &, const RuntimeFactory &);
 void registerSimRun(Registry &, const RuntimeFactory &);
 void registerStandardMotion(Registry &, const RuntimeFactory &);
+void registerRosBagging(Registry &, const RuntimeFactory &);
 Pose poseMatrix(const geometry_msgs::msg::Transform &);
 bool finitePose(const Pose &);
 

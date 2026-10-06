@@ -51,6 +51,7 @@ void RosProviders::registerFactories(Registry &registry) {
     registerStandardMotion(registry, factory);
     registerSimRun(registry, factory);
     registerSimulationRate(registry, factory);
+    registerRosBagging(registry, factory);
 #ifdef NEREUS_VIEWER_UWRT
     registerUwrtActuators(registry, factory);
     registerUwrtMapping(registry, factory);

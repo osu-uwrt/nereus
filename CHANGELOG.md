@@ -10,6 +10,9 @@ First version for the team.
   observers and compiled competition scoring (RoboSub 2026).
 - `nereus-viewer`: pool viewer and operator panels (motion, autonomy, mapping, vision, run
   scorecard, camera cards, point clouds). Drives either the simulator or the real robot.
+- Viewer **Bagging** panel: `ros2 bag record` on the robot over ssh (any `user@host`, prefilled `ros@orin2`; keeps recording through a dropped link or a
+  closed viewer; any viewer picks it up) or on this computer, all topics with an exclude regex or a picked list with
+  presets, and a BAG chip in the command bar while recording.
 - Packs: robot, pool, tasks, bridge and scenario YAML with JSON-schema and semantic validation
   (`python -m nereus.packs validate|resolve`). The Talos robot, RoboSub 2026 course and UWRT
   bridge ship as packs.

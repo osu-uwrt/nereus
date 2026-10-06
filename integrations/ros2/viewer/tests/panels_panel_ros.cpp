@@ -77,6 +77,8 @@ int main(int argc, char **argv) {
     RosProviders ros;
     ros.registerFactories(registry);
     auto cfg = YAML::LoadFile(argv[1]);
+    for (auto target : cfg["providers"]["bags"]["options"]["targets"]) // bag targets: never ssh to the robot
+        target["ssh"] = YAML::Load("[\"false\"]");
     auto composition = std::make_unique<Composition>(cfg, Context{robot, "map", false, false}, registry);
     auto control = std::dynamic_pointer_cast<Motion>(composition->providers().at("motion"));
     auto mission = std::dynamic_pointer_cast<Autonomy>(composition->providers().at("mission"));
