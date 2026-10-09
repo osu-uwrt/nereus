@@ -1,8 +1,10 @@
 // The prior map editor in the pool view: click to select, drag a prop (its children ride along), keyboard
 // nudges, undo / redo, and locked props being click-through. Headless ImGui, a top-down camera, map = world.
 #include "prior_map_editor.hpp"
+#include <cmath>
 #include <glm/gtc/matrix_transform.hpp>
 #include <gtest/gtest.h>
+#include <utility>
 
 using namespace nereus::ros_viewer::host;
 namespace pm = prior_map;
@@ -479,4 +481,46 @@ TEST_F(EditorTest, SimCourseWindowsDraw) {
     EXPECT_EQ(editor->selected(), "table");
     for (int i = 0; i < 3; ++i)
         frame({790, 590}, false);
+}
+
+// In a pool turned and moved as RoboSub's (the world at the calibration board), a copy between layers that share
+// their origin is exact both ways, and differences under a micrometer are no edit to save.
+TEST_F(EditorTest, CopiesAreExactInATurnedPool) {
+    PriorMapEditor::Pool pool;
+    pool.poolToWorld =
+        glm::rotate(glm::translate(glm::mat4(1), glm::vec3(0, 19.5136f, 0)), glm::radians(-90.f), glm::vec3(0, 0, 1));
+    const glm::mat4 toPool = glm::inverse(pool.poolToWorld); // the world (= map) in the pool, as the viewer sets it
+    auto &origin = pool.scenarioOrigin;
+    origin.x = toPool[3].x;
+    origin.y = toPool[3].y;
+    origin.z = toPool[3].z;
+    const double yaw = std::atan2(toPool[0].y, toPool[0].x) * 180 / M_PI;
+    origin.basePhi = double((std::lround(yaw / 90) % 4 + 4) % 4 * 90);
+    origin.yawOffset = pm::wrapDegrees(yaw - origin.basePhi);
+    editor->setPool(pool);
+    editor->setCourseLinks({{{"gate", "gate"}, {"table", "table"}}, {}});
+    const auto mapGate = pose("gate"), mapTable = pose("table"), mapBandage = pose("bandage");
+
+    // A course that matches the robot's map, but for its gate 0.4 um off.
+    auto course = smallCourse();
+    course.objects[0].pose = {mapGate.x + 4e-7, mapGate.y, mapGate.z, mapGate.yaw};
+    course.objects[1].pose = mapTable;
+    course.objects[2].pose = pm::decompose(mapTable, mapBandage);
+    course.options[0].value = pm::find(editor->document().objects, "bin_vinyl1")->cls;
+    editor->setCourse(course);
+    editor->editCourse(true);
+    editor->copyFromOtherLayer();
+    EXPECT_NEAR(object(*editor, "gate").pose.x, mapGate.x, 1e-9);
+    EXPECT_EQ(editor->courseEdit(), ""); // nothing that set-course would write differently
+
+    // And back: the robot's map ends where it started.
+    editor->editCourse(false);
+    editor->copyFromOtherLayer();
+    for (const auto &[name, before] : {std::pair{"gate", mapGate}, {"table", mapTable}, {"bandage", mapBandage}}) {
+        const auto after = pose(name);
+        EXPECT_NEAR(after.x, before.x, 1e-9) << name;
+        EXPECT_NEAR(after.y, before.y, 1e-9) << name;
+        EXPECT_NEAR(after.z, before.z, 1e-9) << name;
+        EXPECT_NEAR(pm::wrapDegrees(after.yaw - before.yaw), 0, 1e-9) << name;
+    }
 }

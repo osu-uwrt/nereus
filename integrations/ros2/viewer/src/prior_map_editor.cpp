@@ -702,9 +702,10 @@ std::string jsonPose(const pm::Pose &p) {
     std::snprintf(text, sizeof(text), "\"position_m\": [%.9g, %.9g, %.9g], \"yaw_deg\": %.9g", p.x, p.y, p.z, p.yaw);
     return text;
 }
+// Unchanged as the scenario writes it: under a micrometer and a microdegree (set-course keeps six decimals).
 bool samePose(const pm::Pose &a, const pm::Pose &b) {
-    return std::abs(a.x - b.x) < 1e-9 && std::abs(a.y - b.y) < 1e-9 && std::abs(a.z - b.z) < 1e-9 &&
-           std::abs(pm::wrapDegrees(a.yaw - b.yaw)) < 1e-9;
+    return std::abs(a.x - b.x) < 1e-6 && std::abs(a.y - b.y) < 1e-6 && std::abs(a.z - b.z) < 1e-6 &&
+           std::abs(pm::wrapDegrees(a.yaw - b.yaw)) < 1e-6;
 }
 } // namespace
 
@@ -794,17 +795,17 @@ std::string PriorMapEditor::copyFromOtherLayer() {
         return "Nothing to copy: no links between the robot's map and the Sim course";
     record();
     int tasks = 0, objects = 0, classes = 0;
+    // Both layers' frames are planar poses in the pool, so a pose goes from one to the other through the pool in
+    // double precision (the pool's own float transform cancels): equal origins copy exactly.
     if (course_) { // the robot's map into the Sim course
         const auto map = pm::mapPoses(other_.doc.objects);
-        const auto mapWorld = worldFrom(other_.origin), toCourse = glm::inverse(worldFromMap());
         for (const auto &[task, prop] : links_.tasks) {
             auto *t = pm::find(doc_.objects, task);
             if (!t || t->parent != pm::kMap || !map.count(prop))
                 continue;
             const auto &m = map.at(prop);
-            const auto at = toCourse * mapWorld * poseMatrix(m.x, m.y, m.z, m.yaw);
-            t->pose = {at[3].x, at[3].y, links_.floating.count(task) ? t->pose.z : double(at[3].z),
-                       pm::wrapDegrees(yawOf(at))};
+            const auto at = pm::poolToMap(pm::mapToPool(m, other_.origin), origin_);
+            t->pose = {at.x, at.y, links_.floating.count(task) ? t->pose.z : at.z, at.yaw};
             ++tasks;
             // its loose objects: the props of the same name, where they are relative to the task's prop
             for (auto &o : doc_.objects)
@@ -827,13 +828,11 @@ std::string PriorMapEditor::copyFromOtherLayer() {
             }
         }
     } else { // the Sim course into the robot's map
-        const auto courseWorld = worldFrom(other_.origin);
         for (const auto &[task, prop] : links_.tasks) {
             const auto *t = pm::find(other_.doc.objects, task);
             if (!t || t->parent != pm::kMap || !pm::find(doc_.objects, prop))
                 continue;
-            const auto at = courseWorld * poseMatrix(t->pose.x, t->pose.y, t->pose.z, t->pose.yaw);
-            auto pose = mapFromWorld(glm::vec3(at[3]), yawOf(at));
+            auto pose = pm::poolToMap(pm::mapToPool(t->pose, other_.origin), origin_);
             if (links_.floating.count(task))
                 pose.z = pm::mapPoses(doc_.objects).at(prop).z;
             pm::setMapPose(doc_.objects, prop, pose);

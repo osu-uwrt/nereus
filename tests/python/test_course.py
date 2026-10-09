@@ -18,7 +18,8 @@ TALOS = PACKS / "scenarios" / "talos_uwrt"
 
 
 def talos_copy(folder: Path) -> Path:
-    """The Talos scenario written into `folder`, its pack paths re-pointed at the shipped packs."""
+    """The Talos scenario written into `folder`, its pack paths re-pointed at the shipped packs and without the
+    shipped loose-object placements (the tests make their own)."""
     folder.mkdir(parents=True, exist_ok=True)
 
     def repoint(match: re.Match[str]) -> str:
@@ -27,6 +28,7 @@ def talos_copy(folder: Path) -> Path:
 
     text = (TALOS / "scenario.yaml").read_text()
     text = re.sub(r"^(robot|pool|tasks|bridge|equipment): (\S+)", repoint, text, flags=re.M)
+    text = re.sub(r"(^#[^\n]*\n)*^task_frames:\n(^- [^\n]*\n)*\n?", "", text, flags=re.M)
     (folder / "scenario.yaml").write_text(text)
     return folder / "scenario.yaml"
 
@@ -94,6 +96,11 @@ class CourseTests(unittest.TestCase):
         self.assertLess(text.index("task_placements:"), text.index("task_frames:"))
         self.assertLess(text.index("task_frames:"), text.index("contacts:"))
         self.assertEqual(load_pack(self.scenario).dumps(), text)
+
+    def test_saving_keeps_the_files_permissions(self) -> None:
+        self.scenario.chmod(0o644)
+        set_course(self.scenario, {"run_options": {"bin_vinyl1_class": "fire"}})
+        self.assertEqual(self.scenario.stat().st_mode & 0o777, 0o644)
 
     def test_a_loose_object_moved_again_replaces_its_entry(self) -> None:
         for x in (0.1, 0.2):

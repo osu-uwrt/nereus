@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import stat
 import tempfile
 from dataclasses import dataclass, field
 from io import StringIO
@@ -162,6 +163,16 @@ def canonical_file(path: Path) -> Path:
     return path
 
 
+def _file_mode(path: Path) -> int:
+    """An existing file's permission bits, else a new file's under the process umask."""
+    try:
+        return stat.S_IMODE(path.stat().st_mode)
+    except FileNotFoundError:
+        umask = os.umask(0)
+        os.umask(umask)
+        return 0o666 & ~umask
+
+
 @dataclass
 class PackDocument:
     """One loaded pack document. ``data`` is the round-trip tree; edit it, then ``save``.
@@ -214,11 +225,13 @@ class PackDocument:
         target = Path(path) if path is not None else self.path
         data = self._bytes()
 
-        # Write a hidden temp file in the target folder, then rename over the target
+        # Write a hidden temp file in the target folder, then rename over the target. The temp file is private
+        # (0600), so it takes the target's permissions first (a new file: the umask's, as open() would give).
         descriptor, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
         try:
             with os.fdopen(descriptor, "wb") as stream:
                 stream.write(data)
+            os.chmod(temporary, _file_mode(target))
             os.replace(temporary, target)
         except BaseException:
             Path(temporary).unlink(missing_ok=True)
