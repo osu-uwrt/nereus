@@ -34,8 +34,13 @@ task_placements:
 - {task: slalom, position_m: [8.332382, 0.560795, -1.3], yaw_deg: -152.691724}
 - {task: bins, position_m: [13.408019, 12.324713, -2.13], yaw_deg: -145.070841}
 # The octagon sits above the table.
-- {task: surface, position_m: [19.35704644774681, 9.087985574042571, -0.3048], yaw_deg: -45.273547}
+- {task: surface, position_m: [19.420078, 9.140727, -0.3048], yaw_deg: -45.273547}
 - {task: table, position_m: [19.290761, 9.007, -1.54], yaw_deg: 89.039804}
+
+# Where the table's loose objects start, on the table.
+task_frames:
+- {task: table, frame: bandage, position_m: [-0.157078, -0.147819, 0.03], yaw_deg: 180.0}
+- {task: table, frame: plug, position_m: [0.15233, -0.14664, 0.03], yaw_deg: 0.0}
 
 contacts:
   model: box_scene
