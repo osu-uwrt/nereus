@@ -15,6 +15,8 @@ from typing import Any
 
 import numpy as np
 
+from . import _bindings as bindings
+
 WORLD = "world"  # reserved reporting frame for world-referenced sensor products
 TASK = "task"  # reserved name of a task's own local frame
 # Native invariants (libraries/spatial frames.cpp, simulation plant.cpp, marine_dynamics.cpp).
@@ -249,7 +251,9 @@ def robot(data: dict[str, Any]) -> list[str]:
     for index, visual in enumerate(data.get("visuals", [])):
         if visual["asset"] not in asset_ids:
             problems.append(f"/visuals/{index}/asset: unknown asset '{visual['asset']}'")
-        if "texture" in visual and visual["texture"] not in asset_ids:
+        if bindings.is_binding(visual.get("texture")):
+            problems.append(f"/visuals/{index}/texture: only task visuals bind run options")
+        elif "texture" in visual and visual["texture"] not in asset_ids:
             problems.append(f"/visuals/{index}/texture: unknown asset '{visual['texture']}'")
         if "indicator" in visual:
             problems.append(f"/visuals/{index}/indicator: only task visuals follow indicators")
@@ -542,8 +546,13 @@ def _asset(value: str, asset_ids: set[str] | None, where: str, problems: list[st
         problems.append(f"{where}: unknown asset '{value}'")
 
 
-def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
-    """Check one task include; asset references are checked when the owning pack is known."""
+def task(
+    data: dict[str, Any],
+    asset_ids: set[str] | None,
+    options: dict[str, dict[str, Any]] | None = None,
+) -> list[str]:
+    """Check one task include; asset references and run option bindings are checked when the owning pack
+    (its assets, its run options by key) is known."""
     problems: list[str] = []
 
     # Ids: frames (plus the reserved task-local frame), props, regions, events, scoring
@@ -574,10 +583,14 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
         for visual in parameters.get("visuals", []):
             if asset_ids is not None and visual["asset"] not in asset_ids:
                 problems.append(f"/props/{identifier}/visuals: unknown asset '{visual['asset']}'")
-            if asset_ids is not None and "texture" in visual and visual["texture"] not in asset_ids:
-                problems.append(
-                    f"/props/{identifier}/visuals: unknown texture asset '{visual['texture']}'"
-                )
+            texture = visual.get("texture")
+            if asset_ids is not None and texture is not None:
+                bound = bindings.is_binding(texture)
+                for name in bindings.outcomes(texture, options) if bound else [texture]:
+                    if name not in asset_ids:
+                        problems.append(
+                            f"/props/{identifier}/visuals: unknown texture asset '{name}'"
+                        )
             if visual["frame"] not in frames:
                 problems.append(f"/props/{identifier}/visuals: unknown frame '{visual['frame']}'")
             if "radiance" in visual and visual.get("material") != "emissive":
@@ -670,6 +683,7 @@ def task(data: dict[str, Any], asset_ids: set[str] | None) -> list[str]:
     for item in data["scoring"]:
         if item["parameters"]["event"] not in events:
             problems.append(f"/scoring/{item['id']}: unknown event '{item['parameters']['event']}'")
+    problems += bindings.check(data, options)
     _quaternions(data, "", problems)
     return problems
 

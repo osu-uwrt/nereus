@@ -18,15 +18,16 @@ props:
   type: static_body
   parameters:
     collision_boxes: []   # no robot contact boxes; payloads hit the crate regions
-    # Each vinyl picks its texture (blood/fire) from its crate's class. The crate lattice and liner are
-    # generated from the crate dimensions (tools/generate_course_geometry.py). Each magnet target shows the
-    # light housing tilted to its face, with a clear cover and 16 LEDs lit by the target's indicator.
+    # Each vinyl's texture (blood/fire) and its crate's class follow the bin_vinyl<N>_class run option, which
+    # the scenario fixes. The crate lattice and liner are generated from the crate dimensions
+    # (tools/generate_course_geometry.py). Each magnet target shows the light housing tilted to its face, with a
+    # clear cover and 16 LEDs lit by the target's indicator.
     visuals:
     - {asset: bin_mesh, frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
-    - {asset: bin_vinyl_mesh, frame: bin_vinyl1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: bin_vinyl_blood_texture}
-    - {asset: bin_vinyl_mesh, frame: bin_vinyl2, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: bin_vinyl_fire_texture}
-    - {asset: bin_vinyl_mesh, frame: bin_vinyl3, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: bin_vinyl_fire_texture}
-    - {asset: bin_vinyl_mesh, frame: bin_vinyl4, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: bin_vinyl_blood_texture}
+    - {asset: bin_vinyl_mesh, frame: bin_vinyl1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: {option: bin_vinyl1_class, values: {blood: bin_vinyl_blood_texture, fire: bin_vinyl_fire_texture}}}
+    - {asset: bin_vinyl_mesh, frame: bin_vinyl2, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: {option: bin_vinyl2_class, values: {blood: bin_vinyl_blood_texture, fire: bin_vinyl_fire_texture}}}
+    - {asset: bin_vinyl_mesh, frame: bin_vinyl3, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: {option: bin_vinyl3_class, values: {blood: bin_vinyl_blood_texture, fire: bin_vinyl_fire_texture}}}
+    - {asset: bin_vinyl_mesh, frame: bin_vinyl4, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], texture: {option: bin_vinyl4_class, values: {blood: bin_vinyl_blood_texture, fire: bin_vinyl_fire_texture}}}
     - {asset: crate_lattice_mesh, frame: bin_vinyl1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
     - {asset: crate_liner_mesh, frame: bin_vinyl1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0], material: liner}
     - {asset: crate_lattice_mesh, frame: bin_vinyl2, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}
@@ -59,7 +60,7 @@ regions:
   type: open_crate
   parameters:
     frame: bin_vinyl1
-    class: blood
+    class: {option: bin_vinyl1_class}
     # CleverMade 25 L crate; local z = 0 is the interior (vinyl) floor.
     outer_width_m: 0.333248
     inner_width_m: 0.3048
@@ -71,7 +72,7 @@ regions:
   type: open_crate
   parameters:
     frame: bin_vinyl2
-    class: fire
+    class: {option: bin_vinyl2_class}
     # CleverMade 25 L crate; local z = 0 is the interior (vinyl) floor.
     outer_width_m: 0.333248
     inner_width_m: 0.3048
@@ -83,7 +84,7 @@ regions:
   type: open_crate
   parameters:
     frame: bin_vinyl3
-    class: fire
+    class: {option: bin_vinyl3_class}
     # CleverMade 25 L crate; local z = 0 is the interior (vinyl) floor.
     outer_width_m: 0.333248
     inner_width_m: 0.3048
@@ -95,7 +96,7 @@ regions:
   type: open_crate
   parameters:
     frame: bin_vinyl4
-    class: blood
+    class: {option: bin_vinyl4_class}
     # CleverMade 25 L crate; local z = 0 is the interior (vinyl) floor.
     outer_width_m: 0.333248
     inner_width_m: 0.3048

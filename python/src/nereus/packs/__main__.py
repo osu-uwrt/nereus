@@ -1,4 +1,4 @@
-"""Command line: ``python -m nereus.packs {validate,resolve,types,schema}``."""
+"""Command line: ``python -m nereus.packs {validate,resolve,set-course,types,schema}``."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from . import DOCUMENT_KINDS, PackError, load_pack, registry, resolve_scenario, schema, type_catalog
+from ._course import set_course
 from ._document import canonical_file, read_yaml
 
 
@@ -56,6 +57,29 @@ def _resolve(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _set_course(arguments: argparse.Namespace) -> int:
+    """Apply a course edit (JSON) to a scenario: written only when the edited scenario resolves."""
+    path = Path(arguments.scenario)
+    try:
+        course = json.loads(Path(arguments.course).read_text(encoding="utf-8"))
+        if not isinstance(course, dict):
+            raise PackError("course: expected a JSON object")
+        written = set_course(path, course)
+    except (OSError, ValueError, PackError) as error:
+        print(f"NOT SAVED {path}", file=sys.stderr)
+        for problem in error.problems if isinstance(error, PackError) else [str(error)]:
+            print(f"  {problem}", file=sys.stderr)
+        return 1
+    counts = {
+        key: len(course.get(key, [])) for key in ("task_placements", "task_frames", "run_options")
+    }
+    print(
+        f"saved {written}: {counts['task_placements']} placements, {counts['task_frames']} loose objects, "
+        f"{counts['run_options']} options"
+    )
+    return 0
+
+
 def _types(arguments: argparse.Namespace) -> int:
     """List built-in types per category, or dump their parameter schemas with ``--json``."""
     if arguments.json:
@@ -85,6 +109,16 @@ def main(argv: list[str] | None = None) -> int:
     resolve.add_argument("scenario", help="scenario pack folder or file")
     resolve.add_argument("--output", "-o", required=True, help="resolved JSON to write")
     resolve.set_defaults(run=_resolve)
+
+    course = commands.add_parser(
+        "set-course",
+        help="move a scenario's tasks and loose objects, set run options (validated, lossless)",
+    )
+    course.add_argument("scenario", help="scenario pack folder or file")
+    course.add_argument(
+        "--course", required=True, help="JSON: {task_placements, task_frames, run_options}"
+    )
+    course.set_defaults(run=_set_course)
 
     types = commands.add_parser("types", help="list built-in types")
     types.add_argument("--json", action="store_true", help="parameter schemas as JSON")

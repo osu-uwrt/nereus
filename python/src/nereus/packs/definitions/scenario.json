@@ -85,6 +85,34 @@
         "additionalProperties": false
       }
     },
+    "task_frames": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "$ref": "common.schema.json#/$defs/name"
+          },
+          "frame": {
+            "$ref": "common.schema.json#/$defs/name"
+          },
+          "position_m": {
+            "$ref": "common.schema.json#/$defs/vector3"
+          },
+          "yaw_deg": {
+            "$ref": "common.schema.json#/$defs/yaw_deg"
+          }
+        },
+        "required": [
+          "task",
+          "frame",
+          "position_m",
+          "yaw_deg"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Where this scenario puts a task's loose objects: a task frame that carries a rigid_body prop, moved to this pose in the task's local frame (upright: yaw about the task's +Z). Applied when resolving (semantic check)."
+    },
     "equipment_placements": {
       "type": "array",
       "items": {

@@ -75,6 +75,7 @@ requires:                             # the robot must have these mechanisms
 run_options:                          # chosen in the viewer before "Start run"
 - {key: role, type: choice, choices: [repair, rescue], default: repair}
 - {key: heading_coin, type: bool, default: true}
+- {key: bin_vinyl1_class, type: choice, choices: [blood, fire], default: blood, fixed: true}   # set by the scenario
 scoring_rules:
 - {name: robosub_2026, parameters: {...points and thresholds...}}
 score_rows:                           # scorecard rows, in order
@@ -91,6 +92,24 @@ ui:                                   # how the viewer presents the run
   manual_adjustment: true             # the Add/Clear score adjustment
   focus: [Course, Vehicle, gate, torpedo, table]                   # viewer focus list
 ```
+
+### Fixed run options
+
+A `fixed: true` option is set by the scenario's `run.options` when it resolves and holds for the whole session:
+a run Start can't change it. A task file can bind a value to a fixed choice option, so one task file serves
+every layout of the course. Bindings are allowed for a visual's `texture` and an `open_crate` region's `class`:
+
+```yaml
+# bins.yaml: the crate's class is the choice itself; its vinyl texture maps each choice to an asset
+- {asset: bin_vinyl_mesh, frame: bin_vinyl1, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0],
+   texture: {option: bin_vinyl1_class, values: {blood: bin_vinyl_blood_texture, fire: bin_vinyl_fire_texture}}}
+- id: bin_vinyl1
+  type: open_crate
+  parameters: {frame: bin_vinyl1, class: {option: bin_vinyl1_class}, ...}
+```
+
+`values` must map every choice. Resolving writes the plain value in, so the simulator, cameras and datasets
+never see a binding.
 
 ## Scoring rules
 

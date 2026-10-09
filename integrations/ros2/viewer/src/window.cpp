@@ -333,6 +333,10 @@ void Window::setIcon(const std::vector<std::filesystem::path> &pngs) {
         glfwSetWindowIcon(window_, int(images.size()), images.data());
 }
 
+unsigned long Window::x11Id() const {
+    return glfwGetX11Display() ? static_cast<unsigned long>(glfwGetX11Window(window_)) : 0;
+}
+
 void Window::beginMove() {
     moveResize(8); // _NET_WM_MOVERESIZE_MOVE
 }

@@ -9,6 +9,29 @@
       "maxLength": 128,
       "description": "Identifier for ids and native frame names; no path separators or spaces."
     },
+    "option_binding": {
+      "type": "object",
+      "properties": {
+        "option": {
+          "$ref": "#/$defs/name"
+        },
+        "values": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/name"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/name"
+          },
+          "minProperties": 1
+        }
+      },
+      "required": [
+        "option"
+      ],
+      "additionalProperties": false,
+      "description": "Task files only: a value a fixed run option of the tasks pack sets when a scenario resolves. Without values the chosen choice is the value; values maps every choice to the value used (semantic check)."
+    },
     "path": {
       "type": "string",
       "minLength": 1,

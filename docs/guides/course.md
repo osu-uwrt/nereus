@@ -165,11 +165,25 @@ initial:                                                         # start pose of
 run:
   auto_start: false                  # wait for "Start run" in the viewer
   options: {role: repair, heading_coin: true, role_coin: true}   # defaults of the tasks' run_options
+                                     # (fixed ones, like bin_vinyl1_class, hold for the session)
 ```
 
 Every task in the task pack needs exactly one placement; to run only some tasks, use a task pack whose
 `tasks:` lists just those files. Positions are in the world frame (`map`); a task's local frame (its origin and
 +x, see [tasks](tasks.md)) is placed with `position_m` and `yaw_deg`.
+
+A scenario can also say where a task's loose objects start: `task_frames` moves a task frame that carries a
+`rigid_body` prop (the table's objects), in the task's frame and upright. The rest of a task is its built geometry
+and stays as the task file has it.
+
+```yaml
+task_frames:
+- {task: table, frame: plug, position_m: [0.15, -0.13, 0.03], yaw_deg: 0}
+```
+
+The viewer's Edit map > Sim course edits all of this in place: placements, loose objects and the fixed run options.
+It saves through `python -m nereus.packs set-course <scenario> --course <edit.json>`, which keeps comments and the
+untouched entries and writes only when the edited scenario resolves.
 
 ## Equipment
 

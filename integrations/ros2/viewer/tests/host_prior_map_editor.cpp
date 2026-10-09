@@ -308,3 +308,175 @@ TEST_F(EditorTest, WindowDrawsWithAndWithoutASelection) {
         frame({790, 590}, false);
     EXPECT_EQ(editor->selected(), "gate");
 }
+
+namespace {
+// A small Sim course: the gate and the table as tasks (drawn by the scene: no mesh path), the table's bandage as a
+// loose object, and one fixed class option.
+PriorMapEditor::Course smallCourse() {
+    PriorMapEditor::Course course;
+    course.label = "Test course";
+    course.scenario = "/packs/scenarios/test";
+    pm::Object gate, table, bandage;
+    gate.name = "gate";
+    gate.pose = {5, 1, -.75, 90};
+    table.name = "table";
+    table.pose = {-3, 2, -1.5, 0};
+    bandage.name = "bandage";
+    bandage.parent = "table";
+    bandage.pose = {.1, .2, .03, 180};
+    course.objects = {gate, table, bandage};
+    course.frameOf["bandage"] = "bandage";
+    course.options = {{"bin_vinyl1_class", "blood", {"blood", "fire"}}};
+    for (const char *name : {"gate", "table", "bandage"}) {
+        MappingMarker marker;
+        marker.frame = std::string(name) + "_frame";
+        course.meshes[marker.frame] = marker;
+        course.low[marker.frame] = glm::vec3(-.5f);
+        course.high[marker.frame] = glm::vec3(.5f);
+    }
+    course.meshes["bandage_frame"].path = "/meshes/bandage.dae";
+    return course;
+}
+
+const pm::Object &object(const PriorMapEditor &editor, const std::string &name) {
+    return *pm::find(editor.document().objects, name);
+}
+} // namespace
+
+// The layers swap whole: each keeps its objects and unsaved state; the Sim course's moved task corrects the scene.
+TEST_F(EditorTest, SimCourseIsASecondLayer) {
+    const auto mapGate = pose("gate");
+    editor->setCourse(smallCourse());
+    EXPECT_FALSE(editor->editingCourse());
+    EXPECT_FALSE(editor->drawsCourse()); // the robot's map hides the simulator's course by default
+    EXPECT_TRUE(editor->courseMoves().empty());
+
+    editor->editCourse(true);
+    ASSERT_TRUE(editor->editingCourse());
+    ASSERT_EQ(editor->document().objects.size(), 3u);
+    EXPECT_FALSE(editor->hidesCourse()); // the course being edited is always drawn
+    EXPECT_TRUE(editor->drawsCourse());
+
+    // Select the course's gate where it is drawn and nudge it 1 cm along the pool's +X.
+    const auto at = pixel(5, 1, -.75);
+    click(at);
+    ASSERT_EQ(editor->selected(), "gate");
+    frame(at, false, ImGuiKey_RightArrow);
+    frame(at, false);
+    EXPECT_NEAR(object(*editor, "gate").pose.x, 5.01, 1e-9);
+    EXPECT_TRUE(editor->courseDirty());
+    EXPECT_FALSE(editor->mapDirty());
+    const auto moves = editor->courseMoves();
+    ASSERT_EQ(moves.count("gate"), 1u);
+    EXPECT_NEAR(moves.at("gate")[3].x, .01f, 1e-5f);
+    EXPECT_NEAR(moves.at("gate")[3].y, 0.f, 1e-5f);
+
+    // The robot's map is untouched and comes back as it was; the course keeps its edit.
+    editor->editCourse(false);
+    EXPECT_NEAR(pose("gate").x, mapGate.x, 1e-12);
+    EXPECT_TRUE(editor->dirty());
+    editor->editCourse(true);
+    EXPECT_NEAR(object(*editor, "gate").pose.x, 5.01, 1e-9);
+
+    // A new scenario's course replaces it (the scene is rebuilt from it: no corrections).
+    editor->setCourse(smallCourse());
+    EXPECT_TRUE(editor->courseMoves().empty());
+    EXPECT_FALSE(editor->courseDirty());
+}
+
+// Save hands the host set-course JSON with what changed; the host's report ends the save.
+TEST_F(EditorTest, SimCourseSaveSendsTheEdit) {
+    editor->setCourse(smallCourse());
+    std::filesystem::path savedTo;
+    std::string sent;
+    editor->setCourseSaver([&](const std::filesystem::path &scenario, const std::string &edit) {
+        savedTo = scenario;
+        sent = edit;
+    });
+    editor->editCourse(true);
+    EXPECT_EQ(editor->courseEdit(), "");
+
+    const auto at = pixel(5, 1, -.75);
+    click(at);
+    frame(at, false, ImGuiKey_RightArrow);
+    frame(at, false);
+    const std::string expected = "{\"task_placements\": [{\"task\": \"gate\", \"position_m\": [5.01, 1, -0.75], "
+                                 "\"yaw_deg\": 90}], \"task_frames\": [], \"run_options\": {}}";
+    EXPECT_EQ(editor->courseEdit(), expected);
+
+    editor->save();
+    EXPECT_TRUE(editor->savingCourse());
+    EXPECT_EQ(savedTo, "/packs/scenarios/test");
+    EXPECT_EQ(sent, expected);
+
+    editor->courseSaved("the scenario does not resolve");
+    EXPECT_FALSE(editor->savingCourse());
+    EXPECT_TRUE(editor->courseDirty());
+    EXPECT_NE(editor->message().find("Not saved: the scenario does not resolve"), std::string::npos);
+
+    editor->save();
+    editor->courseSaved("");
+    EXPECT_FALSE(editor->courseDirty());
+    EXPECT_EQ(editor->courseEdit(), "");
+    EXPECT_EQ(editor->courseMoves().count("gate"), 1u); // until the simulator's new scene arrives
+}
+
+// The copy buttons: linked tasks, their loose objects and the classes, each way, one undo step each.
+TEST_F(EditorTest, CopiesBetweenTheRobotsMapAndTheSimCourse) {
+    editor->setCourse(smallCourse());
+    editor->setCourseLinks({{{"gate", "gate"}, {"table", "table"}}, {"gate"}}); // the gate floats
+
+    // Robot's map -> Sim course (map = world here).
+    const auto mapGate = pose("gate"), mapTable = pose("table"), mapBandage = pose("bandage");
+    const auto mapClass = pm::find(editor->document().objects, "bin_vinyl1")->cls;
+    editor->editCourse(true);
+    editor->copyFromOtherLayer();
+    const auto &gate = object(*editor, "gate").pose;
+    EXPECT_NEAR(gate.x, mapGate.x, 1e-5);
+    EXPECT_NEAR(gate.y, mapGate.y, 1e-5);
+    EXPECT_NEAR(gate.z, -.75, 1e-12); // floating: the course keeps its height
+    EXPECT_NEAR(pm::wrapDegrees(gate.yaw - mapGate.yaw), 0, 1e-3);
+    const auto onTable = pm::decompose(mapTable, mapBandage);
+    EXPECT_NEAR(object(*editor, "bandage").pose.x, onTable.x, 1e-9);
+    EXPECT_NEAR(object(*editor, "bandage").pose.y, onTable.y, 1e-9);
+    EXPECT_NE(editor->courseEdit().find("\"bin_vinyl1_class\": \"" + mapClass + "\""), std::string::npos);
+    editor->editCourse(false);
+
+    // Sim course -> robot's map, from a course laid out elsewhere.
+    auto moved = smallCourse();
+    moved.objects[1].pose = {4, -6, -2, 30}; // the table
+    moved.options[0].value = mapClass == "fire" ? "blood" : "fire";
+    editor->setCourse(moved);
+    editor->copyFromOtherLayer();
+    EXPECT_NEAR(pose("table").x, 4, 1e-5);
+    EXPECT_NEAR(pose("table").y, -6, 1e-5);
+    EXPECT_NEAR(pose("table").z, -2, 1e-5);
+    EXPECT_NEAR(pm::wrapDegrees(pose("table").yaw - 30), 0, 1e-3);
+    const auto bandage = pm::compose(pose("table"), {.1, .2, .03, 180});
+    EXPECT_NEAR(pose("bandage").x, bandage.x, 1e-9);
+    EXPECT_NEAR(pose("bandage").y, bandage.y, 1e-9);
+    EXPECT_NEAR(pose("gate").z, mapGate.z, 1e-9); // floating: the map keeps its height
+    EXPECT_EQ(pm::find(editor->document().objects, "bin_vinyl1")->cls, moved.options[0].value);
+    EXPECT_TRUE(editor->mapDirty());
+
+    // One undo puts the map back.
+    frame({790, 590}, false, ImGuiKey_None);
+    ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+    frame({400, 300}, false, ImGuiKey_Z);
+    ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, false);
+    frame({400, 300}, false);
+    EXPECT_NEAR(pose("table").x, mapTable.x, 1e-9);
+}
+
+// The windows draw in the Sim course with and without a selection (its own bar and inspector).
+TEST_F(EditorTest, SimCourseWindowsDraw) {
+    drawWindow = true;
+    editor->setCourse(smallCourse());
+    editor->editCourse(true);
+    for (int i = 0; i < 3; ++i)
+        frame({790, 590}, false);
+    click(pixel(-3, 2, -1.5));
+    EXPECT_EQ(editor->selected(), "table");
+    for (int i = 0; i < 3; ++i)
+        frame({790, 590}, false);
+}

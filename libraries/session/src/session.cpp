@@ -550,6 +550,9 @@ CommandResult Session::runStart(const Json &options) {
                 if (!known)
                     return {false, "Select a known " + key + ": " + joined};
             }
+            // A fixed option was written into the tasks when the scenario resolved.
+            if (option.value("fixed", false) && value != s.scenario.run_options.value(key, Json()))
+                return {false, "Run option " + repr(key) + " is fixed by the scenario"};
             chosen[key] = value;
         }
 

@@ -187,6 +187,25 @@ TEST(Session, RunSnapshotDocumentMatchesReference) {
     }
 }
 
+// A fixed run option was written into the tasks when the scenario resolved: a run Start may repeat its value
+// but not change it.
+TEST(Session, RunStartKeepsFixedOptions) {
+    auto scenario = loadResolvedScenario(NEREUS_RESOLVED_TALOS);
+    scenario.tasks["run_options"].push_back(
+        {{"key", "paint"}, {"type", "choice"}, {"choices", {"red", "blue"}}, {"default", "red"}, {"fixed", true}});
+    scenario.run_options["paint"] = "blue";
+    const RulesRegistry rules = nereus::rules::standardRules();
+    const auto sensors = sensorNames(scenario);
+    const std::vector<std::string> task_ids{"gate"};
+    Session s(scenario, createRuntime(scenario, &sensors), rules, SessionOptions{&task_ids, true});
+
+    const auto changed = s.runStart({{"paint", "red"}});
+    EXPECT_FALSE(changed.accepted);
+    EXPECT_EQ(changed.message, "Run option 'paint' is fixed by the scenario");
+    EXPECT_FALSE(s.running());
+    EXPECT_TRUE(s.runStart({{"paint", "blue"}}).accepted);
+}
+
 namespace {
 // Times `ticks` session steps with all thrusters at 3 N and prints ticks/s; only checks the clock advanced.
 void throughput(bool tasks, const char *label, std::vector<std::string> task_ids = {"gate", "torpedo", "slalom"}) {

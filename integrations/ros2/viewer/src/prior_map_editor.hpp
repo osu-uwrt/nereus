@@ -3,7 +3,13 @@
 // places the map origin (an AprilTag at a line / wall intersection, or a free robot-frame pose) and saves the
 // file with its comments and layout untouched. The pool view is the scenario's world, which is the map frame:
 // props are drawn through the editor's origin relative to the scenario's, so moving the origin moves them.
+//
+// It edits a second layer the same way: the Sim course, the simulator's truth (the scenario's task placements,
+// the tasks' loose objects and the fixed run options). One layer is edited at a time; the other is drawn for
+// reference. Copy buttons carry poses and classes from one to the other through the host's links (task id ->
+// the prop at the task's origin).
 #pragma once
+#include "file_picker.hpp"
 #include "mapping_markers.hpp"
 #include "prior_map.hpp"
 #include "visual_state.hpp"
@@ -14,6 +20,7 @@
 #include <imgui.h>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -41,9 +48,71 @@ class PriorMapEditor {
         std::optional<glm::vec3> pointer; // the scene point under the pointer (last frame's depth), if any
     };
 
+    // The simulator's course, from the loaded scenario: each task at its world placement (a root; "map" is the
+    // world here) with its loose objects (rigid-body frames) under it, in the task's frame, and the tasks pack's
+    // fixed choice run options.
+    struct Course {
+        std::string label;              // the scenario, for the bar
+        std::filesystem::path scenario; // the scenario pack Save writes (empty: none found; Save is off)
+        std::vector<prior_map::Object> objects;
+        std::map<std::string, std::string> frameOf; // loose object name -> its task frame id
+        struct Option {
+            std::string key, value;
+            std::vector<std::string> choices;
+        };
+        std::vector<Option> options;
+        std::map<std::string, MappingMarker> meshes; // by "<name>_frame": loose objects' meshes; a task's has no
+                                                     // path (the scene draws the task, moved by courseMoves())
+        std::map<std::string, glm::vec3> low, high;  // by "<name>_frame": what a click on it hits, in its frame
+    };
+    // Which prior map prop stands for which task (at the task's origin), for the copy buttons. A loose object or
+    // a class matches by name: a prop named like the object, or a prop whose class sets the `<name>_class` option.
+    struct Links {
+        std::map<std::string, std::string> tasks; // task id -> prop name
+        std::set<std::string> floating;           // tasks whose height is never copied (the octagon floats)
+    };
+    // Saving the Sim course: the host writes the edit (set-course JSON) into `scenario` and restarts the
+    // simulator on it, then reports back through courseSaved().
+    using CourseSaver = std::function<void(const std::filesystem::path &scenario, const std::string &edit)>;
+
     PriorMapEditor(std::filesystem::path stateDirectory, std::filesystem::path defaultConfig);
 
+    void setCourse(Course);
+    void setCourseLinks(Links links) {
+        links_ = std::move(links);
+    }
+    void setCourseSaver(CourseSaver saver) {
+        courseSaver_ = std::move(saver);
+    }
+    void courseSaved(const std::string &error); // empty: written
+    // The scenario pack Save writes, once known (the simulator's supervisor names it after the course is set).
+    void setCourseScenario(std::filesystem::path scenario);
+    const std::filesystem::path &courseScenario() const {
+        return courseScenario_;
+    }
+    // Whether the simulator's course is drawn at all (not on a robot whose course comes from mapping).
+    void setCourseShown(bool shown) {
+        courseShown_ = shown;
+    }
+    bool savingCourse() const {
+        return savingCourse_;
+    }
+    // The Sim course's unsaved changes as set-course JSON (empty: none).
+    std::string courseEdit() const;
+    // Which layer is edited: the robot's map (false) or the Sim course (true).
+    bool editingCourse() const {
+        return course_;
+    }
+    void editCourse(bool on);
+    // Copy into the edited layer from the other one (one undo step): the linked tasks' poses, their loose objects
+    // and the classes. Returns what was copied, for the status line.
+    std::string copyFromOtherLayer();
+
     void setPool(const Pool &);
+    // The X11 window the file picker's dialog stays above (Browse in the file bar).
+    void setDialogParent(unsigned long x11Window) {
+        picker_.setParent(x11Window);
+    }
     void setMeshes(std::vector<MappingMarker> markers); // by TF frame: "<name>_frame"
 
     // Each meshed prop's extent in its own frame (the mesh's bounds through its marker pose): what a click on the
@@ -70,24 +139,41 @@ class PriorMapEditor {
     bool &inspectorOpen() {
         return inspectorOpen_;
     }
-    // The simulator's own course should be hidden (the Map workspace is shown and "Hide sim course" is on).
+    // The simulator's own course should be hidden (the robot's map is edited and "Hide sim course" is on).
     bool hidesCourse() const {
-        return active() && hideCourse_;
+        return active() && hideCourse_ && !course_;
     }
+    // The Sim course is drawn as edited (Map workspace, not hidden): its tasks moved by courseMoves() and its loose
+    // objects by the editor (the simulator's own props are not drawn).
+    bool drawsCourse() const {
+        return active_ && courseShown_ && !courseDoc().text.empty() && !hidesCourse();
+    }
+    // Each moved task's correction for the scene: world from its edited placement, times the inverse of the one
+    // the scene was built with.
+    std::map<std::string, glm::mat4> courseMoves() const;
     bool loaded() const {
         return !doc_.text.empty();
     }
-    bool dirty() const {
-        return dirty_;
+    bool dirty() const { // either layer
+        return dirty_ || other_.dirty;
+    }
+    bool mapDirty() const {
+        return course_ ? other_.dirty : dirty_;
+    }
+    bool courseDirty() const {
+        return course_ ? dirty_ : other_.dirty;
+    }
+    const std::string &courseLabel() const {
+        return courseLabel_;
     }
 
-    void save() {
-        saveFile();
-    }
+    void save(); // both layers' unsaved changes (the Sim course through the host's saver)
     void open(const std::filesystem::path &file) { // a riptide_mapping config.yaml (errors go to the status line)
+        editCourse(false);
         openFile(file);
     }
     void reload() { // the file again, dropping unsaved edits
+        editCourse(false);
         openFile(configPath_);
     }
 
@@ -145,11 +231,27 @@ class PriorMapEditor {
     }
 
   private:
-    // One undo / redo step: the objects and the origin.
+    // One undo / redo step: the objects, the origin and (Sim course) the option values.
     struct Snapshot {
         std::vector<prior_map::Object> objects;
         prior_map::Origin origin;
+        std::vector<Course::Option> options;
     };
+
+    // What one layer is: swapped into the members below while it is edited, kept in other_ while it is not.
+    struct Layer {
+        prior_map::Document doc;
+        std::vector<Snapshot> undo, redo;
+        std::string selected, message;
+        bool dirty = false, messageError = false;
+        prior_map::Origin origin;
+        std::map<std::string, MappingMarker> meshes;
+        std::map<std::string, Extent> extents;
+    };
+    void swapLayers();
+    const prior_map::Document &courseDoc() const {
+        return course_ ? doc_ : other_.doc;
+    }
 
     // What a pointer gesture is dragging: the selected prop (body, axis arrows, yaw ring) or the robot-frame origin.
     enum class Handle { None, Body, X, Y, Z, Yaw, OriginBody, OriginYaw, OriginX, OriginY };
@@ -186,6 +288,14 @@ class PriorMapEditor {
     int onOriginArrow(const View &, const glm::vec2 &mouse) const;
     float handleLength(const View &, const glm::vec3 &center) const; // meters for ~90 px on screen
 
+    // the Sim course
+    void saveCourse();
+    void drawCourseBar();
+    void drawCourseInspector();
+    void addLayerMarkers(const prior_map::Document &, const std::map<std::string, MappingMarker> &meshes,
+                         const prior_map::Origin &, bool reference, std::vector<MarkerDraw> &) const;
+    glm::mat4 worldFrom(const prior_map::Origin &) const;
+
     // window parts
     void drawFileBar();
     void drawObjects();
@@ -195,6 +305,7 @@ class PriorMapEditor {
     // The file and its contents.
     std::filesystem::path stateDirectory_, configPath_;
     char pathField_[512]{}; // the Objects window's path field
+    FilePicker picker_;     // Browse: the desktop's file picker
     prior_map::Document doc_;
     prior_map::Origin origin_;
     Pool pool_;
@@ -208,6 +319,17 @@ class PriorMapEditor {
         ImVec2 min, max;
     };
     mutable std::vector<LabelBox> labelBoxes_; // last drawn label boxes, for picking
+
+    // The layers: the one not edited, and the Sim course's own state.
+    Layer other_;
+    bool course_ = false, savingCourse_ = false, courseShown_ = true;
+    Links links_;
+    CourseSaver courseSaver_;
+    std::string courseLabel_;
+    std::filesystem::path courseScenario_;
+    std::map<std::string, std::string> frameOf_;               // loose object -> task frame
+    std::vector<Course::Option> options_, savedOptions_;       // the course's fixed options: now, as last saved
+    std::vector<prior_map::Object> savedCourse_, sceneCourse_; // as last saved; as the scene was built
 
     // Edit state and options.
     std::vector<Snapshot> undo_, redo_;

@@ -156,3 +156,17 @@ First version for the team.
   `sim_supervisor.py`, which restarts it in the chosen pool (`<ns>/simulator/load_scenario`, status on
   `<ns>/simulator/supervisor`; records go to `<output>-2`, ...) while the robot stack keeps running; otherwise the
   viewer resolves the pack itself and reloads. The Windows menu is now generated from the window list.
+- Fixed run options: a tasks pack option with `fixed: true` is set by the scenario when it resolves and holds for
+  the session (a run Start can't change it). Task files bind a visual's `texture` or a crate's `class` to one with
+  `{option: <key>, values: {...}}`. RoboSub 2026's four bin vinyls are `bin_vinyl1_class` .. `bin_vinyl4_class`.
+- Viewer: Browse... beside the prior map's path (File > Open prior map, and the Map objects window) opens the
+  desktop's file picker (zenity, else kdialog) on top of the viewer; the picked config opens. `--open
+  open-prior-map` shows that dialog at start.
+- Scenario `task_frames`: where a task's loose objects (frames carrying a `rigid_body`) start, in the task's frame.
+  `python -m nereus.packs set-course` edits a scenario's placements, loose objects and run options in place
+  (comments kept), writing only when the edited scenario resolves.
+- Viewer Edit map > **Sim course**: the simulator's truth beside the robot's map. Move tasks and loose objects, set
+  the fixed options (bin vinyl classes); Save writes the scenario and restarts the simulator on it. Copy buttons
+  carry poses and classes between the two layers through the host config's `prior_map.course_links`.
+  `--open sim-course` starts there.
+- Viewer: `Ctrl+F` toggles Follow (as the toolbar chip).

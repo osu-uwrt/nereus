@@ -2,23 +2,24 @@
 // menus, command palette), the observer 3D view, the camera cards, the map editor and the ROS side feeding them.
 
 #include "app.hpp"
+#include "file_picker.hpp"
 #include "frame_profiler.hpp"
 #include "mapping_markers.hpp"
 #include "nereus/ros_viewer/dock_layout.hpp"
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
-#include "nereus/ros_viewer/panels/ros_providers.hpp"
 #include "nereus/ros_viewer/panels/pose_math.hpp"
+#include "nereus/ros_viewer/panels/ros_providers.hpp"
 #include "nereus/ros_viewer/pins.hpp"
 #include "nereus/ros_viewer/plots/plots.hpp"
 #include "nereus/ros_viewer/theme.hpp"
 #include "overlay_draw.hpp"
 #include "pose_command.hpp"
 #include "prior_map_editor.hpp"
-#include "top_down.hpp"
-#include "scenario_packs.hpp"
 #include "ros_side.hpp"
+#include "scenario_packs.hpp"
 #include "scene_model.hpp"
+#include "top_down.hpp"
 #include "viewer_input.hpp"
 #include "window.hpp"
 #include <GL/glew.h>
@@ -28,22 +29,22 @@
 #include <array>
 #include <atomic>
 #include <cctype>
-#include <ctime>
-#include <sys/wait.h>
-#include <spawn.h>
-#include <cmath>
 #include <cfloat>
+#include <cmath>
 #include <cstring>
-#include <functional>
+#include <ctime>
 #include <deque>
 #include <fstream>
+#include <functional>
 #include <imgui_internal.h>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <nereus/rendering/renderer.hpp>
 #include <set>
+#include <spawn.h>
 #include <sstream>
-#include <mutex>
+#include <sys/wait.h>
 #include <thread>
 
 // The process environment, handed to posix_spawnp (openFolder).
@@ -418,6 +419,21 @@ class App {
     SensorView planCamera(float aspect) const;
 
     void setupPriorMap();
+    // Edit map's Sim course: the scenario's course for the editor, its pack folder, and saving it (set-course off
+    // the UI thread, then the simulator restarts on it).
+    void setupCourse();
+    fs::path courseFolder() const;
+    void startCourseSave(const fs::path &folder, const std::string &edit);
+    void updateCourseSave();
+    void reloadCourse(const fs::path &folder);
+    struct CourseSave {
+        std::thread worker;
+        std::mutex mutex;
+        bool done = false;
+        std::string error;
+        fs::path folder;
+    } courseSave_;
+    bool openCourse_ = false; // --open sim-course, until the scenario's course is set up
     void drawHelpWindow();
     void handleShortcuts();
 
@@ -503,6 +519,7 @@ class App {
     void notify(const std::string &message, bool error = false); // the pool view's status line, for a few seconds
     std::vector<fs::path> recentMaps_;
     char openMapPath_[512] = {};
+    FilePicker mapPicker_; // the Open prior map dialog's Browse
     bool openMapPopup_ = false, reloadMapPopup_ = false;
     int screenshotCountdown_ = 0; // frames until the window is saved (the menu that asked has closed by then)
     fs::path screenshotPath_;
@@ -608,6 +625,7 @@ class App {
         bool fromTopic = false;
         std::string topicBase;                // <namespace>/simulator
         std::string supervisorState, message; // supervisor: running | switching | stopped | error
+        std::string scenarioFolder;           // the scenario pack the supervisor runs
         bool messageError = false;
         std::string target, targetLabel; // the pool id being switched to (empty: none)
         Clock::time_point messageUntil{};
@@ -846,6 +864,19 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     priorMap_ = std::make_unique<PriorMapEditor>(
         persist_ ? configHome / "prior_map" : fs::path(),
         !opt_.priorMap.empty() ? opt_.priorMap : lookup(config_, {"prior_map", "config"}).as<std::string>(""));
+    priorMap_->setDialogParent(window_->x11Id());
+    mapPicker_.setParent(window_->x11Id());
+
+    // Host config `prior_map: {course_links: {task: prop}, floating: [task]}`: the copy buttons' task <-> prop
+    // pairs. Saving the Sim course goes through set-course and restarts the simulator.
+    PriorMapEditor::Links links;
+    for (const auto &entry : lookup(config_, {"prior_map", "course_links"}))
+        links.tasks[entry.first.as<std::string>()] = entry.second.as<std::string>();
+    for (const auto &task : lookup(config_, {"prior_map", "floating"}))
+        links.floating.insert(task.as<std::string>());
+    priorMap_->setCourseLinks(std::move(links));
+    priorMap_->setCourseSaver(
+        [this](const fs::path &folder, const std::string &edit) { startCourseSave(folder, edit); });
     if (!opt_.layout.empty())
         requestLayout(opt_.layout);
     else if (persist_ && fs::exists(sessionIni_)) {
@@ -940,6 +971,9 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
                 const auto status = YAML::Load(json); // JSON is YAML
                 auto &s = poolSwitch_;
                 s.supervisorState = status["state"].as<std::string>("");
+                s.scenarioFolder = status["scenario"].as<std::string>("");
+                if (!s.scenarioFolder.empty() && scenario_)
+                    priorMap_->setCourseScenario(s.scenarioFolder);
                 const auto message = status["message"].as<std::string>("");
                 if (s.supervisorState == "error" || s.supervisorState == "stopped") {
                     s.message =
@@ -991,6 +1025,8 @@ void App::loadLogo() {
 App::~App() {
     if (poolSwitch_.worker.joinable())
         poolSwitch_.worker.join();
+    if (courseSave_.worker.joinable())
+        courseSave_.worker.join();
     try {
         persistLayout(true); // before the panels (their window states) go
     } catch (const std::exception &error) {
@@ -1513,9 +1549,13 @@ VisualState App::buildState() {
     if (robotGhost_ && haveEstimate_ && !mapping)
         state.ghostBody = estimateBody_;
 
-    // The prior map being edited, in place of the course when the editor hides it.
+    // The prior map being edited, in place of the course when the editor hides it; the Sim course as edited (its
+    // moved tasks corrected in the scene, its loose objects drawn by the editor in place of the simulator's props).
     const bool priorMapOnly = priorMap_->hidesCourse();
+    priorMap_->setCourseShown(demoMode_ || !courseFromMapping());
     priorMap_->addMarkers(state.markers);
+    state.courseMoves = priorMap_->courseMoves();
+    const bool editedCourse = priorMap_->drawsCourse();
     const auto payloads = lookup(config_, {"payloads", "loaded_namespaces"});
     if (demoMode_) {
         for (const auto &entry : payloads)
@@ -1544,7 +1584,7 @@ VisualState App::buildState() {
 
     // Simulator props (marker meshes), unless the mapped course or the prior map stands in for them
     for (const auto &[key, record] : ros_->props) {
-        if (mappingCourse || priorMapOnly) // simulator props duplicate the mapped table items
+        if (mappingCourse || priorMapOnly || editedCourse) // the mapped table items or the editor stand in for them
             break;
         if (record.mesh.empty())
             continue;
@@ -2499,7 +2539,7 @@ void App::toolbarFollow() {
     toggleChip("Follow", &follow_);
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("Keep the camera on the focus target as it moves (panning detaches it)");
+        ImGui::SetTooltip("Keep the camera on the focus target as it moves (panning detaches it)  (Ctrl+F)");
 }
 
 void App::toolbarLabels() {
@@ -2583,6 +2623,194 @@ void App::setupPriorMap() {
         }
     priorMap_->setExtents(std::move(extents));
     priorMap_->setMeshes(std::move(meshes));
+    setupCourse();
+}
+
+// The scenario pack being run: the supervisor's, else the shipped pack of this scenario and pool (empty: none).
+fs::path App::courseFolder() const {
+    if (!poolSwitch_.scenarioFolder.empty())
+        return poolSwitch_.scenarioFolder;
+    for (const auto &pack : scenarioPacks())
+        if (pack.poolId == scenario_->poolId && pack.scenarioId == scenario_->id)
+            return pack.folder;
+    return {};
+}
+
+// The Sim course from the resolved scenario: each task at its world placement, its rigid bodies' frames (the loose
+// objects) in the task's frame with their meshes, the click extents (a task's: its static visuals' bounds) and the
+// tasks pack's fixed choice options with the scenario's values.
+void App::setupCourse() {
+    const auto &doc = scenario_->document;
+    PriorMapEditor::Course course;
+    course.label = scenarioLabel(*scenario_);
+    course.scenario = courseFolder();
+    const auto pose = [](const YAML::Node &p, double yaw) {
+        return prior_map::Pose{p[0].as<double>(), p[1].as<double>(), p[2].as<double>(), yaw};
+    };
+    const auto bounds = [](const rendering::MeshAsset &mesh, const glm::mat4 &to, glm::vec3 &low, glm::vec3 &high) {
+        for (int corner = 0; corner < 8; ++corner) {
+            const glm::vec3 p(corner & 1 ? mesh.maximum.x() : mesh.minimum.x(),
+                              corner & 2 ? mesh.maximum.y() : mesh.minimum.y(),
+                              corner & 4 ? mesh.maximum.z() : mesh.minimum.z());
+            const glm::vec3 q(to * glm::vec4(p, 1));
+            low = glm::min(low, q);
+            high = glm::max(high, q);
+        }
+    };
+    const auto marker = [](const std::string &name, const fs::path &path) {
+        MappingMarker m;
+        m.frame = name + "_frame";
+        m.label = name;
+        m.path = path;
+        return m;
+    };
+
+    // Tasks (the scene draws them: no mesh path).
+    std::map<std::string, glm::mat4> taskWorld;
+    for (const auto &place : doc["scenario"]["task_placements"]) {
+        prior_map::Object task;
+        task.name = place["task"].as<std::string>();
+        task.pose = pose(place["position_m"], place["yaw_deg"].as<double>(0));
+        taskWorld[task.name] =
+            glm::rotate(glm::translate(glm::mat4(1), glm::vec3(task.pose.x, task.pose.y, task.pose.z)),
+                        glm::radians(float(task.pose.yaw)), glm::vec3(0, 0, 1));
+        course.meshes[task.name + "_frame"] = marker(task.name, {});
+        course.objects.push_back(std::move(task));
+    }
+    const auto &pack = model_->pack();
+    for (std::size_t i = 0; i < pack.staticSources().size() && i < pack.staticScene().instances.size(); ++i) {
+        const auto &source = pack.staticSources()[i];
+        const auto &instance = pack.staticScene().instances[i];
+        const auto world = taskWorld.find(source.task);
+        if (source.role != "task" || !instance.mesh || world == taskWorld.end())
+            continue;
+        const auto frame = source.task + "_frame";
+        course.low.try_emplace(frame, glm::vec3(1e9f));
+        course.high.try_emplace(frame, glm::vec3(-1e9f));
+        bounds(*instance.mesh, glm::inverse(world->second) * fromEigen(instance.transform), course.low[frame],
+               course.high[frame]);
+    }
+
+    // Loose objects: rigid bodies' frames, named after the frame (qualified by the task when taken).
+    for (const auto &task : doc["task_definitions"]) {
+        const auto id = task["id"].as<std::string>();
+        for (const auto &prop : task["props"]) {
+            if (prop["type"].as<std::string>("") != "rigid_body")
+                continue;
+            const auto frameId = prop["parameters"]["frame"].as<std::string>();
+            YAML::Node frame;
+            for (const auto &f : task["frames"])
+                if (f["id"].as<std::string>() == frameId)
+                    frame.reset(f); // rebinds (assigning would write into the node it refers to)
+            if (!frame)
+                continue;
+            prior_map::Object object;
+            object.name = std::any_of(course.objects.begin(), course.objects.end(),
+                                      [&](const auto &o) { return o.name == frameId; })
+                              ? id + "." + frameId
+                              : frameId;
+            object.parent = id;
+            const auto q = frame["orientation_wxyz"];
+            const double w = q[0].as<double>(), x = q[1].as<double>(), y = q[2].as<double>(), z = q[3].as<double>();
+            object.pose =
+                pose(frame["position_m"], glm::degrees(std::atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))));
+            course.frameOf[object.name] = frameId;
+            fs::path path;
+            if (const auto asset = prop["parameters"]["visual_asset"])
+                path = doc["asset_paths"]["tasks"][asset.as<std::string>()].as<std::string>("");
+            course.meshes[object.name + "_frame"] = marker(object.name, path);
+            if (const auto mesh = path.empty() ? nullptr : model_->mesh(path)) {
+                auto &low = course.low[object.name + "_frame"] = glm::vec3(1e9f);
+                auto &high = course.high[object.name + "_frame"] = glm::vec3(-1e9f);
+                bounds(*mesh, glm::mat4(1), low, high);
+            }
+            course.objects.push_back(std::move(object));
+        }
+    }
+
+    // The fixed choice options and the scenario's values.
+    for (const auto &item : doc["tasks"]["run_options"])
+        if (item["fixed"].as<bool>(false) && item["type"].as<std::string>("") == "choice") {
+            PriorMapEditor::Course::Option option;
+            option.key = item["key"].as<std::string>();
+            option.value = doc["run_options"][option.key].as<std::string>(item["default"].as<std::string>(""));
+            for (const auto &choice : item["choices"])
+                option.choices.push_back(choice.as<std::string>());
+            course.options.push_back(std::move(option));
+        }
+    priorMap_->setCourse(std::move(course));
+    if (openCourse_) {
+        priorMap_->editCourse(true);
+        openCourse_ = false;
+    }
+}
+
+// Saves the Sim course on a worker (set-course resolves the edited scenario first: a few seconds).
+void App::startCourseSave(const fs::path &folder, const std::string &edit) {
+    auto &c = courseSave_;
+    if (c.worker.joinable()) {
+        priorMap_->courseSaved("a save is still running");
+        return;
+    }
+    c.done = false;
+    c.error.clear();
+    c.folder = folder;
+    c.worker = std::thread([this, folder, edit] {
+        std::string error;
+        try {
+            setScenarioCourse(folder, edit);
+        } catch (const std::exception &e) {
+            error = e.what();
+        }
+        std::lock_guard<std::mutex> lock(courseSave_.mutex);
+        courseSave_.error = std::move(error);
+        courseSave_.done = true;
+    });
+}
+
+// Each frame: a finished save is reported to the editor, and a written course restarts the simulator on it.
+void App::updateCourseSave() {
+    auto &c = courseSave_;
+    if (!c.worker.joinable())
+        return;
+    {
+        std::lock_guard<std::mutex> lock(c.mutex);
+        if (!c.done)
+            return;
+    }
+    c.worker.join();
+    priorMap_->courseSaved(c.error);
+    if (c.error.empty())
+        reloadCourse(c.folder);
+}
+
+// The written course in the simulator: its supervisor restarts it on the pack (the new scene arrives on the
+// topic), else this viewer resolves the pack again.
+void App::reloadCourse(const fs::path &folder) {
+    auto &s = poolSwitch_;
+    if (s.worker.joinable())
+        return;
+    s.messageError = false;
+    s.messageUntil = Clock::now() + std::chrono::seconds(6);
+    if (s.fromTopic) {
+        s.message = "Restarting the simulator on the saved course ...";
+        ros_->requestScenario(s.topicBase + "/load_scenario", folder.string());
+        return;
+    }
+    s.message = "Reloading the saved course ...";
+    s.done = false;
+    s.worker = std::thread([this, folder] {
+        std::string resolved, error;
+        try {
+            resolved = resolveScenarioPack(folder);
+        } catch (const std::exception &e) {
+            error = e.what();
+        }
+        std::lock_guard<std::mutex> lock(poolSwitch_.mutex);
+        poolSwitch_.resolved = std::move(resolved);
+        poolSwitch_.error = std::move(error);
+        poolSwitch_.done = true;
+    });
 }
 
 // The prior map editor's Map objects and Inspector windows (Map workspace).
@@ -3818,6 +4046,10 @@ void App::drawFileMenu() {
 
 // The File menu's dialogs: a prior map's path to open, and confirming a reload over unsaved edits.
 void App::drawFilePopups() {
+    // A file picked with the Open dialog's Browse opens, and the dialog closes.
+    const auto picked = mapPicker_.take();
+    if (picked)
+        openPriorMap(*picked);
     if (openMapPopup_) {
         ImGui::OpenPopup("Open prior map");
         openMapPopup_ = false;
@@ -3830,12 +4062,22 @@ void App::drawFilePopups() {
     ImGui::SetNextWindowSize({ui(620), 0});
     if (ImGui::BeginPopupModal("Open prior map", nullptr, ImGuiWindowFlags_NoSavedSettings)) {
         ImGui::TextWrapped("A riptide_mapping config.yaml (the robot workspace's source tree).");
-        ImGui::SetNextItemWidth(-1);
+        ImGui::SetNextItemWidth(-(buttonWidth("Browse...") + ImGui::GetStyle().ItemSpacing.x));
         if (ImGui::IsWindowAppearing())
             ImGui::SetKeyboardFocusHere();
         const bool entered = ImGui::InputText("##path", openMapPath_, sizeof(openMapPath_),
                                               ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
         const fs::path path = openMapPath_;
+
+        // Browse: the desktop's file picker, starting at the path typed.
+        ImGui::SameLine();
+        ImGui::BeginDisabled(mapPicker_.program().empty() || mapPicker_.busy());
+        if (ImGui::Button("Browse..."))
+            mapPicker_.open("Open prior map", path, "YAML files", {"*.yaml", "*.yml"});
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s", mapPicker_.hint());
+
         const bool exists = fs::is_regular_file(path);
         if (!exists && openMapPath_[0])
             ImGui::TextColored(palette().error, "No such file");
@@ -3846,7 +4088,7 @@ void App::drawFilePopups() {
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
-        if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape) || picked)
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
@@ -3899,7 +4141,7 @@ void App::drawViewMenu() {
                     focus(name);
             ImGui::EndMenu();
         }
-        ImGui::MenuItem("Follow", nullptr, &follow_, presetFor(focusName_).follow);
+        ImGui::MenuItem("Follow", "Ctrl+F", &follow_, presetFor(focusName_).follow);
         sectionTitle("Overlays");
         ImGui::MenuItem("Labels", nullptr, &labels_);
         ImGui::MenuItem("TF frames", nullptr, &showTf_);
@@ -4088,8 +4330,11 @@ void App::drawCommandBar() {
                        [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
         headerSubtitle = lookup(config_, {"branding", "subtitle"}).as<std::string>(headerSubtitle);
         if (editingMap) {
-            headerSubtitle = "EDITING PRIOR MAP  \u00b7  " +
-                             (priorMap_->loaded() ? priorMap_->file().filename().string() : std::string("no file"));
+            headerSubtitle =
+                priorMap_->editingCourse()
+                    ? "EDITING SIM COURSE  \u00b7  " + priorMap_->courseLabel()
+                    : "EDITING PRIOR MAP  \u00b7  " +
+                          (priorMap_->loaded() ? priorMap_->file().filename().string() : std::string("no file"));
             if (priorMap_->dirty())
                 headerSubtitle += "  \u00b7  unsaved";
             if (mapPausedSim_)
@@ -4394,7 +4639,7 @@ void App::drawPoolView(double time, float dt) {
         const auto mouse = io.MousePos;
         priorMapPointer_ = depthPoint(view, frame, {mouse.x - position.x, mouse.y - position.y}, {width, viewHeight});
     }
-    if (mode_ == 0 && hovered && !dragging && !io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F))
+    if (mode_ == 0 && hovered && !dragging && !io.WantTextInput && !io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F))
         planActive() ? fitPlan() : focusAtCursor(view, frame, position, width, viewHeight);
 
     // The image, centered in the view
@@ -4478,7 +4723,9 @@ void App::drawPoolView(double time, float dt) {
     }
 
     // Course labels: a leader line and a name plate for each focus landmark in view
-    if (labels_ && mode_ < 2 && presetFor(focusName_).labels && !priorMap_->hidesCourse()) {
+    // (the editor labels the Sim course's tasks itself while they are edited)
+    if (labels_ && mode_ < 2 && presetFor(focusName_).labels && !priorMap_->hidesCourse() &&
+        !(priorMap_->active() && priorMap_->editingCourse())) {
         for (const auto &key : focusNames_) {
             const auto found = scenario_->landmarks.find(key);
             if (found == scenario_->landmarks.end())
@@ -4778,6 +5025,7 @@ void App::drawHelpWindow() {
         sectionTitle("Shortcuts");
         table("shortcuts", {{"Ctrl+P", "search: windows, layouts, themes, controls, trees; robot moves"},
                             {"Ctrl+P, plot odom z", "a field or Motion axis in a plot (Shift+Enter: the focused one)"},
+                            {"Ctrl+F", "Follow: keep the camera on the focus target"},
                             {"Ctrl+M", "edit the prior map / done"},
                             {"Ctrl+S", "save the prior map"},
                             {"F12", "save a screenshot (Pictures/Nereus)"},
@@ -4827,6 +5075,14 @@ void App::handleShortcuts() {
         priorMap_->save();
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_P, ImGuiInputFlags_RouteGlobal) && scenario_)
         paletteFocus_ = true; // the title bar's search box takes the keyboard
+    // Ctrl+F: Follow, as the toolbar chip (Operate only: the map is edited against a still scene)
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F, ImGuiInputFlags_RouteGlobal) && scenario_ &&
+        workspace_ == Workspace::Operate) {
+        if (presetFor(focusName_).follow)
+            follow_ = !follow_;
+        else
+            notify("Follow needs a moving focus: " + focusName_ + " stays put");
+    }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_LeftBracket, ImGuiInputFlags_RouteGlobal))
         toggleSide(Side::Left);
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_RightBracket, ImGuiInputFlags_RouteGlobal))
@@ -5018,6 +5274,14 @@ void App::applyCommandLineWindows() {
         tfOpen_ |= name == "tf";
         displayOpen_ |= name == "pool-viewer" || name == "display";
         helpOpen_ |= name == "help";
+        if (name == "sim-course") { // now if the course is set up, else once it is (setupCourse)
+            openCourse_ = true;
+            priorMap_->editCourse(true);
+        }
+        if (name == "open-prior-map") {
+            std::snprintf(openMapPath_, sizeof(openMapPath_), "%s", priorMap_->file().c_str());
+            openMapPopup_ = true;
+        }
     }
 }
 
@@ -5340,6 +5604,7 @@ int App::loop() {
             ros_->spin();
         }
         updatePoolSwitch();
+        updateCourseSave();
 
         // the first scenario: one frame of "Building the scene" first (kept: the loading thread draws over it)
         if (!pendingScenario_.empty() && !scenario_ && !buildingShown_)
@@ -5599,12 +5864,13 @@ float App::editMapButtonWidth() const {
 
 void App::drawMapButtons() {
     const float y = ImGui::GetCursorPosY();
-    ImGui::BeginDisabled(!priorMap_->loaded() || !priorMap_->dirty());
+    ImGui::BeginDisabled(!priorMap_->dirty() || priorMap_->savingCourse());
     if (ImGui::Button("Save###bar_save"))
         priorMap_->save();
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("Write the prior map (Ctrl+S)");
+        ImGui::SetTooltip("Write the robot's map and the Sim course, whichever changed (Ctrl+S); the simulator "
+                          "restarts on a saved course");
     ImGui::SameLine();
     ImGui::SetCursorPosY(y);
     if (ImGui::Button("Done###bar_done"))
@@ -5619,8 +5885,10 @@ void App::drawEditMapButton() {
     if (ImGui::Button(priorMap_->dirty() ? "Edit map*###edit_map" : "Edit map###edit_map"))
         setWorkspace(Workspace::Map);
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip(priorMap_->dirty() ? "Edit the robot's prior map: it has unsaved changes  (Ctrl+M)"
-                                             : "Edit the robot's prior map (riptide_mapping config.yaml)  (Ctrl+M)");
+        ImGui::SetTooltip(priorMap_->dirty()
+                              ? "Edit the robot's prior map and the Sim course: unsaved changes  (Ctrl+M)"
+                              : "Edit the robot's prior map (riptide_mapping config.yaml) and the "
+                                "simulator's course  (Ctrl+M)");
 }
 
 // Switches between Operate and Map. Each keeps its own window layout; entering Map pauses a running simulator and
@@ -5914,8 +6182,20 @@ void App::drawUnsavedMapPrompt() {
     }
     if (!ImGui::BeginPopupModal("Unsaved prior map", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         return;
-    ImGui::Text("The prior map has unsaved changes.");
+    ImGui::Text(priorMap_->mapDirty() && priorMap_->courseDirty()
+                    ? "The prior map and the Sim course have unsaved changes."
+                : priorMap_->courseDirty() ? "The Sim course has unsaved changes."
+                                           : "The prior map has unsaved changes.");
     if (ImGui::Button("Save and quit")) {
+        if (priorMap_->courseDirty() && !priorMap_->savingCourse()) { // here and now: the viewer is closing
+            std::string error;
+            try {
+                setScenarioCourse(priorMap_->courseScenario(), priorMap_->courseEdit());
+            } catch (const std::exception &e) {
+                error = e.what();
+            }
+            priorMap_->courseSaved(priorMap_->courseScenario().empty() ? "no scenario pack to save into" : error);
+        }
         priorMap_->save();
         if (!priorMap_->dirty()) {
             closeConfirmed_ = true;

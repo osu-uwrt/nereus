@@ -97,6 +97,16 @@ class RobotRejectionTests(PackRejectionCase):
         self.edit("robot/robot.yaml", "type: ahrs", "type: sonar")
         self.assert_load_rejects("robot", "'sonar' is not one of")
 
+    def test_visual_texture_cannot_bind_a_run_option(self) -> None:
+        """The visual schema is shared with task files, but only they have run options."""
+        visual = "{asset: hull, frame: com, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]"
+        self.edit(
+            "robot/robot.yaml",
+            "reference_frame: base_link\n",
+            f"reference_frame: base_link\nvisuals:\n- {visual}, texture: {{option: paint}}}}\n",
+        )
+        self.assert_load_rejects("robot", "/visuals/0/texture: only task visuals bind run options")
+
     def test_non_unit_frame_quaternion(self) -> None:
         self.edit(
             "robot/robot.yaml",
@@ -336,6 +346,81 @@ class TaskRejectionTests(PackRejectionCase):
     def test_pass_through_sides_must_differ(self) -> None:
         self.edit("tasks/hoop.yaml", "to_side: negative", "to_side: positive")
         self.assert_resolve_rejects("from_side and to_side must differ")
+
+
+class RunOptionBindingTests(PackRejectionCase):
+    """Task-file values bound to fixed run options: set by the scenario when it resolves, checked against the
+    tasks pack's options and assets."""
+
+    VISUAL = "frame: task, position_m: [0, 0, 0], orientation_wxyz: [1, 0, 0, 0]}\nregions"
+    PAINT = "{option: paint, values: {red: red_png, blue: blue_png}}"
+
+    def setUp(self) -> None:
+        """A fixed `paint` choice option and two texture assets (any file will do)."""
+        super().setUp()
+        mesh = "- {id: hoop_mesh, path: assets/hoop.dae}\n"
+        textures = (
+            "- {id: red_png, path: assets/hoop.dae}\n- {id: blue_png, path: assets/hoop.dae}\n"
+        )
+        self.edit("tasks/tasks.yaml", mesh, mesh + textures)
+        timed = "- {key: timed, type: bool, default: false}\n"
+        paint = "- {key: paint, type: choice, choices: [red, blue], default: red, fixed: true}\n"
+        self.edit("tasks/tasks.yaml", timed, timed + paint)
+
+    def bind(self, binding: str) -> None:
+        """Give the hoop's visual this texture."""
+        self.edit(
+            "tasks/hoop.yaml", self.VISUAL, self.VISUAL.replace("]}", f"], texture: {binding}}}")
+        )
+
+    def texture(self) -> str:
+        """The hoop visual's texture in the resolved scenario."""
+        hoop = resolve_scenario(self.scenario).task_definitions[0]
+        return str(hoop["props"][0]["parameters"]["visuals"][0]["texture"])
+
+    def test_scenario_choice_sets_the_bound_value(self) -> None:
+        self.bind(self.PAINT)
+        self.assertEqual(self.texture(), "red_png")  # the option's default
+        self.edit("scenario/scenario.yaml", "options: {}", "options: {paint: blue}")
+        self.assertEqual(self.texture(), "blue_png")
+        self.assertEqual(resolve_scenario(self.scenario).run_options["paint"], "blue")
+
+    def test_bare_binding_takes_the_choice_itself(self) -> None:
+        self.edit(
+            "tasks/tasks.yaml", "[red, blue], default: red", "[red_png, blue_png], default: red_png"
+        )
+        self.bind("{option: paint}")
+        self.assertEqual(self.texture(), "red_png")
+
+    def test_option_must_be_fixed(self) -> None:
+        self.edit("tasks/tasks.yaml", ", fixed: true}", "}")
+        self.bind(self.PAINT)
+        self.assert_load_rejects("tasks", "run option 'paint' is not fixed")
+
+    def test_unknown_option(self) -> None:
+        self.bind("{option: ghost, values: {red: red_png}}")
+        self.assert_load_rejects("tasks", "unknown run option 'ghost'")
+
+    def test_bool_option_cannot_be_bound(self) -> None:
+        self.edit(
+            "tasks/tasks.yaml",
+            "type: bool, default: false}",
+            "type: bool, default: false, fixed: true}",
+        )
+        self.bind("{option: timed, values: {red: red_png}}")
+        self.assert_load_rejects("tasks", "run option 'timed' is not a choice")
+
+    def test_values_must_map_every_choice(self) -> None:
+        self.bind("{option: paint, values: {red: red_png}}")
+        self.assert_load_rejects("tasks", "values: must map exactly the choices ['red', 'blue']")
+
+    def test_bound_texture_must_be_a_declared_asset(self) -> None:
+        self.bind("{option: paint, values: {red: red_png, blue: ghost_png}}")
+        self.assert_load_rejects("tasks", "unknown texture asset 'ghost_png'")
+
+    def test_binding_elsewhere_is_a_schema_error(self) -> None:
+        self.edit("tasks/hoop.yaml", "asset: hoop_mesh", "asset: {option: paint}")
+        self.assert_load_rejects("tasks", "/asset")
 
 
 class PoolMarkingTests(PackRejectionCase):

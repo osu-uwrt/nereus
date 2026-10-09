@@ -168,6 +168,10 @@
             "string",
             "boolean"
           ]
+        },
+        "fixed": {
+          "type": "boolean",
+          "description": "Set by the scenario when it resolves, not at a run's start: the value task files bind (option_binding) and that a run Start cannot change. Default false."
         }
       },
       "required": [
@@ -209,7 +213,7 @@
           }
         }
       ],
-      "description": "Scenario-selectable option; a choice default must be one of choices (semantic check)."
+      "description": "Scenario-selectable option; a choice default must be one of choices (semantic check). A fixed option holds for the whole session."
     },
     "scoring_rule": {
       "type": "object",

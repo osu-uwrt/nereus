@@ -29,6 +29,7 @@ starts it for you; for the real robot use `ros2 launch integrations/uwrt/launch/
 | Right / middle drag | pan (detaches Follow) |
 | Scroll | zoom |
 | `F` | focus on the point under the cursor |
+| `Ctrl+F` | Follow: keep the camera on the focus target as it moves |
 | `F3` | frame-time stats |
 | `F1` | controls and shortcuts |
 | `Ctrl+Space` | maximize the pool view (close every other window); again to restore them |
@@ -103,8 +104,9 @@ The toolbar is saved with the layout (and with named layouts); the built-in layo
 ## File menu
 
 - **Pool**: switch the pool (in the simulator, the supervisor restarts it there).
-- **Prior map**: Open (a riptide_mapping `config.yaml` by path), Open recent, Save (Ctrl+S, from anywhere), Reload
-  (asks first over unsaved edits). Map editing (Edit map, Ctrl+M) is where it is changed.
+- **Prior map**: Open (a riptide_mapping `config.yaml` by path, or Browse... for the desktop's file picker), Open
+  recent, Save (Ctrl+S, from anywhere), Reload (asks first over unsaved edits). Map editing (Edit map, Ctrl+M) is
+  where it is changed; its Map objects window has the same path field and Browse....
 - **Capture**: Save screenshot (F12: the whole window, a PNG in `~/Pictures/Nereus/`), and that folder.
 - **Folders**: the simulator's run records (`/tmp/nereus_sim/`) and the viewer's settings (`~/.config/nereus/`:
   preferences, the saved arrangement, named layouts), in the desktop's file manager.
@@ -425,6 +427,30 @@ A click picks what is under the pointer: a prop's mesh (its bounds), its label o
 - **Undo / Redo** (`Ctrl+Z`, `Ctrl+Shift+Z`) cover every edit. **Save** (`Ctrl+S`) writes only the values that
   changed: comments, order, other robots' sections and the deprecated entries stay byte for byte, and the result
   is read back and checked before the file is replaced. The namespace list switches robots in a file with several.
+
+### The Sim course
+
+The switch at the top of **Map objects** picks what is edited: the **Robot's map** (what the robot believes, the
+riptide_mapping file above) or the **Sim course** (what the simulator runs: the scenario's task placements, the
+tasks' loose objects and the fixed run options). The bar then reads *EDITING SIM COURSE*. The robot's map is drawn
+translucent for reference while the course is edited.
+
+- **Tasks** move and turn as props do (drag, arrows, ring, keys, the table and inspector), in the world. The pool
+  view draws each task where it is being put. A task's **loose objects** (the table's pill, bandage, nut and bolt and
+  plug) are its children, positioned on the task.
+- **Options** (inspector, nothing selected) are the tasks pack's fixed run options: the four bin vinyls' classes.
+- **Save** writes what changed into the scenario pack's `scenario.yaml` (`python -m nereus.packs set-course`:
+  comments and untouched entries stay as written, and the edit is checked by resolving first). The simulator then
+  restarts on it, the stack keeps running. **Discard** goes back to the course as saved. There is nothing to add,
+  rename or delete: the tasks are the task pack's.
+- **Copy from the robot's map** (Sim course) and **Copy from the Sim course** (Robot's map) carry the linked tasks'
+  poses, their loose objects and the classes across, as one undo step. The host config names the links:
+  `prior_map.course_links` maps each task to the prop at its origin (`slalom: slalom_parent`, `surface: octagon`).
+  Loose objects match props of the same name, and a prop's class sets the `<prop>_class` option. `prior_map.floating`
+  lists tasks whose height is never copied (the octagon floats).
+
+`--open sim-course` starts on the Sim course. **Save** in the command bar (`Ctrl+S`) saves both layers; quitting with
+unsaved changes in either asks first.
 
 Locks, hidden props, the origin (per pool) and the view options are the editor's own, kept per file in
 `~/.config/nereus/prior_map/`; the Map layout is `~/.config/nereus/map_layout.ini` (Layout → *Reset map layout*).

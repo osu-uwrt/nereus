@@ -12,7 +12,8 @@ find_package(X11 REQUIRED) # custom title bar: window-manager move / resize
 find_package(Fontconfig REQUIRED) # a theme's font family (the desktop's Qt font)
 
 # Logic that needs no GL context (tested by tests/host_*).
-add_library(nereus_viewer_host_core STATIC scenario.cpp scenario_packs.cpp jpeg_decode.cpp prior_map.cpp)
+add_library(nereus_viewer_host_core STATIC scenario.cpp scenario_packs.cpp jpeg_decode.cpp prior_map.cpp
+            file_picker.cpp)
 target_include_directories(nereus_viewer_host_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
   ${PROJECT_SOURCE_DIR}/integrations/ros2/viewer/include)
 target_link_libraries(nereus_viewer_host_core PUBLIC nereus_glm nereus_mesh_assets nereus_pack_scene Eigen3::Eigen yaml-cpp
@@ -45,7 +46,7 @@ if(BUILD_TESTING)
 
   # One GTest binary per host_<name>.cpp, all linked against the GL-free core.
   set(_host_tests viewer_input tf_tree detection_pose status_lights thruster_visuals camera_geometry jpeg scenario
-      display_clock frame_profiler point_cloud mapping_markers prior_map scenario_packs)
+      display_clock frame_profiler point_cloud mapping_markers prior_map scenario_packs file_picker)
   foreach(name ${_host_tests})
     add_executable(host_${name}_test ../tests/host_${name}.cpp)
     target_link_libraries(host_${name}_test PRIVATE nereus_viewer_host_core GTest::gtest_main)

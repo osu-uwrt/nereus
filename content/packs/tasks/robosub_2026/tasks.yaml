@@ -77,6 +77,11 @@ run_options:
 - {key: role_coin, type: bool, default: true}
 - {key: pinger_task, type: choice, choices: [none, deploy, restore], default: none}
 - {key: pinger_random, type: bool, default: false}
+# Each bin crate's vinyl (its class and texture), fixed for the session: set by the scenario.
+- {key: bin_vinyl1_class, type: choice, choices: [blood, fire], default: blood, fixed: true}
+- {key: bin_vinyl2_class, type: choice, choices: [blood, fire], default: fire, fixed: true}
+- {key: bin_vinyl3_class, type: choice, choices: [blood, fire], default: fire, fixed: true}
+- {key: bin_vinyl4_class, type: choice, choices: [blood, fire], default: blood, fixed: true}
 
 # Scoring: compiled rules (extensions/rules/robosub_2026) and their parameters. The rules turn
 # (run state, events since the last call) into score row changes, run-status fields and the event feed.

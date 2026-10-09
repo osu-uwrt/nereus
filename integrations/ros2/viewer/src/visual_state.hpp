@@ -33,5 +33,6 @@ struct VisualState {
     std::vector<glm::mat4> loadedPayloads;        // world poses (body already applied), unit length scaled
     bool showEquipment = true, showWalls = true, showFloor = true; // walls include the deck and coping
     bool showCourse = true; // the pack's task visuals (false: the course comes from mapping markers)
+    std::map<std::string, glm::mat4> courseMoves; // task id -> world correction of its visuals (a Sim course edit)
 };
 } // namespace nereus::ros_viewer::host

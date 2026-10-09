@@ -208,6 +208,15 @@ r::Scene SceneModel::build(const VisualState &state) const {
     // Compose, then hide what the toggles turn off. Instance order: pool, task visuals, equipment, then robot
     // and dynamic instances.
     r::Scene scene = pack_->compose(worldFromRoot(state.body), dynamic, overrides, state.indicatorLatched);
+
+    // A task moved in the Sim course (not saved yet): its static visuals follow the correction.
+    if (!state.courseMoves.empty()) {
+        const auto &sources = pack_->staticSources();
+        for (std::size_t i = 0; i < sources.size() && i < scene.instances.size(); ++i)
+            if (const auto move = state.courseMoves.find(sources[i].task);
+                sources[i].role == "task" && move != state.courseMoves.end())
+                scene.instances[i].transform = toEigen(move->second) * scene.instances[i].transform;
+    }
     if (robotOnly_) { // static scene = pool + task visuals; robot and dynamic instances follow it
         for (std::size_t i = 0; i < pack_->staticScene().instances.size() && i < scene.instances.size(); ++i)
             scene.instances[i].visible = false;

@@ -185,13 +185,79 @@ PriorMapEditor::PriorMapEditor(fs::path stateDirectory, fs::path defaultConfig)
 }
 
 // A pool switch puts the map where it was last placed in that pool (else where the scenario has it). Undo steps
-// keep their props but take the new pool's origin: an old pool's origin means nothing in this one.
+// keep their props but take the new pool's origin: an old pool's origin means nothing in this one. The Sim
+// course's "map" is the scenario's world, which is where the scenario has the map.
 void PriorMapEditor::setPool(const Pool &pool) {
     pool_ = pool;
+    const bool editing = course_;
+    if (editing)
+        swapLayers(); // the robot's map in the members
     useOrigin();
     for (auto *steps : {&undo_, &redo_})
         for (auto &step : *steps)
             step.origin = origin_;
+    other_.origin = pool_.scenarioOrigin;
+    for (auto *steps : {&other_.undo, &other_.redo})
+        for (auto &step : *steps)
+            step.origin = pool_.scenarioOrigin;
+    if (editing)
+        swapLayers();
+}
+
+// Swaps the edited layer with the other one; a gesture or origin placement in progress ends.
+void PriorMapEditor::swapLayers() {
+    std::swap(doc_, other_.doc);
+    std::swap(undo_, other_.undo);
+    std::swap(redo_, other_.redo);
+    std::swap(selected_, other_.selected);
+    std::swap(message_, other_.message);
+    std::swap(dirty_, other_.dirty);
+    std::swap(messageError_, other_.messageError);
+    std::swap(origin_, other_.origin);
+    std::swap(meshes_, other_.meshes);
+    std::swap(extents_, other_.extents);
+    course_ = !course_;
+    drag_ = Handle::None;
+    placing_ = pressed_ = originSelected_ = false;
+    std::snprintf(renameField_, sizeof(renameField_), "%s", selected_.c_str());
+}
+
+void PriorMapEditor::editCourse(bool on) {
+    if (on != course_ && (!on || !courseDoc().text.empty()))
+        swapLayers();
+}
+
+// A new scenario's course replaces the Sim course (its unsaved edits included), in whichever layer slot it is.
+void PriorMapEditor::setCourse(Course course) {
+    const bool editing = course_;
+    if (editing)
+        swapLayers(); // the course into other_
+    const bool dropped = other_.dirty;
+    other_.doc = {};
+    other_.doc.text = course.label.empty() ? std::string("course") : course.label; // loaded
+    other_.doc.ns = course.label;
+    other_.doc.objects = std::move(course.objects);
+    other_.undo.clear();
+    other_.redo.clear();
+    other_.selected.clear();
+    other_.dirty = false;
+    other_.message = course.scenario.empty() ? "No scenario pack to save into (the course is shown, not saved)"
+                     : dropped               ? "A new scenario arrived: the unsaved course edits were dropped"
+                                             : "";
+    other_.messageError = dropped;
+    other_.origin = pool_.scenarioOrigin;
+    other_.meshes = std::move(course.meshes);
+    other_.extents.clear();
+    for (const auto &[frame, low] : course.low)
+        if (const auto high = course.high.find(frame); high != course.high.end())
+            other_.extents[frame] = {low, high->second};
+    courseLabel_ = course.label;
+    courseScenario_ = course.scenario;
+    frameOf_ = std::move(course.frameOf);
+    options_ = savedOptions_ = course.options;
+    savedCourse_ = sceneCourse_ = other_.doc.objects;
+    if (editing)
+        swapLayers();
 }
 
 void PriorMapEditor::rememberOrigin() {
@@ -270,6 +336,20 @@ void PriorMapEditor::saveFile() {
     }
 }
 
+// Both layers' unsaved changes: the robot's map written here, the Sim course handed to the host.
+void PriorMapEditor::save() {
+    if (mapDirty()) {
+        const bool editing = course_;
+        if (editing)
+            swapLayers();
+        saveFile();
+        if (editing)
+            swapLayers();
+    }
+    if (courseDirty())
+        saveCourse();
+}
+
 // The per-config state file in the state directory, named after the config's full path.
 fs::path PriorMapEditor::statePath() const {
     return stateDirectory_ / (sanitized(configPath_) + ".yaml");
@@ -329,9 +409,10 @@ void PriorMapEditor::loadState() {
 void PriorMapEditor::saveState() const {
     if (stateDirectory_.empty() || configPath_.empty())
         return;
+    const auto &map = course_ ? other_.doc : doc_; // the robot's map, whichever layer is edited
     YAML::Node state;
     state["config"] = configPath_.string();
-    state["namespace"] = doc_.ns;
+    state["namespace"] = map.ns;
 
     for (const auto &[pool, origin] : origins_) {
         auto o = state["origins"][pool];
@@ -350,7 +431,7 @@ void PriorMapEditor::saveState() const {
     state["hide_course"] = hideCourse_;
     state["locked"] = YAML::Node(YAML::NodeType::Sequence);
     state["hidden"] = YAML::Node(YAML::NodeType::Sequence);
-    for (const auto &o : doc_.objects) {
+    for (const auto &o : map.objects) {
         if (o.locked)
             state["locked"].push_back(o.name);
         if (o.hidden)
@@ -366,7 +447,7 @@ void PriorMapEditor::saveState() const {
 
 // Pushes the objects and origin as an undo step (at most kUndoDepth kept) and clears the redo stack.
 void PriorMapEditor::record() {
-    undo_.push_back({doc_.objects, origin_});
+    undo_.push_back({doc_.objects, origin_, course_ ? options_ : std::vector<Course::Option>{}});
     if (undo_.size() > kUndoDepth)
         undo_.erase(undo_.begin());
     redo_.clear();
@@ -375,9 +456,11 @@ void PriorMapEditor::record() {
 void PriorMapEditor::undo() {
     if (undo_.empty())
         return;
-    redo_.push_back({doc_.objects, origin_});
+    redo_.push_back({doc_.objects, origin_, course_ ? options_ : std::vector<Course::Option>{}});
     doc_.objects = undo_.back().objects;
     origin_ = undo_.back().origin;
+    if (course_)
+        options_ = undo_.back().options;
     undo_.pop_back();
     changed();
 }
@@ -385,9 +468,11 @@ void PriorMapEditor::undo() {
 void PriorMapEditor::redo() {
     if (redo_.empty())
         return;
-    undo_.push_back({doc_.objects, origin_});
+    undo_.push_back({doc_.objects, origin_, course_ ? options_ : std::vector<Course::Option>{}});
     doc_.objects = redo_.back().objects;
     origin_ = redo_.back().origin;
+    if (course_)
+        options_ = redo_.back().options;
     redo_.pop_back();
     changed();
 }
@@ -396,7 +481,7 @@ void PriorMapEditor::redo() {
 // the editor state.
 void PriorMapEditor::changed() {
     dirty_ = true;
-    if (!pool_.id.empty())
+    if (!pool_.id.empty() && !course_)
         rememberOrigin(); // an undo or redo can move the origin too
     if (!selected_.empty() && !pm::find(doc_.objects, selected_))
         selected_.clear();
@@ -510,9 +595,14 @@ void PriorMapEditor::moveSelected(double dx, double dy, double dz, double dyaw) 
 
 // ------------------------------------------------------------------ geometry
 
-// Map frame to world: the pool's transform, then the origin's pose in the pool.
+// A layer's frame to world: the pool's transform, then that origin's pose in the pool.
+glm::mat4 PriorMapEditor::worldFrom(const pm::Origin &origin) const {
+    return pool_.poolToWorld * poseMatrix(origin.x, origin.y, origin.z, origin.yaw());
+}
+
+// The edited layer's frame to world (the map, or for the Sim course the scenario's world).
 glm::mat4 PriorMapEditor::worldFromMap() const {
-    return pool_.poolToWorld * poseMatrix(origin_.x, origin_.y, origin_.z, origin_.yaw());
+    return worldFrom(origin_);
 }
 
 // A map-frame pose in the world.
@@ -527,45 +617,261 @@ pm::Pose PriorMapEditor::mapFromWorld(const glm::vec3 &world, double yawWorld) c
     return {p.x, p.y, p.z, pm::wrapDegrees(yawWorld - yawOf(worldFromMap()))};
 }
 
-// The props for the pool view's renderer: meshes, and boxes for mesh-less stand-alone props in 3D.
+// The props for the pool view's renderer: the edited layer's meshes (boxes for mesh-less stand-alone props in 3D),
+// then the other layer: the robot's map as translucent reference meshes, or the Sim course's loose objects.
 void PriorMapEditor::addMarkers(std::vector<MarkerDraw> &markers) const {
     if (!active())
         return;
-    const auto poses = pm::mapPoses(doc_.objects);
+    addLayerMarkers(doc_, meshes_, origin_, false, markers);
+    if (course_)
+        addLayerMarkers(other_.doc, other_.meshes, other_.origin, true, markers);
+    else if (drawsCourse())
+        addLayerMarkers(other_.doc, other_.meshes, other_.origin, false, markers);
+}
+
+// One layer's props through its origin. A mesh without a path is drawn by the scene (a Sim course task); a
+// reference layer shows only its meshes, translucent.
+void PriorMapEditor::addLayerMarkers(const pm::Document &doc, const std::map<std::string, MappingMarker> &meshes,
+                                     const pm::Origin &origin, bool reference, std::vector<MarkerDraw> &markers) const {
+    const auto poses = pm::mapPoses(doc.objects);
+    const auto world = worldFrom(origin);
     const auto meshed = [&](const std::string &name) {
-        const auto found = meshes_.find(name + "_frame");
-        return found != meshes_.end() && found->second.visible;
+        const auto found = meshes.find(name + "_frame");
+        return found != meshes.end() && found->second.visible;
     };
 
     // A mesh-less frame on a meshed assembly (the bin's targets, the torpedo's holes) is part of that mesh.
     const auto onMesh = [&](const pm::Object &o) {
         std::set<std::string> seen;
-        for (auto *parent = pm::find(doc_.objects, o.parent); parent && seen.insert(parent->name).second;
-             parent = pm::find(doc_.objects, parent->parent))
+        for (auto *parent = pm::find(doc.objects, o.parent); parent && seen.insert(parent->name).second;
+             parent = pm::find(doc.objects, parent->parent))
             if (meshed(parent->name))
                 return true;
         return false;
     };
 
-    for (const auto &o : doc_.objects) {
+    for (const auto &o : doc.objects) {
         if (o.hidden)
             continue;
-        const auto world = worldOf(poses.at(o.name));
+        const auto &p = poses.at(o.name);
+        const auto at = world * poseMatrix(p.x, p.y, p.z, p.yaw);
         MarkerDraw draw;
         draw.observerOnly = true;
-        const auto mesh = meshes_.find(o.name + "_frame");
+        draw.ghost = reference;
+        const auto mesh = meshes.find(o.name + "_frame");
         if (meshed(o.name)) {
+            if (mesh->second.path.empty())
+                continue; // the scene draws it
             draw.mesh = mesh->second.path;
-            draw.world = world * mesh->second.local;
-        } else if (onMesh(o) || plan_) {
+            draw.world = at * mesh->second.local;
+        } else if (reference || onMesh(o) || plan_) {
             continue; // part of a meshed assembly, or 2D: drawn as a dot / badge by the overlay
         } else {      // no mesh: a colored box at the pose
-            draw.world = world;
+            draw.world = at;
             draw.scale = kBox;
             draw.tint = colorFor(o.name);
         }
         markers.push_back(std::move(draw));
     }
+}
+
+std::map<std::string, glm::mat4> PriorMapEditor::courseMoves() const {
+    std::map<std::string, glm::mat4> moves;
+    if (!drawsCourse())
+        return moves;
+    const auto world = worldFrom(course_ ? origin_ : other_.origin);
+    for (const auto &o : courseDoc().objects) {
+        const auto *built = pm::find(sceneCourse_, o.name);
+        if (o.parent != pm::kMap || !built)
+            continue;
+        const auto &a = o.pose, &b = built->pose;
+        if (a.x == b.x && a.y == b.y && a.z == b.z && a.yaw == b.yaw)
+            continue;
+        moves[o.name] =
+            world * poseMatrix(a.x, a.y, a.z, a.yaw) * glm::inverse(world * poseMatrix(b.x, b.y, b.z, b.yaw));
+    }
+    return moves;
+}
+
+// ------------------------------------------------------------------ the Sim course
+
+namespace {
+// A pose as set-course JSON fields (the doc's frame is the world for the Sim course).
+std::string jsonPose(const pm::Pose &p) {
+    char text[160];
+    std::snprintf(text, sizeof(text), "\"position_m\": [%.9g, %.9g, %.9g], \"yaw_deg\": %.9g", p.x, p.y, p.z, p.yaw);
+    return text;
+}
+bool samePose(const pm::Pose &a, const pm::Pose &b) {
+    return std::abs(a.x - b.x) < 1e-9 && std::abs(a.y - b.y) < 1e-9 && std::abs(a.z - b.z) < 1e-9 &&
+           std::abs(pm::wrapDegrees(a.yaw - b.yaw)) < 1e-9;
+}
+} // namespace
+
+// What changed since the last save: moved tasks (world placements), moved loose objects (in their task's frame)
+// and changed options, as `python -m nereus.packs set-course` reads them.
+std::string PriorMapEditor::courseEdit() const {
+    std::vector<std::string> placements, frames, options;
+    for (const auto &o : courseDoc().objects) {
+        const auto *saved = pm::find(savedCourse_, o.name);
+        if (!saved || samePose(o.pose, saved->pose))
+            continue;
+        if (o.parent == pm::kMap)
+            placements.push_back("{\"task\": \"" + o.name + "\", " + jsonPose(o.pose) + "}");
+        else if (const auto frame = frameOf_.find(o.name); frame != frameOf_.end())
+            frames.push_back("{\"task\": \"" + o.parent + "\", \"frame\": \"" + frame->second + "\", " +
+                             jsonPose(o.pose) + "}");
+    }
+    for (const auto &option : options_)
+        for (const auto &saved : savedOptions_)
+            if (saved.key == option.key && saved.value != option.value)
+                options.push_back("\"" + option.key + "\": \"" + option.value + "\"");
+    if (placements.empty() && frames.empty() && options.empty())
+        return {};
+    const auto join = [](const std::vector<std::string> &items) {
+        std::string out;
+        for (const auto &item : items)
+            out += (out.empty() ? "" : ", ") + item;
+        return out;
+    };
+    return "{\"task_placements\": [" + join(placements) + "], \"task_frames\": [" + join(frames) +
+           "], \"run_options\": {" + join(options) + "}}";
+}
+
+// Hands the edit to the host (which writes it and restarts the simulator); courseSaved() reports back.
+void PriorMapEditor::saveCourse() {
+    bool &dirty = course_ ? dirty_ : other_.dirty;
+    std::string &message = course_ ? message_ : other_.message;
+    bool &error = course_ ? messageError_ : other_.messageError;
+    if (savingCourse_)
+        return;
+    const auto edit = courseEdit();
+    if (edit.empty()) {
+        dirty = false;
+        message = "Nothing to save: the course is as the scenario has it";
+        error = false;
+        return;
+    }
+    if (courseScenario_.empty() || !courseSaver_) {
+        message = "Not saved: no scenario pack to save into";
+        error = true;
+        return;
+    }
+    savingCourse_ = true;
+    message = "Saving into " + courseScenario_.filename().string() + " ...";
+    error = false;
+    courseSaver_(courseScenario_, edit);
+}
+
+void PriorMapEditor::setCourseScenario(fs::path scenario) {
+    if (scenario == courseScenario_)
+        return;
+    courseScenario_ = std::move(scenario);
+    std::string &message = course_ ? message_ : other_.message;
+    if (!courseScenario_.empty() && message.rfind("No scenario pack", 0) == 0)
+        message.clear();
+}
+
+void PriorMapEditor::courseSaved(const std::string &failure) {
+    savingCourse_ = false;
+    bool &dirty = course_ ? dirty_ : other_.dirty;
+    std::string &message = course_ ? message_ : other_.message;
+    bool &error = course_ ? messageError_ : other_.messageError;
+    if (!failure.empty()) {
+        message = "Not saved: " + failure;
+        error = true;
+        return;
+    }
+    savedCourse_ = courseDoc().objects;
+    savedOptions_ = options_;
+    dirty = !courseEdit().empty(); // edits made while it saved
+    message = "Saved " + courseScenario_.filename().string() + ": the simulator restarts on it";
+    error = false;
+}
+
+std::string PriorMapEditor::copyFromOtherLayer() {
+    if (other_.doc.text.empty() || links_.tasks.empty())
+        return "Nothing to copy: no links between the robot's map and the Sim course";
+    record();
+    int tasks = 0, objects = 0, classes = 0;
+    if (course_) { // the robot's map into the Sim course
+        const auto map = pm::mapPoses(other_.doc.objects);
+        const auto mapWorld = worldFrom(other_.origin), toCourse = glm::inverse(worldFromMap());
+        for (const auto &[task, prop] : links_.tasks) {
+            auto *t = pm::find(doc_.objects, task);
+            if (!t || t->parent != pm::kMap || !map.count(prop))
+                continue;
+            const auto &m = map.at(prop);
+            const auto at = toCourse * mapWorld * poseMatrix(m.x, m.y, m.z, m.yaw);
+            t->pose = {at[3].x, at[3].y, links_.floating.count(task) ? t->pose.z : double(at[3].z),
+                       pm::wrapDegrees(yawOf(at))};
+            ++tasks;
+            // its loose objects: the props of the same name, where they are relative to the task's prop
+            for (auto &o : doc_.objects)
+                if (const auto frame = frameOf_.find(o.name);
+                    o.parent == task && frame != frameOf_.end() && map.count(frame->second)) {
+                    o.pose = pm::decompose(m, map.at(frame->second));
+                    ++objects;
+                }
+        }
+        for (auto &option : options_) { // a prop's class sets the `<name>_class` option
+            const auto suffix = std::string("_class");
+            if (option.key.size() <= suffix.size() ||
+                option.key.compare(option.key.size() - suffix.size(), suffix.size(), suffix) != 0)
+                continue;
+            const auto *o = pm::find(other_.doc.objects, option.key.substr(0, option.key.size() - suffix.size()));
+            if (o && o->cls != option.value &&
+                std::find(option.choices.begin(), option.choices.end(), o->cls) != option.choices.end()) {
+                option.value = o->cls;
+                ++classes;
+            }
+        }
+    } else { // the Sim course into the robot's map
+        const auto courseWorld = worldFrom(other_.origin);
+        for (const auto &[task, prop] : links_.tasks) {
+            const auto *t = pm::find(other_.doc.objects, task);
+            if (!t || t->parent != pm::kMap || !pm::find(doc_.objects, prop))
+                continue;
+            const auto at = courseWorld * poseMatrix(t->pose.x, t->pose.y, t->pose.z, t->pose.yaw);
+            auto pose = mapFromWorld(glm::vec3(at[3]), yawOf(at));
+            if (links_.floating.count(task))
+                pose.z = pm::mapPoses(doc_.objects).at(prop).z;
+            pm::setMapPose(doc_.objects, prop, pose);
+            ++tasks;
+            const auto anchor = pm::mapPoses(doc_.objects).at(prop);
+            for (const auto &o : other_.doc.objects)
+                if (const auto frame = frameOf_.find(o.name);
+                    o.parent == task && frame != frameOf_.end() && pm::find(doc_.objects, frame->second)) {
+                    pm::setMapPose(doc_.objects, frame->second, pm::compose(anchor, o.pose));
+                    ++objects;
+                }
+        }
+        for (const auto &option : options_) {
+            const auto suffix = std::string("_class");
+            if (option.key.size() <= suffix.size() ||
+                option.key.compare(option.key.size() - suffix.size(), suffix.size(), suffix) != 0)
+                continue;
+            auto *o = pm::find(doc_.objects, option.key.substr(0, option.key.size() - suffix.size()));
+            if (o && !o->cls.empty() && o->cls != option.value) {
+                o->cls = option.value;
+                ++classes;
+            }
+        }
+    }
+    if (tasks + objects + classes == 0) {
+        undo_.pop_back();
+        message_ = "Nothing matched: no linked task or prop is in both";
+        messageError_ = true;
+        return message_;
+    }
+    changed();
+    char summary[160];
+    std::snprintf(summary, sizeof(summary), "Copied %d task%s, %d loose object%s and %d class%s from the %s", tasks,
+                  tasks == 1 ? "" : "s", objects, objects == 1 ? "" : "s", classes, classes == 1 ? "" : "es",
+                  course_ ? "robot's map" : "Sim course");
+    message_ = summary;
+    messageError_ = false;
+    return message_;
 }
 
 // Asks the camera to look at a prop (read once through takeFocus()).
@@ -982,7 +1288,7 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
     const auto map = worldFromMap();
     const glm::vec3 o(map[3]);
     ImVec2 po;
-    if (proj(o, po)) {
+    if (!course_ && proj(o, po)) {
         const ImU32 colors[] = {IM_COL32(240, 96, 100, 255), IM_COL32(84, 208, 144, 255), IM_COL32(80, 145, 255, 255)};
         // 3D: axes 0.7 m long; 2D: X and Y as arrows a fixed 64 px long (the map frame reads at any zoom)
         const float meters = view.plan ? ui(64) / pixelsPerMeter(view.viewProjection, view.origin, view.size, o) : .7f;
@@ -1242,8 +1548,8 @@ void PriorMapEditor::drawOverlay(const View &view, ImFont *small) const {
             // A readout of its map pose under it.
             const auto &mp = poses.at(selected_);
             char readout[160];
-            std::snprintf(readout, sizeof(readout), "%s%s  map x %.2f  y %.2f  z %.2f  yaw %.1f", selected_.c_str(),
-                          sel->locked ? " (locked)" : "", mp.x, mp.y, mp.z, mp.yaw);
+            std::snprintf(readout, sizeof(readout), "%s%s  %s x %.2f  y %.2f  z %.2f  yaw %.1f", selected_.c_str(),
+                          sel->locked ? " (locked)" : "", course_ ? "world" : "map", mp.x, mp.y, mp.z, mp.yaw);
             const ImVec2 size = small->CalcTextSizeA(small->FontSize, 1e9f, 0, readout);
             const ImVec2 box(c.x - size.x / 2 - ui(6), c.y + ui(18));
             d->AddRectFilled(box, {box.x + size.x + ui(12), box.y + size.y + ui(8)}, IM_COL32(8, 22, 29, 225), ui(4));
@@ -1299,7 +1605,7 @@ void PriorMapEditor::shortcuts(bool viewHovered) {
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y))
         redo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S))
-        saveFile();
+        save();
 
     auto *o = pm::find(doc_.objects, selected_);
     if (!o || io.KeyCtrl)
@@ -1346,7 +1652,7 @@ void PriorMapEditor::shortcuts(bool viewHovered) {
         o->hidden = !o->hidden;
         saveState();
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
+    if (!course_ && ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
         record();
         pm::remove(doc_.objects, selected_);
         message_ = "Deleted " + selected_ + " (Ctrl+Z restores it)";
@@ -1359,6 +1665,12 @@ void PriorMapEditor::shortcuts(bool viewHovered) {
 // ------------------------------------------------------------------ the window
 
 void PriorMapEditor::drawObjectsWindow(const char *name, const std::function<void()> &insideWindow) {
+    // A file picked with Browse opens as if typed and opened.
+    if (const auto picked = picker_.take()) {
+        editCourse(false);
+        std::snprintf(pathField_, sizeof(pathField_), "%s", picked->c_str());
+        openFile(*picked);
+    }
     if (!objectsOpen_)
         return;
     if (!ImGui::Begin(name, &objectsOpen_)) {
@@ -1368,7 +1680,20 @@ void PriorMapEditor::drawObjectsWindow(const char *name, const std::function<voi
     if (insideWindow)
         insideWindow();
     windowFocused_ = windowFocused_ || ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-    drawFileBar();
+
+    // Which layer is edited, once the scenario has a course.
+    if (!courseDoc().text.empty()) {
+        int layer = course_ ? 1 : 0;
+        if (pins::Switch("Edit##map_layer", &layer, {"Robot's map", "Sim course"}))
+            editCourse(layer == 1);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Robot's map: what the robot believes (riptide_mapping config.yaml)\n"
+                              "Sim course: what the simulator runs (the scenario's tasks and loose objects)");
+    }
+    if (course_)
+        drawCourseBar();
+    else
+        drawFileBar();
     if (loaded()) {
         ImGui::Separator();
         drawObjects();
@@ -1390,45 +1715,62 @@ void PriorMapEditor::drawInspectorWindow(const char *name, const std::function<v
         ImGui::TextDisabled("Open the prior map (Map objects) to edit it.");
     else if (pm::find(doc_.objects, selected_))
         drawInspector();
+    else if (course_)
+        drawCourseInspector();
     else
         drawOriginInspector();
     ImGui::End();
 }
 
 void PriorMapEditor::drawViewTools() {
-    ImGui::BeginDisabled(!loaded());
+    ImGui::BeginDisabled(!loaded() || course_); // the Sim course is in the world: no origin to place
     pushActiveColors(placing_);
     if (ImGui::Button(placing_ ? "Placing origin (Esc)###place" : "Place origin###place"))
         placing_ = !placing_;
     popActiveColors();
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip(origin_.robot ? "Click in the pool to put the map origin there"
-                                        : "Click near a line end on a wall; the AprilTag snaps to it");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip(course_ ? "The Sim course is placed in the world (the map origin is the robot's map's)"
+                          : origin_.robot ? "Click in the pool to put the map origin there"
+                                          : "Click near a line end on a wall; the AprilTag snaps to it");
+    ImGui::EndDisabled();
+    ImGui::BeginDisabled(!loaded());
     sameLineIfFits(ui(120)); // the toolbar wraps on a narrow view
     ImGui::SetNextItemWidth(ui(120));
     if (ImGui::Combo("##labels", &labels_, "No labels\0Root labels\0All labels\0"))
         saveState();
-    sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
-                   ImGui::CalcTextSize("Hide sim course").x);
-    if (ImGui::Checkbox("Hide sim course", &hideCourse_))
-        saveState();
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Hide the simulator's own course, leaving only the prior map's props");
+    if (!course_) {
+        sameLineIfFits(ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
+                       ImGui::CalcTextSize("Hide sim course").x);
+        if (ImGui::Checkbox("Hide sim course", &hideCourse_))
+            saveState();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Hide the simulator's own course, leaving only the prior map's props");
+    }
     ImGui::EndDisabled();
 }
 
-// The file: path, open / reload / save, the robot (namespace), undo / redo / add.
+// The file: path (and Browse), open / reload / save, the robot (namespace), undo / redo / add.
 void PriorMapEditor::drawFileBar() {
-    ImGui::SetNextItemWidth(-1);
+    ImGui::SetNextItemWidth(-(buttonWidth("Browse...") + ImGui::GetStyle().ItemSpacing.x));
     const bool enter = ImGui::InputTextWithHint("##path", "riptide_mapping config.yaml", pathField_, sizeof(pathField_),
                                                 ImGuiInputTextFlags_EnterReturnsTrue);
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("%s", (std::string(pathField_) + "\nThe robot's prior map (Enter opens it)").c_str());
+
+    // Browse: the desktop's file picker, starting at the path in the field.
+    ImGui::SameLine();
+    ImGui::BeginDisabled(picker_.program().empty() || picker_.busy());
+    if (ImGui::Button("Browse..."))
+        picker_.open("Open prior map", expandHome(pathField_), "YAML files", {"*.yaml", "*.yml"});
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("%s", picker_.hint());
+
     if (ImGui::Button("Open") || enter)
         openFile(expandHome(pathField_));
 
-    // Reload asks first when there are unsaved edits.
-    ImGui::SameLine();
+    // Reload asks first when there are unsaved edits. The row wraps in a narrow window.
+    sameLineIfFits(buttonWidth("Reload"));
     ImGui::BeginDisabled(!loaded());
     if (ImGui::Button("Reload")) {
         if (dirty_)
@@ -1451,7 +1793,7 @@ void PriorMapEditor::drawFileBar() {
     }
 
     // Save, highlighted while there are unsaved edits.
-    ImGui::SameLine();
+    sameLineIfFits(buttonWidth("Save*"));
     pushActiveColors(dirty_);
     if (ImGui::Button(dirty_ ? "Save*###save" : "Save###save"))
         saveFile();
@@ -1508,6 +1850,17 @@ void PriorMapEditor::drawFileBar() {
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("A new prop in the middle of the pool");
+        if (!other_.doc.text.empty()) {
+            ImGui::BeginDisabled(links_.tasks.empty());
+            if (ImGui::Button("Copy from the Sim course"))
+                copyFromOtherLayer();
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip(links_.tasks.empty()
+                                      ? "No links: the host config's prior_map.course_links names each task's prop"
+                                      : "Put the linked props, their loose objects and classes where the simulator "
+                                        "has them (one undo step)");
+        }
     }
 
     if (!message_.empty()) {
@@ -1630,7 +1983,10 @@ void PriorMapEditor::drawObjects() {
         }
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             focusOn(o.name);
-        if (ImGui::IsItemHovered())
+        if (ImGui::IsItemHovered() && course_)
+            ImGui::SetTooltip("%s  (%s)\nDouble-click to look at it", o.name.c_str(),
+                              o.parent == pm::kMap ? "a task" : ("a loose object of " + o.parent).c_str());
+        else if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s  (frame %s_frame, parent %s)\nDouble-click to look at it", o.name.c_str(),
                               o.name.c_str(), o.parent == pm::kMap ? "map" : (o.parent + "_frame").c_str());
 
@@ -1690,7 +2046,9 @@ void PriorMapEditor::drawObjects() {
                                       : i == 0 ? "x (m)"
                                       : i == 1 ? "y (m)"
                                                : "z (m)",
-                                      o.parent == pm::kMap ? "the map" : (o.parent + "_frame").c_str());
+                                      o.parent == pm::kMap ? (course_ ? "the world" : "the map")
+                                      : course_            ? (o.parent + "'s frame").c_str()
+                                                           : (o.parent + "_frame").c_str());
                 if (entered && std::isfinite(value) && value != *field[i]) {
                     record();
                     *field[i] = i == 3 ? pm::wrapDegrees(value) : value;
@@ -1730,7 +2088,10 @@ void PriorMapEditor::drawInspector() {
     };
     ImGui::SetNextItemWidth(
         std::max(ui(100), ImGui::GetContentRegionAvail().x - checkboxWidth("Locked") - checkboxWidth("Hidden")));
-    if (ImGui::InputText("##name", renameField_, sizeof(renameField_), ImGuiInputTextFlags_EnterReturnsTrue)) {
+    if (course_) { // the scenario's names are the tasks' and their frames'
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(o->name.c_str());
+    } else if (ImGui::InputText("##name", renameField_, sizeof(renameField_), ImGuiInputTextFlags_EnterReturnsTrue)) {
         record();
         std::string error;
         if (pm::rename(doc_.objects, selected_, renameField_, &error)) {
@@ -1742,7 +2103,7 @@ void PriorMapEditor::drawInspector() {
             messageError_ = !error.empty();
         }
     }
-    if (ImGui::IsItemHovered())
+    if (ImGui::IsItemHovered() && !course_)
         ImGui::SetTooltip("Rename (Enter); children are re-parented to the new name");
     ImGui::SameLine();
     if (ImGui::Checkbox("Locked", &o->locked))
@@ -1752,10 +2113,11 @@ void PriorMapEditor::drawInspector() {
         saveState();
 
     // The parent, then the pose: the file stores it relative to the parent; a child also shows where that puts it.
-    section("Parent");
+    // (A Sim course task is in the world; a loose object rides on its task.)
+    section(course_ ? (o->parent == pm::kMap ? "Task" : ("Loose object of " + o->parent).c_str()) : "Parent");
     ImGui::SetNextItemWidth(std::min(ui(220), ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Parent").x -
                                                   ImGui::GetStyle().ItemInnerSpacing.x));
-    if (ImGui::BeginCombo("Parent", o->parent.c_str())) {
+    if (!course_ && ImGui::BeginCombo("Parent", o->parent.c_str())) {
         const auto below = pm::descendants(doc_.objects, o->name);
         std::vector<std::string> options{pm::kMap};
         for (const auto &c : doc_.objects)
@@ -1776,7 +2138,7 @@ void PriorMapEditor::drawInspector() {
             }
         ImGui::EndCombo();
     }
-    if (ImGui::IsItemHovered())
+    if (!course_ && ImGui::IsItemHovered())
         ImGui::SetTooltip("Re-parenting keeps the prop where it is in the pool");
 
     // x / y / z / yaw fields in a row; `apply` writes `values` back (one undo step per field activated).
@@ -1805,10 +2167,17 @@ void PriorMapEditor::drawInspector() {
     };
 
     const bool child = o->parent != pm::kMap;
-    section(child ? ("Stored: relative to " + o->parent + "_frame").c_str() : "Pose in the map (as stored)");
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip(child ? "What config.yaml holds for this prop: its pose in its parent's frame"
-                                : "What config.yaml holds: the parent is the map, so this is the map pose");
+    if (course_) {
+        section(child ? ("In " + o->parent + "'s frame").c_str() : "Placement in the world");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(child ? "What the scenario's task_frames holds: the object's pose on its task"
+                                    : "What the scenario's task_placements holds: the task's world pose");
+    } else {
+        section(child ? ("Stored: relative to " + o->parent + "_frame").c_str() : "Pose in the map (as stored)");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(child ? "What config.yaml holds for this prop: its pose in its parent's frame"
+                                    : "What config.yaml holds: the parent is the map, so this is the map pose");
+    }
     double rel[4] = {o->pose.x, o->pose.y, o->pose.z, o->pose.yaw};
     ImGui::PushID("relative");
     fieldRow(rel, "%.2f", [&] { o->pose = {rel[0], rel[1], rel[2], pm::wrapDegrees(rel[3])}; });
@@ -1816,9 +2185,10 @@ void PriorMapEditor::drawInspector() {
 
     const auto mp = poses.at(o->name);
     if (child) { // where the parent's pose and this one put it: editable too (the stored pose follows)
-        section("Resulting map position");
+        section(course_ ? "Resulting world position" : "Resulting map position");
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Where the prop ends up in the map: its parents' poses and its own combined");
+            ImGui::SetTooltip(course_ ? "Where the object ends up in the world: its task's placement and its own"
+                                      : "Where the prop ends up in the map: its parents' poses and its own combined");
         double inMap[4] = {mp.x, mp.y, mp.z, mp.yaw};
         ImGui::PushID("map");
         fieldRow(inMap, "%.2f",
@@ -1830,28 +2200,30 @@ void PriorMapEditor::drawInspector() {
     ImGui::TextDisabled("In the pool: x %.2f  y %.2f  yaw %.1f  (%.2f m deep)", inPool.x, inPool.y, inPool.yaw,
                         pool_.waterLevel - worldOf(mp)[3].z);
 
-    // Config flags and covariance, as the mapping node reads them.
-    section("Config");
-    if (ImGui::Checkbox("lock_orientation_to_config", &o->lockOrientation)) {
-        dirty_ = true;
+    // Config flags and covariance, as the mapping node reads them (the Sim course has none of these).
+    if (!course_) {
+        section("Config");
+        if (ImGui::Checkbox("lock_orientation_to_config", &o->lockOrientation)) {
+            dirty_ = true;
+        }
+        if (ImGui::IsItemActivated())
+            record();
+        if (ImGui::Checkbox("point_yaw_at_parent", &o->pointYawAtParent))
+            dirty_ = true;
+        char cls[64];
+        std::snprintf(cls, sizeof(cls), "%s", o->cls.c_str());
+        ImGui::SetNextItemWidth(ui(150));
+        if (ImGui::InputTextWithHint("class", "none", cls, sizeof(cls), ImGuiInputTextFlags_EnterReturnsTrue)) {
+            record();
+            o->cls = cls;
+            changed();
+        }
+        double cov[4] = {o->covar.x, o->covar.y, o->covar.z, o->covar.yaw};
+        ImGui::TextDisabled("Covariance");
+        ImGui::PushID("covar");
+        fieldRow(cov, "%.3f", [&] { o->covar = {cov[0], cov[1], cov[2], cov[3]}; });
+        ImGui::PopID();
     }
-    if (ImGui::IsItemActivated())
-        record();
-    if (ImGui::Checkbox("point_yaw_at_parent", &o->pointYawAtParent))
-        dirty_ = true;
-    char cls[64];
-    std::snprintf(cls, sizeof(cls), "%s", o->cls.c_str());
-    ImGui::SetNextItemWidth(ui(150));
-    if (ImGui::InputTextWithHint("class", "none", cls, sizeof(cls), ImGuiInputTextFlags_EnterReturnsTrue)) {
-        record();
-        o->cls = cls;
-        changed();
-    }
-    double cov[4] = {o->covar.x, o->covar.y, o->covar.z, o->covar.yaw};
-    ImGui::TextDisabled("Covariance");
-    ImGui::PushID("covar");
-    fieldRow(cov, "%.3f", [&] { o->covar = {cov[0], cov[1], cov[2], cov[3]}; });
-    ImGui::PopID();
 
     // Swap with another prop (e.g. the two gate sides), classes (fire / blood).
     section("Swap");
@@ -1883,17 +2255,25 @@ void PriorMapEditor::drawInspector() {
                 messageError_ = true;
             }
         }
-        sameLineIfFits(buttonWidth("Swap classes"));
-        const auto *b = pm::find(doc_.objects, names[std::size_t(other)]);
-        ImGui::BeginDisabled(o->cls.empty() || !b || b->cls.empty());
-        if (ImGui::Button("Swap classes")) {
-            record();
-            pm::swapClasses(doc_.objects, selected_, names[std::size_t(other)]);
-            changed();
+        if (!course_) { // the Sim course's classes are its options
+            sameLineIfFits(buttonWidth("Swap classes"));
+            const auto *b = pm::find(doc_.objects, names[std::size_t(other)]);
+            ImGui::BeginDisabled(o->cls.empty() || !b || b->cls.empty());
+            if (ImGui::Button("Swap classes")) {
+                record();
+                pm::swapClasses(doc_.objects, selected_, names[std::size_t(other)]);
+                changed();
+            }
+            ImGui::EndDisabled();
         }
-        ImGui::EndDisabled();
     }
 
+    if (course_) { // a scenario's tasks and objects are its own: nothing to add or delete
+        ImGui::Spacing();
+        if (ImGui::Button("Deselect (Esc)"))
+            selected_.clear();
+        return;
+    }
     section("Object");
     if (ImGui::Button("Add child")) {
         record();
@@ -2037,6 +2417,108 @@ void PriorMapEditor::drawOriginInspector() {
 
     ImGui::Spacing();
     ImGui::TextDisabled("Select a prop in the list or the view to edit it.");
+}
+
+// The Sim course's bar: the scenario, save (it restarts the simulator) / discard, undo / redo and the copy.
+void PriorMapEditor::drawCourseBar() {
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(courseLabel_.c_str());
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", courseScenario_.empty() ? "No scenario pack found to save into"
+                                                        : (courseScenario_ / "scenario.yaml").c_str());
+
+    pushActiveColors(dirty_);
+    ImGui::BeginDisabled(!dirty_ || savingCourse_ || courseScenario_.empty());
+    if (ImGui::Button(savingCourse_ ? "Saving...###course_save"
+                      : dirty_      ? "Save*###course_save"
+                                    : "Save###course_save"))
+        saveCourse();
+    ImGui::EndDisabled();
+    popActiveColors();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Write the moved tasks, loose objects and options into the scenario (comments kept, "
+                          "checked first)\nand restart the simulator on it (Ctrl+S)");
+    sameLineIfFits(buttonWidth("Discard"));
+    ImGui::BeginDisabled(!dirty_);
+    if (ImGui::Button("Discard")) { // back to the course as last saved (one undo step)
+        record();
+        doc_.objects = savedCourse_;
+        options_ = savedOptions_;
+        dirty_ = false;
+        if (!selected_.empty() && !pm::find(doc_.objects, selected_))
+            selected_.clear();
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Put everything back as the scenario has it (Ctrl+Z brings the edits back)");
+
+    ImGui::BeginDisabled(undo_.empty());
+    if (ImGui::Button("Undo"))
+        undo();
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Ctrl+Z");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(redo_.empty());
+    if (ImGui::Button("Redo"))
+        redo();
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Ctrl+Shift+Z");
+    sameLineIfFits(buttonWidth("Copy from the robot's map"));
+    ImGui::BeginDisabled(links_.tasks.empty() || other_.doc.text.empty());
+    if (ImGui::Button("Copy from the robot's map"))
+        copyFromOtherLayer();
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip(links_.tasks.empty()      ? "No links: the host config's prior_map.course_links names each "
+                                                      "task's prop"
+                          : other_.doc.text.empty() ? "Open the robot's prior map first"
+                                                    : "Put the linked tasks, their loose objects and classes where "
+                                                      "the robot's map has them (one undo step)");
+
+    if (!message_.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, messageError_ ? palette().error : palette().muted);
+        ImGui::TextWrapped("%s", message_.c_str());
+        ImGui::PopStyleColor();
+    }
+}
+
+// The Sim course's inspector when nothing is selected: what it is, and the scenario's fixed options.
+void PriorMapEditor::drawCourseInspector() {
+    sectionTitle("Sim course");
+    ImGui::TextWrapped("What the simulator runs: the scenario's task placements, the tasks' loose objects and the "
+                       "options below. The robot's map is drawn translucent for reference.");
+    if (!options_.empty()) {
+        sectionTitle("Options");
+        // the names in a column with each choice filling the rest of its row; in a narrow panel, each name above
+        float names = 0;
+        for (const auto &option : options_)
+            names = std::max(names, ImGui::CalcTextSize(option.key.c_str()).x + ImGui::GetStyle().ItemSpacing.x);
+        const bool column = names + ui(110) <= ImGui::GetContentRegionAvail().x;
+        for (auto &option : options_) {
+            int current = 0;
+            for (std::size_t i = 0; i < option.choices.size(); ++i)
+                if (option.choices[i] == option.value)
+                    current = int(i);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(option.key.c_str());
+            if (column)
+                ImGui::SameLine(names);
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::BeginCombo(("##" + option.key).c_str(), option.value.c_str())) {
+                for (std::size_t i = 0; i < option.choices.size(); ++i)
+                    if (ImGui::Selectable(option.choices[i].c_str(), int(i) == current) && int(i) != current) {
+                        record();
+                        option.value = option.choices[i];
+                        changed();
+                    }
+                ImGui::EndCombo();
+            }
+        }
+    }
+    ImGui::Spacing();
+    ImGui::TextDisabled("Select a task or loose object in the list or the view to move it.");
 }
 
 } // namespace nereus::ros_viewer::host

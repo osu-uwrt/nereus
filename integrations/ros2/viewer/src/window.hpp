@@ -45,6 +45,8 @@ class Window {
     bool customTitleBar() const {
         return custom_;
     }
+    // The X11 window id (what another program's dialog attaches to); 0 off X11.
+    unsigned long x11Id() const;
 
     // Window-manager move / resize from the current pointer position, as when dragging a system title bar or
     // border. Edge: 0 top-left, 1 top, 2 top-right, 3 right, 4 bottom-right, 5 bottom, 6 bottom-left, 7 left.

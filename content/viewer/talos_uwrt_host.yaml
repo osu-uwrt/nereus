@@ -78,6 +78,10 @@ mapping_markers:
 # not the installed one, so saves reach the robot's next build). --prior-map FILE overrides it.
 prior_map:
   config: ~/osu-uwrt/release/src/riptide_perception/riptide_mapping/config/config.yaml
+  # Edit map's copy buttons between the robot's map and the Sim course: the prop at each task's origin. A task's
+  # loose objects match props of the same name, and a prop's class sets the `<prop>_class` option.
+  course_links: {gate: gate, torpedo: torpedo, slalom: slalom_parent, bins: bin, table: table, surface: octagon}
+  floating: [surface]   # the octagon floats on the water: its height is never copied
 
 # PointCloud2 layers (Vision panel; off until enabled, subscribed only while on). Topics are relative to the
 # robot namespace; the simulator bridge publishes the camera clouds on the ZED driver's topics.

@@ -1,4 +1,4 @@
-// Scenario pack discovery for View > Pool, and running the Python pack resolver on one.
+// Scenario pack discovery for View > Pool, and running the Python pack tools (resolve, set-course) on one.
 #include "scenario_packs.hpp"
 #include <algorithm>
 #include <array>
@@ -54,6 +54,7 @@ std::vector<ScenarioPack> scenarioPacks(const fs::path &scenarios) {
             const auto scenario = YAML::LoadFile(file.string());
             ScenarioPack pack;
             pack.folder = entry.path();
+            pack.scenarioId = scenario["id"].as<std::string>("");
             const auto poolDir = entry.path() / scenario["pool"].as<std::string>();
             const auto pool = YAML::LoadFile((poolDir / "pool.yaml").string());
             pack.poolId = pool["id"].as<std::string>(poolDir.filename().string());
@@ -76,17 +77,9 @@ std::vector<ScenarioPack> scenarioPacks(const fs::path &scenarios) {
     return packs;
 }
 
-std::string resolveScenarioPack(const fs::path &folder) {
-    const fs::path root = packContent().parent_path().parent_path(); // <source>/content/packs
-    if (root.empty())
-        throw std::runtime_error("this viewer was built without the pack content folder");
-
-    // The project's virtualenv Python when present.
-    const fs::path venv = root / ".venv/bin/python";
-    std::error_code error;
-    const std::string python = fs::exists(venv, error) ? venv.string() : "python3";
-
-    // A unique temporary file for the resolver's output (mkstemp creates it; the resolver overwrites it).
+namespace {
+// A unique temporary file (mkstemp creates it; the caller writes or overwrites it, then removes it).
+fs::path temporaryFile(const char *what) {
     std::array<char, 64> name{};
     std::snprintf(name.data(), name.size(), "nereus_viewer_%d_XXXXXX", int(getpid()));
     const std::string pattern = (fs::temp_directory_path() / name.data()).string();
@@ -94,36 +87,53 @@ std::string resolveScenarioPack(const fs::path &folder) {
     path.push_back('\0');
     const int fd = mkstemp(path.data());
     if (fd < 0)
-        throw std::runtime_error("cannot create a temporary file for the resolved scenario");
+        throw std::runtime_error(std::string("cannot create a temporary file for ") + what);
     close(fd);
-    const fs::path out(path.data());
+    return path.data();
+}
 
-    // cd <source> && PYTHONPATH=<source>/python/src[:existing] python -m nereus.packs resolve <folder> -o <out>
+// cd <source> && PYTHONPATH=<source>/python/src[:existing] python -m nereus.packs <arguments> (the project's
+// virtualenv Python when present). Throws with the tools' last non-empty line of output when they fail.
+void runPackTools(const std::string &arguments) {
+    const fs::path root = packContent().parent_path().parent_path(); // <source>/content/packs
+    if (root.empty())
+        throw std::runtime_error("this viewer was built without the pack content folder");
+    const fs::path venv = root / ".venv/bin/python";
+    std::error_code error;
+    const std::string python = fs::exists(venv, error) ? venv.string() : "python3";
     const char *existing = std::getenv("PYTHONPATH");
-    const std::string command =
-        "cd " + quoted(root.string()) +
-        " && PYTHONPATH=" + quoted((root / "python/src").string() + (existing ? std::string(":") + existing : "")) +
-        " " + quoted(python) + " -m nereus.packs resolve " + quoted(folder.string()) + " -o " + quoted(out.string()) +
-        " 2>&1";
+    const std::string command = "cd " + quoted(root.string()) + " && PYTHONPATH=" +
+                                quoted((root / "python/src").string() + (existing ? std::string(":") + existing : "")) +
+                                " " + quoted(python) + " -m nereus.packs " + arguments + " 2>&1";
 
-    // Run it, keeping the combined output; on failure report its last non-empty line.
     std::string output;
-    if (FILE *pipe = popen(command.c_str(), "r")) {
-        std::array<char, 512> buffer{};
-        while (std::fgets(buffer.data(), int(buffer.size()), pipe))
-            output += buffer.data();
-        const int status = pclose(pipe);
-        if (status != 0) {
-            fs::remove(out, error);
-            std::string last;
-            std::istringstream lines(output);
-            for (std::string line; std::getline(lines, line);)
-                if (!line.empty())
-                    last = line;
-            throw std::runtime_error(last.empty() ? "the pack resolver failed" : last);
-        }
-    } else
-        throw std::runtime_error("cannot run the pack resolver");
+    FILE *pipe = popen(command.c_str(), "r");
+    if (!pipe)
+        throw std::runtime_error("cannot run the pack tools");
+    std::array<char, 512> buffer{};
+    while (std::fgets(buffer.data(), int(buffer.size()), pipe))
+        output += buffer.data();
+    if (pclose(pipe) != 0) {
+        // the last line with text (a problem is indented under its "INVALID" / "NOT SAVED" heading)
+        std::string last;
+        std::istringstream lines(output);
+        for (std::string line; std::getline(lines, line);)
+            if (const auto start = line.find_first_not_of(" \t"); start != std::string::npos)
+                last = line.substr(start);
+        throw std::runtime_error(last.empty() ? "the pack tools failed" : last);
+    }
+}
+} // namespace
+
+std::string resolveScenarioPack(const fs::path &folder) {
+    const fs::path out = temporaryFile("the resolved scenario");
+    std::error_code error;
+    try {
+        runPackTools("resolve " + quoted(folder.string()) + " -o " + quoted(out.string()));
+    } catch (const std::runtime_error &) {
+        fs::remove(out, error);
+        throw;
+    }
 
     // Read the resolved JSON and remove the temporary file.
     std::ifstream in(out);
@@ -133,5 +143,18 @@ std::string resolveScenarioPack(const fs::path &folder) {
     if (text.str().empty())
         throw std::runtime_error("the pack resolver wrote nothing");
     return text.str();
+}
+
+void setScenarioCourse(const fs::path &folder, const std::string &edit) {
+    const fs::path course = temporaryFile("the course edit");
+    std::error_code error;
+    try {
+        std::ofstream(course) << edit;
+        runPackTools("set-course " + quoted(folder.string()) + " --course " + quoted(course.string()));
+    } catch (const std::runtime_error &) {
+        fs::remove(course, error);
+        throw;
+    }
+    fs::remove(course, error);
 }
 } // namespace nereus::ros_viewer::host

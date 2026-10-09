@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import os
 import tempfile
 from collections import Counter
@@ -12,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import _bindings as bindings
 from . import _semantics as semantics
 from ._definitions import schema_problems
 from ._document import (
@@ -39,6 +41,7 @@ def _includes(document: PackDocument, data: dict[str, Any], hashes: dict[Path, s
     """Load and check every task include of a tasks pack."""
     problems: list[str] = []
     asset_ids = {item["id"] for item in data.get("assets", [])}
+    options = {item["key"]: item for item in data["run_options"]}
     for relative in data["tasks"]:
         target = semantics.inside(document.root, relative)
         if target is None:
@@ -54,7 +57,7 @@ def _includes(document: PackDocument, data: dict[str, Any], hashes: dict[Path, s
         if include.kind != "task":
             problems.append(f"{include.path}: task include must declare kind 'task'")
             continue
-        problems += _prefixed(include.path, semantics.task(include.plain(), asset_ids))
+        problems += _prefixed(include.path, semantics.task(include.plain(), asset_ids, options))
         document.includes.append(include)
 
     semantics.duplicates((item.plain()["id"] for item in document.includes), "task", problems)
@@ -274,6 +277,43 @@ def _override_thrusters(data: dict[str, Any], robot: dict[str, Any]) -> list[str
     return [f"/thruster_overrides: overridden robot {problem}" for problem in result]
 
 
+def _move_task_frames(data: dict[str, Any], definitions: list[dict[str, Any]]) -> list[str]:
+    """Apply the scenario's ``task_frames`` to the task definitions in place; problems of the entries.
+
+    Only a frame that carries a rigid_body prop (a loose object) moves; the rest of a task is its built geometry.
+    """
+    problems: list[str] = []
+    tasks = {task["id"]: task for task in definitions}
+    seen: set[tuple[str, str]] = set()
+    for index, entry in enumerate(data.get("task_frames", [])):
+        where = f"/task_frames/{index}"
+        task = tasks.get(entry["task"])
+        if task is None:
+            problems.append(f"{where}/task: unknown task '{entry['task']}'")
+            continue
+        loose = {
+            prop["parameters"]["frame"] for prop in task["props"] if prop["type"] == "rigid_body"
+        }
+        if entry["frame"] not in loose:
+            problems.append(
+                f"{where}/frame: '{entry['frame']}' is not a loose object of task '{entry['task']}' "
+                f"(one of {sorted(loose)})"
+            )
+            continue
+        if (entry["task"], entry["frame"]) in seen:
+            problems.append(f"{where}: {entry['task']}/{entry['frame']} is moved twice")
+            continue
+        seen.add((entry["task"], entry["frame"]))
+
+        # Upright: yaw about the task's +Z
+        half = math.radians(float(entry["yaw_deg"])) / 2
+        for frame in task["frames"]:
+            if frame["id"] == entry["frame"]:
+                frame["position_m"] = [float(value) for value in entry["position_m"]]
+                frame["orientation_wxyz"] = [math.cos(half), 0.0, 0.0, math.sin(half)]
+    return problems
+
+
 def resolve_scenario(path: Path) -> ResolvedScenario:
     """Load a scenario and every selected pack and validate their cross-references."""
     hashes: dict[Path, str] = {}
@@ -321,6 +361,12 @@ def resolve_scenario(path: Path) -> ResolvedScenario:
     )
     problems += _prefixed(scenario.path, scenario_problems)
     problems += _prefixed(scenario.path, semantics.scenario_pool(data, documents["pool"].plain()))
+    if problems:
+        raise PackError(problems)
+
+    # Values bound to fixed run options take the scenario's choices; loose objects go where the scenario puts them
+    definitions = [bindings.apply(item, options) for item in definitions]
+    problems += _prefixed(scenario.path, _move_task_frames(data, definitions))
     if problems:
         raise PackError(problems)
 

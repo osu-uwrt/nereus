@@ -1015,7 +1015,14 @@
           "$ref": "common.schema.json#/$defs/quaternion"
         },
         "texture": {
-          "$ref": "common.schema.json#/$defs/name"
+          "anyOf": [
+            {
+              "$ref": "common.schema.json#/$defs/name"
+            },
+            {
+              "$ref": "common.schema.json#/$defs/option_binding"
+            }
+          ]
         },
         "material": {
           "enum": [
@@ -1060,7 +1067,7 @@
         "orientation_wxyz"
       ],
       "additionalProperties": false,
-      "description": "Rigid mesh placement: the asset id is drawn in its authored coordinates, offset by position_m (m) and orientation_wxyz in the named frame of the owning pack. Optional texture is the id of a PNG asset of the same pack that replaces the diffuse texture of the mesh's textured submeshes (of every submesh when none is textured) for this placement only."
+      "description": "Rigid mesh placement: the asset id is drawn in its authored coordinates, offset by position_m (m) and orientation_wxyz in the named frame of the owning pack. Optional texture is the id of a PNG asset of the same pack that replaces the diffuse texture of the mesh's textured submeshes (of every submesh when none is textured) for this placement only. In a task file the texture may be bound to a fixed run option (option_binding); robot visuals take an id."
     },
     "static_body": {
       "type": "object",
@@ -1440,8 +1447,15 @@
           "description": "Task frame of the crate; local z = 0 is the interior floor."
         },
         "class": {
-          "$ref": "common.schema.json#/$defs/name",
-          "description": "Class label emitted with landings (the scoring rules give it meaning)."
+          "anyOf": [
+            {
+              "$ref": "common.schema.json#/$defs/name"
+            },
+            {
+              "$ref": "common.schema.json#/$defs/option_binding"
+            }
+          ],
+          "description": "Class label emitted with landings (the scoring rules give it meaning). May be bound to a fixed run option (option_binding)."
         },
         "outer_width_m": {
           "type": "number",
