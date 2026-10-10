@@ -7,6 +7,7 @@
 #include "nereus/ros_viewer/plots/plots.hpp"
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <tuple>
@@ -27,10 +28,17 @@ void numericText(const char *text, bool available = true) {
         ImGui::TextDisabled("%s", text);
 }
 
+// A value to two decimals; one that rounds to zero is "0.00", never "-0.00".
+void twoDecimals(char (&text)[64], float value) {
+    std::snprintf(text, sizeof(text), "%.2f", value);
+    if (text[0] == '-' && std::strspn(text + 1, "0.") == std::strlen(text + 1))
+        std::memmove(text, text + 1, std::strlen(text));
+}
+
 // A value to two decimals, or "--" when unavailable (the name argument is unused).
 void numericValue(const char *, float value, bool available) {
     char text[64];
-    std::snprintf(text, sizeof(text), "%.2f", value);
+    twoDecimals(text, value);
     numericText(available ? text : "--", available);
 }
 
@@ -45,7 +53,7 @@ bool targetInput(float *value) {
     if (!editing) {
         ImGui::PopStyleColor();
         char text[64];
-        std::snprintf(text, sizeof(text), "%.2f", *value);
+        twoDecimals(text, *value);
         const auto lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
         const auto padding = ImGui::GetStyle().FramePadding;
         auto *draw = ImGui::GetWindowDrawList();
