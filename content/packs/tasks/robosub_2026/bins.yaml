@@ -43,7 +43,7 @@ props:
       position_m: [0, 0, 0]
       orientation_wxyz: [0.9238795325112867, 0.0, -0.3826834323650898, 0.0]
       material: emissive
-      radiance: 200.0
+      radiance: 40.0   # the ffc model finds the red ring at 0.7-4.6 m; at 200 bloom merges it within ~1.1 m
       indicator: {region: magnet_target1, color_rgb: {red: [1.0, 0.001, 0.002], green: [0.002, 1.0, 0.004]}}
     - {asset: magnet_housing_mesh, frame: magnet_target2, position_m: [0, 0, 0], orientation_wxyz: [0.9238795325112867, 0.0, -0.3826834323650898, 0.0]}
     - {asset: magnet_cover_mesh, frame: magnet_target2, position_m: [0, 0, 0], orientation_wxyz: [0.9238795325112867, 0.0, -0.3826834323650898, 0.0], material: clear}
@@ -52,7 +52,7 @@ props:
       position_m: [0, 0, 0]
       orientation_wxyz: [0.9238795325112867, 0.0, -0.3826834323650898, 0.0]
       material: emissive
-      radiance: 200.0
+      radiance: 40.0
       indicator: {region: magnet_target2, color_rgb: {red: [1.0, 0.001, 0.002], green: [0.002, 1.0, 0.004]}}
 
 regions:

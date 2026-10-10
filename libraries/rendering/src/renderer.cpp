@@ -15,8 +15,10 @@
 #include <map>
 #include <png.h>
 #include <stdexcept>
+#include <string>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 namespace nereus::rendering {
 namespace {
@@ -547,19 +549,23 @@ struct Target {
     }
 };
 
+// Bloom levels: level 0 is quarter size, each further level half the one before (see Resources::render).
+constexpr int kBloomLevels = 5;
+
 // All per-view render targets: opaque pass, composite (opaque + water + overlays), tone-mapped final,
-// and two quarter-size ping-pong bloom targets.
+// and a pair of ping-pong targets per bloom level.
 struct Frame {
     Target opaque, composite, final;
-    std::array<Target, 2> bloom;
+    std::array<std::array<Target, 2>, kBloomLevels> bloom;
     int samples = 1; // supersampling: the scene passes (opaque, composite) are samples x final's size
 
     void resize(int w, int h, int n) {
         opaque.resize(n * w, n * h);
         composite.resize(n * w, n * h);
         final.resize(w, h, false);
-        for (auto &b : bloom)
-            b.resize(std::max(1, w / 4), std::max(1, h / 4));
+        for (int k = 0; k < kBloomLevels; ++k)
+            for (auto &b : bloom[k])
+                b.resize(std::max(1, w / (4 << k)), std::max(1, h / (4 << k)));
         samples = n;
     }
 
@@ -568,8 +574,17 @@ struct Frame {
         opaque.swap(o.opaque);
         composite.swap(o.composite);
         final.swap(o.final);
-        bloom[0].swap(o.bloom[0]);
-        bloom[1].swap(o.bloom[1]);
+        for (int k = 0; k < kBloomLevels; ++k)
+            for (int i = 0; i < 2; ++i)
+                bloom[k][i].swap(o.bloom[k][i]);
+    }
+
+    std::vector<Target *> targets() {
+        std::vector<Target *> all{&opaque, &composite, &final};
+        for (auto &level : bloom)
+            for (auto &b : level)
+                all.push_back(&b);
+        return all;
     }
 };
 
@@ -809,9 +824,12 @@ struct Renderer::Resources {
             entry.second.vao = entry.second.vbo = 0;
         pointBuffers.clear();
         pointDraws.clear();
-        for (auto *target :
-             {&f.opaque, &f.composite, &f.final, &f.bloom[0], &f.bloom[1], &preview.opaque, &preview.composite,
-              &preview.final, &preview.bloom[0], &preview.bloom[1], &shadow, &reflection, &depthSample})
+        std::vector<Target *> targets = f.targets();
+        for (auto *target : preview.targets())
+            targets.push_back(target);
+        for (auto *target : {&shadow, &reflection, &depthSample})
+            targets.push_back(target);
+        for (auto *target : targets)
             target->fbo = target->color = target->depth = 0;
         const auto forget = [](auto &meshes) {
             for (auto &mesh : meshes) {
@@ -1146,31 +1164,36 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
         glDisable(GL_PROGRAM_POINT_SIZE);
     }
 
-    // Filter the HDR bright pass before tone mapping. A continuous low-resolution
-    // blur avoids the replicated bars produced by sparse full-resolution rings.
+    // Filter the HDR bright pass before tone mapping, as a chain of blurred levels at halving resolutions
+    // (each about twice as wide as the one before) that the post pass weights into one exponential falloff.
     // The bright pass taps are one output pixel apart (with supersampling each bilinear tap then averages
     // part of a pixel's block; at 2x exactly its 2x2 samples), so the bloom does not shrink with the factor.
     glDisable(GL_DEPTH_TEST);
     glUseProgram(bloomProgram);
     integer(bloomProgram, "source", 0);
     glBindVertexArray(quad);
-    glViewport(0, 0, f.bloom[0].width, f.bloom[0].height);
-    if (!look.bloom) { // the post pass still samples the bloom target: give it black
-        glBindFramebuffer(GL_FRAMEBUFFER, f.bloom[0].fbo);
-        glClearColor(0, 0, 0, 0);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
-    // Pass 0: bright extract into bloom[0]; 1: horizontal blur into bloom[1]; 2: vertical blur back into bloom[0].
-    for (int pass = 0; pass < (look.bloom ? 3 : 0); ++pass) {
-        glBindFramebuffer(GL_FRAMEBUFFER, f.bloom[pass % 2].fbo);
-        integer(bloomProgram, "extractBright", pass == 0);
-        bindTexture(pass == 0 ? f.composite.color : f.bloom[(pass - 1) % 2].color, 0);
-        glUniform2f(glGetUniformLocation(bloomProgram, "stepSize"),
-                    pass == 0 ? 1.f / static_cast<float>(f.final.width)
-                              : (pass == 1 ? 1.f / static_cast<float>(f.bloom[0].width) : 0.f),
-                    pass == 0 ? 1.f / static_cast<float>(f.final.height)
-                              : (pass == 2 ? 1.f / static_cast<float>(f.bloom[0].height) : 0.f));
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+    for (int k = 0; k < kBloomLevels; ++k) {
+        auto &level = f.bloom[k];
+        glViewport(0, 0, level[0].width, level[0].height);
+        if (!look.bloom) { // the post pass still samples every level: give it black
+            glBindFramebuffer(GL_FRAMEBUFFER, level[0].fbo);
+            glClearColor(0, 0, 0, 0);
+            glClear(GL_COLOR_BUFFER_BIT);
+            continue;
+        }
+        // Pass 0: bright extract (level 0) or downsample of the level before into level[0]; 1: horizontal
+        // blur into level[1]; 2: vertical blur back into level[0].
+        for (int pass = 0; pass < 3; ++pass) {
+            glBindFramebuffer(GL_FRAMEBUFFER, level[pass % 2].fbo);
+            const Target &source = pass > 0 ? level[(pass - 1) % 2] : (k == 0 ? f.composite : f.bloom[k - 1][0]);
+            integer(bloomProgram, "mode", pass > 0 ? 1 : (k == 0 ? 0 : 2));
+            bindTexture(source.color, 0);
+            const Target &texels = pass == 0 ? (k == 0 ? f.final : source) : level[0];
+            glUniform2f(glGetUniformLocation(bloomProgram, "stepSize"),
+                        pass == 2 ? 0.f : 1.f / static_cast<float>(texels.width),
+                        pass == 1 ? 0.f : 1.f / static_cast<float>(texels.height));
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
     }
 
     // Post pass: supersample resolve, glare, bloom and tone mapping into the output-sized final target.
@@ -1181,8 +1204,10 @@ void Renderer::Resources::render(const InternalView &camera, const Look &look, f
     uniform(postProgram, "exposure", look.exposure);
     bindTexture(f.composite.color, 0);
     bindTexture(f.composite.depth, 1);
-    bindTexture(f.bloom[0].color, 2);
-    integer(postProgram, "bloomColor", 2);
+    for (int k = 0; k < kBloomLevels; ++k) {
+        bindTexture(f.bloom[k][0].color, 2 + k);
+        integer(postProgram, ("bloom" + std::to_string(k)).c_str(), 2 + k);
+    }
     integer(postProgram, "sceneDepth", 1);
     uniform(postProgram, "inverseViewProjection", glm::inverse(camera.projection * camera.view));
     uniform(postProgram, "eye", camera.eye);

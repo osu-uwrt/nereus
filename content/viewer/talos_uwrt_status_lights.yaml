@@ -12,14 +12,14 @@ lights:
     target_mask: 2  # ALU board; accepts TARGET_ALU and TARGET_ALL
     pose: [-0.181, 0.1573, 0.094, 0, 0, 0]
     size: [0.012, 0.055, 0.003]
-    radiance: 240  # Four times the task magnet LEDs; drives stronger HDR bloom.
+    radiance: 120  # Four times the task magnet LEDs; drives stronger HDR bloom.
   - id: port_hull_middle
     target_mask: 2
     pose: [-0.143, 0.1573, 0.094, 0, 0, 0]
     size: [0.012, 0.055, 0.003]
-    radiance: 240
+    radiance: 120
   - id: port_hull_fore
     target_mask: 2
     pose: [-0.105, 0.1573, 0.094, 0, 0, 0]
     size: [0.012, 0.055, 0.003]
-    radiance: 240
+    radiance: 120

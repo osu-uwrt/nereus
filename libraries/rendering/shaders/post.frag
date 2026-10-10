@@ -3,7 +3,9 @@
 // from the HDR composite to the 8-bit output.
 in vec2 uv;
 out vec4 frag;
-uniform sampler2D sceneColor,sceneDepth,bloomColor;
+uniform sampler2D sceneColor,sceneDepth;
+// Bloom levels, each about twice as wide as the one before (sigma about 7, 16, 33, 67, 134 output pixels).
+uniform sampler2D bloom0,bloom1,bloom2,bloom3,bloom4;
 uniform mat4 inverseViewProjection;
 uniform vec3 eye,sunDirection;
 uniform float glare;
@@ -50,8 +52,12 @@ void main(){
     c+=vec3(1.,.87,.60)*glare*sky*(pow(alignment,1800.)*18.+pow(alignment,90.)*.25);
   }
   // Camera bloom applies to full-brightness LEDs indoors too. HDR emission
-  // spreads beyond each package without changing geometry, projection or depth.
-  c+=texture(bloomColor,uv).rgb*(.60+.48*glare);
+  // spreads beyond each package without changing geometry, projection or depth. Level 0 alone is the tight
+  // core; on top of it an exponential halo of the same energy, exp(-r / 12 px), as a light seen through
+  // water: level weights .0841, .7109, .2004, .0046 (sum 1), a least-squares fit of that falloff.
+  vec3 bloom=texture(bloom0,uv).rgb*1.0841+texture(bloom1,uv).rgb*.7109+texture(bloom2,uv).rgb*.2004+
+             texture(bloom3,uv).rgb*.0046+texture(bloom4,uv).rgb*0.;
+  c+=bloom*(.60+.48*glare);
 
   // Exposure, ACES filmic tone-mapping curve (Narkowicz fit), then gamma 2.2 encoding.
   c*=exposure;
