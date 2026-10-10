@@ -30,6 +30,17 @@ void drawPlannedPath(const std::vector<glm::mat4> &, const glm::mat4 &viewProjec
 void drawThrust(const std::vector<ThrusterMount> &, const std::vector<float> &forces, const glm::mat4 &body,
                 float metersPerNewton, const glm::mat4 &viewProjection, const ScreenRect &);
 
+// What drawCovariances draws: mapping's estimates as covariance ellipsoids, each its `sigmas` surface drawn as the
+// three principal ellipses, labeled with the object and its horizontal 1-sigma spread. `font` must be set.
+struct CovarianceOverlay {
+    const std::vector<RosSide::MappingEstimate> *estimates = nullptr;
+    float sigmas = 2;
+    bool labels = true;
+    ImFont *font = nullptr;
+};
+
+void drawCovariances(const CovarianceOverlay &, const glm::mat4 &viewProjection, const ScreenRect &);
+
 // What drawTfAxes draws: the snapshot's frames as RGB axes (meters long), optional names, and a caption.
 // `font` must be set (it is dereferenced).
 struct TfOverlay {

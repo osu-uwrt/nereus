@@ -1,7 +1,10 @@
-// Screen-space overlays (detections, MPC and planned paths, thrust arrows, TF axes) and the TF tree table.
+// Screen-space overlays (detections, MPC and planned paths, thrust arrows, mapping covariance, TF axes) and the TF
+// tree table.
 #include "overlay_draw.hpp"
+#include "covariance_ellipsoid.hpp"
 #include "nereus/ros_viewer/theme.hpp"
 #include <algorithm>
+#include <cstdio>
 #include <imgui_internal.h>
 
 namespace nereus::ros_viewer::host {
@@ -175,6 +178,45 @@ void drawPlannedPath(const std::vector<glm::mat4> &path, const glm::mat4 &vp, co
         ImVec2 end;
         if (projectToScreen(vp, rect, path.back()[3], end))
             draw->AddCircle(end, 5.f, line, 0, 1.5f);
+    }
+    draw->PopClipRect();
+}
+
+void drawCovariances(const CovarianceOverlay &overlay, const glm::mat4 &vp, const ScreenRect &rect) {
+    if (!overlay.estimates)
+        return;
+    auto *draw = ImGui::GetWindowDrawList();
+    draw->PushClipRect(rect.position, {rect.position.x + rect.width, rect.position.y + rect.height}, true);
+    const ImU32 line = IM_COL32(200, 150, 255, 210), text = IM_COL32(255, 255, 255, 255);
+    constexpr int kSegments = 48;
+    for (const auto &estimate : *overlay.estimates) {
+        // The ellipses in the planes of the largest-middle, largest-smallest and middle-smallest axes
+        const auto axes = principalAxes(estimate.covariance);
+        for (const auto &[i, j] : {std::pair{0, 1}, std::pair{0, 2}, std::pair{1, 2}}) {
+            if (glm::length(axes.axis[i]) < 1e-4f) // a point: nothing to draw
+                continue;
+            const auto points = ellipsePoints(estimate.position, axes, i, j, overlay.sigmas, kSegments);
+            ImVec2 previous;
+            bool previousVisible = false;
+            for (const auto &point : points) {
+                ImVec2 pixel;
+                const bool visible = projectToScreen(vp, rect, glm::vec4(point, 1), pixel);
+                if (visible && previousVisible)
+                    draw->AddLine(previous, pixel, line, 1.25f);
+                previous = pixel;
+                previousVisible = visible;
+            }
+        }
+        ImVec2 center;
+        if (overlay.labels && overlay.font && projectToScreen(vp, rect, glm::vec4(estimate.position, 1), center)) {
+            char label[160];
+            const float cm = horizontalSigma(estimate.covariance) * 100.f;
+            std::snprintf(label, sizeof(label), cm < 10 ? "%s  \xC2\xB1%.1f cm" : "%s  \xC2\xB1%.0f cm",
+                          estimate.object.c_str(), cm);
+            const ImVec2 at(center.x + 5, center.y - overlay.font->FontSize - 3);
+            draw->AddText(overlay.font, overlay.font->FontSize, {at.x + 1, at.y + 1}, IM_COL32(0, 0, 0, 255), label);
+            draw->AddText(overlay.font, overlay.font->FontSize, at, text, label);
+        }
     }
     draw->PopClipRect();
 }

@@ -99,6 +99,7 @@ topics:
   projectiles: simulator/projectiles
   detections: yolo_orientation/visualization_marker_array
   mpc_path: controller/mpc/predicted_path
+  mapping: mapping  # riptide_mapping2 publishes mapping/<object> (PoseWithCovarianceStamped)
   planned_path: controller/mpc/planned_path   # whole follow_path plan, drawn with the MPC path toggle
   thruster_forces: thruster_forces   # commanded forces (controller); the Thrust toggle draws them
 
@@ -106,6 +107,12 @@ topics:
 thrust_arrows:
   enabled: false            # on at start (CLI: --thrust)
   meters_per_newton: 0.05   # arrow length; full thrust (28 N) is 1.4 m
+
+# Mapping's estimates as covariance ellipsoids (topics.mapping/<object>), placed through TF like the mapping course.
+mapping_covariance:
+  enabled: false            # on at start (CLI: --covariance)
+  sigmas: 2                 # ellipsoid size: 1, 2 or 3 sigma
+  show: targets             # targets: what mapping is fusing now (state/mapping); all: every object
 
 # Camera card names by robot-pack sensor id; sensors without an entry are titled by index and id.
 cameras:
