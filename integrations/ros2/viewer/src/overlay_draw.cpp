@@ -202,7 +202,7 @@ void drawCovariances(const CovarianceOverlay &overlay, const glm::mat4 &vp, cons
                 ImVec2 pixel;
                 const bool visible = projectToScreen(vp, rect, glm::vec4(point, 1), pixel);
                 if (visible && previousVisible)
-                    draw->AddLine(previous, pixel, line, 1.25f);
+                    draw->AddLine(previous, pixel, line, overlay.lineWidth);
                 previous = pixel;
                 previousVisible = visible;
             }

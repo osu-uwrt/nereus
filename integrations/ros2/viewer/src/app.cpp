@@ -688,6 +688,7 @@ class App {
     // Mapping covariance overlay: the ellipsoid size in sigmas, targets only (when mapping says which) or all
     bool showCovariance_ = false, covarianceAll_ = false, covarianceLabels_ = true;
     int covarianceSigmas_ = 2;
+    float covarianceLineWidth_ = 2; // pixels
     bool showTf_ = false, tfNames_ = true, tfTreeOpen_ = false, detections_ = false, showMpc_ = false,
          showThrust_ = false, demoMode_ = false;
     float thrustScale_ = .05f; // arrow meters per newton (host yaml thrust_arrows.meters_per_newton)
@@ -805,6 +806,9 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     showCovariance_ = opt_.covariance || lookup(config_, {"mapping_covariance", "enabled"}).as<bool>(false);
     covarianceSigmas_ = std::clamp(lookup(config_, {"mapping_covariance", "sigmas"}).as<int>(2), 1, 3);
     covarianceAll_ = lookup(config_, {"mapping_covariance", "show"}).as<std::string>("targets") == "all";
+    covarianceLineWidth_ = lookup(config_, {"mapping_covariance", "line_width"}).as<float>(2);
+    if (!std::isfinite(covarianceLineWidth_) || covarianceLineWidth_ <= 0)
+        throw std::runtime_error("mapping_covariance.line_width must be positive");
     showThrust_ = opt_.thrust || lookup(config_, {"thrust_arrows", "enabled"}).as<bool>(false);
     thrustScale_ = lookup(config_, {"thrust_arrows", "meters_per_newton"}).as<float>(.05f);
     if (!std::isfinite(thrustScale_) || thrustScale_ <= 0)
@@ -3006,6 +3010,8 @@ void App::drawCovarianceSettings() {
     ImGui::SetNextItemWidth(ui(170));
     if (pins::Combo("Ellipsoid", &sigmas, "1 sigma\0" "2 sigma\0" "3 sigma\0"))
         covarianceSigmas_ = sigmas + 1;
+    ImGui::SetNextItemWidth(ui(170));
+    ImGui::SliderFloat("Line width", &covarianceLineWidth_, .5f, 6.f, "%.1f px");
     int show = covarianceAll_ ? 1 : 0;
     ImGui::SetNextItemWidth(ui(170));
     if (pins::Combo("Objects", &show, "Mapping targets\0" "All\0"))
@@ -4728,6 +4734,7 @@ void App::drawPoolView(double time, float dt) {
         CovarianceOverlay overlay;
         overlay.estimates = &shown;
         overlay.sigmas = float(covarianceSigmas_);
+        overlay.lineWidth = covarianceLineWidth_;
         overlay.labels = covarianceLabels_;
         overlay.font = window_->small;
         drawCovariances(overlay, vp, rect);

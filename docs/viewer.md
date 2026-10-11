@@ -43,7 +43,7 @@ preview) by thin dividers. **Focus** jumps to the vehicle, a mechanism (Claw,
 Payloads) or a course element; **Follow** keeps the camera on the robot. **Labels** names course elements; **TF**
 draws frame axes (its arrow opens the TF frames window: names, axis length, the frame tree); **MPC path** draws the
 MPC's predicted path; **Covariance** draws mapping's estimates (`mapping/<object>`) as covariance ellipsoids
-placed through TF, each labeled with its horizontal 1-sigma spread (its arrow: 1, 2 or 3 sigma, mapping's current
+placed through TF, each labeled with its horizontal 1-sigma spread (its arrow: 1, 2 or 3 sigma, line width, mapping's current
 targets or every object, labels; host yaml `mapping_covariance`); **Thrust** draws the commanded thruster forces (`thruster_forces`) as red arrows from each
 thruster along its axis, like RViz's thruster wrenches (0.05 m per newton; nothing while the controller is not
 publishing). The same toggles are in the **View** menu.

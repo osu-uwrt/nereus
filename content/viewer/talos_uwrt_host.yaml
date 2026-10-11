@@ -112,6 +112,7 @@ thrust_arrows:
 mapping_covariance:
   enabled: false            # on at start (CLI: --covariance)
   sigmas: 2                 # ellipsoid size: 1, 2 or 3 sigma
+  line_width: 2.0           # ellipse line width in pixels (the overlay menu has a slider)
   show: targets             # targets: what mapping is fusing now (state/mapping); all: every object
 
 # Camera card names by robot-pack sensor id; sensors without an entry are titled by index and id.

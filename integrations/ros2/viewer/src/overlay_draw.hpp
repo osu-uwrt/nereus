@@ -35,6 +35,7 @@ void drawThrust(const std::vector<ThrusterMount> &, const std::vector<float> &fo
 struct CovarianceOverlay {
     const std::vector<RosSide::MappingEstimate> *estimates = nullptr;
     float sigmas = 2;
+    float lineWidth = 2; // pixels
     bool labels = true;
     ImFont *font = nullptr;
 };
