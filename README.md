@@ -23,7 +23,8 @@ Tested on Ubuntu 22.04 with ROS 2 Humble.
 ```sh
 # System libraries
 sudo apt install cmake g++ libeigen3-dev libyaml-cpp-dev nlohmann-json3-dev libgtest-dev \
-  libbullet-dev libassimp-dev libglfw3-dev libglew-dev libegl-dev libpng-dev libjpeg-dev libopencv-dev
+  libbullet-dev libassimp-dev libglfw3-dev libglew-dev libegl-dev libpng-dev libjpeg-dev libopencv-dev \
+  libfontconfig1-dev
 # uv, once per machine (manages the Python environment)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
