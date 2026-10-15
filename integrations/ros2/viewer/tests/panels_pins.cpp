@@ -162,8 +162,33 @@ int main() {
     pins::requestCensus();
     assert(pins::needsDrawing("panel.a"));
     (void)mode;
+    for (int i = 0; i < 3; ++i) // the census done
+        frame();
+
+    // Default pins: pinned unless the operator unpins one (declined, kept in the ini), applied again after a layout
+    // loads, and all back on reset. A pin whose control never drew (its window is not here) has no toolbar copy:
+    // the first copy is the next pin's.
+    pins::clear();
+    pins::setDefaults({"panel.b/missing", "panel.a/fire"});
+    assert((pins::pinnedKeys() == std::vector<std::string>{"panel.b/missing", "panel.a/fire"}));
+    const int beforeDefault = fired;
+    clickFirstPinned();
+    assert(fired == beforeDefault + 1);
+    pins::setPinned("panel.a/fire", false);
+    const std::string declinedIni = ImGui::SaveIniSettingsToMemory();
+    assert(declinedIni.find("[NereusPinDefaults][Declined]\npanel.a/fire\n") != std::string::npos);
+    pins::setDefaults({"panel.b/missing", "panel.a/fire"});
+    assert((pins::pinnedKeys() == std::vector<std::string>{"panel.b/missing"}));
+    ImGui::LoadIniSettingsFromMemory(declinedIni.c_str(), declinedIni.size());
+    assert((pins::pinnedKeys() == std::vector<std::string>{"panel.b/missing"}));
+    pins::reset();
+    assert((pins::pinnedKeys() == std::vector<std::string>{"panel.b/missing", "panel.a/fire"}));
+    assert(std::string(ImGui::SaveIniSettingsToMemory()).find("[NereusPinDefaults][Declined]\n\n") !=
+           std::string::npos);             // none declined
+    pins::setPinned("panel.a/fire", true); // pinning a declined default again is no longer declining it
+    pins::setDefaults({});
 
     ImGui::DestroyContext();
-    std::cout
-        << "PASS: pinned buttons, checkboxes, scoped keys, disabled state, off-screen panels, ini, search index\n";
+    std::cout << "PASS: pinned buttons, checkboxes, scoped keys, disabled state, off-screen panels, ini, search "
+                 "index, default pins\n";
 }

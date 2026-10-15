@@ -177,6 +177,32 @@ int main(int argc, char **argv) {
     const auto &q = ang.back().setpoint_quat;
     assert(std::abs(glm::dot(expectedQuat, glm::quat(q.w, q.x, q.y, q.z))) > 1 - 1e-5);
 
+    // A mapping calibration moves world -> map (here to (3, -2), unrotated): the command stays where the controller
+    // has it, at world (5, 4, -2); its map-frame pose (table, gizmo, ghost) follows as a new revision, and a drag from
+    // that pose goes out unchanged.
+    const auto revision = control->state().revision;
+    world.transform.translation.x = 3;
+    world.transform.translation.y = -2;
+    world.transform.rotation.z = 0;
+    world.transform.rotation.w = 1;
+    staticTf.sendTransform(world);
+    spin(.3);
+    const auto moved = control->state().commanded;
+    assert(control->state().revision > revision);
+    assert(std::abs(moved[3].x - 2) < 1e-4 && std::abs(moved[3].y - 6) < 1e-4 && std::abs(moved[3].z + 2) < 1e-4);
+    assert(std::abs(glm::dot(expectedQuat, glm::normalize(glm::quat_cast(moved)))) > 1 - 1e-5);
+    const auto ghost = targetTf.lookupTransform("world", "ghost/base_link", tf2::TimePointZero);
+    assert(std::abs(ghost.transform.translation.x - 5) < 1e-4 && std::abs(ghost.transform.translation.y - 4) < 1e-4);
+    control->drag(moved);
+    spin(.1);
+    assert(std::abs(lin.back().setpoint_vect.x - 5) < 1e-4 && std::abs(lin.back().setpoint_vect.y - 4) < 1e-4);
+    world.transform.translation.x = 10; // back to the first calibration for the rest
+    world.transform.translation.y = 0;
+    world.transform.rotation.w = world.transform.rotation.z = std::sqrt(.5);
+    staticTf.sendTransform(world);
+    spin(.3);
+    assert(std::abs(control->state().commanded[3].x - target[3].x) < 1e-4);
+
     // Each rotation handle changes its named Euler angle, preserving the others.
     for (int i = 0; i < 3; ++i) {
         auto edited = targetAngles;

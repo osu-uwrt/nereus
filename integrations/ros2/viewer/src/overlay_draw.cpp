@@ -293,7 +293,7 @@ void drawTfAxes(const TfOverlay &tf, const glm::mat4 &vp, const ScreenRect &rect
     draw->PopClipRect();
 }
 
-void drawTfTree(TfTree &tree, const std::string &root) {
+void drawTfTree(TfTree &tree, const std::string &root, float below) {
     // Bulk toggles above the table.
     if (ImGui::Button("Show all"))
         tree.selectAll(true);
@@ -301,11 +301,13 @@ void drawTfTree(TfTree &tree, const std::string &root) {
     if (ImGui::Button("Hide all"))
         tree.selectAll(false);
     ImGui::TextDisabled("Only this: one frame. With children: the frame and all descendants.");
-    ImGui::BeginChild("TF frame tree", {620, 320}, ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
+    const ImVec2 available = ImGui::GetContentRegionAvail(), minimum = ui(ImVec2(420, 240));
+    ImGui::BeginChild("TF frame tree", {std::max(minimum.x, available.x), std::max(minimum.y, available.y - below)},
+                      ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
     if (ImGui::BeginTable("TF visibility", 3, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) {
         ImGui::TableSetupColumn("Frame", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Only this", ImGuiTableColumnFlags_WidthFixed, 76);
-        ImGui::TableSetupColumn("With children", ImGuiTableColumnFlags_WidthFixed, 112);
+        ImGui::TableSetupColumn("Only this", ImGuiTableColumnFlags_WidthFixed, ui(76));
+        ImGui::TableSetupColumn("With children", ImGuiTableColumnFlags_WidthFixed, ui(112));
         ImGui::TableHeadersRow();
 
         // One row per frame, recursing into children while the node is open; `visited` guards against cycles.

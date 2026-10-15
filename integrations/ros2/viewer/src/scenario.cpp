@@ -119,7 +119,8 @@ Scenario parseScenario(const std::string &json, const YAML::Node &config, const 
     s.baseId = robot["reference_frame"].as<std::string>("base_link");
     for (const auto &item : s.bridge["frame_names"])
         s.frameNames[item.first.as<std::string>()] = item.second.as<std::string>();
-    s.mapFrame = s.frameNames.count("world") ? s.frameNames["world"] : scenario["world_frame"].as<std::string>("map");
+    s.robotFrame = scenario["world_frame"].as<std::string>("map");
+    s.mapFrame = s.frameNames.count("world") ? s.frameNames["world"] : s.robotFrame;
     s.estimateBaseFrame = s.rosFrame(s.baseId);
     // Truth pose: the bridge tf.publish entry driven by the robot reference pose.
     for (const auto &entry : s.bridge["tf"]["publish"])

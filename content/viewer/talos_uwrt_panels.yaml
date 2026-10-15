@@ -210,6 +210,11 @@ toolbar:  # groups: camera | overlays | windows | preview task (separator: a div
   - {id: run, type: run, provider: run, options: {profile: task}}
   - {id: separator_task, type: separator}
   - {type: preview_task}
+# Controls pinned to the toolbar by default (the window's scope / the control): pinned unless the operator unpins
+# them (the layout remembers), and Reset toolbar brings them back. A tool this composition lacks (the simulator's,
+# on a real robot) is skipped.
+pins:
+  - tool.simulation/Sync sim
 # Command bar (always visible, whatever the window layout), right-aligned beside the pose-source pill; the motion
 # panel's Enable / KILL is pinned at its left. Toolbar item types (provider-backed
 # ones draw their compact form): robot temperatures, a REC chip per camera while it records, and a BAG chip per

@@ -794,6 +794,22 @@ ui:
     for (int frame = 0; frame < 4; ++frame)
         draw(*composition);
 
+    // Pin the floating scorecard open (its title-bar pin, left of the close box): the clicks below land outside it
+    // and would close it, and its placement is checked after them.
+    for (const auto *window : ImGui::GetCurrentContext()->Windows)
+        if (window->Active && std::string(window->Name).find("###scorecard_") != std::string::npos) {
+            const auto title = window->TitleBarRect();
+            const auto &style = ImGui::GetStyle();
+            io.AddMousePosEvent(title.Max.x - style.FramePadding.x - 1.5f * ImGui::GetFontSize() -
+                                    style.ItemInnerSpacing.x,
+                                title.Min.y + style.FramePadding.y + .5f * ImGui::GetFontSize());
+        }
+    draw(*composition);
+    io.AddMouseButtonEvent(0, true);
+    draw(*composition);
+    io.AddMouseButtonEvent(0, false);
+    draw(*composition);
+
     // Click the Simulation toolbar button.
     const auto anchor = simulationButtonMin;
     const auto bottom = simulationButtonMax.y + ImGui::GetStyle().ItemSpacing.y;

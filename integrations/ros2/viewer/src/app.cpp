@@ -855,6 +855,7 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     defaultOpen_ = {{"map", true}, {"scene_settings", false}, {"display", false}, {"tf", false}, {"help", false}};
     windowStates_.install();
     pins::install();
+    installToolWindows();
     plots::install();
     loadLogo();
     const auto configHome = configDirectory();
@@ -1209,6 +1210,10 @@ void App::loadScenario(const std::string &json) {
         return;
     animateLoadingWhile([&] { // the heavy part: packs, meshes, textures; no ImGui or GL in here
         auto parsed = parseScenario(json, config_, opt_.packDir);
+        // A real robot (only the estimate shown) has no simulator world: draw in the robot's frame, where its tag
+        // calibration puts the course.
+        if (ros_->poseSource() == PoseSource::Estimate)
+            parsed.mapFrame = parsed.robotFrame;
         loadedHash_ = hash;
         // Replace dependents before the scenario they point to.
         model_.reset();
@@ -1329,7 +1334,7 @@ void App::buildPanels() {
     registerHostItems();
     panelRos_.registerFactories(registry_);
 
-    panels::Context context{trimSlashes(scenario_->ns), scenario_->mapFrame, demoMode_, ros_->useSimTime()};
+    panels::Context context{trimSlashes(scenario_->ns), scenario_->robotFrame, demoMode_, ros_->useSimTime()};
     // Panel profile documents carry their scorecard schema under `ui` (run panel and sim.run provider).
     YAML::Node task(YAML::NodeType::Map);
     task["ui"] = YAML::Clone(scenario_->ui);
@@ -1345,6 +1350,7 @@ void App::buildPanels() {
     if (ros_->poseSource() == PoseSource::Estimate)
         dropSimulatorPanels(document); // real robot: no simulator run / rate controls
     composition_ = std::make_unique<panels::Composition>(document, context, registry_);
+    pins::setDefaults(composition_->defaultPins());
     composition_->setWindowMenu([this] { drawWindowsMenu(); });
     composition_->setWindowContextMenu([this](const std::string &id) { windowContextMenu("panel." + id); });
 
@@ -2366,7 +2372,7 @@ void App::toolbarSceneSettings() {
 void App::drawSceneSettingsWindow() {
     if (sceneOpen_) {
         focusIfRequested(kSceneSettings);
-        if (beginToolWindow(kSceneSettings, &sceneOpen_, ui(ImVec2(780, 400)), sceneAnchor_)) {
+        if (beginToolWindow(kSceneSettings, &sceneOpen_, ui(ImVec2(780, 0)), sceneAnchor_)) {
             windowContextMenu("scene_settings");
             pins::beginScope("scene_settings", "Scene settings");
             drawSceneSettings();
@@ -2565,6 +2571,7 @@ void App::toolbarLabels() {
 void App::toolbarTf() {
     if (toggleChipWithMenu("TF", &showTf_, "tf_settings"))
         tfOpen_ = !tfOpen_;
+    markToolWindowButton(&tfOpen_); // the arrow
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("TF frames: names, axis length and the frame tree");
     tfAnchor_ = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y};
@@ -2843,7 +2850,7 @@ void App::drawTfWindow() {
     };
     if (tfOpen_) {
         focusIfRequested(kTfFrames);
-        if (beginToolWindow(kTfFrames, &tfOpen_, ui(ImVec2(420, 520)), tfAnchor_)) {
+        if (beginToolWindow(kTfFrames, &tfOpen_, ui(ImVec2(420, 0)), tfAnchor_)) {
             windowContextMenu("tf");
             tfTreeOpen_ = true;
             pins::beginScope("tf", "TF frames");
@@ -2852,7 +2859,7 @@ void App::drawTfWindow() {
             ImGui::SetNextItemWidth(ui(220));
             ImGui::SliderFloat("Axis length", &tfAxisLength_, .02f, 1.f, "%.2f m");
             ImGui::TextUnformatted("X: red   Y: green   Z: blue");
-            drawTfTree(tfTree_, scenario_->mapFrame);
+            drawTfTree(tfTree_, scenario_->mapFrame, 2 * ImGui::GetTextLineHeightWithSpacing()); // the two lines below
             ImGui::TextDisabled("Axes show through objects. Unavailable frames cannot reach the fixed frame.");
             ImGui::TextDisabled("%s", demoMode_ ? "Preview: robot-pack frames at the preview pose."
                                                 : "Raw ROS TF in the fixed frame, including localization drift.");
@@ -4545,10 +4552,14 @@ void App::drawPoolView(double time, float dt) {
                                {width, viewHeight},
                                hovered && mode_ == 0,
                                bool(glfwGetWindowAttrib(window_->handle(), GLFW_FOCUSED))};
-    // Commands live in the estimate frame; anchored on the truth robot, draw them re-rooted there (offset
-    // sampled at one time for both poses, see RosSide::truthFromEstimate).
-    if (!gizmoOnEstimate_ && haveEstimate_)
-        panelView.displayFromCommand = body_ * glm::inverse(estimateBody_);
+    // Commands live in the panels' frame (the robot's, e.g. map), placed in the view's through TF; anchored on the
+    // truth robot, they are drawn re-rooted there (offset sampled at one time for both poses, see
+    // RosSide::truthFromEstimate).
+    glm::mat4 viewFromRobot(1);
+    if (scenario_ && scenario_->robotFrame != scenario_->mapFrame)
+        ros_->latestInFixed(scenario_->robotFrame, viewFromRobot); // identity until the robot publishes it
+    panelView.displayFromCommand =
+        !gizmoOnEstimate_ && haveEstimate_ ? body_ * glm::inverse(estimateBody_) * viewFromRobot : viewFromRobot;
     const bool operating = workspace_ == Workspace::Operate;
     const bool dragging = operating && composition_ && mode_ == 0 && composition_->input(panelView);
 
@@ -5217,9 +5228,9 @@ void App::rememberDefaults() {
         defaultOpen_.emplace(key, *flag);
 }
 
-// Back to the configured toolbar: its default items, nothing pinned.
+// Back to the configured toolbar: its default items and default pins.
 void App::resetToolbar() {
-    pins::clear();
+    pins::reset();
     for (const auto &[key, flag] : toolbarFlags()) {
         const auto value = defaultOpen_.find(key);
         *flag = value != defaultOpen_.end() && value->second;
@@ -5259,7 +5270,9 @@ void App::pinnedWindowButton(const WindowEntry &entry) {
     ImGui::PushID(entry.key.c_str());
     sameLineIfFits(buttonWidth(entry.label.c_str()));
     pushActiveColors(front);
-    if (ImGui::Button(entry.label.c_str())) {
+    const bool clicked = ImGui::Button(entry.label.c_str());
+    markToolWindowButton(entry.open);
+    if (clicked) {
         if (front)
             *entry.open = false;
         else

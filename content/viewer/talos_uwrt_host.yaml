@@ -31,7 +31,7 @@ thruster_visuals_config: talos_uwrt_thruster_visuals.yaml
 initial_focus: Vehicle
 
 # Vehicle pose source and display smoothing (CLI: --pose-source, --display-delay, --estimate-delay).
-#   source: auto   simulator truth (map -> <namespace>/simulator base link) while it is fresh, else the
+#   source: auto   simulator truth (world -> <namespace>/simulator base link) while it is fresh, else the
 #                  localization estimate (<namespace>/base_link): the same viewer serves a real robot.
 #           truth  always the simulator truth; estimate  always the estimate (also hides simulator-only
 #                  panels and defaults --use-sim-time to false).

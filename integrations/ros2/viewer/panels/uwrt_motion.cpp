@@ -59,13 +59,13 @@ class UwrtMotion final : public RosMotion {
     }
 
   private:
-    // Folds an observed POSITION command (linear or angular half) into value.commanded, so the gizmo
-    // follows setpoints from autonomy as well as our own.
+    // Folds an observed POSITION command (linear or angular half, in the command frame) into the command, so the
+    // gizmo follows setpoints from autonomy as well as our own.
     void observe(const Command &msg, bool lin) {
         if (msg.mode != Command::POSITION)
             return;
         std::lock_guard<std::mutex> lock(mutex);
-        auto world = commandFromFixed * value.commanded;
+        auto world = commandedInCommand;
         if (lin)
             world[3] = glm::vec4(msg.setpoint_vect.x, msg.setpoint_vect.y, msg.setpoint_vect.z, 1);
         else {
@@ -76,9 +76,7 @@ class UwrtMotion final : public RosMotion {
             rotation[3] = world[3];
             world = rotation;
         }
-        value.commanded = glm::inverse(commandFromFixed) * world;
-        value.hasCommand = true;
-        ++value.revision;
+        adoptCommand(world);
     }
 
     // Publishes the pose as a linear (position) + angular (quaternion) command pair in the command frame.

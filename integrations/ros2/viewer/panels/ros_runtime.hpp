@@ -71,6 +71,8 @@ class RosMotion : public Motion {
     // *Locked helpers expect `mutex` held. Kill disables the switch; release only drops manual control.
     void killLocked(const std::string &);
     void releaseLocked(const std::string &);
+    // A new command (mutex held), given in the command frame: kept there, shown in the fixed frame.
+    void adoptCommand(const Pose &inCommand);
     // Called by the adapter when a requestMode() finishes; ignored unless `epoch` is still current.
     void complete(uint64_t epoch, Mode, const Pose &, bool success, const std::string &message);
 
@@ -91,6 +93,11 @@ class RosMotion : public Motion {
     MotionState value;
     // Maps fixed-frame poses into the command frame; refreshed from TF every tick.
     Pose commandFromFixed{1};
+    // The last command where the controller has it (command frame). value.commanded is it seen from the fixed
+    // frame, re-derived every tick, so moving the fixed frame (a mapping calibration) cannot leave stale numbers.
+    Pose commandedInCommand{1};
+    // value.commanded at its last revision; the frames moving it more than 1 cm or 0.5 deg bump the revision.
+    Pose commandedAtRevision{1};
     std::string baseFrame, commandFrame, setpointFrame;
     // Only created when the config names a setpoint_frame.
     std::unique_ptr<tf2_ros::TransformBroadcaster> setpointTf;

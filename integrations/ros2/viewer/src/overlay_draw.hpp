@@ -54,6 +54,8 @@ struct TfOverlay {
 
 void drawTfAxes(const TfOverlay &, const glm::mat4 &viewProjection, const ScreenRect &);
 
-// Frame tree table with tri-state branch selection; `root` is the fixed frame (opened by default).
-void drawTfTree(TfTree &, const std::string &root);
+// Frame tree table with tri-state branch selection; `root` is the fixed frame (opened by default). The table fills
+// the window to its right and bottom edges, less `below` (the height of what the caller draws under it), and never
+// gets smaller than its minimum (it scrolls instead).
+void drawTfTree(TfTree &, const std::string &root, float below);
 } // namespace nereus::ros_viewer::host

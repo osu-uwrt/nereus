@@ -111,8 +111,21 @@ std::string panelWindowName(const std::string &id, const std::string &title) {
 Composition::Composition(const YAML::Node &config, const Context &ctx, const Registry &registry) {
     keys(config,
          {"sidebar_width", "sidebar_width_fraction", "sidebar_visible", "providers", "panels", "toolbar", "header",
-          "overlays", "ownership"},
+          "overlays", "ownership", "pins"},
          "composition");
+
+    // Default toolbar pins: control keys, a window scope then the control ("tool.simulation/Sync sim").
+    if (const auto pins = config["pins"]) {
+        if (!pins.IsSequence())
+            throw std::invalid_argument("composition.pins must be a list of control keys");
+        for (const auto &entry : pins) {
+            const auto key = entry.IsScalar() ? entry.as<std::string>() : std::string();
+            const auto slash = key.find('/');
+            if (slash == std::string::npos || slash == 0 || key.back() == '/')
+                throw std::invalid_argument("composition.pins: '" + key + "' is not a control key (scope/control)");
+            pinDefaults.push_back(key);
+        }
+    }
 
     // Sidebar width: an absolute pixel width or a fraction of the window, not both.
     const bool panelsShown = config["sidebar_visible"].as<bool>(true);
@@ -356,6 +369,21 @@ std::vector<Composition::ToolbarItem> Composition::toolbarItems() {
     for (auto &item : toolbarInstances)
         items.push_back({item.id, item.type, item.configuredTitle, &item.visible});
     return items;
+}
+
+std::vector<std::string> Composition::defaultPins() const {
+    const auto has = [](const std::vector<PanelInstance> &items, const std::string &id) {
+        return std::any_of(items.begin(), items.end(), [&](const PanelInstance &item) { return item.id == id; });
+    };
+    std::vector<std::string> keys;
+    for (const auto &key : pinDefaults) {
+        const auto scope = key.substr(0, key.find('/'));
+        if (scope.rfind("panel.", 0) == 0  ? has(panelInstances, scope.substr(6))
+            : scope.rfind("tool.", 0) == 0 ? has(toolbarInstances, scope.substr(5))
+                                           : true)
+            keys.push_back(key);
+    }
+    return keys;
 }
 
 std::vector<Composition::PanelWindow> Composition::panelWindows() const {

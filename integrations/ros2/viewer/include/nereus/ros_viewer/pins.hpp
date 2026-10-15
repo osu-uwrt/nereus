@@ -5,8 +5,8 @@
 // tab is drawn off screen so its pinned controls keep working.
 #pragma once
 #include <functional>
-#include <initializer_list>
 #include <imgui.h>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -61,17 +61,23 @@ void drawMenu(); // the right-click menu, at top level after all windows
 // Whether a scope has pinned controls but did not draw this frame; drawOffscreen draws it unseen.
 bool needsDrawing(const std::string &scope);
 void drawOffscreen(const std::string &scope, const std::string &title, const std::function<void()> &body);
-// The toolbar's copies of the pinned controls, in pin order.
+// The toolbar's copies of the pinned controls, in pin order; a control not drawn yet this session (its window is
+// not in this composition) has none.
 void drawPinned();
 // For the toolbar's customization popup: a checkbox per pinned control (untick to unpin).
 void drawCustomization();
 // Whether anything is pinned; clear() unpins everything.
 bool any();
 void clear();
+// Default pins (the composition's `pins:`): each is pinned unless the operator unpinned it, which the ini keeps.
+// Applied now and again after every layout load. reset() goes back to them, none unpinned (Reset toolbar).
+void setDefaults(const std::vector<std::string> &keys);
+void reset();
 
 // Pins by key (scope/part/id), for saved layouts and tests.
 std::vector<std::string> pinnedKeys();
 void setPinned(const std::string &key, bool pinned);
-// [Nereus][Pins] in the ImGui ini, so saved layouts carry the pinned controls. Once per ImGui context.
+// [NereusPins] in the ImGui ini, so saved layouts carry the pinned controls, and [NereusPinDefaults] the default
+// pins the operator unpinned. Once per ImGui context.
 void install();
 } // namespace nereus::ros_viewer::pins

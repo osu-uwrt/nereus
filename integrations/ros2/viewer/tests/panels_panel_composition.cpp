@@ -220,6 +220,19 @@ ownership:
   - {id: mine, type: motion, provider: motion}
   - {type: scene_settings, options: {label: x}}
 )";
+
+    // --- default pins: those of this composition's panels and tools, and of the host's windows; malformed keys fail
+    {
+        auto pinned = YAML::Load(toolbarText);
+        pinned["pins"] = YAML::Load("[tool.mine/Go, tool.gone/Go, panel.control/Current, panel.gone/x, display/Water]");
+        Composition c(pinned, ctx, r);
+        assert((c.defaultPins() == std::vector<std::string>{"tool.mine/Go", "panel.control/Current", "display/Water"}));
+        for (const char *key : {"[nope]", "[/x]", "[tool.mine/]", "[{a: b}]", "tool.mine/Go"}) {
+            auto cfg = YAML::Load(toolbarText);
+            cfg["pins"] = YAML::Load(key);
+            fails(cfg);
+        }
+    }
     {
         Composition c(YAML::Load(toolbarText), ctx, r);
         const std::vector<std::string> order{"view", "pm", "mine", "scene_settings"};
