@@ -1,5 +1,6 @@
 // Tool windows (headless ImGui): a floating one closes at a press outside it but not on its toggle button, inside
-// it or while a popup is open; its title-bar pin keeps it open and survives the ini; a docked one stays.
+// it or while a popup is open; its title-bar pin keeps it open and survives the ini; a docked one stays. A floating
+// one is sized to its contents: fitted on opening, grown with them, never shrunk while open, capped at the display.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include <cassert>
 #include <cfloat>
@@ -25,6 +26,8 @@ int main() {
     const char *name = "Display###display", *dockedName = "Docked###docked";
     const ImGuiID dockspace = ImHashStr("test_dockspace");
     bool open = false, docked = true, dockPending = true, openMenu = false;
+    int lines = 1;     // the floating window's contents: lines of text,
+    bool fill = false; // or a box filling the window (at least 420 x 240) above two lines, as the TF frames table
 
     // One viewer frame: the dock space with one docked tool window, the toolbar with the toggle (and a popup
     // when asked), then the floating tool window with a context menu on its title bar.
@@ -58,7 +61,17 @@ int main() {
                 ImGui::TextUnformatted("Pin to toolbar");
                 ImGui::EndPopup();
             }
-            ImGui::TextUnformatted("settings");
+            if (fill) {
+                const ImVec2 available = ImGui::GetContentRegionAvail();
+                const float below = 2 * ImGui::GetTextLineHeightWithSpacing();
+                ImGui::BeginChild("box", {std::max(420.f, available.x), std::max(240.f, available.y - below)},
+                                  ImGuiChildFlags_Borders);
+                ImGui::EndChild();
+                ImGui::TextUnformatted("first line below");
+                ImGui::TextUnformatted("second line below");
+            } else
+                for (int i = 0; i < lines; ++i)
+                    ImGui::Text("setting %d", i);
             ImGui::End();
         }
         ImGui::Render();
@@ -140,6 +153,73 @@ int main() {
     click(pin);
     click(outside);
     assert(!open && docked);
+
+    // Opening fits the contents; growing contents grow it; shrinking ones leave it while open; the next opening fits.
+    const auto fitsAll = [&] { return window()->ScrollMax.y == 0; };
+    const auto settle = [&] {
+        for (int i = 0; i < 3; ++i)
+            frame();
+    };
+    lines = 10;
+    click(toggle);
+    settle();
+    assert(open && fitsAll());
+    const float ten = window()->Size.y;
+    lines = 25;
+    settle();
+    assert(fitsAll() && window()->Size.y > ten);
+    const float grown = window()->Size.y;
+    lines = 3;
+    settle();
+    assert(window()->Size.y == grown);
+    click(toggle);
+    assert(!open);
+    click(toggle);
+    settle();
+    assert(open && fitsAll() && window()->Size.y < ten);
+
+    // The operator's resize holds until the contents grow.
+    lines = 12;
+    settle();
+    ImGui::SetWindowSize(name, {300, 120});
+    settle();
+    assert(std::abs(window()->Size.y - 120) < 1 && !fitsAll());
+    lines = 20;
+    settle();
+    assert(fitsAll() && window()->Size.y > 120);
+
+    // Contents taller than the display: the window stops at the work area (12 px margins) and scrolls.
+    lines = 400;
+    settle();
+    assert(window()->Size.y <= io.DisplaySize.y - 24 + 1 && window()->Pos.y >= 12 - 1 && !fitsAll());
+    assert(docked && ImGui::FindWindowByName(dockedName)->DockIsActive);
+
+    // A box filling the window: the window keeps what the operator sets, larger (the box fills it exactly, no
+    // scrolling) or smaller (it scrolls), without growing on its own; opened again it fits the box's minimum.
+    const auto extent = [&] { return window()->Size; };
+    const auto near = [](ImVec2 a, ImVec2 b) { return std::abs(a.x - b.x) < 1 && std::abs(a.y - b.y) < 1; };
+    click(toggle);
+    fill = true;
+    click(toggle);
+    settle();
+    const ImVec2 first = extent();
+    settle();
+    assert(open && fitsAll() && near(extent(), first));
+    ImGui::SetWindowSize(name, {640, 520});
+    settle();
+    settle();
+    assert(near(extent(), {640, 520}) && fitsAll());
+    ImGui::SetWindowSize(name, {300, 150});
+    settle();
+    settle();
+    assert(near(extent(), {300, 150}) && !fitsAll());
+    click(toggle);
+    click(toggle);
+    settle();
+    const ImVec2 minimum = extent();
+    assert(fitsAll() && minimum.x >= 420 && minimum.x < 500 && minimum.y >= 240 && minimum.y < 360);
+    settle();
+    assert(near(extent(), minimum));
 
     ImGui::DestroyContext();
     std::cout << "panels_tool_window: ok\n";

@@ -6,6 +6,7 @@
 #include <imgui_internal.h>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace nereus::ros_viewer {
@@ -33,6 +34,36 @@ std::set<std::string> &keptOpen() {
 std::string windowKey(const char *name) {
     const char *id = std::strstr(name, "###");
     return id ? id + 3 : name;
+}
+
+// Each tool window's fitted size last frame, to tell contents that grew from the operator resizing it.
+std::unordered_map<ImGuiID, ImVec2> &fits() {
+    static std::unordered_map<ImGuiID, ImVec2> sizes;
+    return sizes;
+}
+
+// Sizes a floating tool window to its contents (last frame's, within the size limits set just before), before its
+// Begin: when it opens, its height fits them and its width grows to them; while open it grows as they grow (a tab,
+// an expanded tree) but never shrinks, so the operator can still resize it.
+void fitContents(const char *name) {
+    ImGuiWindow *window = ImGui::FindWindowByName(name);
+    if (!window || window->DockIsActive || window->Collapsed)
+        return;
+    const ImVec2 fit = ImGui::CalcWindowNextAutoFitSize(window);
+    auto &known = fits();
+    const auto last = known.find(window->ID);
+    ImVec2 target = window->SizeFull;
+    if (!window->WasActive || last == known.end()) // opening
+        target = {std::max(target.x, fit.x), fit.y};
+    else {
+        if (fit.x > last->second.x + .5f)
+            target.x = std::max(target.x, fit.x);
+        if (fit.y > last->second.y + .5f)
+            target.y = std::max(target.y, fit.y);
+    }
+    known[window->ID] = fit;
+    if (std::abs(target.x - window->SizeFull.x) >= 1 || std::abs(target.y - window->SizeFull.y) >= 1)
+        ImGui::SetNextWindowSize(target); // only on a change: setting it every frame would stop manual resizing
 }
 
 // Whether `at` is on a button that toggles this window (drawn this frame or the last).
@@ -140,13 +171,15 @@ bool beginToolWindow(const char *name, bool *open, ImVec2 size, ImVec2 anchor, b
     const ImVec2 available(std::max(1.f, viewport->WorkSize.x - 2 * margin),
                            std::max(1.f, viewport->WorkSize.y - 2 * margin));
 
-    // First-use size and position (clamped so the window starts fully on screen), then size limits.
+    // First-use width and position (clamped so the window starts fully on screen), size limits (never past the
+    // work area), then the height (and any wider width) from the contents.
     const float width = std::min(size.x, available.x);
-    ImGui::SetNextWindowSize({width, std::min(size.y, available.y)}, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize({width, 0}, ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos({std::clamp(anchor.x, low.x, low.x + std::max(0.f, available.x - width)),
                              std::clamp(anchor.y, low.y, low.y + std::max(0.f, available.y - ui(120)))},
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSizeConstraints({std::min(ui(240), available.x), std::min(ui(100), available.y)}, available);
+    fitContents(name);
     if (focus) {
         ImGui::SetNextWindowFocus();
         ImGui::SetNextWindowCollapsed(false);

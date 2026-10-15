@@ -79,10 +79,12 @@ inline bool windowToggle(const char *label, bool *open) {
 }
 
 // A dockable tool window opened from a toolbar button or the Windows menu. The first time it opens it floats
-// under the button that opened it (anchor, in screen coordinates) at `size` (height 0: fit the contents once);
-// afterwards the operator places it (float, dock, tab) and the layout remembers. A floating window is kept
-// inside the application window and closes at a click anywhere outside it, unless the pin in its title bar keeps
-// it open; a docked one stays until closed. Call End() whatever this returns, as with ImGui::Begin.
+// under the button that opened it (anchor, in screen coordinates), `size.x` wide (size.y is unused); afterwards
+// the operator places it (float, dock, tab) and the layout remembers. A floating window is kept inside the
+// application window and sized to show all its contents as far as the window allows: each time it opens its height
+// fits them (its width grows to them), and while open it grows with them but is never shrunk under the operator. It
+// closes at a click anywhere outside it, unless the pin in its title bar keeps it open; a docked one stays until
+// closed. Call End() whatever this returns, as with ImGui::Begin.
 bool beginToolWindow(const char *name, bool *open, ImVec2 size, ImVec2 anchor, bool focus = false);
 
 // Registers the ini handler that keeps the tool windows' pins ([NereusToolWindows]), so a saved layout carries

@@ -2358,7 +2358,7 @@ void App::toolbarSceneSettings() {
 void App::drawSceneSettingsWindow() {
     if (sceneOpen_) {
         focusIfRequested(kSceneSettings);
-        if (beginToolWindow(kSceneSettings, &sceneOpen_, ui(ImVec2(780, 400)), sceneAnchor_)) {
+        if (beginToolWindow(kSceneSettings, &sceneOpen_, ui(ImVec2(780, 0)), sceneAnchor_)) {
             windowContextMenu("scene_settings");
             pins::beginScope("scene_settings", "Scene settings");
             drawSceneSettings();
@@ -2836,7 +2836,7 @@ void App::drawTfWindow() {
     };
     if (tfOpen_) {
         focusIfRequested(kTfFrames);
-        if (beginToolWindow(kTfFrames, &tfOpen_, ui(ImVec2(420, 520)), tfAnchor_)) {
+        if (beginToolWindow(kTfFrames, &tfOpen_, ui(ImVec2(420, 0)), tfAnchor_)) {
             windowContextMenu("tf");
             tfTreeOpen_ = true;
             pins::beginScope("tf", "TF frames");
@@ -2845,7 +2845,7 @@ void App::drawTfWindow() {
             ImGui::SetNextItemWidth(ui(220));
             ImGui::SliderFloat("Axis length", &tfAxisLength_, .02f, 1.f, "%.2f m");
             ImGui::TextUnformatted("X: red   Y: green   Z: blue");
-            drawTfTree(tfTree_, scenario_->mapFrame);
+            drawTfTree(tfTree_, scenario_->mapFrame, 2 * ImGui::GetTextLineHeightWithSpacing()); // the two lines below
             ImGui::TextDisabled("Axes show through objects. Unavailable frames cannot reach the fixed frame.");
             ImGui::TextDisabled("%s", demoMode_ ? "Preview: robot-pack frames at the preview pose."
                                                 : "Raw ROS TF in the fixed frame, including localization drift.");
