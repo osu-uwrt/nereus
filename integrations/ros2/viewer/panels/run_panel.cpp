@@ -92,8 +92,12 @@ class RunPanel final : public Panel {
         ImGui::AlignTextToFramePadding();
         ImGui::TextColored(palette().muted, "points");
 
-        if (showDetails && pins::Button("Detailed scorecard", {-1, ui(36)}))
-            details = focusDetails = true;
+        if (showDetails) {
+            const bool clicked = pins::Button("Detailed scorecard", {-1, ui(36)});
+            nereus::ros_viewer::markToolWindowButton(&details);
+            if (clicked)
+                details = focusDetails = true;
+        }
 
         // Run options (bool / number / choice) are editable only while no run is in progress.
         ImGui::BeginDisabled(!run || !s.fresh || !enabled);

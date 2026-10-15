@@ -61,12 +61,18 @@ inline bool toggleChipWithMenu(const char *label, bool *value, const char *menuI
     return menu;
 }
 
+// Records the item just drawn as a button that toggles the tool window `open` belongs to. A click on it is that
+// button's to handle, so it is not a click outside the window (which would close it, and the button's release
+// would open it again).
+void markToolWindowButton(const bool *open);
+
 // A toolbar button that shows/hides a tool window; filled while the window is open.
 inline bool windowToggle(const char *label, bool *open) {
     sameLineIfFits(buttonWidth(label));
     pushActiveColors(*open);
     const bool clicked = ImGui::Button(label);
     popActiveColors();
+    markToolWindowButton(open);
     if (clicked)
         *open = !*open;
     return clicked;
@@ -75,36 +81,11 @@ inline bool windowToggle(const char *label, bool *open) {
 // A dockable tool window opened from a toolbar button or the Windows menu. The first time it opens it floats
 // under the button that opened it (anchor, in screen coordinates) at `size` (height 0: fit the contents once);
 // afterwards the operator places it (float, dock, tab) and the layout remembers. A floating window is kept
-// inside the application window. Call End() whatever this returns, as with ImGui::Begin.
-inline bool beginToolWindow(const char *name, bool *open, ImVec2 size, ImVec2 anchor, bool focus = false) {
-    // The usable area: the main viewport's work area inset by a margin (at least 1 px each way).
-    const float margin = ui(12);
-    const auto *viewport = ImGui::GetMainViewport();
-    const ImVec2 low(viewport->WorkPos.x + margin, viewport->WorkPos.y + margin);
-    const ImVec2 available(std::max(1.f, viewport->WorkSize.x - 2 * margin),
-                           std::max(1.f, viewport->WorkSize.y - 2 * margin));
+// inside the application window and closes at a click anywhere outside it, unless the pin in its title bar keeps
+// it open; a docked one stays until closed. Call End() whatever this returns, as with ImGui::Begin.
+bool beginToolWindow(const char *name, bool *open, ImVec2 size, ImVec2 anchor, bool focus = false);
 
-    // First-use size and position (clamped so the window starts fully on screen), then size limits.
-    const float width = std::min(size.x, available.x);
-    ImGui::SetNextWindowSize({width, std::min(size.y, available.y)}, ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos({std::clamp(anchor.x, low.x, low.x + std::max(0.f, available.x - width)),
-                             std::clamp(anchor.y, low.y, low.y + std::max(0.f, available.y - ui(120)))},
-                            ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSizeConstraints({std::min(ui(240), available.x), std::min(ui(100), available.y)}, available);
-    if (focus) {
-        ImGui::SetNextWindowFocus();
-        ImGui::SetNextWindowCollapsed(false);
-    }
-    const bool visible = ImGui::Begin(name, open);
-
-    // Pull a floating window back inside the work area if it was dragged (or resized) past an edge.
-    if (!ImGui::IsWindowDocked() && !ImGui::IsWindowAppearing()) {
-        const auto pos = ImGui::GetWindowPos(), extent = ImGui::GetWindowSize();
-        const ImVec2 clamped(std::clamp(pos.x, low.x, low.x + std::max(0.f, available.x - extent.x)),
-                             std::clamp(pos.y, low.y, low.y + std::max(0.f, available.y - extent.y)));
-        if (clamped.x != pos.x || clamped.y != pos.y)
-            ImGui::SetWindowPos(clamped);
-    }
-    return visible;
-}
+// Registers the ini handler that keeps the tool windows' pins ([NereusToolWindows]), so a saved layout carries
+// them. Once per ImGui context.
+void installToolWindows();
 } // namespace nereus::ros_viewer

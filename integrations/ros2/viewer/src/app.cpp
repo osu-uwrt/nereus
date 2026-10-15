@@ -843,6 +843,7 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     defaultOpen_ = {{"map", true}, {"scene_settings", false}, {"display", false}, {"tf", false}, {"help", false}};
     windowStates_.install();
     pins::install();
+    installToolWindows();
     plots::install();
     loadLogo();
     const auto configHome = configDirectory();
@@ -2556,6 +2557,7 @@ void App::toolbarLabels() {
 void App::toolbarTf() {
     if (toggleChipWithMenu("TF", &showTf_, "tf_settings"))
         tfOpen_ = !tfOpen_;
+    markToolWindowButton(&tfOpen_); // the arrow
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("TF frames: names, axis length and the frame tree");
     tfAnchor_ = {ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y};
@@ -5201,7 +5203,9 @@ void App::pinnedWindowButton(const WindowEntry &entry) {
     ImGui::PushID(entry.key.c_str());
     sameLineIfFits(buttonWidth(entry.label.c_str()));
     pushActiveColors(front);
-    if (ImGui::Button(entry.label.c_str())) {
+    const bool clicked = ImGui::Button(entry.label.c_str());
+    markToolWindowButton(entry.open);
+    if (clicked) {
         if (front)
             *entry.open = false;
         else
