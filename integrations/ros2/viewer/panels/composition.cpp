@@ -453,9 +453,9 @@ std::vector<std::string> Composition::panelIds() const {
 
 const std::vector<HostItemType> &hostItemTypes() {
     static const std::vector<HostItemType> types{
-        {"scene_settings", false}, {"pool_viewer", false},  {"view", false},     {"focus", false},
-        {"follow", false},         {"labels", false},       {"tf", false},       {"mpc_path", false},
-        {"thrust", false},         {"preview_task", false}, {"detections", true}};
+        {"scene_settings", false}, {"pool_viewer", false}, {"view", false},         {"focus", false},
+        {"follow", false},         {"labels", false},      {"tf", false},           {"mpc_path", false},
+        {"covariance", false},     {"thrust", false},      {"preview_task", false}, {"detections", true}};
     return types;
 }
 

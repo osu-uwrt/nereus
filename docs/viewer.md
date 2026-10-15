@@ -42,7 +42,9 @@ The camera and focus dropdowns lead the pool view's toolbar, which is grouped (c
 preview) by thin dividers. **Focus** jumps to the vehicle, a mechanism (Claw,
 Payloads) or a course element; **Follow** keeps the camera on the robot. **Labels** names course elements; **TF**
 draws frame axes (its arrow opens the TF frames window: names, axis length, the frame tree); **MPC path** draws the
-MPC's predicted path; **Thrust** draws the commanded thruster forces (`thruster_forces`) as red arrows from each
+MPC's predicted path; **Covariance** draws mapping's estimates (`mapping/<object>`) as covariance ellipsoids
+placed through TF, each labeled with its horizontal 1-sigma spread (its arrow: 1, 2 or 3 sigma, line width, mapping's current
+targets or every object, labels; host yaml `mapping_covariance`); **Thrust** draws the commanded thruster forces (`thruster_forces`) as red arrows from each
 thruster along its axis, like RViz's thruster wrenches (0.05 m per newton; nothing while the controller is not
 publishing). The same toggles are in the **View** menu.
 
@@ -475,7 +477,7 @@ All of it is YAML in `content/viewer/`:
 
 | File | Controls |
 | --- | --- |
-| `talos_uwrt_host.yaml` | window size and `title_bar`, default `layout` and `theme`, topics, pose source and delays, estimate ghost/anchors, detections, `point_clouds`, `mapping_markers`, `prior_map`, `thrust_arrows`, focus presets |
+| `talos_uwrt_host.yaml` | window size and `title_bar`, default `layout` and `theme`, topics, pose source and delays, estimate ghost/anchors, detections, `point_clouds`, `mapping_markers`, `mapping_covariance`, `prior_map`, `thrust_arrows`, focus presets |
 | `talos_uwrt_panels.yaml` | the pool view `toolbar:`, command bar `header:` and the `panels:` windows (order, titles, `dock:` area in the built-in layouts, which start open or as the shown tab), and the providers they talk to (telemetry readings and thresholds, recording services, bag targets and presets) |
 | `talos_uwrt_thruster_visuals.yaml`, `talos_uwrt_status_lights.yaml` | rotor animation and LED bars |
 

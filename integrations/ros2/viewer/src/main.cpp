@@ -37,7 +37,7 @@ void usage() {
            "desktop\n"
            "  --system-title-bar | --custom-title-bar   window decorations: the desktop's, or the viewer's own\n"
            "                         title bar with the menus in it (default; host yaml window.title_bar)\n"
-           "  --show-tf --mpc-path --thrust --show-scorecard   initial toggle states\n"
+           "  --show-tf --mpc-path --thrust --covariance --show-scorecard   initial toggle states\n"
            "  --detections | --no-detections   detection overlay on/off at start (default on)\n"
            "  --keep-detections      ignore detector DELETEALL; observations live out their lifetime\n"
            "  --detections-placement MODE   pose_source (default) | truth | estimate | both; truth/both need the "
@@ -172,6 +172,8 @@ int main(int argc, char **argv) {
             options.mpcPath = true;
         else if (arg == "--thrust")
             options.thrust = true;
+        else if (arg == "--covariance")
+            options.covariance = true;
         else if (arg == "--show-scorecard")
             options.showScorecard = true;
         else if (arg == "--frames")

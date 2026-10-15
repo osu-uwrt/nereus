@@ -42,6 +42,7 @@ def _viewer(context, *_):
         ("--show-tf", "show_tf"),
         ("--detections", "detections"),
         ("--mpc-path", "mpc_path"),
+        ("--covariance", "covariance"),
         ("--show-scorecard", "show_scorecard"),
     ):
         if value(name).lower() in ("true", "1"):
@@ -68,6 +69,7 @@ def generate_launch_description():
         "show_tf": "false",
         "detections": "false",
         "mpc_path": "false",
+        "covariance": "false",
         "show_scorecard": "false",
         "use_sim_time": "true",
     }
