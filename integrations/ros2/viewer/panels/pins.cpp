@@ -32,6 +32,8 @@ struct Record {
 struct Board {
     std::map<std::string, Record> records;
     std::vector<std::string> pinned;    // in pin order
+    std::vector<std::string> defaults;  // the composition's default pins
+    std::set<std::string> declined;     // defaults the operator unpinned
     std::map<std::string, int> pending; // key -> click (1) / toggle (1) / selection + 1
     std::string scope, title;           // current beginScope(); empty scope: widgets are plain ImGui
     std::vector<std::string> parts;     // nested Scope parts
@@ -78,6 +80,19 @@ std::string keyOf(const char *label) {
 bool isPinned(const std::string &key) {
     const auto &p = board().pinned;
     return std::find(p.begin(), p.end(), key) != p.end();
+}
+
+// Pins (after those already there) each default the operator has not unpinned.
+void applyDefaults() {
+    auto &b = board();
+    bool changed = false;
+    for (const auto &key : b.defaults)
+        if (!b.declined.count(key) && !isPinned(key)) {
+            b.pinned.push_back(key);
+            changed = true;
+        }
+    if (changed && ImGui::GetCurrentContext())
+        ImGui::MarkIniSettingsDirty();
 }
 
 // Refreshes a widget's record just before it draws: kind, label, disabled state and current button colors.
@@ -427,6 +442,8 @@ void drawPinned() {
     // Iterate over a copy: the menu or a click may unpin.
     for (const auto &key : std::vector<std::string>(b.pinned)) {
         const auto &r = b.records[key];
+        if (r.frame < 0)
+            continue; // not drawn this session: not in this composition (or not yet), so nothing to click
         const bool live = frame - r.frame <= 2; // the original drew within the last two frames
         const std::string text = r.label.empty() ? key.substr(key.rfind('/') + 1) : r.label;
         ImGui::PushID(key.c_str());
@@ -441,10 +458,10 @@ void drawPinned() {
         // A copy is disabled when its original is, or has stopped drawing. Clicks are queued for the original.
         ImGui::BeginDisabled(!live || r.disabled);
         if (r.kind == Kind::Button) {
-            // As the original was drawn (KILL red, ...); one never drawn yet (restored from a layout) as plain.
+            // As the original was drawn (KILL red, ...).
             const ImGuiCol slots[4] = {ImGuiCol_Button, ImGuiCol_ButtonHovered, ImGuiCol_ButtonActive, ImGuiCol_Text};
             for (int i = 0; i < 4; ++i)
-                ImGui::PushStyleColor(slots[i], r.frame >= 0 ? r.colors[i] : ImGui::GetStyle().Colors[slots[i]]);
+                ImGui::PushStyleColor(slots[i], r.colors[i]);
             if (ImGui::Button((text + "##pinned").c_str()))
                 b.pending[key] = 1;
             ImGui::PopStyleColor(4);
@@ -512,26 +529,51 @@ std::vector<std::string> pinnedKeys() {
     return board().pinned;
 }
 
-// Adds (at the end) or removes a pin and marks the ini dirty so it is saved.
+// Adds (at the end) or removes a pin and marks the ini dirty so it is saved; unpinning a default declines it.
 void setPinned(const std::string &key, bool pinned) {
-    auto &p = board().pinned;
+    auto &b = board();
+    auto &p = b.pinned;
     const auto found = std::find(p.begin(), p.end(), key);
     if (pinned && found == p.end())
         p.push_back(key);
     else if (!pinned && found != p.end())
         p.erase(found);
+    if (std::find(b.defaults.begin(), b.defaults.end(), key) != b.defaults.end()) {
+        if (pinned)
+            b.declined.erase(key);
+        else
+            b.declined.insert(key);
+    }
     if (ImGui::GetCurrentContext())
         ImGui::MarkIniSettingsDirty();
 }
 
-// One line per pinned control: kind, key, label and window title (tab separated), so the toolbar can show it
-// before its window first draws.
+void setDefaults(const std::vector<std::string> &keys) {
+    board().defaults = keys;
+    applyDefaults();
+}
+
+// Only the default pins, none declined, and no queued actions.
+void reset() {
+    auto &b = board();
+    b.pinned.clear();
+    b.pending.clear();
+    b.declined.clear();
+    applyDefaults();
+    if (ImGui::GetCurrentContext())
+        ImGui::MarkIniSettingsDirty();
+}
+
+// One line per pinned control: kind, key, label and window title (tab separated), so the toolbar's customization
+// lists it before its window first draws; then, in their own section, the declined defaults (one key per line).
+// Defaults are applied again once a layout is loaded.
 void install() {
     ImGuiSettingsHandler handler;
     handler.TypeName = "NereusPins";
     handler.TypeHash = ImHashStr("NereusPins");
 
     handler.ClearAllFn = [](ImGuiContext *, ImGuiSettingsHandler *) { board().pinned.clear(); };
+    handler.ApplyAllFn = [](ImGuiContext *, ImGuiSettingsHandler *) { applyDefaults(); };
     handler.ReadOpenFn = [](ImGuiContext *, ImGuiSettingsHandler *, const char *) -> void * { return &board(); };
     // Restores a pin with a placeholder record (label and title only until its original draws).
     handler.ReadLineFn = [](ImGuiContext *, ImGuiSettingsHandler *, void *, const char *line) {
@@ -567,6 +609,26 @@ void install() {
         out->append("\n");
     };
     ImGui::AddSettingsHandler(&handler);
+
+    // A section of its own, which viewers without default pins skip.
+    ImGuiSettingsHandler declined;
+    declined.TypeName = "NereusPinDefaults";
+    declined.TypeHash = ImHashStr("NereusPinDefaults");
+    declined.ClearAllFn = [](ImGuiContext *, ImGuiSettingsHandler *) { board().declined.clear(); };
+    declined.ReadOpenFn = [](ImGuiContext *, ImGuiSettingsHandler *, const char *name) -> void * {
+        return std::strcmp(name, "Declined") == 0 ? &board() : nullptr;
+    };
+    declined.ReadLineFn = [](ImGuiContext *, ImGuiSettingsHandler *, void *, const char *line) {
+        if (*line)
+            board().declined.insert(line);
+    };
+    declined.WriteAllFn = [](ImGuiContext *, ImGuiSettingsHandler *, ImGuiTextBuffer *out) {
+        out->append("[NereusPinDefaults][Declined]\n");
+        for (const auto &key : board().declined)
+            out->appendf("%s\n", key.c_str());
+        out->append("\n");
+    };
+    ImGui::AddSettingsHandler(&declined);
 }
 
 } // namespace nereus::ros_viewer::pins

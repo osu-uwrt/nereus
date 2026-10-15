@@ -1338,6 +1338,7 @@ void App::buildPanels() {
     if (ros_->poseSource() == PoseSource::Estimate)
         dropSimulatorPanels(document); // real robot: no simulator run / rate controls
     composition_ = std::make_unique<panels::Composition>(document, context, registry_);
+    pins::setDefaults(composition_->defaultPins());
     composition_->setWindowMenu([this] { drawWindowsMenu(); });
     composition_->setWindowContextMenu([this](const std::string &id) { windowContextMenu("panel." + id); });
 
@@ -5161,9 +5162,9 @@ void App::rememberDefaults() {
         defaultOpen_.emplace(key, *flag);
 }
 
-// Back to the configured toolbar: its default items, nothing pinned.
+// Back to the configured toolbar: its default items and default pins.
 void App::resetToolbar() {
-    pins::clear();
+    pins::reset();
     for (const auto &[key, flag] : toolbarFlags()) {
         const auto value = defaultOpen_.find(key);
         *flag = value != defaultOpen_.end() && value->second;

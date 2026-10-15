@@ -156,6 +156,9 @@ class Composition {
         bool selected; // `open`: the shown tab of its dock area in a built-in layout
     };
     std::vector<PanelWindow> panelWindows() const;
+    // The configured default toolbar pins (`pins:`, control keys) whose panel or tool is in this composition (a
+    // robot without the simulator has no simulator tools); keys of the host's windows pass through.
+    std::vector<std::string> defaultPins() const;
     // Open state of each panel window by stable key ("panel.<id>"), for saved layouts.
     std::vector<std::pair<std::string, bool *>> visibility();
     // Shows the panel window and brings it to the front.
@@ -202,7 +205,8 @@ class Composition {
     float sidebarWidth = 350, sidebarFraction = .29f;
     Providers sources;
     std::vector<PanelInstance> panelInstances, toolbarInstances, headerInstances;
-    float headerWidth = 0; // last frame's, for right alignment
+    std::vector<std::string> pinDefaults; // `pins:` as configured
+    float headerWidth = 0;                // last frame's, for right alignment
     struct OverlayInstance {
         std::string id, title;
         bool visible;
