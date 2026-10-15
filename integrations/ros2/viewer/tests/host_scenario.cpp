@@ -41,9 +41,9 @@ const char *kDocument = R"json({
    "regions": [], "props": [{"id": "structure", "type": "static_body",
      "parameters": {"visuals": [{"asset": "gate_mesh", "frame": "task", "position_m": [0, 0, 0], "orientation_wxyz": [1, 0, 0, 0]}]}}]}],
  "asset_paths": {"robot": {"body_mesh": "/abs/body.glb"}, "tasks": {"gate_mesh": "/abs/gate.dae"}},
- "bridge": {"namespace": "/bot", "frame_names": {"world": "map", "cam_mount": "bot/cam_link", "cam_optical": "bot/cam_optical"},
+ "bridge": {"namespace": "/bot", "frame_names": {"world": "world", "cam_mount": "bot/cam_link", "cam_optical": "bot/cam_optical"},
    "thrusters": {"order": ["A", "B"], "input_scales": [1, 2]},
-   "tf": {"publish": [{"parent": "map", "child": "simulator/bot/base_link", "native": "state:robot.reference_pose"}]},
+   "tf": {"publish": [{"parent": "world", "child": "simulator/bot/base_link", "native": "state:robot.reference_pose"}]},
    "streams": [
      {"id": "rgb", "direction": "publish", "topic": "cam/rgb/compressed", "native": "sensor:cam.rgb_left"},
      {"id": "depth", "direction": "publish", "topic": "cam/depth", "native": "sensor:cam.depth_left"},
@@ -57,7 +57,8 @@ TEST(HostScenario, ReadsFramesCamerasMechanismsAndLandmarks) {
     const auto config = YAML::Load("cameras: {cam: {title: FRONT, model: TESTCAM}}\nui: {focus: [Course], extra: 1}");
     const auto s = parseScenario(kDocument, config, {});
     EXPECT_EQ(s.robotId, "bot");
-    EXPECT_EQ(s.mapFrame, "map");
+    EXPECT_EQ(s.mapFrame, "world"); // the simulator world (truth parent)
+    EXPECT_EQ(s.robotFrame, "map"); // the scenario's world_frame: the panels' frame
     EXPECT_EQ(s.truthBaseFrame, "simulator/bot/base_link");
     EXPECT_EQ(s.estimateBaseFrame, "bot/base_link"); // not listed in frame_names: namespace/base id
     EXPECT_EQ(s.thrusterOrder, (std::vector<std::string>{"A", "B"}));

@@ -91,6 +91,16 @@ bool finitePose(const Pose &pose) {
     return true;
 }
 
+namespace {
+// More than 1 cm or 0.5 deg apart.
+bool apart(const Pose &a, const Pose &b) {
+    if (glm::length(glm::vec3(a[3] - b[3])) > .01f)
+        return true;
+    const float halfCos = std::abs(glm::dot(glm::normalize(glm::quat_cast(a)), glm::normalize(glm::quat_cast(b))));
+    return halfCos < std::cos(glm::radians(.25f)); // the quaternion dot is the cosine of half the angle
+}
+} // namespace
+
 RosMotion::RosMotion(std::shared_ptr<RosRuntime> runtime, const YAML::Node &cfg, const Context &ctx)
     : runtime(std::move(runtime)), config(cfg), context(ctx),
       baseFrame(expand(cfg["base_frame"].as<std::string>(), ctx)),
@@ -211,9 +221,7 @@ void RosMotion::complete(uint64_t epoch, Mode mode, const Pose &pose, bool succe
 
     // The controller accepted the mode: adopt the pose as the new command and send it.
     value.mode = mode;
-    value.commanded = pose;
-    value.hasCommand = true;
-    ++value.revision;
+    adoptCommand(commandFromFixed * pose);
     value.message = mode == Mode::Position ? "Position control" : "Feedforward control";
     send(pose, mode);
 }
@@ -223,10 +231,15 @@ void RosMotion::drag(const Pose &pose) {
     std::lock_guard<std::mutex> lock(mutex);
     if (!value.enabled || !ready() || value.pending || value.mode != Mode::Position || !finitePose(pose))
         return;
-    value.commanded = pose;
+    adoptCommand(commandFromFixed * pose);
+    send(pose, Mode::Position);
+}
+
+void RosMotion::adoptCommand(const Pose &inCommand) {
+    commandedInCommand = inCommand;
+    value.commanded = commandedAtRevision = glm::inverse(commandFromFixed) * inCommand;
     value.hasCommand = true;
     ++value.revision;
-    send(pose, Mode::Position);
 }
 
 void RosMotion::startTimer() {
@@ -259,6 +272,15 @@ void RosMotion::tick() {
         }
         value.fresh = std::chrono::duration<double>(now - lastPose).count() < poseTimeout && finitePose(value.actual) &&
                       finitePose(commandFromFixed);
+        // The command stays where the controller has it; its fixed-frame pose follows the frames. A real move (a
+        // mapping calibration) is a new revision, so the panel's target and the gizmo take the new numbers.
+        if (value.hasCommand && finitePose(commandFromFixed)) {
+            value.commanded = glm::inverse(commandFromFixed) * commandedInCommand;
+            if (apart(value.commanded, commandedAtRevision)) {
+                commandedAtRevision = value.commanded;
+                ++value.revision;
+            }
+        }
     } catch (const tf2::TransformException &) {
         value.fresh = false;
     }

@@ -73,7 +73,12 @@ struct Landmark {
 
 // The parsed scenario: identities and ROS frames, then pool, robot, task and camera content.
 struct Scenario {
-    std::string id, robotId, ns, mapFrame, truthBaseFrame, estimateBaseFrame, baseId;
+    std::string id, robotId, ns, truthBaseFrame, estimateBaseFrame, baseId;
+    // mapFrame: the view's fixed frame, the simulator world's ROS name (the truth transform's parent). robotFrame:
+    // the robot's course frame (scenario world_frame, e.g. map), which the panels work in. They coincide until
+    // the robot's mapping calibration moves it. With only the estimate shown (a real robot) the host draws in
+    // robotFrame.
+    std::string mapFrame, robotFrame;
     YAML::Node document, bridge, ui; // the whole document, its bridge section, merged ui settings
     FrameGraph frames;               // robot pack frame tree
 

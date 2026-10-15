@@ -16,7 +16,7 @@ requires_robot: my_auv           # refuses to run with a different robot pack
 namespace: /my_auv               # prefix for every relative topic and service
 node_name: physics_simulator
 frame_names:                     # robot-pack frame -> ROS frame id
-  world: map
+  world: world                   # your stack's fixed frame (see TF)
   imu_mount: my_auv/imu_link
   ffc_left_optical: my_auv/ffc_left_camera_optical_frame
 clock:                           # /clock for use_sim_time stacks
@@ -88,7 +88,7 @@ Reading fields per sensor type are in `libraries/sensors/include/nereus/sensors/
 ```yaml
 tf:
   publish:                                 # moving frames
-  - {parent: map, child: simulator/my_auv/base_link, native: state:robot.reference_pose, rate_hz: 100}
+  - {parent: world, child: simulator/my_auv/base_link, native: state:robot.reference_pose, rate_hz: 100}
   static:                                  # fixed frames from the robot pack
   - {parent: my_auv/ffc_camera_link, child: my_auv/ffc_left_camera_optical_frame, from_frame: ffc_mount, to_frame: ffc_left_optical}
   lookup:                                  # frames your stack owns; the bridge reads them
@@ -98,6 +98,11 @@ tf:
 
 Publish the simulator's truth under its own prefix (`simulator/...`) so it never collides with your state
 estimate's `base_link`. The viewer draws the robot from the truth frame and your estimate as a ghost.
+
+Name the simulator's world after a frame nothing recalibrates (here `world`, with a static `world -> odom`), not
+a frame your mapping or tag calibration moves (`map`): truth must stay where the pool is when the robot
+re-anchors its map, or truth and estimate drift apart in the viewer. The viewer draws in the simulator's world and
+runs its operator panels in the scenario's `world_frame` (the robot's course frame), converting through TF.
 
 ## Services
 

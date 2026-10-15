@@ -1197,6 +1197,10 @@ void App::loadScenario(const std::string &json) {
         return;
     animateLoadingWhile([&] { // the heavy part: packs, meshes, textures; no ImGui or GL in here
         auto parsed = parseScenario(json, config_, opt_.packDir);
+        // A real robot (only the estimate shown) has no simulator world: draw in the robot's frame, where its tag
+        // calibration puts the course.
+        if (ros_->poseSource() == PoseSource::Estimate)
+            parsed.mapFrame = parsed.robotFrame;
         loadedHash_ = hash;
         // Replace dependents before the scenario they point to.
         model_.reset();
@@ -1317,7 +1321,7 @@ void App::buildPanels() {
     registerHostItems();
     panelRos_.registerFactories(registry_);
 
-    panels::Context context{trimSlashes(scenario_->ns), scenario_->mapFrame, demoMode_, ros_->useSimTime()};
+    panels::Context context{trimSlashes(scenario_->ns), scenario_->robotFrame, demoMode_, ros_->useSimTime()};
     // Panel profile documents carry their scorecard schema under `ui` (run panel and sim.run provider).
     YAML::Node task(YAML::NodeType::Map);
     task["ui"] = YAML::Clone(scenario_->ui);
@@ -4495,10 +4499,14 @@ void App::drawPoolView(double time, float dt) {
                                {width, viewHeight},
                                hovered && mode_ == 0,
                                bool(glfwGetWindowAttrib(window_->handle(), GLFW_FOCUSED))};
-    // Commands live in the estimate frame; anchored on the truth robot, draw them re-rooted there (offset
-    // sampled at one time for both poses, see RosSide::truthFromEstimate).
-    if (!gizmoOnEstimate_ && haveEstimate_)
-        panelView.displayFromCommand = body_ * glm::inverse(estimateBody_);
+    // Commands live in the panels' frame (the robot's, e.g. map), placed in the view's through TF; anchored on the
+    // truth robot, they are drawn re-rooted there (offset sampled at one time for both poses, see
+    // RosSide::truthFromEstimate).
+    glm::mat4 viewFromRobot(1);
+    if (scenario_ && scenario_->robotFrame != scenario_->mapFrame)
+        ros_->latestInFixed(scenario_->robotFrame, viewFromRobot); // identity until the robot publishes it
+    panelView.displayFromCommand =
+        !gizmoOnEstimate_ && haveEstimate_ ? body_ * glm::inverse(estimateBody_) * viewFromRobot : viewFromRobot;
     const bool operating = workspace_ == Workspace::Operate;
     const bool dragging = operating && composition_ && mode_ == 0 && composition_->input(panelView);
 

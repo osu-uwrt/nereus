@@ -15,7 +15,8 @@ timestep_s: 0.002   # physics step
 sensor_noise: true
 
 # World = the robot's `map` frame: ENU, +Z up, z = 0 at the water surface. Placements are
-# upright (yaw about world +Z only).
+# upright (yaw about world +Z only). The bridge runs the simulator in the stack's fixed `world` frame, which
+# `map` equals until a mapping calibration moves it; the viewer's panels stay in this frame.
 world_frame: map
 
 # Pool corner pose in the world.

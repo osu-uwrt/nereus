@@ -14,7 +14,8 @@ seed: 7
 timestep_s: 0.002   # physics step
 sensor_noise: true
 
-# World = the robot's `map` frame: ENU, +Z up. Pools and tasks are upright (yaw about world +Z only).
+# World = the robot's `map` frame: ENU, +Z up. Pools and tasks are upright (yaw about world +Z only). The bridge
+# runs the simulator in the stack's fixed `world` frame, which `map` equals until a mapping calibration moves it.
 world_frame: map
 
 # Laid out as at the pool: the calibration board hangs on the deep-end wall, centered on lap line 3, with its datum

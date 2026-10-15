@@ -10,9 +10,11 @@ requires_robot: talos   # binds to the robot pack's ids
 namespace: /talos   # relative names resolve here (the controller hardcodes /talos)
 node_name: physics_simulator   # hosts the real_time_factor parameter
 
-# Simulator frame id -> ROS frame name. Only frames used in headers/TF are listed.
+# Simulator frame id -> ROS frame name. Only frames used in headers/TF are listed. The simulator world is the
+# stack's fixed `world` frame (world->odom is static), not `map`: a mapping calibration moves world->map, and truth
+# must stay where the pool is.
 frame_names:
-  world: map
+  world: world
   imu_mount: talos/imu_link
   fog_mount: talos/fog_link
   dvl_mount: talos/dvl_link
@@ -38,7 +40,7 @@ thrusters:
 
 tf:
   publish:
-  - {parent: map, child: simulator/talos/base_link, native: 'state:robot.reference_pose', rate_hz: 100}   # truth
+  - {parent: world, child: simulator/talos/base_link, native: 'state:robot.reference_pose', rate_hz: 100}   # truth
   # The navigation stack owns the camera links; the bridge adds their optical frames.
   static:
   - {parent: talos/ffc_camera_link, child: talos/ffc_left_camera_optical_frame, from_frame: ffc_mount, to_frame: ffc_left_optical}
@@ -75,7 +77,7 @@ placement:
     client: /talos/set_pose
     service_type: robot_localization/srv/SetPose
     triggers: [startup, placement, reset_to_start, full_reset]
-    estimate_stream: ekf_odometry        # header.frame_id gives the EKF frame; map->it via tf.lookup
+    estimate_stream: ekf_odometry        # header.frame_id gives the EKF frame; world->it via tf.lookup
     pose: reference_frame                # robot reference_frame (base_link)
     covariance_diagonal: 1.0e-06
 
@@ -230,7 +232,7 @@ streams:
   topic: depth/pose
   message_type: geometry_msgs/msg/PoseWithCovarianceStamped
   native: 'sensor:depth'
-  frame_id: map
+  frame_id: world
   rate_hz: 20
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
   fields:
@@ -420,7 +422,7 @@ streams:
   topic: simulator/ground_truth
   message_type: nav_msgs/msg/Odometry
   native: 'state:robot'
-  frame_id: map
+  frame_id: world
   rate_hz: 100
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
   fields:
@@ -511,7 +513,7 @@ streams:
   message_type: visualization_msgs/msg/MarkerArray
   native: 'state:indicators'
   format: marker_array
-  frame_id: map
+  frame_id: world
   rate_hz: 50
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
   fields: {}
@@ -525,7 +527,7 @@ streams:
   message_type: visualization_msgs/msg/MarkerArray
   native: 'state:props'
   format: marker_array
-  frame_id: map
+  frame_id: world
   rate_hz: 50
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
   fields: {}
@@ -537,7 +539,7 @@ streams:
   message_type: visualization_msgs/msg/MarkerArray
   native: 'state:payloads'
   format: marker_array
-  frame_id: map
+  frame_id: world
   rate_hz: 50
   qos: {history: keep_last, depth: 10, reliability: reliable, durability: volatile}
   fields: {}
@@ -565,7 +567,7 @@ services:
   service_type: robot_localization/srv/SetPose
   action: 'command:robot.place'
   request:
-    frame: {from: pose.header.frame_id}          # non-map frames resolved through tf.lookup
+    frame: {from: pose.header.frame_id}          # non-world frames resolved through tf.lookup
     position_m: {from: pose.pose.pose.position}
     orientation_w: {from: pose.pose.pose.orientation.w}
     orientation_x: {from: pose.pose.pose.orientation.x}
