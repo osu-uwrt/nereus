@@ -20,6 +20,19 @@ jobs=$(((available_gb - 4) / 3))
 ((jobs < 1)) && jobs=1
 jobs=${NEREUS_JOBS:-$jobs}
 
+# Keep an active conda environment out of the build: CMake finds packages through PATH, and conda's libraries
+# (libcurl, gtest, yaml-cpp, ...) then shadow the system ones that OpenCV/GDAL link against, failing the link.
+if [[ -n ${CONDA_PREFIX:-} ]]; then
+    conda_root=${_CONDA_ROOT:-$CONDA_PREFIX}
+    PATH=$(tr ':' '\n' <<<"$PATH" | grep -v "^$conda_root" | paste -sd:)
+    unset CONDA_PREFIX
+    # A cache configured inside conda keeps its package paths; start that preset's configure over.
+    if grep -qs "$conda_root" "build/$preset/CMakeCache.txt"; then
+        echo "Reconfiguring build/$preset: its CMake cache was made with conda active."
+        rm -rf "build/$preset/CMakeCache.txt" "build/$preset/CMakeFiles"
+    fi
+fi
+
 if ! command -v uv >/dev/null; then
     echo "uv not found: install it once with 'curl -LsSf https://astral.sh/uv/install.sh | sh'" >&2
     echo "(or 'pip install --user uv'), then rerun." >&2
