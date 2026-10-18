@@ -106,6 +106,49 @@ TEST(CameraProducts, TopDownColorAndOpticalDepthStayRegistered) {
     EXPECT_EQ(bottom_depth[3], 1);
 }
 
+// Buffers a GPU capture already flipped and converted give the frame the framebuffer layout gives, noise
+// included: the random stream sees the same top-down metric depth either way.
+TEST(CameraProducts, SensorReadyLayoutSkipsTheFlipAndConversionOnly) {
+    const auto k = small(4, 3);
+    std::vector<std::uint8_t> bottom_rgb(4 * 3 * 3);
+    std::vector<float> bottom_depth(4 * 3);
+    for (std::size_t i = 0; i < bottom_rgb.size(); ++i)
+        bottom_rgb[i] = static_cast<std::uint8_t>(i * 7);
+    for (std::size_t i = 0; i < bottom_depth.size(); ++i)
+        bottom_depth[i] = i == 5 ? 1.f : bufferDepth(.5 + .25 * double(i), k);
+    DepthNoise clean;
+    clean.enabled = false;
+    const auto ready = Processor().process(k, clean, bottom_rgb, bottom_depth); // top-down rgb, meters
+
+    DepthNoise noise; // defaults: enabled
+    Processor cpu(11), gpu(11);
+    for (int frame = 0; frame < 3; ++frame) {
+        const auto expected = cpu.process(k, noise, bottom_rgb, bottom_depth, true, 90);
+        const auto actual = gpu.process(k, noise, ready.rgb, ready.depth, true, 90, {true, true});
+        EXPECT_EQ(actual.rgb, expected.rgb);
+        EXPECT_EQ(actual.jpeg, expected.jpeg);
+        ASSERT_EQ(actual.depth.size(), expected.depth.size());
+        for (std::size_t i = 0; i < actual.depth.size(); ++i)
+            if (std::isnan(expected.depth[i]))
+                EXPECT_TRUE(std::isnan(actual.depth[i])) << i;
+            else
+                EXPECT_EQ(actual.depth[i], expected.depth[i]) << i;
+    }
+
+    // Top-down but still nonlinear depth: nothing is flipped, the depth is still converted.
+    std::vector<float> top_depth(bottom_depth.size());
+    for (std::size_t i = 0; i < top_depth.size(); ++i)
+        top_depth[i] = bottom_depth[(2 - i / 4) * 4 + i % 4];
+    const auto mixed = Processor().process(k, clean, ready.rgb, top_depth, false, 93, {true, false});
+    EXPECT_EQ(mixed.rgb, ready.rgb);
+    ASSERT_EQ(mixed.depth.size(), ready.depth.size());
+    for (std::size_t i = 0; i < mixed.depth.size(); ++i)
+        if (std::isnan(ready.depth[i]))
+            EXPECT_TRUE(std::isnan(mixed.depth[i])) << i;
+        else
+            EXPECT_EQ(mixed.depth[i], ready.depth[i]) << i;
+}
+
 TEST(CameraProducts, RangeAndBackgroundRemainInvalidWithNoiseDisabled) {
     const auto k = small(5, 1);
     DepthNoise noise;

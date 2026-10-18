@@ -172,11 +172,12 @@ OffscreenRenderer::~OffscreenRenderer() {
 }
 
 ImageCapture OffscreenRenderer::capture(const Scene &scene, const View &view, const Appearance &appearance, float time,
-                                        int width, int height, bool color, bool depth) {
+                                        int width, int height, bool color, bool depth,
+                                        const std::optional<SensorFormat> &sensor) {
     std::lock_guard<std::mutex> lock(host_mutex);
     Binding binding(impl_->display, impl_->surface, impl_->context);
     impl_->renderer->draw(scene, view, appearance, time, width, height);
-    return impl_->renderer->captureImage(color, depth);
+    return impl_->renderer->captureImage(color, depth, sensor);
 }
 
 LabelCapture OffscreenRenderer::captureLabels(const Scene &scene, const std::vector<InstanceLabel> &labels,
