@@ -243,6 +243,9 @@ TEST(SessionCameras, GpuAndCpuProductsAreIdentical) {
             EXPECT_TRUE(sink.waitFor(count + cameras->cameraIds().size()));
         }
         cameras->close();
+        // A failing GPU path falls back to the CPU silently: the comparison would then prove nothing.
+        EXPECT_EQ(cameras->describe().at("gpu_products").get<bool>(), gpu)
+            << "the GPU path failed and the session fell back to the CPU";
         auto products = sink.products;
         std::sort(products.begin(), products.end(), [](const auto &a, const auto &b) {
             return std::tie(a.snapshot_time_ns, a.camera) < std::tie(b.snapshot_time_ns, b.camera);
