@@ -3,6 +3,8 @@ task, an equipment placement or an item frame, and the world itself may be place
 
 import json
 import math
+import os
+import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
@@ -27,6 +29,47 @@ items:
 POOL_PLACEMENT = "pool_placement: {position_m: [0, 0, 0], yaw_deg: 0}\n"
 HOOP = "- {task: hoop, position_m: [5, 2.5, -1], yaw_deg: 90}\n"
 INITIAL = "initial: {frame: com, position_m: [2, 2, -1],"
+
+# The shipped RPAC layout (board on the deep-end wall, map from its tag) with a course of the test's own.
+RPAC_BOARD_COURSE = [
+    {"task": task, "position_m": [float(index), 1.0, -1.0], "yaw_deg": 10.0 * index}
+    for index, task in enumerate(("gate", "torpedo", "slalom", "bins", "surface", "table"), 1)
+]
+RPAC_BOARD_SCENARIO = (
+    """\
+kind: scenario
+id: rpac_board
+robot: {packs}/robots/talos
+pool: {packs}/pools/rpac_divewell
+tasks: {packs}/tasks/robosub_2026
+bridge: {packs}/bridges/uwrt_talos
+equipment: {packs}/equipment/uwrt
+seed: 7
+timestep_s: 0.002
+sensor_noise: true
+world_frame: map
+equipment_placements:
+- {{item: calibration_board, relative_to: pool, position_m: [0.0, 5.334, -0.3394]}}
+world_placement: {{relative_to: calibration_board/tag, position_m: [0.0, 0.4572, 0.0], rpy_deg: [-90, -90, 0]}}
+task_placements:
+"""
+    + "".join(
+        f"- {{{{task: {p['task']}, position_m: {p['position_m']}, yaw_deg: {p['yaw_deg']}}}}}\n"
+        for p in RPAC_BOARD_COURSE
+    )
+    + """\
+contacts: {{model: box_scene, restitution: 0.1, friction: 0.4}}
+initial:
+  frame: com
+  position_m: [2, 0, -1]
+  orientation_wxyz: [1, 0, 0, 0]
+  linear_velocity_m_s: [0, 0, 0]
+  angular_velocity_rad_s: [0, 0, 0]
+run:
+  auto_start: false
+  options: {{role: repair, heading_coin: true, role_coin: true, pinger_task: none, pinger_random: false}}
+"""
+)
 
 
 def close(test: unittest.TestCase, actual: Any, expected: Any, where: str = "") -> None:
@@ -247,16 +290,25 @@ class UwrtEquipmentTests(unittest.TestCase):
         board = load_pack(TALOS / "equipment" / "uwrt").plain()["items"][0]
         self.assertEqual([frame["id"] for frame in board["frames"]], ["tag"])
 
-    def test_rpac_map_origin_is_on_the_board_and_the_course_is_unchanged(self) -> None:
-        rpac = resolve_scenario(TALOS / "scenarios" / "talos_uwrt_rpac")
-        robosub = resolve_scenario(TALOS / "scenarios" / "talos_uwrt")
+    def test_map_from_the_rpac_board_is_on_its_tag_and_keeps_the_course(self) -> None:
+        """The RPAC layout with the test's own course, so editing a shipped course cannot break it."""
+        with tempfile.TemporaryDirectory() as folder:
+            scenario = Path(folder) / "scenario.yaml"
+            packs = os.path.relpath(TALOS, folder)  # pack paths must be relative
+            scenario.write_text(RPAC_BOARD_SCENARIO.format(packs=packs), encoding="utf-8")
+            resolved = resolve_scenario(scenario)
         # Map origin at the tag face, 3 mm out from the deep-end wall, centered on lap line 3; level and upright.
         close(
             self,
-            rpac.scenario["pool_placement"],
+            resolved.scenario["pool_placement"],
             {"position_m": [-0.003, -5.334, 0.0], "yaw_deg": 0.0},
         )
-        self.assertEqual(rpac.scenario["task_placements"], robosub.scenario["task_placements"])
+        # The course is authored in map coordinates: placing the map from the board leaves it as written.
+        close(self, resolved.scenario["task_placements"], RPAC_BOARD_COURSE)
+
+    def test_shipped_scenarios_place_the_board(self) -> None:
+        rpac = resolve_scenario(TALOS / "scenarios" / "talos_uwrt_rpac")
+        robosub = resolve_scenario(TALOS / "scenarios" / "talos_uwrt")
         for resolved in (rpac, robosub):
             assert resolved.equipment is not None
             self.assertEqual(
