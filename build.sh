@@ -48,3 +48,9 @@ cmake --build --preset "$preset" -j "$jobs"
 echo
 echo "Built preset '$preset' in build/$preset."
 echo "Python tools: 'source .venv/bin/activate' (nereus-dataset, nereus-packs), or prefix commands with 'uv run'."
+# ROS builds register `ros2 launch nereus ...` (cmake/NereusRosIndex.cmake); point at it unless ~/.bashrc has it.
+prefix_setup="$PWD/build/$preset/ros/setup.bash"
+if [[ -f $prefix_setup ]] && ! grep -qsF "$prefix_setup" ~/.bashrc; then
+    echo "ROS launch: 'source $prefix_setup', then 'ros2 launch nereus sim.launch.py'"
+    echo "(./setup.sh can add it to ~/.bashrc)."
+fi

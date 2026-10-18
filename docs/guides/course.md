@@ -242,5 +242,5 @@ agree before any detection.
 
 ```sh
 uv run nereus-packs validate content/packs/scenarios/my_practice
-ros2 launch integrations/uwrt/launch/sim.launch.py scenario:=$PWD/content/packs/scenarios/my_practice
+ros2 launch nereus sim.launch.py scenario:=$PWD/content/packs/scenarios/my_practice
 ```

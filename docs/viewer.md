@@ -1,7 +1,7 @@
 # Using the viewer
 
 `nereus-viewer` is the operator interface for both the simulator and the real robot. The sim launch
-starts it for you; for the real robot use `ros2 launch integrations/uwrt/launch/robot.launch.py`.
+starts it for you; for the real robot use `ros2 launch nereus robot.launch.py`.
 
 ![Viewer with the robot in the pool](images/robot.jpg)
 

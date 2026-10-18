@@ -21,6 +21,10 @@ the real robot.
 Tested on Ubuntu 22.04 with ROS 2 Humble.
 
 ```sh
+# System libraries and uv, once per machine (or run the steps below by hand); on a ROS machine it also
+# offers to add `ros2 launch nereus ...` to ~/.bashrc
+./setup.sh
+
 # System libraries
 sudo apt install cmake g++ libeigen3-dev libyaml-cpp-dev nlohmann-json3-dev libgtest-dev \
   libbullet-dev libassimp-dev libglfw3-dev libglew-dev libegl-dev libpng-dev libjpeg-dev libopencv-dev \
@@ -39,17 +43,22 @@ editable from `python/src`) and builds a CMake preset: `ros-viewer` when ROS is 
 with little memory. Python-only setup is just `uv sync`. Run the tools with `uv run <tool>` or after
 `source .venv/bin/activate`. `COLCON_IGNORE` keeps colcon out of this folder; everything builds into `build/`.
 
+The ROS build also registers a `nereus` ROS package in `build/ros-viewer/ros/` (no colcon involved), so the
+launch files below run from any directory once `build/ros-viewer/ros/setup.bash` is sourced. `./setup.sh` offers to
+add that to `~/.bashrc` (a marked `# >>> nereus >>>` block; delete it to undo). `ros2 launch
+integrations/uwrt/launch/sim.launch.py` from this folder still works without it.
+
 ## Run
 
 ```sh
 # Simulator + UWRT stack + viewer
-ros2 launch integrations/uwrt/launch/sim.launch.py
+ros2 launch nereus sim.launch.py
 #   pool:=rpac  (robosub default; scenario:=<pack folder> for any other; switch later with View > Pool)
 #   stack:=false  viewer:=false  cameras:=false  rmw:=rmw_zenoh_cpp
 #   active_control_model:=mpc mpc_model:=sim     (MPC controller on the simulator plant)
 
 # Viewer against the real robot (no simulator)
-ros2 launch integrations/uwrt/launch/robot.launch.py
+ros2 launch nereus robot.launch.py
 #   robot_only:=true  (hide the simulated pool)   rmw:=...   config:=<viewer host yaml>
 ```
 
