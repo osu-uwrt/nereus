@@ -218,6 +218,7 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
     plannedTopic =
         scenario.absolute(lookup(config, {"topics", "planned_path"}).as<std::string>("controller/mpc/planned_path"));
     mappingTopic = scenario.absolute(lookup(config, {"topics", "mapping"}).as<std::string>("mapping"));
+    resetMapping(); // the previous scenario's objects, possibly under another namespace
 
     // Point cloud layers; capturePointClouds() subscribes the enabled ones.
     pointClouds.clear();
@@ -846,18 +847,22 @@ void RosSide::captureMpc(bool wanted) {
         mpcPath.clear(); // controller disabled or gone
 }
 
+void RosSide::resetMapping() {
+    mappingSubs_.clear();
+    mappingMessages_.clear();
+    mappingTargetSub_.reset();
+    mappingEstimates.clear();
+    mappingTargets.clear();
+    haveMappingTargets = false;
+    mappingScanned_ = {};
+}
+
 // Mapping publishes every object as <mapping>/<object> (riptide_mapping2's PoseWithCovarianceStamped, in the
 // object's parent frame). New ones are picked up from the topic list every 2 s; each is placed with the latest TF.
 void RosSide::captureMappingCovariance(bool wanted) {
     wanted = wanted && live_ && scenario_;
     if (!wanted) {
-        mappingSubs_.clear();
-        mappingMessages_.clear();
-        mappingTargetSub_.reset();
-        mappingEstimates.clear();
-        mappingTargets.clear();
-        haveMappingTargets = false;
-        mappingScanned_ = {};
+        resetMapping();
         return;
     }
 
@@ -872,7 +877,7 @@ void RosSide::captureMappingCovariance(bool wanted) {
                 continue;
             mappingSubs_[object] = node_->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
                 topic, 10, [this, object](const geometry_msgs::msg::PoseWithCovarianceStamped &msg) {
-                    mappingMessages_[object] = msg;
+                    mappingMessages_[object] = {msg, Clock::now()};
                 });
         }
 #ifdef NEREUS_VIEWER_UWRT
@@ -896,9 +901,14 @@ void RosSide::captureMappingCovariance(bool wanted) {
 #endif
     }
 
+    // Mapping republishes every estimate at least every 2 s: one older than 5 s has stopped (mapping gone).
+    for (auto it = mappingMessages_.begin(); it != mappingMessages_.end();)
+        it = now - it->second.received > std::chrono::seconds(5) ? mappingMessages_.erase(it) : std::next(it);
+
     // Place each estimate: its pose and covariance from the parent frame into the map frame
     mappingEstimates.clear();
-    for (const auto &[object, msg] : mappingMessages_) {
+    for (const auto &[object, entry] : mappingMessages_) {
+        const auto &msg = entry.msg;
         glm::mat4 parent;
         if (!latestInFixed(msg.header.frame_id, parent))
             continue;

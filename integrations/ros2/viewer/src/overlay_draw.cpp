@@ -4,6 +4,7 @@
 #include "covariance_ellipsoid.hpp"
 #include "nereus/ros_viewer/theme.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <imgui_internal.h>
 
@@ -190,6 +191,15 @@ void drawCovariances(const CovarianceOverlay &overlay, const glm::mat4 &vp, cons
     const ImU32 line = IM_COL32(200, 150, 255, 210), text = IM_COL32(255, 255, 255, 255);
     constexpr int kSegments = 48;
     for (const auto &estimate : *overlay.estimates) {
+        // PoseWithCovariance does not promise finite values: skip an estimate that would draw NaN lines
+        bool finite = true;
+        for (int c = 0; c < 3; ++c) {
+            finite = finite && std::isfinite(estimate.position[c]);
+            for (int r = 0; r < 3; ++r)
+                finite = finite && std::isfinite(estimate.covariance[c][r]);
+        }
+        if (!finite)
+            continue;
         // The ellipses in the planes of the largest-middle, largest-smallest and middle-smallest axes
         const auto axes = principalAxes(estimate.covariance);
         for (const auto &[i, j] : {std::pair{0, 1}, std::pair{0, 2}, std::pair{1, 2}}) {

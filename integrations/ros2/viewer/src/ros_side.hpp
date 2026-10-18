@@ -273,6 +273,8 @@ class RosSide {
     void receiveMarkers(std::map<MarkerKey, MarkerRecord> &, const visualization_msgs::msg::MarkerArray &);
     void receiveDetections(const visualization_msgs::msg::MarkerArray &);
     void expire(std::map<MarkerKey, MarkerRecord> &);
+    // Drops the mapping subscriptions, messages and targets (captureMappingCovariance rediscovers them).
+    void resetMapping();
 
     // (Un)subscribes a feed's RGB and depth topics to match what is wanted.
     void subscribeCamera(CameraFeed &);
@@ -347,8 +349,12 @@ class RosSide {
     Clock::time_point thrustReceived_{};
 
     // Mapping estimates by object (captureMappingCovariance), the topic list's last scan and the target list.
+    struct MappingMessage {
+        geometry_msgs::msg::PoseWithCovarianceStamped msg;
+        Clock::time_point received;
+    };
     std::map<std::string, rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr> mappingSubs_;
-    std::map<std::string, geometry_msgs::msg::PoseWithCovarianceStamped> mappingMessages_;
+    std::map<std::string, MappingMessage> mappingMessages_;
     Clock::time_point mappingScanned_{};
     rclcpp::SubscriptionBase::SharedPtr mappingTargetSub_;
 
