@@ -24,10 +24,16 @@ jobs=${NEREUS_JOBS:-$jobs}
 # (libcurl, gtest, yaml-cpp, ...) then shadow the system ones that OpenCV/GDAL link against, failing the link.
 if [[ -n ${CONDA_PREFIX:-} ]]; then
     conda_root=${_CONDA_ROOT:-$CONDA_PREFIX}
-    PATH=$(tr ':' '\n' <<<"$PATH" | grep -v "^$conda_root" | paste -sd:)
+    # Literal prefix match (the root may hold regex characters).
+    kept=()
+    IFS=: read -ra entries <<<"$PATH"
+    for entry in "${entries[@]}"; do
+        [[ $entry == "$conda_root"* ]] || kept+=("$entry")
+    done
+    PATH=$(IFS=:; echo "${kept[*]}")
     unset CONDA_PREFIX
     # A cache configured inside conda keeps its package paths; start that preset's configure over.
-    if grep -qs "$conda_root" "build/$preset/CMakeCache.txt"; then
+    if grep -qsF "$conda_root" "build/$preset/CMakeCache.txt"; then
         echo "Reconfiguring build/$preset: its CMake cache was made with conda active."
         rm -rf "build/$preset/CMakeCache.txt" "build/$preset/CMakeFiles"
     fi
