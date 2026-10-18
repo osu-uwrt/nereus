@@ -6,8 +6,10 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cstring>
 #include <iostream>
+#include <sstream>
 #ifdef NEREUS_VIEWER_UWRT
 #include <riptide_msgs2/msg/led_command.hpp>
+#include <riptide_msgs2/msg/mapping_target_info.hpp>
 #endif
 
 namespace nereus::ros_viewer::host {
@@ -215,6 +217,8 @@ void RosSide::attach(const Scenario &scenario, const YAML::Node &config, StatusL
         scenario.absolute(lookup(config, {"topics", "mpc_path"}).as<std::string>("controller/mpc/predicted_path"));
     plannedTopic =
         scenario.absolute(lookup(config, {"topics", "planned_path"}).as<std::string>("controller/mpc/planned_path"));
+    mappingTopic = scenario.absolute(lookup(config, {"topics", "mapping"}).as<std::string>("mapping"));
+    resetMapping(); // the previous scenario's objects, possibly under another namespace
 
     // Point cloud layers; capturePointClouds() subscribes the enabled ones.
     pointClouds.clear();
@@ -761,7 +765,7 @@ std::vector<rendering::PointSet> RosSide::pointSets() const {
 }
 
 // The controller steers its estimate, so the true vehicle follows the same motion relative to itself:
-// place the prediction relative to the estimated base link, then re-root it at the truth base link.
+// place the prediction and the plan relative to the estimated base link, then re-root them at the truth base link.
 void RosSide::captureMpc(bool wanted) {
     wanted = wanted && live_ && scenario_;
 
@@ -791,18 +795,25 @@ void RosSide::captureMpc(bool wanted) {
 
     if (!wanted)
         return;
-    // The plan is fixed in the odometry frame: re-place it with the latest TF (empty message: no path).
+    // The plan is fixed in the odometry frame, and the controller flies it in its estimate: re-root it like the
+    // prediction so drift carries it with the vehicle (empty message: no path). Both poses at the newest stamp
+    // they share: truth and estimate update at different rates, and pairing their latest would wobble with motion.
     if (plannedMessage_.poses.empty()) {
         plannedPath.clear();
     } else {
         try {
-            const auto toMap = matrixOf(buffer_
-                                            ->lookupTransform(scenario_->mapFrame, plannedMessage_.header.frame_id,
-                                                              rclcpp::Time(0, 0, RCL_ROS_TIME))
-                                            .transform);
+            const auto &odom = plannedMessage_.header.frame_id;
+            const auto stamp = std::min(
+                rclcpp::Time(
+                    buffer_->lookupTransform(scenario_->estimateBaseFrame, odom, tf2::TimePointZero).header.stamp),
+                rclcpp::Time(
+                    buffer_->lookupTransform(scenario_->mapFrame, poseFrame(), tf2::TimePointZero).header.stamp));
+            const auto estimated =
+                matrixOf(buffer_->lookupTransform(scenario_->estimateBaseFrame, odom, stamp).transform);
+            const auto truth = matrixOf(buffer_->lookupTransform(scenario_->mapFrame, poseFrame(), stamp).transform);
             plannedPath.clear();
             for (const auto &pose : plannedMessage_.poses)
-                plannedPath.push_back(toMap * poseOf(pose.pose));
+                plannedPath.push_back(truth * estimated * poseOf(pose.pose));
         } catch (const tf2::TransformException &) {
         } // keep the last placement until TF has the frame
     }
@@ -834,6 +845,85 @@ void RosSide::captureMpc(bool wanted) {
 
     if (age > .5)
         mpcPath.clear(); // controller disabled or gone
+}
+
+void RosSide::resetMapping() {
+    mappingSubs_.clear();
+    mappingMessages_.clear();
+    mappingTargetSub_.reset();
+    mappingEstimates.clear();
+    mappingTargets.clear();
+    haveMappingTargets = false;
+    mappingScanned_ = {};
+}
+
+// Mapping publishes every object as <mapping>/<object> (riptide_mapping2's PoseWithCovarianceStamped, in the
+// object's parent frame). New ones are picked up from the topic list every 2 s; each is placed with the latest TF.
+void RosSide::captureMappingCovariance(bool wanted) {
+    wanted = wanted && live_ && scenario_;
+    if (!wanted) {
+        resetMapping();
+        return;
+    }
+
+    const auto now = Clock::now();
+    if (now - mappingScanned_ > std::chrono::seconds(2)) {
+        mappingScanned_ = now;
+        const std::string prefix = mappingTopic + "/";
+        for (const auto &[topic, types] : node_->get_topic_names_and_types()) {
+            const std::string object = topic.rfind(prefix, 0) == 0 ? topic.substr(prefix.size()) : "";
+            if (object.empty() || object.find('/') != std::string::npos || mappingSubs_.count(object) ||
+                std::find(types.begin(), types.end(), "geometry_msgs/msg/PoseWithCovarianceStamped") == types.end())
+                continue;
+            mappingSubs_[object] = node_->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+                topic, 10, [this, object](const geometry_msgs::msg::PoseWithCovarianceStamped &msg) {
+                    mappingMessages_[object] = {msg, Clock::now()};
+                });
+        }
+#ifdef NEREUS_VIEWER_UWRT
+        if (!mappingTargetSub_) {
+            const auto stateTopic = scenario_->absolute("state/mapping");
+            mappingTargetSub_ = node_->create_subscription<riptide_msgs2::msg::MappingTargetInfo>(
+                stateTopic, 10, [this](const riptide_msgs2::msg::MappingTargetInfo &msg) {
+                    // "torpedo" or "torpedo,bin": every listed object is fused
+                    mappingTargets.clear();
+                    std::stringstream list(msg.target_object);
+                    std::string target;
+                    while (std::getline(list, target, ',')) {
+                        target.erase(0, target.find_first_not_of(" \t"));
+                        target.erase(target.find_last_not_of(" \t") + 1);
+                        if (!target.empty())
+                            mappingTargets.push_back(target);
+                    }
+                    haveMappingTargets = true;
+                });
+        }
+#endif
+    }
+
+    // Mapping republishes every estimate at least every 2 s: one older than 5 s has stopped (mapping gone).
+    for (auto it = mappingMessages_.begin(); it != mappingMessages_.end();)
+        it = now - it->second.received > std::chrono::seconds(5) ? mappingMessages_.erase(it) : std::next(it);
+
+    // Place each estimate: its pose and covariance from the parent frame into the map frame
+    mappingEstimates.clear();
+    for (const auto &[object, entry] : mappingMessages_) {
+        const auto &msg = entry.msg;
+        glm::mat4 parent;
+        if (!latestInFixed(msg.header.frame_id, parent))
+            continue;
+        const auto &p = msg.pose.pose.position;
+        glm::mat3 local;
+        for (int r = 0; r < 3; ++r)
+            for (int c = 0; c < 3; ++c)
+                local[c][r] = float(msg.pose.covariance[std::size_t(6 * r + c)]);
+        const glm::mat3 rotation(parent);
+        MappingEstimate estimate;
+        estimate.object = object;
+        estimate.position = glm::vec3(parent * glm::vec4(float(p.x), float(p.y), float(p.z), 1));
+        estimate.covariance = rotation * local * glm::transpose(rotation);
+        mappingEstimates.push_back(std::move(estimate));
+    }
 }
 
 void RosSide::captureThrust(bool wanted) {

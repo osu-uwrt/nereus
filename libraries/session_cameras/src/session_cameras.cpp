@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 #include <stdexcept>
 
 namespace nereus::session_cameras {
@@ -154,6 +155,8 @@ SessionCameras::SessionCameras(const session::ResolvedScenario &resolved, Option
     sensor_noise_ = scenarioJson.value("sensor_noise", options_.sensor_noise);
     if (options_.supersample < 1 || options_.supersample > 4)
         throw std::runtime_error("camera supersample must be 1..4");
+    const char *cpuProducts = std::getenv("NEREUS_CAMERA_CPU_PRODUCTS");
+    gpu_products_ = options_.gpu_products && !(cpuProducts && std::string(cpuProducts) == "1");
     seed_ = scenarioJson.value("seed", std::uint64_t(0));
     if (!scene_)
         scene_ = std::make_shared<pack_scene::PackScene>(resolved);
@@ -513,6 +516,7 @@ Json SessionCameras::describe() const {
             {"seed", seed_},
             {"always", always_},
             {"supersample", options_.supersample},
+            {"gpu_products", gpu_products_.load()},
             {"cameras", cameraRecords},
             {"scene", scene_->describe()}};
 }
@@ -551,15 +555,31 @@ Products SessionCameras::capture(Camera &c, const Job &job) {
         if (wantEye[eye])
             views[eye] = viewFor(eye); // validates before rendering
 
-    // GL capture, serialized across cameras on the shared host.
+    // GL capture, serialized across cameras on the shared host. The GPU delivers sensor-ready buffers (rows
+    // top-down, depth in meters) unless it failed to before; a failure that the plain capture survives switches
+    // this session to processing them on the CPU.
     const auto renderStart = nowNs();
     {
         std::lock_guard<std::mutex> gl(gl_mutex_);
         for (int eye = 0; eye < 2; ++eye)
             if (wantEye[eye]) {
                 const auto &k = c.intrinsics[std::size_t(eye)];
-                raw[std::size_t(eye)] = host_->capture(scene, *views[eye], appearance, time, k.width, k.height,
-                                                       wantColor[eye], wantDepth[eye]);
+                const auto capture = [&](const std::optional<rendering::SensorFormat> &sensor) {
+                    return host_->capture(scene, *views[eye], appearance, time, k.width, k.height, wantColor[eye],
+                                          wantDepth[eye], sensor);
+                };
+                if (!gpu_products_) {
+                    raw[std::size_t(eye)] = capture(std::nullopt);
+                    continue;
+                }
+                try {
+                    raw[std::size_t(eye)] = capture(rendering::SensorFormat{k.near_plane, k.far_plane});
+                } catch (const std::exception &error) {
+                    raw[std::size_t(eye)] = capture(std::nullopt);
+                    gpu_products_ = false;
+                    std::cerr << "session_cameras: GPU camera products failed (" << error.what()
+                              << "); flipping and converting depth on the CPU from now on\n";
+                }
             }
     }
     const auto renderNs = nowNs() - renderStart;
@@ -571,9 +591,10 @@ Products SessionCameras::capture(Camera &c, const Job &job) {
         if (!wantEye[eye])
             continue;
         const bool jpeg = wantColor[eye] && job.jpeg_quality.has_value();
-        auto frame = c.processors[std::size_t(eye)].process(c.intrinsics[std::size_t(eye)], c.noise,
-                                                            raw[std::size_t(eye)].rgb, raw[std::size_t(eye)].depth,
-                                                            jpeg, job.jpeg_quality.value_or(kDefaultJpegQuality));
+        auto &image = raw[std::size_t(eye)];
+        auto frame = c.processors[std::size_t(eye)].process(
+            c.intrinsics[std::size_t(eye)], c.noise, std::move(image.rgb), std::move(image.depth), jpeg,
+            job.jpeg_quality.value_or(kDefaultJpegQuality), {image.top_down, image.metric_depth});
         (eye ? products.right : products.left) = std::move(frame);
     }
 

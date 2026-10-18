@@ -1,6 +1,6 @@
 """Real-robot operator interface: the pool viewer against a running Talos (no simulator, no stack).
 
-    ros2 launch integrations/uwrt/launch/robot.launch.py [robot_only:=true] [rmw:=<rmw implementation>]
+    ros2 launch nereus robot.launch.py [robot_only:=true] [rmw:=<rmw implementation>]
         [pool:=robosub|rpac] [scenario:=<pack folder>] [config:=<viewer host yaml>]
         [nvidia:=auto|true|false]
 

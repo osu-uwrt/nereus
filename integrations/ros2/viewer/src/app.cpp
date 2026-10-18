@@ -456,6 +456,8 @@ class App {
     void toolbarDetections();
     void drawDetectionSettings(bool includeEnable);
     void toolbarMpcPath();
+    void toolbarCovariance();
+    void drawCovarianceSettings();
     void toolbarThrust();
     void toolbarPreviewTask();
 
@@ -683,6 +685,10 @@ class App {
 
     void drawMapLighting();
     bool openDepth_ = false;
+    // Mapping covariance overlay: the ellipsoid size in sigmas, targets only (when mapping says which) or all
+    bool showCovariance_ = false, covarianceAll_ = false, covarianceLabels_ = true;
+    int covarianceSigmas_ = 2;
+    float covarianceLineWidth_ = 2; // pixels
     bool showTf_ = false, tfNames_ = true, tfTreeOpen_ = false, detections_ = false, showMpc_ = false,
          showThrust_ = false, demoMode_ = false;
     float thrustScale_ = .05f; // arrow meters per newton (host yaml thrust_arrows.meters_per_newton)
@@ -797,6 +803,12 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     showTf_ = opt_.showTf;
     detections_ = opt_.detections.value_or(lookup(config_, {"detections", "enabled"}).as<bool>(true));
     showMpc_ = opt_.mpcPath;
+    showCovariance_ = opt_.covariance || lookup(config_, {"mapping_covariance", "enabled"}).as<bool>(false);
+    covarianceSigmas_ = std::clamp(lookup(config_, {"mapping_covariance", "sigmas"}).as<int>(2), 1, 3);
+    covarianceAll_ = lookup(config_, {"mapping_covariance", "show"}).as<std::string>("targets") == "all";
+    covarianceLineWidth_ = lookup(config_, {"mapping_covariance", "line_width"}).as<float>(2);
+    if (!std::isfinite(covarianceLineWidth_) || covarianceLineWidth_ <= 0)
+        throw std::runtime_error("mapping_covariance.line_width must be positive");
     showThrust_ = opt_.thrust || lookup(config_, {"thrust_arrows", "enabled"}).as<bool>(false);
     thrustScale_ = lookup(config_, {"thrust_arrows", "meters_per_newton"}).as<float>(.05f);
     if (!std::isfinite(thrustScale_) || thrustScale_ <= 0)
@@ -1460,6 +1472,7 @@ void App::step(double t) {
     if (!demoMode_)
         ros_->capturePointClouds();
     ros_->captureMpc(showMpc_ && !demoMode_);
+    ros_->captureMappingCovariance(showCovariance_ && !demoMode_);
     ros_->captureThrust(showThrust_ && !demoMode_);
     thrusters_.advance(clockSeconds());
     (void)t;
@@ -2978,10 +2991,45 @@ void App::toolbarMpcPath() {
         return;
     toggleChip("MPC path", &showMpc_);
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Predicted MPC trajectory over its horizon (%s, orange).\n"
-                          "Drawn relative to the simulator vehicle, so localization drift does not offset it.\n"
-                          "Blue: the whole follow_path plan with its headings (%s), placed through TF.",
-                          ros_->mpcTopic.c_str(), ros_->plannedTopic.c_str());
+        ImGui::SetTooltip(
+            "Predicted MPC trajectory over its horizon (%s, orange).\n"
+            "Blue: the whole follow_path plan with its headings (%s).\n"
+            "Both are drawn relative to the simulator vehicle, so localization drift does not offset them.",
+            ros_->mpcTopic.c_str(), ros_->plannedTopic.c_str());
+}
+
+void App::toolbarCovariance() {
+    if (demoMode_)
+        return;
+    if (toggleChipWithMenu("Covariance", &showCovariance_, "covariance_options"))
+        ImGui::OpenPopup("covariance_options");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Mapping's estimates as covariance ellipsoids (%s/<object>), placed through TF,\n"
+                          "labeled with the object and its horizontal 1-sigma spread.",
+                          ros_->mappingTopic.c_str());
+    if (ImGui::BeginPopup("covariance_options")) {
+        drawCovarianceSettings();
+        ImGui::EndPopup();
+    }
+}
+
+void App::drawCovarianceSettings() {
+    int sigmas = covarianceSigmas_ - 1;
+    ImGui::SetNextItemWidth(ui(170));
+    if (pins::Combo("Ellipsoid", &sigmas, "1 sigma\0" "2 sigma\0" "3 sigma\0"))
+        covarianceSigmas_ = sigmas + 1;
+    ImGui::SetNextItemWidth(ui(170));
+    ImGui::SliderFloat("Line width", &covarianceLineWidth_, .5f, 6.f, "%.1f px");
+    int show = covarianceAll_ ? 1 : 0;
+    ImGui::SetNextItemWidth(ui(170));
+    if (pins::Combo("Objects", &show, "Mapping targets\0" "All\0"))
+        covarianceAll_ = show == 1;
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Mapping targets: what mapping is fusing now (its state/mapping list).\n"
+                          "All: every object it publishes, unseen ones at their prior size.");
+    pins::Checkbox("Labels", &covarianceLabels_);
+    ImGui::TextDisabled("%zu estimates%s", ros_->mappingEstimates.size(),
+                        ros_->haveMappingTargets ? "" : ", no target list yet");
 }
 
 void App::toolbarThrust() {
@@ -3053,6 +3101,7 @@ void App::registerHostItems() {
     add("labels", [this] { toolbarLabels(); });
     add("tf", [this] { toolbarTf(); });
     add("mpc_path", [this] { toolbarMpcPath(); });
+    add("covariance", [this] { toolbarCovariance(); });
     add("thrust", [this] { toolbarThrust(); });
     add("preview_task", [this] { toolbarPreviewTask(); });
     add(
@@ -3347,6 +3396,7 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
         if (!demoMode_) {
             add("View", "Detections", detections_, [this] { detections_ = !detections_; });
             add("View", "MPC path", showMpc_, [this] { showMpc_ = !showMpc_; });
+            add("View", "Mapping covariance", showCovariance_, [this] { showCovariance_ = !showCovariance_; });
             if (!scenario_->thrusterMounts.empty())
                 add("View", "Thrust", showThrust_, [this] { showThrust_ = !showThrust_; });
         }
@@ -4154,6 +4204,7 @@ void App::drawViewMenu() {
         ImGui::MenuItem("TF frames", nullptr, &showTf_);
         ImGui::MenuItem("Detections", nullptr, &detections_, !demoMode_);
         ImGui::MenuItem("MPC path", nullptr, &showMpc_, !demoMode_);
+        ImGui::MenuItem("Mapping covariance", nullptr, &showCovariance_, !demoMode_);
         ImGui::MenuItem("Thrust", nullptr, &showThrust_, !demoMode_ && !scenario_->thrusterMounts.empty());
     }
 
@@ -4683,6 +4734,22 @@ void App::drawPoolView(double time, float dt) {
     if (showMpc_ && !demoMode_) {
         drawPlannedPath(ros_->plannedPath, vp, rect);
         drawMpcPath(ros_->mpcPath, vp, rect);
+    }
+    if (showCovariance_ && !demoMode_) {
+        // Targets: what mapping is fusing now (all of them until it has said)
+        std::vector<RosSide::MappingEstimate> shown;
+        for (const auto &estimate : ros_->mappingEstimates)
+            if (covarianceAll_ || !ros_->haveMappingTargets ||
+                std::find(ros_->mappingTargets.begin(), ros_->mappingTargets.end(), estimate.object) !=
+                    ros_->mappingTargets.end())
+                shown.push_back(estimate);
+        CovarianceOverlay overlay;
+        overlay.estimates = &shown;
+        overlay.sigmas = float(covarianceSigmas_);
+        overlay.lineWidth = covarianceLineWidth_;
+        overlay.labels = covarianceLabels_;
+        overlay.font = window_->small;
+        drawCovariances(overlay, vp, rect);
     }
     if (showThrust_ && !demoMode_)
         drawThrust(scenario_->thrusterMounts, ros_->thrust, body_, thrustScale_, vp, rect);
@@ -5696,7 +5763,7 @@ int App::loop() {
             if (scenario_)
                 std::cout << "capture: status=" << status_ << " detections stored/placed=" << ros_->detectionCount()
                           << "/" << ros_->placedDetections.size() << " mpc_points=" << ros_->mpcPath.size()
-                          << " planned_points=" << ros_->plannedPath.size() << " props=" << ros_->props.size()
+                          << " planned_points=" << ros_->plannedPath.size() << " mapping_estimates=" << ros_->mappingEstimates.size() << " props=" << ros_->props.size()
                           << " projectiles=" << ros_->projectiles.size()
                           << " magnet_lights=" << ros_->magnetLights.size() << " tf_frames=" << tf_.frames.size()
                           << " camera_frames=" << (ros_->feeds.empty() ? 0 : ros_->feeds[0].frames) << " body=("

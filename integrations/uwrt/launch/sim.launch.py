@@ -1,6 +1,6 @@
 """One-command UWRT simulation: nereus-sim + the UWRT robot stack + the pool viewer.
 
-    ros2 launch integrations/uwrt/launch/sim.launch.py [stack:=false] [viewer:=false] [close_with_viewer:=false]
+    ros2 launch nereus sim.launch.py [stack:=false] [viewer:=false] [close_with_viewer:=false]
         [pool:=robosub|rpac] [scenario:=<pack folder>] [output:=<run dir>] [rmw:=<rmw implementation>]
         [cameras:=true|false] [always_cameras:=true|false] [camera_supersample:=1..4]
         [active_control_model:=mpc] [mpc_model:=sim|<name>|<path>] [mpc_odom_topic:=simulator/ground_truth]

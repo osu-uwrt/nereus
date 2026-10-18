@@ -131,6 +131,12 @@ if(NEREUS_BUILD_ROS_VIEWER)
   add_subdirectory(integrations/ros2/viewer)
 endif()
 
+# `ros2 launch nereus <file>` (cmake/NereusRosIndex.cmake) for the UWRT launch files.
+if(NEREUS_BUILD_ROS_BRIDGE OR NEREUS_BUILD_ROS_VIEWER)
+  include(cmake/NereusRosIndex.cmake)
+  add_subdirectory(integrations/uwrt)
+endif()
+
 # Install the exported targets and a find_package(Nereus) config (cmake/NereusConfig.cmake.in).
 install(FILES LICENSE NOTICE DESTINATION ${CMAKE_INSTALL_DATADIR}/nereus/legal)
 install(EXPORT NereusTargets NAMESPACE Nereus::

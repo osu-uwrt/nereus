@@ -22,7 +22,8 @@ class OffscreenRenderer {
 
     // Renderer::draw followed by Renderer::captureImage on this host's context.
     ImageCapture capture(const Scene &, const View &, const Appearance &, float time, int width, int height,
-                         bool color = true, bool depth = true);
+                         bool color = true, bool depth = true,
+                         const std::optional<SensorFormat> &sensor = std::nullopt);
     // Renderer::drawLabels on this host's context (does not disturb capture()).
     LabelCapture captureLabels(const Scene &, const std::vector<InstanceLabel> &labels, const View &, int width,
                                int height);

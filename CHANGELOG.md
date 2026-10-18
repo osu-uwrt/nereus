@@ -23,6 +23,9 @@ First version for the team.
   (`python -m nereus.packs validate|resolve`). The Talos robot, RoboSub 2026 course and UWRT
   bridge ship as packs.
 - UWRT launch files for the simulator and for the real robot.
+- `ros2 launch nereus sim.launch.py` / `robot.launch.py` from any directory: the ROS build registers a `nereus`
+  package in `build/ros-viewer/ros/` (plain CMake, `nereus_register_launch()`); `./setup.sh` offers to source it
+  from `~/.bashrc` on ROS machines.
 - Pool packs describe their own lane lines and finish (`markings`, `surface`): floor and wall stripes
   at any position, angle, width and color, with optional T ends and an evenly spaced `lane_grid`
   shorthand. The renderer no longer assumes the RoboSub layout, and the course map draws the lines.

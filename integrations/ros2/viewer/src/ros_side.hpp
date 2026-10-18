@@ -14,6 +14,7 @@
 #include <chrono>
 #include <deque>
 #include <functional>
+#include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <map>
 #include <memory>
@@ -221,6 +222,20 @@ class RosSide {
     // MPC prediction (mpcPath, over its horizon) and the whole follow_path plan (plannedPath, latched,
     // placed through TF in the map frame like the course estimate), subscribed only while wanted.
     void captureMpc(bool wanted);
+    // Mapping's estimates with their covariance (riptide_mapping's mapping/<object>, PoseWithCovarianceStamped;
+    // topics.mapping), discovered and subscribed only while wanted and placed in the map frame through TF like the
+    // mapping course. mappingTargets: what mapping is fusing now (its state/mapping target list, UWRT builds;
+    // haveMappingTargets is false without one).
+    struct MappingEstimate {
+        std::string object;
+        glm::vec3 position{0};   // map frame
+        glm::mat3 covariance{0}; // position covariance in the map frame
+    };
+    void captureMappingCovariance(bool wanted);
+    std::vector<MappingEstimate> mappingEstimates;
+    std::vector<std::string> mappingTargets;
+    bool haveMappingTargets = false;
+
     // Commanded thruster forces (topics.thruster_forces, what RViz drew as thruster wrenches), subscribed only
     // while wanted. `thrust` holds the newest array in bridge order, empty when none arrived for 0.5 s.
     void captureThrust(bool wanted);
@@ -244,7 +259,7 @@ class RosSide {
         return detectionMarkers_.size();
     }
     // Resolved topic names (set by attach(), shown in the GUI).
-    std::string mpcTopic, plannedTopic, detectionTopic, thrustTopic;
+    std::string mpcTopic, plannedTopic, detectionTopic, thrustTopic, mappingTopic;
 
   private:
     // A detection marker and its placements (each placed once, see captureDetections()).
@@ -258,6 +273,8 @@ class RosSide {
     void receiveMarkers(std::map<MarkerKey, MarkerRecord> &, const visualization_msgs::msg::MarkerArray &);
     void receiveDetections(const visualization_msgs::msg::MarkerArray &);
     void expire(std::map<MarkerKey, MarkerRecord> &);
+    // Drops the mapping subscriptions, messages and targets (captureMappingCovariance rediscovers them).
+    void resetMapping();
 
     // (Un)subscribes a feed's RGB and depth topics to match what is wanted.
     void subscribeCamera(CameraFeed &);
@@ -330,6 +347,16 @@ class RosSide {
     nav_msgs::msg::Path plannedMessage_;
     rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr thrustSub_;
     Clock::time_point thrustReceived_{};
+
+    // Mapping estimates by object (captureMappingCovariance), the topic list's last scan and the target list.
+    struct MappingMessage {
+        geometry_msgs::msg::PoseWithCovarianceStamped msg;
+        Clock::time_point received;
+    };
+    std::map<std::string, rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr> mappingSubs_;
+    std::map<std::string, MappingMessage> mappingMessages_;
+    Clock::time_point mappingScanned_{};
+    rclcpp::SubscriptionBase::SharedPtr mappingTargetSub_;
 
     // Detections.
     std::map<MarkerKey, DetectionEntry> detectionMarkers_;

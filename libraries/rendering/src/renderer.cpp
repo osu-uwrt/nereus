@@ -588,6 +588,59 @@ struct Frame {
     }
 };
 
+// Sensor-ready readback target: one color texture of a fixed format (RGBA8 flipped color, R32F metric
+// depth) and no depth buffer, separate from the frame so it never disturbs draw()'s images.
+struct ColorTarget {
+    GLuint fbo = 0, color = 0;
+    int width = 0, height = 0;
+
+    ColorTarget() = default;
+    ColorTarget(const ColorTarget &) = delete;
+    ColorTarget &operator=(const ColorTarget &) = delete;
+    ~ColorTarget() {
+        release();
+    }
+
+    void release() {
+        if (fbo)
+            glDeleteFramebuffers(1, &fbo);
+        if (color)
+            glDeleteTextures(1, &color);
+        fbo = color = 0;
+        width = height = 0;
+    }
+
+    void resize(int w, int h, GLenum internal, GLenum format, GLenum type) {
+        if (fbo && width == w && height == h)
+            return;
+        release();
+        glGenFramebuffers(1, &fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glGenTextures(1, &color);
+        glBindTexture(GL_TEXTURE_2D, color);
+        glTexImage2D(GL_TEXTURE_2D, 0, internal, w, h, 0, format, type, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color, 0);
+        glDrawBuffer(GL_COLOR_ATTACHMENT0);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        try {
+            checkGl("sensor target"); // never leave an allocation error pending for the next draw()
+        } catch (...) {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            release();
+            throw;
+        }
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            release();
+            throw std::runtime_error("sensor framebuffer incomplete");
+        }
+        width = w;
+        height = h;
+    }
+};
+
 // Label pass target: R32UI ids + 24-bit depth, separate from the color frame so a label pass never
 // disturbs draw()'s images or captures.
 struct LabelTarget {
@@ -659,8 +712,9 @@ bool affine(const Eigen::Matrix4f &m) {
 struct Renderer::Resources {
     // Every new owned GL object must also be zeroed by abandon() after context loss.
     GLuint sceneProgram = 0, waterProgram = 0, shadowProgram = 0, postProgram = 0, bloomProgram = 0, focusProgram = 0,
-           pointsProgram = 0, quad = 0, labelProgram = 0, depthSampleProgram = 0;
-    // label.vert/frag compile on the first label pass, depth_sample.frag on the first supersampled depth readback
+           pointsProgram = 0, quad = 0, labelProgram = 0, depthSampleProgram = 0, depthMetricProgram = 0;
+    // label.vert/frag compile on the first label pass, depth_sample.frag on the first supersampled depth readback,
+    // depth_metric.frag on the first sensor-ready depth readback
     std::filesystem::path shaderRoot;
 
     // Label pass state.
@@ -761,7 +815,8 @@ struct Renderer::Resources {
     Frame f, preview;          // `preview` is swapped into `f` for Appearance::preview draws
     bool shadow_valid = false; // the shadow map holds a real (shadows-on) pass
     Target shadow, reflection;
-    Target depthSample; // output-sized depth picked from a supersampled frame for captureImage
+    Target depthSample;                   // output-sized depth picked from a supersampled frame for captureImage
+    ColorTarget sensorColor, sensorDepth; // sensor-ready captureImage: flipped RGBA8, metric R32F depth
     glm::mat4 lightMatrix{1}, poolToMap{1}, mapToPool{1}; // Sun clip-from-world; pool frame <-> world.
     glm::vec3 poolSize{1}, center{0};
     float waterLevel = 0, ledRadiance = 60;
@@ -805,7 +860,7 @@ struct Renderer::Resources {
         for (auto &entry : pointBuffers)
             releasePoints(entry.second);
         for (auto id : {sceneProgram, waterProgram, shadowProgram, postProgram, bloomProgram, focusProgram,
-                        pointsProgram, labelProgram, depthSampleProgram})
+                        pointsProgram, labelProgram, depthSampleProgram, depthMetricProgram})
             if (id)
                 glDeleteProgram(id);
         if (quad)
@@ -815,8 +870,10 @@ struct Renderer::Resources {
     // Zeroes every GL name without calling GL, so the destructors that follow make no GL calls.
     void abandon() noexcept {
         sceneProgram = waterProgram = shadowProgram = postProgram = bloomProgram = focusProgram = pointsProgram = quad =
-            labelProgram = depthSampleProgram = 0;
+            labelProgram = depthSampleProgram = depthMetricProgram = 0;
         labelTarget.fbo = labelTarget.ids = labelTarget.depth = 0;
+        for (auto *target : {&sensorColor, &sensorDepth})
+            target->fbo = target->color = 0;
         for (auto &entry : partMaps)
             if (entry.second.texture)
                 entry.second.texture->id = 0;
@@ -910,6 +967,8 @@ struct Renderer::Resources {
     void drawScene(const InternalView &camera, const Look &look, float time, bool clip = false);
     void render(const InternalView &camera, const Look &look, float time);
     void sampleDepth();
+    void flipColor();
+    void metricDepth(const SensorFormat &);
 };
 
 // Renders the sun's depth map: a 66 m square orthographic view centered on the lighting center. Indoors the
@@ -1252,6 +1311,49 @@ void Renderer::Resources::sampleDepth() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+// The final color with its rows flipped (a mirrored blit), so the readback starts at the top.
+void Renderer::Resources::flipColor() {
+    const int w = f.final.width, h = f.final.height;
+    sensorColor.resize(w, h, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+    glDisable(GL_SCISSOR_TEST); // blits are scissored
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, f.final.fbo);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, sensorColor.fbo);
+    glBlitFramebuffer(0, 0, w, h, 0, h, w, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+// Output-sized depth in meters along the optical axis, rows flipped (see depth_metric.frag): the same
+// per-pixel sample as sampleDepth, converted on the GPU instead of by the caller.
+void Renderer::Resources::metricDepth(const SensorFormat &sensor) {
+    if (!depthMetricProgram)
+        depthMetricProgram = program(shaderRoot, "depth_metric", "post");
+    sensorDepth.resize(f.final.width, f.final.height, GL_R32F, GL_RED, GL_FLOAT);
+    glBindFramebuffer(GL_FRAMEBUFFER, sensorDepth.fbo);
+    glViewport(0, 0, sensorDepth.width, sensorDepth.height);
+    // The caller may have changed state since draw(); only what this full-screen color write depends on.
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_RASTERIZER_DISCARD);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glUseProgram(depthMetricProgram);
+    integer(depthMetricProgram, "sceneDepth", 0);
+    integer(depthMetricProgram, "samples", f.samples);
+    integer(depthMetricProgram, "height", sensorDepth.height);
+    uniform(depthMetricProgram, "nearPlane", static_cast<float>(sensor.near_plane));
+    uniform(depthMetricProgram, "farPlane", static_cast<float>(sensor.far_plane));
+    glBindSampler(0, 0);
+    bindTexture(f.opaque.depth, 0);
+    glBindVertexArray(quad);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 Renderer::Renderer(const std::filesystem::path &root) {
     if (!GLEW_VERSION_3_3)
         throw std::runtime_error("rendering requires initialized GLEW and OpenGL 3.3");
@@ -1488,16 +1590,23 @@ Capture Renderer::capture() const {
     return result;
 }
 
-ImageCapture Renderer::captureImage(bool color, bool depth) const {
+ImageCapture Renderer::captureImage(bool color, bool depth, const std::optional<SensorFormat> &sensor) const {
     if (!resources_)
         throw std::logic_error("renderer context was abandoned");
     const auto &f = resources_->f;
     if (!resources_->frame_valid)
         throw std::logic_error("capture requires a rendered frame");
+    if (sensor) {
+        const auto near = static_cast<float>(sensor->near_plane), far = static_cast<float>(sensor->far_plane);
+        if (!std::isfinite(near) || !std::isfinite(far) || near <= 0 || far <= near)
+            throw std::invalid_argument("sensor clip planes must be finite with 0 < near < far");
+    }
 
     ImageCapture result;
     result.width = f.final.width;
     result.height = f.final.height;
+    result.top_down = sensor.has_value();
+    result.metric_depth = sensor && depth;
     const auto pixels = static_cast<std::size_t>(result.width) * result.height;
 
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -1508,11 +1617,19 @@ ImageCapture Renderer::captureImage(bool color, bool depth) const {
     glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
     if (color) { // Same source as the original sensor: tone-mapped final color.
         result.rgb.resize(pixels * 3);
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, f.final.fbo);
+        if (sensor)
+            resources_->flipColor();
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, sensor ? resources_->sensorColor.fbo : f.final.fbo);
         glReadBuffer(GL_COLOR_ATTACHMENT0);
         glReadPixels(0, 0, result.width, result.height, GL_RGB, GL_UNSIGNED_BYTE, result.rgb.data());
     }
-    if (depth) { // Opaque pass depth: the water surface never occludes sensor depth.
+    if (depth && sensor) { // Opaque pass depth (the water surface never occludes sensor depth), in meters.
+        result.depth.resize(pixels);
+        resources_->metricDepth(*sensor);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, resources_->sensorDepth.fbo);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glReadPixels(0, 0, result.width, result.height, GL_RED, GL_FLOAT, result.depth.data());
+    } else if (depth) {
         result.depth.resize(pixels);
         if (f.samples > 1)
             resources_->sampleDepth();

@@ -57,17 +57,24 @@ struct Frame {
     std::vector<float> depth;
 };
 
+// Layout of the raw buffers given to Processor::process. The default is the framebuffer's: rows bottom-up and
+// nonlinear [0,1] depth. A GPU sensor capture (rendering::SensorFormat) delivers rows top-down and depth already
+// in meters (NaN invalid), so the processor skips those steps.
+struct RawLayout {
+    bool top_down = false, metric_depth = false;
+};
+
 // One processor per camera, used by one owner; reset restores its random stream.
-// Inputs are immutable bottom-up framebuffer RGB8/nonlinear depth; either may be empty.
+// Inputs are RGB8/depth buffers in `layout` (moved from when already top-down); either may be empty.
 class Processor {
   public:
     explicit Processor(std::uint32_t seed = 7);
     void reset(std::uint32_t seed);
 
-    // Flips rows to top-down, linearizes depth, applies noise and optionally encodes JPEG.
-    // Throws on mismatched buffers; a throwing call leaves the random stream untouched.
-    Frame process(const Intrinsics &, const DepthNoise &, const std::vector<std::uint8_t> &rgb,
-                  const std::vector<float> &depth, bool jpeg = false, int jpeg_quality = 93);
+    // Flips rows to top-down and linearizes depth unless `layout` says that is done, applies noise and
+    // optionally encodes JPEG. Throws on mismatched buffers; a throwing call leaves the random stream untouched.
+    Frame process(const Intrinsics &, const DepthNoise &, std::vector<std::uint8_t> rgb, std::vector<float> depth,
+                  bool jpeg = false, int jpeg_quality = 93, RawLayout layout = {});
 
   private:
     std::mt19937 random_;

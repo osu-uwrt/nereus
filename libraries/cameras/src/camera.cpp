@@ -57,8 +57,8 @@ void Processor::reset(std::uint32_t seed) {
     random_.seed(seed);
 }
 
-Frame Processor::process(const Intrinsics &calibration, const DepthNoise &noise, const std::vector<std::uint8_t> &rgb,
-                         const std::vector<float> &depth, bool jpeg, int jpeg_quality) {
+Frame Processor::process(const Intrinsics &calibration, const DepthNoise &noise, std::vector<std::uint8_t> rgb,
+                         std::vector<float> depth, bool jpeg, int jpeg_quality, RawLayout layout) {
     // Validate everything before touching any state.
     calibration.validate();
     noise.validate();
@@ -70,29 +70,42 @@ Frame Processor::process(const Intrinsics &calibration, const DepthNoise &noise,
     Frame result;
     result.width = calibration.width;
     result.height = calibration.height;
-    result.rgb.resize(rgb.size());
-    result.depth.resize(depth.size());
     auto candidate = random_; // Failed processing must not consume the camera's random state.
 
-    // Flip GL's bottom-up rows to top-down and convert depth-buffer values to meters.
-    for (int y = 0; y < result.height; ++y) {
-        const auto source = static_cast<std::size_t>(result.height - 1 - y) * result.width;
-        const auto target = static_cast<std::size_t>(y) * result.width;
-        if (!rgb.empty())
-            std::copy_n(rgb.begin() + source * 3, result.width * 3, result.rgb.begin() + target * 3);
-        if (!depth.empty())
-            for (int x = 0; x < result.width; ++x) {
-                const float z = depth[source + x];
-                const float near = static_cast<float>(calibration.near_plane);
-                const float far = static_cast<float>(calibration.far_plane);
-                // Depth at (or numerically next to) the far plane is cleared background -> NaN.
-                result.depth[target + x] = !std::isfinite(z) || z < 0 || z >= .999999f
-                                               ? std::numeric_limits<float>::quiet_NaN()
-                                               : 2 * near * far / (far + near - (2 * z - 1) * (far - near));
-            }
-    }
+    // Buffers the GPU already delivered sensor-ready are taken as they are.
+    const bool flipRgb = !rgb.empty() && !layout.top_down;
+    const bool convertDepth = !depth.empty() && !(layout.top_down && layout.metric_depth);
+    if (flipRgb)
+        result.rgb.resize(rgb.size());
+    else
+        result.rgb = std::move(rgb);
+    if (convertDepth)
+        result.depth.resize(depth.size());
+    else
+        result.depth = std::move(depth);
 
-    if (!depth.empty())
+    // Flip GL's bottom-up rows to top-down and convert depth-buffer values to meters.
+    if (flipRgb || convertDepth)
+        for (int y = 0; y < result.height; ++y) {
+            const auto source = static_cast<std::size_t>(layout.top_down ? y : result.height - 1 - y) * result.width;
+            const auto target = static_cast<std::size_t>(y) * result.width;
+            if (flipRgb)
+                std::copy_n(rgb.begin() + source * 3, result.width * 3, result.rgb.begin() + target * 3);
+            if (convertDepth && layout.metric_depth)
+                std::copy_n(depth.begin() + source, result.width, result.depth.begin() + target);
+            else if (convertDepth)
+                for (int x = 0; x < result.width; ++x) {
+                    const float z = depth[source + x];
+                    const float near = static_cast<float>(calibration.near_plane);
+                    const float far = static_cast<float>(calibration.far_plane);
+                    // Depth at (or numerically next to) the far plane is cleared background -> NaN.
+                    result.depth[target + x] = !std::isfinite(z) || z < 0 || z >= .999999f
+                                                   ? std::numeric_limits<float>::quiet_NaN()
+                                                   : 2 * near * far / (far + near - (2 * z - 1) * (far - near));
+                }
+        }
+
+    if (!result.depth.empty())
         detail::applyNoise(noise, result.depth, result.width, result.height, candidate);
 
     // OpenCV encodes BGR, so swap channels before compressing.

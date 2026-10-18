@@ -31,10 +31,19 @@ struct Capture {
 // scene sample per n x n block, never an average across an edge: the sample at block offset
 // (n/2, n/2) (integer division), whose center is the pixel center for odd n and 1/(2n) pixel right of and
 // above it for even n.
+// With a SensorFormat the GPU delivers the buffers sensor-ready instead: rows start at the top, and depth
+// is meters along the optical axis (2 n f / (f + n - (2 z - 1)(f - n)) in float, NaN where z >= .999999,
+// i.e. cleared background), from the same per-pixel sample. top_down/metric_depth say which layout it holds.
 struct ImageCapture {
     int width = 0, height = 0;
     std::vector<std::uint8_t> rgb;
     std::vector<float> depth;
+    bool top_down = false, metric_depth = false;
+};
+
+// Clip planes of the view's projection, used to convert depth to meters on the GPU.
+struct SensorFormat {
+    double near_plane = 0, far_plane = 0;
 };
 
 // Label pass: per scene instance an id (24 bits; 0 = occludes only, never labeled), per submesh a fixed part
@@ -87,8 +96,10 @@ class Renderer {
 
     // Requires the most recent draw to have completed successfully. Resets pixel-pack
     // state like capture() and leaves framebuffer zero bound for reading. A supersampled depth readback
-    // first draws the per-pixel sample into an internal target (changing viewport, program and depth state).
-    ImageCapture captureImage(bool color = true, bool depth = true) const;
+    // first draws the per-pixel sample into an internal target (changing viewport, program and depth state);
+    // so does a SensorFormat readback, which flips and converts on the GPU (see ImageCapture).
+    ImageCapture captureImage(bool color = true, bool depth = true,
+                              const std::optional<SensorFormat> &sensor = std::nullopt) const;
 
     // labels: one per scene.instances entry (same order). Independent of draw(): may be called before or
     // after it, renders into its own target and leaves the last draw's frame and captures intact. Meshes and

@@ -46,7 +46,7 @@ if(BUILD_TESTING)
 
   # One GTest binary per host_<name>.cpp, all linked against the GL-free core.
   set(_host_tests viewer_input tf_tree detection_pose status_lights thruster_visuals camera_geometry jpeg scenario
-      display_clock frame_profiler point_cloud mapping_markers prior_map scenario_packs file_picker)
+      display_clock frame_profiler point_cloud mapping_markers prior_map scenario_packs file_picker covariance_ellipsoid)
   foreach(name ${_host_tests})
     add_executable(host_${name}_test ../tests/host_${name}.cpp)
     target_link_libraries(host_${name}_test PRIVATE nereus_viewer_host_core GTest::gtest_main)

@@ -9,6 +9,8 @@
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <tuple>
+#include <utility>
 
 namespace sc = nereus::session_cameras;
 namespace rs = nereus::session;
@@ -220,6 +222,68 @@ TEST(SessionCameras, InvalidateDiscardsPendingAndStaleResults) {
     EXPECT_GE(stale + sink.size() - before, 2u);
     for (std::size_t i = before; i < sink.products.size(); ++i)
         EXPECT_EQ(sink.products[i].revision, 1u);
+}
+
+// GPU products (flip and depth conversion on the GPU) and the CPU fallback deliver the same frames, noise
+// and all (color exactly, depth to float rounding), and the configuration records which path runs.
+TEST(SessionCameras, GpuAndCpuProductsAreIdentical) {
+    const auto run = [](bool gpu) {
+        sc::Options options;
+        options.always = true;
+        options.gpu_products = gpu;
+        auto cameras = make(options);
+        if (!cameras)
+            return std::vector<sc::Products>{};
+        EXPECT_EQ(cameras->describe().at("gpu_products").get<bool>(), gpu);
+        Sink sink;
+        cameras->start([&](sc::Products &&p) { sink(std::move(p)); });
+        for (std::int64_t t : {std::int64_t(0), std::int64_t(100'000'000)}) {
+            const auto count = sink.size();
+            cameras->request(t, t, poolPose());
+            EXPECT_TRUE(sink.waitFor(count + cameras->cameraIds().size()));
+        }
+        cameras->close();
+        // A failing GPU path falls back to the CPU silently: the comparison would then prove nothing.
+        EXPECT_EQ(cameras->describe().at("gpu_products").get<bool>(), gpu)
+            << "the GPU path failed and the session fell back to the CPU";
+        auto products = sink.products;
+        std::sort(products.begin(), products.end(), [](const auto &a, const auto &b) {
+            return std::tie(a.snapshot_time_ns, a.camera) < std::tie(b.snapshot_time_ns, b.camera);
+        });
+        return products;
+    };
+    const auto gpu = run(true);
+    if (gpu.empty())
+        GTEST_SKIP() << "no EGL";
+    const auto cpu = run(false);
+    ASSERT_EQ(gpu.size(), cpu.size());
+
+    // The GPU rounds the depth conversion differently (fused multiply-add, division) by about 1e-6 relative;
+    // the noise pattern is the same, and only a rare threshold decision may flip (valid <-> NaN).
+    const auto expectSameDepth = [](const std::vector<float> &gpu, const std::vector<float> &cpu) {
+        ASSERT_EQ(gpu.size(), cpu.size());
+        std::size_t flipped = 0;
+        double worst = 0;
+        for (std::size_t i = 0; i < gpu.size(); ++i)
+            if (std::isnan(gpu[i]) != std::isnan(cpu[i]))
+                ++flipped;
+            else if (!std::isnan(cpu[i]))
+                worst = std::max(worst, std::abs(double(gpu[i]) - cpu[i]) / std::abs(double(cpu[i])));
+        EXPECT_LE(worst, 1e-5);
+        EXPECT_LE(flipped, gpu.size() / 100'000);
+    };
+    for (std::size_t i = 0; i < gpu.size(); ++i) {
+        SCOPED_TRACE(gpu[i].camera + " @ " + std::to_string(gpu[i].snapshot_time_ns));
+        ASSERT_EQ(gpu[i].camera, cpu[i].camera);
+        for (const auto &[a, b] : {std::pair{&gpu[i].left, &cpu[i].left}, std::pair{&gpu[i].right, &cpu[i].right}}) {
+            ASSERT_EQ(a->has_value(), b->has_value());
+            if (!a->has_value())
+                continue;
+            EXPECT_EQ((*a)->rgb, (*b)->rgb);
+            EXPECT_EQ((*a)->jpeg, (*b)->jpeg);
+            expectSameDepth((*a)->depth, (*b)->depth);
+        }
+    }
 }
 
 TEST(SessionCameras, FullResetRestoresNoiseStreams) {

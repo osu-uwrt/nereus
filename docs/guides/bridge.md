@@ -124,7 +124,7 @@ used for resets and for aligning your estimator after a placement (`estimator_al
 
 ```sh
 uv run nereus-packs validate content/packs/scenarios/<scenario>
-ros2 launch integrations/uwrt/launch/sim.launch.py scenario:=$PWD/content/packs/scenarios/<scenario> stack:=false
+ros2 launch nereus sim.launch.py scenario:=$PWD/content/packs/scenarios/<scenario> stack:=false
 ros2 topic list          # every stream topic should be there
 ```
 

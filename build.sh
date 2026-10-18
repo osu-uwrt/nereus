@@ -20,6 +20,25 @@ jobs=$(((available_gb - 4) / 3))
 ((jobs < 1)) && jobs=1
 jobs=${NEREUS_JOBS:-$jobs}
 
+# Keep an active conda environment out of the build: CMake finds packages through PATH, and conda's libraries
+# (libcurl, gtest, yaml-cpp, ...) then shadow the system ones that OpenCV/GDAL link against, failing the link.
+if [[ -n ${CONDA_PREFIX:-} ]]; then
+    conda_root=${_CONDA_ROOT:-$CONDA_PREFIX}
+    # Literal prefix match (the root may hold regex characters).
+    kept=()
+    IFS=: read -ra entries <<<"$PATH"
+    for entry in "${entries[@]}"; do
+        [[ $entry == "$conda_root"* ]] || kept+=("$entry")
+    done
+    PATH=$(IFS=:; echo "${kept[*]}")
+    unset CONDA_PREFIX
+    # A cache configured inside conda keeps its package paths; start that preset's configure over.
+    if grep -qsF "$conda_root" "build/$preset/CMakeCache.txt"; then
+        echo "Reconfiguring build/$preset: its CMake cache was made with conda active."
+        rm -rf "build/$preset/CMakeCache.txt" "build/$preset/CMakeFiles"
+    fi
+fi
+
 if ! command -v uv >/dev/null; then
     echo "uv not found: install it once with 'curl -LsSf https://astral.sh/uv/install.sh | sh'" >&2
     echo "(or 'pip install --user uv'), then rerun." >&2
@@ -35,3 +54,9 @@ cmake --build --preset "$preset" -j "$jobs"
 echo
 echo "Built preset '$preset' in build/$preset."
 echo "Python tools: 'source .venv/bin/activate' (nereus-dataset, nereus-packs), or prefix commands with 'uv run'."
+# ROS builds register `ros2 launch nereus ...` (cmake/NereusRosIndex.cmake); point at it unless ~/.bashrc has it.
+prefix_setup="$PWD/build/$preset/ros/setup.bash"
+if [[ -f $prefix_setup ]] && ! grep -qsF "$prefix_setup" ~/.bashrc; then
+    echo "ROS launch: 'source $prefix_setup', then 'ros2 launch nereus sim.launch.py'"
+    echo "(./setup.sh can add it to ~/.bashrc)."
+fi

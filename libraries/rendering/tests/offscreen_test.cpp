@@ -67,6 +67,57 @@ TEST(Offscreen, CapturesWithoutAWindowAndOwnsPixelsAcrossResize) {
     EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
 }
 
+// A SensorFormat capture holds what the CPU makes of a plain one: the same pixels with rows top-down, and depth
+// converted to meters with the same float expression (to a few ulp: GPUs fuse and divide differently; NaN for
+// cleared background), for every supersample factor.
+TEST(Offscreen, SensorFormatMatchesTheCpuFlipAndDepthConversion) {
+    r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
+    auto boxes = scene();
+    boxes.instances[0].transform(1, 3) = .6f; // off center vertically, so a missing or doubled flip shows
+    const int width = 40, height = 24;
+    const float near = .05f, far = 100.f;
+    for (int samples = 1; samples <= 3; ++samples) {
+        SCOPED_TRACE(samples);
+        auto look = appearance();
+        look.supersample = samples;
+        const auto plain = host.capture(boxes, view(), look, 0, width, height);
+        const auto sensor = host.capture(boxes, view(), look, 0, width, height, true, true, r::SensorFormat{near, far});
+        EXPECT_FALSE(plain.top_down || plain.metric_depth);
+        EXPECT_TRUE(sensor.top_down && sensor.metric_depth);
+        ASSERT_EQ(sensor.rgb.size(), plain.rgb.size());
+        ASSERT_EQ(sensor.depth.size(), plain.depth.size());
+        int box = 0, background = 0;
+        for (int y = 0; y < height; ++y)
+            for (int x = 0; x < width; ++x) {
+                const auto top = static_cast<std::size_t>(y) * width + x;
+                const auto bottom = static_cast<std::size_t>(height - 1 - y) * width + x;
+                for (int c = 0; c < 3; ++c)
+                    ASSERT_EQ(sensor.rgb[top * 3 + c], plain.rgb[bottom * 3 + c]) << x << "," << y;
+                const float z = plain.depth[bottom];
+                if (z >= .999999f) {
+                    ASSERT_TRUE(std::isnan(sensor.depth[top])) << x << "," << y;
+                    ++background;
+                    continue;
+                }
+                const float meters = 2 * near * far / (far + near - (2 * z - 1) * (far - near));
+                ASSERT_NEAR(sensor.depth[top], meters, meters * 1e-5f) << x << "," << y;
+                ++box;
+            }
+        EXPECT_GT(box, 0);
+        EXPECT_GT(background, 0);
+    }
+
+    // Color-only sensor captures flip without producing depth; bad clip planes throw before any GL work.
+    const auto color =
+        host.capture(boxes, view(), appearance(), 0, width, height, true, false, r::SensorFormat{near, far});
+    EXPECT_TRUE(color.top_down);
+    EXPECT_FALSE(color.metric_depth);
+    EXPECT_TRUE(color.depth.empty());
+    EXPECT_THROW(host.capture(boxes, view(), appearance(), 0, width, height, true, true, r::SensorFormat{1, 1}),
+                 std::invalid_argument);
+    EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
+}
+
 // Captures may run on other threads; concurrent calls are serialized and give identical results.
 TEST(Offscreen, CanMoveCaptureToAWorkerAndSerializeConcurrentCalls) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);

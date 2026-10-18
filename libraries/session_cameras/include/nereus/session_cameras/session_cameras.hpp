@@ -16,6 +16,7 @@
 #include <nereus/rendering/offscreen.hpp>
 
 #include <array>
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -58,6 +59,9 @@ struct Options {
     std::map<std::string, int> jpeg_quality; // sensor id -> JPEG quality for color outputs (absent: none)
     bool sensor_noise = true;                // overridden by the scenario's sensor_noise when present
     int supersample = 1;                     // color/depth anti-aliasing (rendering::Appearance::supersample), 1..4
+    // Flip rows and convert depth to meters on the GPU (rendering::SensorFormat) instead of in the CPU processor.
+    // If the GPU path fails the session falls back to the CPU for good; NEREUS_CAMERA_CPU_PRODUCTS=1 forces it.
+    bool gpu_products = true;
 };
 
 // One capture of one camera. snapshot_time_ns is the session clock of the request, ros_stamp_ns the stamp
@@ -174,6 +178,7 @@ class SessionCameras {
     // serializes delivery callbacks with invalidate().
     std::unique_ptr<rendering::OffscreenRenderer> host_;
     std::mutex gl_mutex_, publication_mutex_;
+    std::atomic<bool> gpu_products_{true}; // cleared for good (under gl_mutex_) once the GPU products path fails
 
     mutable std::mutex mutex_; // guards everything below and the mutable Camera fields
     std::condition_variable condition_;

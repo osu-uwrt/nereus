@@ -32,7 +32,7 @@ struct Options {
     std::string detectionPlacement; // pose_source | truth | estimate | both (empty: host yaml)
 
     // Overlays and windows open at start, workspace, layout and look.
-    bool showTf = false, mpcPath = false, thrust = false, showScorecard = false;
+    bool showTf = false, mpcPath = false, thrust = false, covariance = false, showScorecard = false;
     std::vector<std::string> open;      // windows shown at start: scene-settings, map, tf, display (pool-viewer)
     std::string priorMap;               // prior map editor's config.yaml (empty: host yaml prior_map.config)
     std::string workspace;              // start workspace: operate (default) | map
