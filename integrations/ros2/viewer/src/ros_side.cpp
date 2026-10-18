@@ -764,7 +764,7 @@ std::vector<rendering::PointSet> RosSide::pointSets() const {
 }
 
 // The controller steers its estimate, so the true vehicle follows the same motion relative to itself:
-// place the prediction relative to the estimated base link, then re-root it at the truth base link.
+// place the prediction and the plan relative to the estimated base link, then re-root them at the truth base link.
 void RosSide::captureMpc(bool wanted) {
     wanted = wanted && live_ && scenario_;
 
@@ -794,18 +794,25 @@ void RosSide::captureMpc(bool wanted) {
 
     if (!wanted)
         return;
-    // The plan is fixed in the odometry frame: re-place it with the latest TF (empty message: no path).
+    // The plan is fixed in the odometry frame, and the controller flies it in its estimate: re-root it like the
+    // prediction so drift carries it with the vehicle (empty message: no path). Both poses at the newest stamp
+    // they share: truth and estimate update at different rates, and pairing their latest would wobble with motion.
     if (plannedMessage_.poses.empty()) {
         plannedPath.clear();
     } else {
         try {
-            const auto toMap = matrixOf(buffer_
-                                            ->lookupTransform(scenario_->mapFrame, plannedMessage_.header.frame_id,
-                                                              rclcpp::Time(0, 0, RCL_ROS_TIME))
-                                            .transform);
+            const auto &odom = plannedMessage_.header.frame_id;
+            const auto stamp = std::min(
+                rclcpp::Time(
+                    buffer_->lookupTransform(scenario_->estimateBaseFrame, odom, tf2::TimePointZero).header.stamp),
+                rclcpp::Time(
+                    buffer_->lookupTransform(scenario_->mapFrame, poseFrame(), tf2::TimePointZero).header.stamp));
+            const auto estimated =
+                matrixOf(buffer_->lookupTransform(scenario_->estimateBaseFrame, odom, stamp).transform);
+            const auto truth = matrixOf(buffer_->lookupTransform(scenario_->mapFrame, poseFrame(), stamp).transform);
             plannedPath.clear();
             for (const auto &pose : plannedMessage_.poses)
-                plannedPath.push_back(toMap * poseOf(pose.pose));
+                plannedPath.push_back(truth * estimated * poseOf(pose.pose));
         } catch (const tf2::TransformException &) {
         } // keep the last placement until TF has the frame
     }

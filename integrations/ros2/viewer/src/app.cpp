@@ -2992,8 +2992,8 @@ void App::toolbarMpcPath() {
     toggleChip("MPC path", &showMpc_);
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Predicted MPC trajectory over its horizon (%s, orange).\n"
-                          "Drawn relative to the simulator vehicle, so localization drift does not offset it.\n"
-                          "Blue: the whole follow_path plan with its headings (%s), placed through TF.",
+                          "Blue: the whole follow_path plan with its headings (%s).\n"
+                          "Both are drawn relative to the simulator vehicle, so localization drift does not offset them.",
                           ros_->mpcTopic.c_str(), ros_->plannedTopic.c_str());
 }
 
