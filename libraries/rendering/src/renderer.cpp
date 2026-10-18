@@ -815,7 +815,7 @@ struct Renderer::Resources {
     Frame f, preview;          // `preview` is swapped into `f` for Appearance::preview draws
     bool shadow_valid = false; // the shadow map holds a real (shadows-on) pass
     Target shadow, reflection;
-    Target depthSample; // output-sized depth picked from a supersampled frame for captureImage
+    Target depthSample;                   // output-sized depth picked from a supersampled frame for captureImage
     ColorTarget sensorColor, sensorDepth; // sensor-ready captureImage: flipped RGBA8, metric R32F depth
     glm::mat4 lightMatrix{1}, poolToMap{1}, mapToPool{1}; // Sun clip-from-world; pool frame <-> world.
     glm::vec3 poolSize{1}, center{0};

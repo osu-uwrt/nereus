@@ -81,8 +81,7 @@ TEST(Offscreen, SensorFormatMatchesTheCpuFlipAndDepthConversion) {
         auto look = appearance();
         look.supersample = samples;
         const auto plain = host.capture(boxes, view(), look, 0, width, height);
-        const auto sensor = host.capture(boxes, view(), look, 0, width, height, true, true,
-                                         r::SensorFormat{near, far});
+        const auto sensor = host.capture(boxes, view(), look, 0, width, height, true, true, r::SensorFormat{near, far});
         EXPECT_FALSE(plain.top_down || plain.metric_depth);
         EXPECT_TRUE(sensor.top_down && sensor.metric_depth);
         ASSERT_EQ(sensor.rgb.size(), plain.rgb.size());
@@ -109,8 +108,8 @@ TEST(Offscreen, SensorFormatMatchesTheCpuFlipAndDepthConversion) {
     }
 
     // Color-only sensor captures flip without producing depth; bad clip planes throw before any GL work.
-    const auto color = host.capture(boxes, view(), appearance(), 0, width, height, true, false,
-                                    r::SensorFormat{near, far});
+    const auto color =
+        host.capture(boxes, view(), appearance(), 0, width, height, true, false, r::SensorFormat{near, far});
     EXPECT_TRUE(color.top_down);
     EXPECT_FALSE(color.metric_depth);
     EXPECT_TRUE(color.depth.empty());
