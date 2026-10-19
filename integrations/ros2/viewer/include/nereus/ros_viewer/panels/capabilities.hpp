@@ -285,6 +285,7 @@ struct BagTargetState {
 struct BagPreset {
     std::string name;
     std::vector<std::string> topics; // absolute
+    bool saved = false;              // saved from the panel (deletable), not from the configuration
 };
 
 struct BaggingState {
@@ -304,6 +305,11 @@ struct Bagging : Provider {
     // Points a remote target at another ssh destination (user@host); ignored for this computer, while it is
     // busy, or for an empty destination. The target then starts over with the new machine's state.
     virtual void setHost(const std::string &target, const std::string &host) = 0;
+    // Saves a topic selection as a preset (replacing a saved one of that name) in the presets file, so it outlasts
+    // the viewer; an error message when it cannot (blank name, no topics, a configured preset's name, the write).
+    virtual std::string savePreset(const std::string &name, const std::vector<std::string> &topics) = 0;
+    // Removes a saved preset; configured presets stay.
+    virtual void deletePreset(const std::string &name) = 0;
 };
 
 // SVO file for `camera`: `base` with a leading ~ replaced by `home`, then _<stamp> (when not empty) and

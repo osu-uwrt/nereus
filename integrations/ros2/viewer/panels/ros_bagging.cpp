@@ -1,9 +1,12 @@
 // "ros.bagging" provider: drives bag_recorder's scripts on each configured target (this computer or the robot)
 // from per-target worker threads and lists the ROS graph's topics for the bagging panel.
+#include "nereus/ros_viewer/dock_layout.hpp"
 #include "ros_runtime.hpp"
 #include <algorithm>
 #include <condition_variable>
+#include <cstdio>
 #include <deque>
+#include <fstream>
 #include <set>
 #include <sstream>
 
@@ -65,6 +68,12 @@ class RosBagging final : public Bagging {
             }
             presets.push_back(std::move(preset));
         }
+        configured = presets.size();
+
+        // Presets saved from the panel: `presets_file`, else bag_presets.yaml in the settings folder.
+        presetsFile = cfg["presets_file"] ? std::filesystem::path(expand(cfg["presets_file"].as<std::string>(), ctx))
+                                          : configDirectory() / "bag_presets.yaml";
+        loadSavedPresets();
 
         // Start the workers and refresh the topic list every 2 s.
         for (auto &target : targets)
@@ -128,6 +137,51 @@ class RosBagging final : public Bagging {
         auto *target = find(id);
         if (target && target->value.stopping && !target->value.pending)
             queue(*target, {Op::Kill, {}}, "Killing the recorder...");
+    }
+
+    std::string savePreset(const std::string &name, const std::vector<std::string> &topics) override {
+        const auto first = name.find_first_not_of(" \t"), last = name.find_last_not_of(" \t");
+        if (first == std::string::npos)
+            return "Name the preset.";
+        const auto trimmed = name.substr(first, last - first + 1);
+        if (topics.empty())
+            return "Select topics to save.";
+        std::lock_guard<std::mutex> lock(mutex);
+        for (size_t i = 0; i < configured; ++i)
+            if (presets[i].name == trimmed)
+                return "The configuration has a preset with this name.";
+
+        // Replace or add, keep the saved ones sorted by name, then write them all.
+        auto saved = savedPresets();
+        BagPreset preset{trimmed, topics, true};
+        std::sort(preset.topics.begin(), preset.topics.end());
+        preset.topics.erase(std::unique(preset.topics.begin(), preset.topics.end()), preset.topics.end());
+        auto found = std::find_if(saved.begin(), saved.end(), [&](const auto &p) { return p.name == trimmed; });
+        if (found != saved.end())
+            *found = std::move(preset);
+        else
+            saved.push_back(std::move(preset));
+        std::sort(saved.begin(), saved.end(), [](const auto &a, const auto &b) { return a.name < b.name; });
+        if (auto error = writeSavedPresets(saved); !error.empty())
+            return error;
+        presets.resize(configured);
+        presets.insert(presets.end(), saved.begin(), saved.end());
+        return "";
+    }
+
+    void deletePreset(const std::string &name) override {
+        std::lock_guard<std::mutex> lock(mutex);
+        auto saved = savedPresets();
+        const auto end = std::remove_if(saved.begin(), saved.end(), [&](const auto &p) { return p.name == name; });
+        if (end == saved.end())
+            return;
+        saved.erase(end, saved.end());
+        if (const auto error = writeSavedPresets(saved); !error.empty()) {
+            std::fprintf(stderr, "nereus-viewer: bag presets: %s\n", error.c_str());
+            return;
+        }
+        presets.resize(configured);
+        presets.insert(presets.end(), saved.begin(), saved.end());
     }
 
     // Points a remote target at another ssh destination (not while it records) and polls it at once.
@@ -302,6 +356,63 @@ class RosBagging final : public Bagging {
         }
     }
 
+    // The saved presets (after the configured ones); caller holds `mutex`.
+    std::vector<BagPreset> savedPresets() const {
+        return {presets.begin() + std::ptrdiff_t(configured), presets.end()};
+    }
+
+    // Reads the presets file (name: [absolute topics]); a missing file is no presets, a broken one is reported and
+    // skipped. A saved preset named like a configured one is dropped.
+    void loadSavedPresets() {
+        std::error_code error;
+        if (presetsFile.empty() || !std::filesystem::exists(presetsFile, error))
+            return;
+        try {
+            const auto file = YAML::LoadFile(presetsFile.string());
+            if (!file.IsMap())
+                throw std::runtime_error("expected a map of preset names to topic lists");
+            std::vector<BagPreset> saved;
+            for (const auto &entry : file) {
+                BagPreset preset{entry.first.as<std::string>(), entry.second.as<std::vector<std::string>>(), true};
+                const bool clash =
+                    std::any_of(presets.begin(), presets.end(), [&](const auto &p) { return p.name == preset.name; });
+                if (!clash && !preset.topics.empty())
+                    saved.push_back(std::move(preset));
+            }
+            std::sort(saved.begin(), saved.end(), [](const auto &a, const auto &b) { return a.name < b.name; });
+            presets.insert(presets.end(), saved.begin(), saved.end());
+        } catch (const std::exception &e) {
+            std::fprintf(stderr, "nereus-viewer: bag presets %s: %s\n", presetsFile.c_str(), e.what());
+        }
+    }
+
+    // Writes `saved` to the presets file through a temporary file, so a failed write keeps the old one.
+    std::string writeSavedPresets(const std::vector<BagPreset> &saved) const {
+        if (presetsFile.empty())
+            return "No settings folder to save presets in.";
+        try {
+            std::filesystem::create_directories(presetsFile.parent_path());
+            YAML::Emitter emitter;
+            emitter << YAML::BeginMap;
+            for (const auto &preset : saved)
+                emitter << YAML::Key << preset.name << YAML::Value << YAML::Flow << preset.topics;
+            emitter << YAML::EndMap;
+            auto temporary = presetsFile;
+            temporary += ".tmp";
+            {
+                std::ofstream out(temporary);
+                out << "# Bag topic presets saved from the Nereus viewer's bagging panel: name: [absolute topics]\n"
+                    << emitter.c_str() << "\n";
+                if (!out.flush())
+                    throw std::runtime_error("write failed");
+            }
+            std::filesystem::rename(temporary, presetsFile);
+            return "";
+        } catch (const std::exception &e) {
+            return std::string("Could not save the preset: ") + e.what();
+        }
+    }
+
     // The last non-blank line of a command's output (usually its error).
     static std::string lastLine(const std::string &text) {
         std::string line, last;
@@ -313,12 +424,14 @@ class RosBagging final : public Bagging {
     }
 
     std::shared_ptr<RosRuntime> runtime;
-    std::mutex mutex;                 // guards targets' state and queues, and `topics`
+    std::mutex mutex;                 // guards targets' state and queues, `topics` and `presets`
     std::condition_variable wake;     // new command or shutdown
     std::atomic<bool> closing{false}; // set by the destructor; also cancels running commands
     double stopWait, requestTimeout;  // seconds
     std::vector<std::unique_ptr<Target>> targets;
-    std::vector<BagPreset> presets;
+    std::vector<BagPreset> presets; // the configured ones (`configured` of them), then the saved ones by name
+    size_t configured = 0;
+    std::filesystem::path presetsFile; // where saved presets live
     std::vector<std::pair<std::string, std::string>> topics;
     rclcpp::TimerBase::SharedPtr timer;
 };
@@ -332,7 +445,7 @@ void registerRosBagging(Registry &registry, const RuntimeFactory &runtime) {
         ProviderFactory{
             Kind::Bagging,
             [](const YAML::Node &cfg) {
-                keys(cfg, {"targets", "presets", "stop_timeout", "request_timeout"}, "ros.bagging");
+                keys(cfg, {"targets", "presets", "presets_file", "stop_timeout", "request_timeout"}, "ros.bagging");
                 positive(cfg, "stop_timeout", 10, 300);
                 positive(cfg, "request_timeout", 30, 300);
                 if (!cfg["targets"].IsSequence() || cfg["targets"].size() == 0)
@@ -363,6 +476,7 @@ void registerRosBagging(Registry &registry, const RuntimeFactory &runtime) {
                     for (const auto &preset : cfg["presets"])
                         (void)preset.second.as<std::vector<std::string>>();
                 }
+                (void)cfg["presets_file"].as<std::string>("");
             },
             [runtime](const YAML::Node &cfg, const Context &ctx) {
                 return std::make_shared<RosBagging>(runtime(ctx), cfg, ctx);

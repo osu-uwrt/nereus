@@ -224,6 +224,8 @@ header:
     targets[0]["directory"] = hostBags.string();
     for (int i = 0; i < 3; ++i)
         targets[i]["setup"] = setup;
+    const auto presetsFile = root / "config" / "bag_presets.yaml";
+    config["providers"]["bags"]["options"]["presets_file"] = presetsFile.string();
     targets[1]["ssh"].push_back((root / "ssh").string());
     targets[2]["ssh"].push_back((root / "ssh_down").string());
     Context ctx{ns, "world", false, false};
@@ -248,6 +250,25 @@ header:
     assert(target("down").message.find("Can't reach ros@down") != std::string::npos &&
            target("down").message.find("No route to host") != std::string::npos);
     assert(target("robot").lastBag == (robotHome / "bags" / "remote").string());
+
+    // Saved presets: written to the presets file after the configured one; the configured name, a blank name and
+    // an empty selection are refused, and saving a name again replaces it.
+    assert(!bagging->savePreset("Nav", {"/a"}).empty() && !bagging->savePreset("  ", {"/a"}).empty() &&
+           !bagging->savePreset("Cams", {}).empty() && !fs::exists(presetsFile));
+    assert(bagging->savePreset("Cams", {"/c2", "/c1", "/c1"}).empty() && bagging->savePreset("Imu", {"/imu"}).empty());
+    assert(bagging->savePreset(" Cams ", {"/c1", "/c2", "/c3"}).empty());
+    auto savedNames = [&] {
+        std::vector<std::string> names;
+        for (const auto &preset : bagging->state().presets)
+            names.push_back(preset.name + (preset.saved ? "*" : ""));
+        return names;
+    };
+    assert(savedNames() == (std::vector<std::string>{"Nav", "Cams*", "Imu*"}));
+    assert(bagging->state().presets[1].topics == (std::vector<std::string>{"/c1", "/c2", "/c3"}));
+    bagging->deletePreset("Imu");
+    bagging->deletePreset("Nav"); // configured: stays
+    assert(savedNames() == (std::vector<std::string>{"Nav", "Cams*"}));
+    assert(read(presetsFile).find("Cams") != std::string::npos && read(presetsFile).find("Imu") == std::string::npos);
 
     // Another machine for the robot target: it starts over there (the stand-in ssh logs the destination);
     // this computer has no destination to change.
@@ -314,6 +335,7 @@ header:
     assert(!target("host").recording && target("host").lastBag == (hostBags / "local").string());
     for (int frame = 0; frame < 3; ++frame)
         draw();
+    assert(bagging->state().presets.size() == 2 && bagging->state().presets[1].name == "Cams"); // read back
 
     // Stopping the found recording saves it with the namespaced preset topics.
     bagging->stop("robot");

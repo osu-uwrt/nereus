@@ -49,6 +49,8 @@ class BaggingPanel final : public Panel {
     std::map<std::string, std::array<char, 256>> hosts;       // per remote target: the ssh destination being edited
     std::set<std::string> selected;                           // topics recorded in "Selected" mode
     ImGuiTextFilter filter;                                   // topic list filter
+    char presetName[96]{};                                    // the Save preset popup's name field
+    std::string presetError;                                  // why the last save failed
 
   public:
     explicit BaggingPanel(const Binding &b)
@@ -269,18 +271,7 @@ class BaggingPanel final : public Panel {
 
     // Topic picker for "Selected" mode: presets, a filter, bulk select/clear and a clipped checkbox list.
     void topicList(const BaggingState &s) {
-        // A preset replaces the selection.
-        if (!s.presets.empty()) {
-            ImGui::SetNextItemWidth(-1);
-            if (ImGui::BeginCombo("##preset", "Preset...")) {
-                for (const auto &preset : s.presets)
-                    if (ImGui::Selectable(preset.name.c_str())) {
-                        selected = {preset.topics.begin(), preset.topics.end()};
-                        filter.Clear();
-                    }
-                ImGui::EndCombo();
-            }
-        }
+        presets(s);
 
         // Live topics plus selected ones not published now (they record once they appear).
         std::vector<std::pair<std::string, std::string>> rows = s.topics;
@@ -331,6 +322,105 @@ class BaggingPanel final : public Panel {
         if (shown.empty())
             ImGui::TextDisabled(rows.empty() ? "No topics seen yet." : "No topic matches the filter.");
         ImGui::EndChild();
+    }
+
+    // Preset picker (a preset replaces the selection; saved ones can be deleted) and Save, which stores the
+    // selection as a named preset that outlasts the viewer.
+    void presets(const BaggingState &s) {
+        // The preview names the preset the selection matches, if any.
+        std::string current = "Preset...";
+        for (const auto &preset : s.presets)
+            if (std::set<std::string>(preset.topics.begin(), preset.topics.end()) == selected) {
+                current = preset.name;
+                break;
+            }
+
+        const float save = buttonWidth("Save");
+        ImGui::SetNextItemWidth(
+            std::max(ui(80), ImGui::GetContentRegionAvail().x - save - ImGui::GetStyle().ItemSpacing.x));
+        if (ImGui::BeginCombo("##preset", current.c_str())) {
+            bool savedHeader = false;
+            for (const auto &preset : s.presets) {
+                ImGui::PushID(preset.name.c_str());
+                if (preset.saved && !savedHeader) {
+                    savedHeader = true;
+                    if (&preset != &s.presets.front())
+                        ImGui::SeparatorText("Saved");
+                }
+                char tooltip[64];
+                std::snprintf(tooltip, sizeof(tooltip), "%zu topic%s", preset.topics.size(),
+                              preset.topics.size() == 1 ? "" : "s");
+                const float gap = ImGui::GetStyle().ItemInnerSpacing.x;
+                const float remove = preset.saved ? ImGui::GetFontSize() + gap : 0;
+                if (ImGui::Selectable(preset.name.c_str(), preset.name == current, ImGuiSelectableFlags_AllowOverlap,
+                                      {ImGui::GetContentRegionAvail().x - remove, 0})) {
+                    selected = {preset.topics.begin(), preset.topics.end()};
+                    filter.Clear();
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("%s", tooltip);
+                if (preset.saved) {
+                    // ImGui's tab close button, centered on the row.
+                    const ImVec2 row = ImGui::GetItemRectMin(), end = ImGui::GetItemRectMax();
+                    if (ImGui::CloseButton(ImGui::GetID("delete"),
+                                           {end.x + gap, (row.y + end.y - ImGui::GetFontSize()) / 2}))
+                        bagging->deletePreset(preset.name);
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Delete this saved preset");
+                }
+                ImGui::PopID();
+            }
+            if (s.presets.empty())
+                ImGui::TextDisabled("No presets yet: select topics, then Save.");
+            ImGui::EndCombo();
+        }
+
+        // Save: names the current selection (Replace for a saved preset's name).
+        ImGui::SameLine();
+        ImGui::BeginDisabled(selected.empty());
+        if (ImGui::Button("Save")) {
+            std::snprintf(presetName, sizeof(presetName), "%s", current == "Preset..." ? "" : current.c_str());
+            presetError.clear();
+            ImGui::OpenPopup("save preset");
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s", selected.empty() ? "Select topics to save them as a preset."
+                                                     : "Save the selected topics as a preset.");
+        if (ImGui::BeginPopup("save preset")) {
+            ImGui::TextDisabled("Preset name");
+            if (ImGui::IsWindowAppearing())
+                ImGui::SetKeyboardFocusHere();
+            ImGui::SetNextItemWidth(ui(230));
+            const bool enter = ImGui::InputTextWithHint("##name", "e.g. Navigation", presetName, sizeof(presetName),
+                                                        ImGuiInputTextFlags_EnterReturnsTrue);
+            const std::string name = presetName;
+            const bool blank = name.find_first_not_of(" \t") == std::string::npos;
+            const auto existing =
+                std::find_if(s.presets.begin(), s.presets.end(), [&](const auto &p) { return p.name == name; });
+            const bool configured = existing != s.presets.end() && !existing->saved;
+            ImGui::BeginDisabled(blank || configured);
+            pushActiveColors(true);
+            const bool clicked = ImGui::Button(existing != s.presets.end() ? "Replace" : "Save", {ui(110), 0});
+            popActiveColors();
+            ImGui::EndDisabled();
+            if ((enter || clicked) && !blank && !configured) {
+                presetError = bagging->savePreset(name, {selected.begin(), selected.end()});
+                if (presetError.empty())
+                    ImGui::CloseCurrentPopup();
+            }
+            if (configured)
+                ImGui::TextDisabled("The configuration has a preset with this name");
+            else if (existing != s.presets.end())
+                ImGui::TextDisabled("A saved preset has this name");
+            if (!presetError.empty())
+                ImGui::TextColored(levelColor(Level::Error), "%s", presetError.c_str());
+            char count[64];
+            std::snprintf(count, sizeof(count), "%zu topic%s, kept for the next session.", selected.size(),
+                          selected.size() == 1 ? "" : "s");
+            ImGui::TextDisabled("%s", count);
+            ImGui::EndPopup();
+        }
     }
 };
 
