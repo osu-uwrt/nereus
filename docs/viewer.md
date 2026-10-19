@@ -305,7 +305,11 @@ does kill: use one operator at a time.
   drop the timestamp; an existing bag is never overwritten).
 - **Topics**: *All* records every topic, including ones that appear later; *Leave out* takes a regex (`-x`), for
   example `image|point_cloud` to skip camera streams. *Selected* records the ticked topics (the live list, with a
-  filter and the configured presets); a ticked topic that is not published yet is recorded once it appears.
+  filter); a ticked topic that is not published yet is recorded once it appears. The **Browse all / Recording**
+  switch above the list shows every topic or only the ticked ones.
+- **Presets** (*Selected*): picking one replaces the ticked topics and switches the list to *Recording*; hovering one
+  lists its topics (amber: not published now). **Save** keeps the ticked topics as a named preset in
+  `~/.config/nereus/bag_presets.yaml`, listed under *Saved* (the × deletes it); the configured presets come first.
 - **Stop** sends Ctrl-C so the recorder closes the bag properly (writes `metadata.yaml`). A recorder that is still
   closing after 10 s shows **Kill recorder**; a killed bag keeps its data and `ros2 bag reindex` rebuilds its
   metadata.

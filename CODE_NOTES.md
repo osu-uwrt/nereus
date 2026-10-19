@@ -105,7 +105,6 @@ are approximate (files grew with the new comments); search for the named functio
 - `libraries/session/tests/prop_world_test.cpp`: uses `std::map` without `<map>` (transitive include).
 - `libraries/session/tests/task_runtime_test.cpp` (~231): hard-coded pi literal where sibling tests use `M_PI` (cosmetic).
 - `libraries/sensors/src/models.cpp` `PoolBottom::operator()`: always reports zero bottom velocity, so the moving-bottom path in `Dvl::sample` is reachable only via a custom `BottomQuery` (looks intentional; commented as stationary floor).
-- `integrations/ros2/viewer/panels/bagging_panel.cpp` `topicList` (~290): `std::binary_search` over `rows` while selected-but-unpublished topics are appended to it; once the tail is unsorted, a published selected topic can be missed and shown as a duplicate row.
 - `panels/bagging_panel.cpp` (~180): Record tooltip says a local bag "stops when the viewer closes" — true for the `stop_on_exit` default, wrong if configured `false`.
 - `panels/motion_panel.cpp` `toolbar()` (~131): `enableKillButton({90, ...})` passes unscaled 90 while `sameLineIfFits(ui(90))` uses the scaled width.
 - `panels/motion_panel.cpp` (~359): `dive_max_depth_z` option is accepted and validated but never read anywhere.

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <cstring>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <map>
@@ -38,6 +39,12 @@ void muted(const std::string &text) {
     ImGui::PopStyleColor();
 }
 
+// Whether `topic` is in the live graph (BaggingState::topics, sorted by name).
+bool published(const BaggingState &s, const std::string &topic) {
+    return std::binary_search(s.topics.begin(), s.topics.end(), std::make_pair(topic, std::string()),
+                              [](const auto &a, const auto &b) { return a.first < b.first; });
+}
+
 // ros2 bag record on this computer or the robot (the RViz rosbag panel's recorder, with a choice of machine).
 // Header form: a red BAG chip per machine while it records.
 class BaggingPanel final : public Panel {
@@ -51,6 +58,7 @@ class BaggingPanel final : public Panel {
     ImGuiTextFilter filter;                                   // topic list filter
     char presetName[96]{};                                    // the Save preset popup's name field
     std::string presetError;                                  // why the last save failed
+    int view = 0;                                             // topic list: 0 every topic, 1 the chosen ones
 
   public:
     explicit BaggingPanel(const Binding &b)
@@ -269,20 +277,21 @@ class BaggingPanel final : public Panel {
         return found->second;
     }
 
-    // Topic picker for "Selected" mode: presets, a filter, bulk select/clear and a clipped checkbox list.
+    // Topic picker for "Selected" mode: presets, a filter, bulk select/clear, a Browse / Recording switch and a
+    // clipped checkbox list.
     void topicList(const BaggingState &s) {
         presets(s);
 
-        // Live topics plus selected ones not published now (they record once they appear).
+        // Live topics plus selected ones not published now (they record once they appear). Looked up in the sorted
+        // live list, not in `rows`, whose appended tail is unsorted.
         std::vector<std::pair<std::string, std::string>> rows = s.topics;
         for (const auto &topic : selected)
-            if (!std::binary_search(rows.begin(), rows.end(), std::make_pair(topic, std::string()),
-                                    [](const auto &a, const auto &b) { return a.first < b.first; }))
+            if (!published(s, topic))
                 rows.emplace_back(topic, "");
         std::sort(rows.begin(), rows.end());
         std::vector<const std::pair<std::string, std::string> *> shown;
         for (const auto &row : rows)
-            if (filter.PassFilter(row.first.c_str()))
+            if ((view == 0 || selected.count(row.first)) && filter.PassFilter(row.first.c_str()))
                 shown.push_back(&row);
 
         const float buttons = buttonWidth("Select shown") + buttonWidth("Clear") + 2 * ImGui::GetStyle().ItemSpacing.x;
@@ -290,15 +299,19 @@ class BaggingPanel final : public Panel {
         if (ImGui::InputTextWithHint("##filter", "Filter topics", filter.InputBuf, IM_ARRAYSIZE(filter.InputBuf)))
             filter.Build();
         ImGui::SameLine();
+        ImGui::BeginDisabled(view == 1);
         if (ImGui::Button("Select shown"))
             for (const auto *row : shown)
                 selected.insert(row->first);
+        ImGui::EndDisabled();
         ImGui::SameLine();
         if (ImGui::Button("Clear"))
             selected.clear();
-        char count[64];
-        std::snprintf(count, sizeof(count), "%zu selected of %zu", selected.size(), rows.size());
-        muted(count);
+
+        // Browse every topic, or only the chosen ones (what Record will record).
+        const auto browse = "Browse all  " + std::to_string(rows.size()),
+                   chosen = "Recording  " + std::to_string(selected.size());
+        pins::Switch("Show##topics", &view, {browse.c_str(), chosen.c_str()}, ImGui::GetContentRegionAvail().x);
 
         // Only the visible rows are drawn (ImGuiListClipper).
         ImGui::BeginChild("topics", {0, std::max(ui(120), ImGui::GetContentRegionAvail().y)}, ImGuiChildFlags_Borders);
@@ -320,8 +333,56 @@ class BaggingPanel final : public Panel {
                 ImGui::PopID();
             }
         if (shown.empty())
-            ImGui::TextDisabled(rows.empty() ? "No topics seen yet." : "No topic matches the filter.");
+            ImGui::TextDisabled(view == 1 && selected.empty() ? "Nothing chosen yet: pick a preset or browse."
+                                : rows.empty()                ? "No topics seen yet."
+                                                              : "No topic matches the filter.");
         ImGui::EndChild();
+    }
+
+    // A preset's topics for its hover tooltip: the count (and how many are not published), then the topics under
+    // their first namespace, amber when not published, at most 12 before "+N more".
+    static void presetTooltip(const BagPreset &preset, const BaggingState &s) {
+        if (!ImGui::BeginTooltip())
+            return;
+        auto topics = preset.topics;
+        std::sort(topics.begin(), topics.end());
+        const auto missing = size_t(
+            std::count_if(topics.begin(), topics.end(), [&](const auto &topic) { return !published(s, topic); }));
+        ImGui::TextUnformatted(preset.name.c_str());
+        ImGui::SameLine();
+        char summary[96];
+        std::snprintf(summary, sizeof(summary), "%zu topic%s", topics.size(), topics.size() == 1 ? "" : "s");
+        if (missing) {
+            const auto len = std::strlen(summary);
+            std::snprintf(summary + len, sizeof(summary) - len, " · %zu not published", missing);
+            ImGui::TextColored(palette().warn, "%s", summary);
+        } else
+            ImGui::TextDisabled("%s", summary);
+        ImGui::Separator();
+
+        constexpr size_t cap = 12;
+        std::string group; // the namespace header drawn last
+        for (size_t i = 0; i < std::min(cap, topics.size()); ++i) {
+            const auto &topic = topics[i];
+            const auto slash = topic.find('/', 1);
+            const bool nested = slash != std::string::npos && slash + 1 < topic.size();
+            const std::string head = nested ? topic.substr(0, slash + 1) : "";
+            if (nested && head != group)
+                ImGui::TextDisabled("%s", head.c_str());
+            group = head;
+            if (nested)
+                ImGui::Indent(ui(12));
+            const char *text = nested ? topic.c_str() + slash + 1 : topic.c_str();
+            if (published(s, topic))
+                ImGui::TextUnformatted(text);
+            else
+                ImGui::TextColored(palette().warn, "%s", text);
+            if (nested)
+                ImGui::Unindent(ui(12));
+        }
+        if (topics.size() > cap)
+            ImGui::TextDisabled("+ %zu more", topics.size() - cap);
+        ImGui::EndTooltip();
     }
 
     // Preset picker (a preset replaces the selection; saved ones can be deleted) and Save, which stores the
@@ -347,18 +408,16 @@ class BaggingPanel final : public Panel {
                     if (&preset != &s.presets.front())
                         ImGui::SeparatorText("Saved");
                 }
-                char tooltip[64];
-                std::snprintf(tooltip, sizeof(tooltip), "%zu topic%s", preset.topics.size(),
-                              preset.topics.size() == 1 ? "" : "s");
                 const float gap = ImGui::GetStyle().ItemInnerSpacing.x;
                 const float remove = preset.saved ? ImGui::GetFontSize() + gap : 0;
                 if (ImGui::Selectable(preset.name.c_str(), preset.name == current, ImGuiSelectableFlags_AllowOverlap,
                                       {ImGui::GetContentRegionAvail().x - remove, 0})) {
                     selected = {preset.topics.begin(), preset.topics.end()};
                     filter.Clear();
+                    view = 1; // show what it chose
                 }
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s", tooltip);
+                    presetTooltip(preset, s);
                 if (preset.saved) {
                     // ImGui's tab close button, centered on the row.
                     const ImVec2 row = ImGui::GetItemRectMin(), end = ImGui::GetItemRectMax();
