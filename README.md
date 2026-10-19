@@ -45,7 +45,8 @@ with little memory. Python-only setup is just `uv sync`. Run the tools with `uv 
 
 The ROS build also registers a `nereus` ROS package in `build/ros-viewer/ros/` (no colcon involved), so the
 launch files below run from any directory once `build/ros-viewer/ros/setup.bash` is sourced. `./setup.sh` offers to
-add that to `~/.bashrc` (a marked `# >>> nereus >>>` block; delete it to undo). `ros2 launch
+add that to `~/.bashrc` (a marked `# >>> nereus >>>` block; delete it to undo); `./setup_bashrc.sh` does just that
+step, e.g. after moving the repository. `ros2 launch
 integrations/uwrt/launch/sim.launch.py` from this folder still works without it.
 
 ## Run

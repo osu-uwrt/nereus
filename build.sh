@@ -58,5 +58,5 @@ echo "Python tools: 'source .venv/bin/activate' (nereus-dataset, nereus-packs), 
 prefix_setup="$PWD/build/$preset/ros/setup.bash"
 if [[ -f $prefix_setup ]] && ! grep -qsF "$prefix_setup" ~/.bashrc; then
     echo "ROS launch: 'source $prefix_setup', then 'ros2 launch nereus sim.launch.py'"
-    echo "(./setup.sh can add it to ~/.bashrc)."
+    echo "(./setup_bashrc.sh can add it to ~/.bashrc)."
 fi
