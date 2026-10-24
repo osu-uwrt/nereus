@@ -394,6 +394,17 @@ ui:
 #endif
     assert(run->state().fresh && actuators->state().fresh);
 
+    // Claw and torpedo links: an Error state reads as not connected, any other as connected, silence as stale.
+    auto links = actuators->state().links;
+    assert(links.size() == 2 && links[0].label == "Claw" && links[1].label == "Torpedo");
+    assert(links[0].level == Level::Error && links[0].value == "Not connected" && links[1].level == Level::Error);
+    actuatorMsg.claw_state = riptide_msgs2::msg::ActuatorStatus::CLAW_OPENED;
+    actuatorMsg.torpedo_state = riptide_msgs2::msg::ActuatorStatus::TORPEDO_DISARMED;
+    spin(.1);
+    links = actuators->state().links;
+    assert(links[0].level == Level::Ok && links[0].value == "Connected" && links[0].detail == "State: Opened");
+    assert(links[1].level == Level::Ok && links[1].detail == "State: Disarmed");
+
     // FOG: temperature and the driver's flags; CPU: the hottest core value with the status level.
     assert(reading("fog").value == "41.5\u00B0C" && reading("fog").level == Level::Ok);
     assert(reading("cpu").value == "72.0\u00B0C" && reading("cpu").level == Level::Warn);
@@ -754,6 +765,8 @@ ui:
     // With the status topics silent the providers go stale and keep their last values.
     spin(.5, false);
     assert(!mapping->state().fresh && !actuators->state().fresh && !run->state().fresh);
+    for (const auto &link : actuators->state().links)
+        assert(link.level == Level::Stale && link.value == "No status");
     assert(reading("fog").level == Level::Stale && reading("fog").value == "41.0\u00B0C"); // last value, muted
     assert(reading("stbd").level == Level::Stale && reading("stbd").value == "19%");
 

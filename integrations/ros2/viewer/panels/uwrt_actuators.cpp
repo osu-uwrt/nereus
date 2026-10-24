@@ -1,5 +1,5 @@
-// "uwrt.actuators" provider: riptide ActuatorStatus (armed, torpedo / marker counts) and configurable
-// actuator command buttons, each publishing a Bool, Float32 or Empty message.
+// "uwrt.actuators" provider: riptide ActuatorStatus (armed, claw / torpedo link, torpedo / marker counts) and
+// configurable actuator command buttons, each publishing a Bool, Float32 or Empty message.
 #include "ros_runtime.hpp"
 #include <riptide_msgs2/msg/actuator_status.hpp>
 #include <set>
@@ -9,6 +9,25 @@
 
 namespace nereus::ros_viewer::panels {
 namespace {
+using ActuatorStatus = riptide_msgs2::msg::ActuatorStatus;
+
+// ActuatorStatus state names (indexed by the message constants).
+const std::vector<std::string> clawStates{"Error",           "Disarmed",       "Unknown", "Opened",
+                                          "Closed (bottle)", "Closed (spoon)", "Opening", "Closing"};
+const std::vector<std::string> torpedoStates{"Error", "Disarmed", "Charging", "Charged", "Firing", "Fired"};
+
+// A mechanism's link from its ActuatorStatus state: the firmware reports ERROR (0) while the servo does not
+// answer its pings (`error` says what else it can mean); any other state means the board hears the servo.
+ActuatorLink link(const std::string &label, bool fresh, uint8_t state, const std::vector<std::string> &names,
+                  const std::string &error) {
+    if (!fresh)
+        return {label, "No status", "No recent actuator status from the board", Level::Stale};
+    if (state == 0)
+        return {label, "Not connected", error, Level::Error};
+    return {label, "Connected", "State: " + (state < names.size() ? names[state] : "invalid " + std::to_string(state)),
+            Level::Ok};
+}
+
 class UwrtActuators final : public Actuators {
     // One configured button; publish() is passed the current armed state.
     struct Command {
@@ -54,15 +73,18 @@ class UwrtActuators final : public Actuators {
             commands.push_back(std::move(command));
         }
 
-        status = node->create_subscription<riptide_msgs2::msg::ActuatorStatus>(
-            expand(cfg["status_topic"].as<std::string>(), ctx), rclcpp::SensorDataQoS(),
-            [this](const riptide_msgs2::msg::ActuatorStatus &msg) {
-                std::lock_guard<std::mutex> lock(mutex);
-                armed = msg.actuators_armed;
-                lastStatus = Steady::now();
-                readings["Torpedoes remaining"] = std::to_string(msg.torpedo_available_count);
-                readings["Markers remaining"] = std::to_string(msg.dropper_available_count);
-            });
+        status = node->create_subscription<ActuatorStatus>(expand(cfg["status_topic"].as<std::string>(), ctx),
+                                                           rclcpp::SensorDataQoS(), [this](const ActuatorStatus &msg) {
+                                                               std::lock_guard<std::mutex> lock(mutex);
+                                                               armed = msg.actuators_armed;
+                                                               clawState = msg.claw_state;
+                                                               torpedoState = msg.torpedo_state;
+                                                               lastStatus = Steady::now();
+                                                               readings["Torpedoes remaining"] =
+                                                                   std::to_string(msg.torpedo_available_count);
+                                                               readings["Markers remaining"] =
+                                                                   std::to_string(msg.dropper_available_count);
+                                                           });
     }
 
     // Buttons are enabled only while status is fresh and, for requires_armed commands, the actuators are armed.
@@ -76,6 +98,10 @@ class UwrtActuators final : public Actuators {
         for (const auto &command : commands)
             value.actions.push_back({command.id, armed ? command.armedLabel : command.label,
                                      value.fresh && (!command.requiresArmed || armed)});
+        value.links = {
+            link("Claw", value.fresh, clawState, clawStates, "Status reports Error: the servo is not answering"),
+            link("Torpedo", value.fresh, torpedoState, torpedoStates,
+                 "Status reports Error: the servo is not answering, or has not been homed")};
         value.readings.assign(readings.begin(), readings.end());
         return value;
     }
@@ -101,10 +127,11 @@ class UwrtActuators final : public Actuators {
     std::mutex mutex;
     double timeout;
     bool armed = false;
+    uint8_t clawState = ActuatorStatus::CLAW_ERROR, torpedoState = ActuatorStatus::TORPEDO_ERROR;
     Steady::time_point lastStatus{};
     std::vector<Command> commands;
     std::map<std::string, std::string> readings;
-    rclcpp::Subscription<riptide_msgs2::msg::ActuatorStatus>::SharedPtr status;
+    rclcpp::Subscription<ActuatorStatus>::SharedPtr status;
 };
 } // namespace
 

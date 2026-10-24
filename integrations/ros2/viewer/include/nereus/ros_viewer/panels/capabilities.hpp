@@ -20,6 +20,8 @@ using Pose = glm::mat4;
 enum class Kind { Motion, Autonomy, Mapping, Actuators, Run, Simulation, Telemetry, Recording, Electrical, Bagging };
 // Manual motion control mode.
 enum class Mode { Disabled, Position, Feedforward };
+// Status level of a reading or a hardware link (Stale: no recent data).
+enum class Level { Ok, Warn, Error, Stale };
 
 // Base of every capability. state() calls are polled from the UI thread; implementations lock internally.
 struct Provider {
@@ -104,9 +106,16 @@ struct ActuatorAction {
     bool available = false;
 };
 
+// Whether a mechanism's hardware (claw, torpedo) is answering: Ok connected, Error not, Stale no status.
+struct ActuatorLink {
+    std::string label, value, detail;
+    Level level = Level::Stale;
+};
+
 struct ActuatorState {
     bool fresh = false, armed = false;
     std::vector<ActuatorAction> actions;
+    std::vector<ActuatorLink> links;
     std::vector<std::pair<std::string, std::string>> readings; // label, value
     std::string message = "Waiting for actuator status";
 };
@@ -164,7 +173,6 @@ struct Simulation : Provider {
 // --- Telemetry ---
 
 // Robot health readings shown at a glance (header chips): one value per configured source.
-enum class Level { Ok, Warn, Error, Stale };
 struct Reading {
     std::string id, label, value = "--", detail = "Waiting for data";
     Level level = Level::Stale;

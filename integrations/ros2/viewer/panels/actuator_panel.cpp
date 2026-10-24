@@ -1,8 +1,9 @@
-// Actuators panel: one full-width button per mechanism action (claw, droppers, torpedoes, ...) plus status
-// readings, all supplied by the bound Actuators provider.
+// Actuators panel: whether each mechanism's hardware is connected, one full-width button per mechanism action
+// (claw, droppers, torpedoes, ...) plus status readings, all supplied by the bound Actuators provider.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/pins.hpp"
+#include "status_chip.hpp"
 #include <imgui.h>
 
 namespace nereus::ros_viewer::panels {
@@ -20,6 +21,18 @@ class ActuatorPanel final : public Panel {
             emptyState("Connected, this holds a button per mechanism action (claw, droppers, torpedoes, magnet).");
         else if (!s.message.empty())
             ImGui::TextWrapped("%s", s.message.c_str());
+
+        // One readout per mechanism link (Claw ● Connected), the firmware state in the hover tooltip.
+        for (std::size_t i = 0; i < s.links.size(); ++i) {
+            const auto &link = s.links[i];
+            if (i)
+                ImGui::SameLine(0, ui(14));
+            ImGui::PushID(int(i));
+            const ImVec4 ink = link.level == Level::Ok ? palette().text : levelColor(link.level);
+            if (statusReadout(link.label.c_str(), link.value.c_str(), levelColor(link.level), ink))
+                ImGui::SetTooltip("%s: %s\n%s", link.label.c_str(), link.value.c_str(), link.detail.c_str());
+            ImGui::PopID();
+        }
 
         // One button per action; "###id" keeps the ImGui ID stable when the label changes.
         for (const auto &action : s.actions) {
