@@ -12,10 +12,10 @@ always_cameras:=true renders every camera output regardless of subscribers. came
 camera anti-aliasing factor (empty: the simulator's default, off; 2..4 supersample).
 
 The controller arguments pass through to riptide_bringup2 (mission_stack.launch.py); empty keeps bringup's
-default controller. With active_control_model:=mpc the MPC models THIS run's plant by default
-(mpc_model empty or sim): mpc_sim_model.py writes its vehicle, hydrodynamics and mpc.yaml (DVL stamped at measurement)
-from the resolved scenario into <output>.mpc/. mpc_model:=talos (or another name/path) uses that model instead,
-e.g. the pool-identified estimate of the real vehicle.
+default controller. With active_control_model:=mpc the MPC uses riptide_mpc's config/models/<robot>.yaml by
+default (mpc_model empty), the same estimate of the real vehicle as on hardware; mpc_model:=<name> or a path picks
+another model. mpc_model:=sim models THIS run's plant instead: mpc_sim_model.py writes its vehicle, hydrodynamics
+and mpc.yaml (DVL stamped at measurement) from the resolved scenario into <output>.mpc/.
 
 Run records (resolved.json, execution.json, summary.json, tasks.json) go to `output`
 (default /tmp/nereus_sim/<timestamp>). Ctrl-C, or closing the viewer, stops everything and writes the records;
@@ -57,7 +57,7 @@ SUPERVISOR = Path(__file__).resolve().parent / "sim_supervisor.py"
 CONTROLLER_ARGS = {
     "active_control_model": "controller: 'mpc' runs riptide_mpc, anything else complete_controller",
     "active_control_enabled": "launch the active controller (True/False)",
-    "mpc_model": "MPC model: '' or 'sim' = this run's plant (generated), 'talos' = vehicle estimate, a name or a path",
+    "mpc_model": "MPC model: '' = config/models/<robot>.yaml (vehicle estimate), 'sim' = this run's plant (generated), a name or a path",
     "mpc_odom_topic": "MPC state feedback topic, e.g. simulator/ground_truth to bypass the EKF",
     "mpc_state_source": "MPC feedback: sensors (default) or odometry",
 }
@@ -93,9 +93,7 @@ def _gpu_env(context):
 
 def _mpc_sim_model(context, resolved, output):
     """MPC model files for this run's plant (see mpc_sim_model.py), as mission_stack arguments."""
-    if LC("active_control_model").perform(context) != "mpc" or LC("mpc_model").perform(
-        context
-    ) not in ("", "sim"):
+    if LC("active_control_model").perform(context) != "mpc" or LC("mpc_model").perform(context) != "sim":
         return []
 
     # Base files from the installed riptide packages, rewritten for the plant into <output>.mpc/.
