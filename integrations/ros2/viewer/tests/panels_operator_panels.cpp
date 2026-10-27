@@ -553,6 +553,12 @@ ui:
     assert(elec.ledsLast && std::abs(elec.ledsLast->brightness - 128 / 255.f) < 1e-6f && elec.ledsLast->red == 1 &&
            std::abs(elec.ledsLast->green - .5f) < 1e-6f && elec.ledsLast->blue == 0);
     assert(elec.ledsMessage.find("Sent #804000 breath to all LEDs") != std::string::npos);
+    // A detection pulse (single flash) leaves the LEDs, and so the reading, as they were.
+    electrical->setLeds({0, 1, 0, 1, riptide_msgs2::msg::LedCommand::SINGLETON_FLASH, 2});
+    spin(.15);
+    elec = electrical->state();
+    assert(ledsSent.size() == 2 && elec.ledsLast->mode == riptide_msgs2::msg::LedCommand::MODE_BREATH &&
+           elec.ledsLast->red == 1);
 
     // IVC: header in the top 3 bits, status / command in the low 5; out-of-range sends are dropped.
     electrical->sendIvc(1, 2);

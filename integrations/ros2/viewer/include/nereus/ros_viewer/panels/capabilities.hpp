@@ -258,7 +258,8 @@ struct ElectricalState {
     int ivcStatusHeaders = 0;        // headers below this index carry a status, the rest a raw 5-bit command
     std::vector<std::string> ivcLog; // newest last
 
-    // LEDs: the last command on the LED topic (from anyone: this panel, the pressure monitor, ...).
+    // LEDs: the last command on the LED topic (from anyone: this panel, the pressure monitor, ...), single flashes
+    // (momentary detection pulses) aside.
     bool hasLeds = false;
     std::optional<LedSetting> ledsLast;
     std::string ledsMessage;

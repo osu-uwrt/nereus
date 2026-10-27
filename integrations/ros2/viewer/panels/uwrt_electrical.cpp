@@ -112,7 +112,10 @@ class UwrtElectrical final : public Electrical {
             value.hasLeds = true;
             const auto topic = name(leds["topic"]);
             ledPub = node->create_publisher<LedMsg>(topic, 10);
+            // Single flashes (riptide_mapping's detection pulses) are momentary and leave the LEDs as they were.
             ledSub = node->create_subscription<LedMsg>(topic, 10, [this](const LedMsg &msg) {
+                if (msg.mode == LedMsg::SINGLETON_FLASH)
+                    return;
                 std::lock_guard<std::mutex> lock(mutex);
                 value.ledsLast = ledSetting(msg);
             });

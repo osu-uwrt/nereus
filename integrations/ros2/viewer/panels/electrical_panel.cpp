@@ -223,10 +223,11 @@ class ElectricalPanel final : public Panel {
     // always); presets set the colour; Off blacks them out and leaves the controls as they are.
     void leds(const ElectricalState &s) {
         sectionTitle("LEDs");
+        // Seeded with the robot's colour, brightness and mode; the target stays All.
         if (!ledsInitialized && s.ledsLast) {
             led = *s.ledsLast;
-            led.target = std::clamp(led.target, 1, 3);
-            led.mode = std::clamp(led.mode, 0, 4);
+            led.target = LedSetting{}.target;
+            led.mode = std::clamp(led.mode, 0, 3);
             ledsInitialized = true;
         }
         bool changed = false;
@@ -267,11 +268,12 @@ class ElectricalPanel final : public Panel {
             changed = true;
         }
 
+        // Single flash is left out: a momentary pulse (mapping's detections), not a colour the LEDs keep.
         static const char *const modes[] = {"Solid", "Slow flash", "Fast flash", "Breath", "Single flash"};
         static const char *const targets[] = {"None", "CCB", "ALU", "All"};
         const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
         ImGui::SetNextItemWidth(half);
-        changed |= ImGui::Combo("##led_mode", &led.mode, modes, int(std::size(modes)));
+        changed |= ImGui::Combo("##led_mode", &led.mode, modes, 4);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(half);
         if (ImGui::BeginCombo("##led_target", (std::string(targets[led.target]) + " LEDs").c_str())) {
