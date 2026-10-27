@@ -566,6 +566,7 @@ ui:
     }
     assert(copRed && copBlue && electrical->state().ledEffect == LedEffect::Cop);
     electrical->setLedEffect(LedEffect::Rainbow, .5f);
+    spin(.15, false); // Cop messages still in flight land first
     ledsSent.clear();
     spin(.3, false);
     assert(ledsSent.size() >= 6 && electrical->state().ledEffect == LedEffect::Rainbow);
