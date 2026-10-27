@@ -9,6 +9,7 @@
 #include <chameleon_tf_msgs/action/model_frame.hpp>
 #endif
 #include <functional>
+#include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <iostream>
@@ -153,11 +154,11 @@ int main(int argc, char **argv) {
       {id: electrical, type: electrical, provider: electrical}])");
     // Telemetry from the test namespace only (the configured CPU source is the global /diagnostics_agg).
     auto readings = config["providers"]["telemetry"]["options"]["readings"];
-    readings[0]["timeout"] = .3;
-    readings[1]["topic"] = "diagnostics_agg";
-    readings[1]["timeout"] = .3;
-    readings[2]["timeout"] = .3;
-    readings[3]["timeout"] = .3;
+    for (auto r : readings) {
+        r["timeout"] = .3;
+        if (r["id"].as<std::string>() == "cpu")
+            r["topic"] = "diagnostics_agg";
+    }
     config["providers"]["recording"]["options"]["request_timeout"] = .3;
     auto mapCfg = config["providers"]["mapping"]["options"];
     mapCfg["calibration_action"] = "calibration";
@@ -240,6 +241,7 @@ ui:
         return Reading{};
     };
     assert(reading("fog").level == Level::Stale && reading("fog").value == "--" && reading("cpu").value == "--");
+    assert(reading("dvl").level == Level::Stale && reading("dvl").value == "--"); // no DVL driver yet
 
     // Telemetry sources: FOG status, batteries and the aggregated diagnostics with core temperatures.
     auto gyroPub = node->create_publisher<riptide_msgs2::msg::GyroStatus>("gyro/status", 10);
@@ -250,6 +252,11 @@ ui:
     gyroMsg.temperature = 41.54;
     using Battery = riptide_msgs2::msg::BatteryStatus;
     auto batteryPub = node->create_publisher<Battery>("state/battery", 10);
+    auto bottomLockPub = node->create_publisher<std_msgs::msg::Bool>("dvl/bottom_lock", 10);
+    auto dvlTwistPub =
+        node->create_publisher<geometry_msgs::msg::TwistWithCovarianceStamped>("dvl_twist", rclcpp::SensorDataQoS());
+    std_msgs::msg::Bool bottomLockMsg;
+    bottomLockMsg.data = true;
     Battery portMsg, stbdMsg, unknownMsg; // both sides share the topic, told apart by `detect`
     portMsg.detect = Battery::DETECT_PORT;
     portMsg.soc = 87;
@@ -374,6 +381,7 @@ ui:
                 batteryPub->publish(portMsg);
                 batteryPub->publish(stbdMsg);
                 batteryPub->publish(unknownMsg);
+                bottomLockPub->publish(bottomLockMsg);
             }
             rclcpp::spin_some(node);
 #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
@@ -413,6 +421,12 @@ ui:
     assert(reading("port").detail.find("24.10 V, -12.50 A") != std::string::npos &&
            reading("port").detail.find("63 min") != std::string::npos);
     assert(reading("stbd").value == "35%" && reading("stbd").level == Level::Warn);
+    // DVL: bottom lock from the driver.
+    assert(reading("dvl").value == "Lock" && reading("dvl").level == Level::Ok);
+    bottomLockMsg.data = false;
+    spin(.1);
+    assert(reading("dvl").value == "No lock" && reading("dvl").level == Level::Warn);
+    bottomLockMsg.data = true;
     stbdMsg.soc = 19;
     spin(.1);
     assert(reading("stbd").level == Level::Error && reading("port").value == "87%");
@@ -769,6 +783,14 @@ ui:
         assert(link.level == Level::Stale && link.value == "No status");
     assert(reading("fog").level == Level::Stale && reading("fog").value == "41.0\u00B0C"); // last value, muted
     assert(reading("stbd").level == Level::Stale && reading("stbd").value == "19%");
+    // A silent DVL whose driver is still up is disconnected; bottom-track velocity alone (the simulator) is a lock.
+    assert(reading("dvl").value == "Disconnected" && reading("dvl").level == Level::Error);
+    for (int i = 0; i < 20; ++i) {
+        dvlTwistPub->publish(geometry_msgs::msg::TwistWithCovarianceStamped{});
+        rclcpp::spin_some(node);
+        std::this_thread::sleep_for(5ms);
+    }
+    assert(reading("dvl").value == "Lock" && reading("dvl").level == Level::Ok);
 
     // Stale: commands are refused.
     actuators->command("torpedo");

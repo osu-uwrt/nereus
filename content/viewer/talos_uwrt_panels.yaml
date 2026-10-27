@@ -47,9 +47,11 @@ providers:
     type: uwrt.telemetry
     options:
       # Thresholds as the RViz diagnostic overlay; timeouts as its gyro (2 s), diagnostics and battery (10 s)
-      # watchdogs. Battery: state of charge (warn/error below the percentage), one reading per side.
+      # watchdogs. Battery: state of charge (warn/error below the percentage), one reading per side. DVL: bottom
+      # lock from the driver, or bottom-track velocity (the simulator's DVL); silence is Disconnected.
       readings:
         - {id: fog, label: FOG, source: gyro_status, topic: gyro/status, warn_c: 55, error_c: 75, timeout: 2}
+        - {id: dvl, label: DVL, source: dvl, topic: dvl/bottom_lock, twist_topic: dvl_twist, timeout: 2}
         - {id: cpu, label: CPU, source: diagnostic, topic: /diagnostics_agg,
            status: "/Robot Diagnostics/Computers/Core Temperature", warn_c: 70, error_c: 85, timeout: 10}
         - {id: port, label: PORT, source: battery, topic: state/battery, side: port, warn_pct: 50, error_pct: 20, timeout: 10}

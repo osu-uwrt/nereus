@@ -1,11 +1,13 @@
-// "uwrt.telemetry" provider: header readouts for the FOG, computer diagnostics and battery packs.
+// "uwrt.telemetry" provider: header readouts for the FOG, the DVL, computer diagnostics and battery packs.
 #include "ros_runtime.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #include <riptide_msgs2/msg/battery_status.hpp>
+#include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
 #include <riptide_msgs2/msg/gyro_status.hpp>
 #include <set>
+#include <std_msgs/msg/bool.hpp>
 
 namespace nereus::ros_viewer::panels {
 namespace {
@@ -13,6 +15,7 @@ using Diagnostics = diagnostic_msgs::msg::DiagnosticArray;
 using DiagnosticStatus = diagnostic_msgs::msg::DiagnosticStatus;
 using GyroStatus = riptide_msgs2::msg::GyroStatus;
 using BatteryStatus = riptide_msgs2::msg::BatteryStatus;
+using Twist = geometry_msgs::msg::TwistWithCovarianceStamped;
 
 // Value formatters for readouts and tooltips.
 std::string celsius(double value) {
@@ -39,6 +42,9 @@ std::string fixed(double value, int digits) {
 //                key/values (the computer monitor's per-core "58.41 C"), combined with the status level.
 //   battery      riptide_msgs2/BatteryStatus of one side (port / stbd; both share the topic): state of charge,
 //                low is bad.
+//   dvl          nortek_dvl's dvl/bottom_lock (std_msgs/Bool, sent with every bottom-track ping): Lock / No lock,
+//                silence is Disconnected. Bottom-track velocity on twist_topic (sent only while locked) also
+//                reads as Lock, for a DVL that publishes no bottom_lock (the simulator's).
 class UwrtTelemetry final : public Telemetry {
     // One configured reading: its latest Reading, thresholds (°C or %) and subscription. Held by pointer so
     // the subscription callbacks can keep `s` across vector growth.
@@ -50,6 +56,11 @@ class UwrtTelemetry final : public Telemetry {
         bool seen = false;
         Steady::time_point received{};
         rclcpp::SubscriptionBase::SharedPtr subscription;
+        // DVL only: the bottom-track velocity topic and when it last arrived.
+        bool dvl = false, twistSeen = false;
+        std::string twistTopic;
+        Steady::time_point twistReceived{};
+        rclcpp::SubscriptionBase::SharedPtr twistSubscription;
     };
 
   public:
@@ -81,6 +92,21 @@ class UwrtTelemetry final : public Telemetry {
                                                                                std::lock_guard<std::mutex> lock(mutex);
                                                                                battery(*s, msg);
                                                                            });
+            } else if (type == "dvl") {
+                s->dvl = true;
+                s->subscription = node->create_subscription<std_msgs::msg::Bool>(
+                    s->topic, qos, [this, s](const std_msgs::msg::Bool &msg) {
+                        std::lock_guard<std::mutex> lock(mutex);
+                        dvl(*s, msg.data);
+                    });
+                if (entry["twist_topic"]) {
+                    s->twistTopic = expand(entry["twist_topic"].as<std::string>(), ctx);
+                    s->twistSubscription = node->create_subscription<Twist>(s->twistTopic, qos, [this, s](const Twist &) {
+                        std::lock_guard<std::mutex> lock(mutex);
+                        s->twistSeen = true;
+                        s->twistReceived = Steady::now();
+                    });
+                }
             } else {
                 s->warn = entry["warn_c"].as<double>();
                 s->error = entry["error_c"].as<double>();
@@ -113,6 +139,10 @@ class UwrtTelemetry final : public Telemetry {
         for (const auto &s : sources) {
             auto reading = s->reading;
             const double age = std::chrono::duration<double>(now - s->received).count();
+            if (s->dvl) {
+                value.readings.push_back(dvlReading(*s, age, now));
+                continue;
+            }
             if (!s->seen) {
                 reading.value = "--";
                 reading.level = Level::Stale;
@@ -170,6 +200,53 @@ class UwrtTelemetry final : public Telemetry {
                    ", diag signal " + number(m.diagsignal);
     }
 
+    // A bottom_lock message: x, y and a z beam velocity valid in the latest bottom-track ping.
+    void dvl(Source &s, bool lock) {
+        mark(s);
+        auto &r = s.reading;
+        r.value = lock ? "Lock" : "No lock";
+        r.number = lock;
+        r.level = lock ? Level::Ok : Level::Warn;
+        r.detail = lock ? "Bottom track: valid velocity from the latest ping"
+                        : "Connected, no bottom track: the latest ping has no valid velocity (too close to, too far "
+                          "from or out of the water?)";
+    }
+
+    // The DVL from bottom_lock while it is fresh, else the bottom-track velocity, else Disconnected. Nothing ever
+    // heard and nobody publishing either topic reads as waiting (stale), like the other readings.
+    Reading dvlReading(const Source &s, double age, Steady::time_point now) const {
+        auto reading = s.reading;
+        const double twistAge = std::chrono::duration<double>(now - s.twistReceived).count();
+        if (s.seen && age <= s.timeout) {
+            reading.detail += "\n" + s.topic;
+            return reading;
+        }
+        if (s.twistSeen && twistAge <= s.timeout) {
+            reading.value = "Lock";
+            reading.number = 1;
+            reading.level = Level::Ok;
+            reading.detail = "Bottom track: velocity arriving on " + s.twistTopic + "\n(nothing on " + s.topic + ")";
+            return reading;
+        }
+        const auto publishers = [&](const std::string &topic) {
+            return topic.empty() ? std::size_t(0) : runtime->node->count_publishers(topic);
+        };
+        const bool driver = publishers(s.topic) + publishers(s.twistTopic) > 0;
+        reading.number = std::numeric_limits<double>::quiet_NaN();
+        if (!s.seen && !s.twistSeen && !driver) {
+            reading.value = "--";
+            reading.level = Level::Stale;
+            reading.detail = "Waiting for " + s.topic;
+            return reading;
+        }
+        reading.value = "Disconnected";
+        reading.level = Level::Error;
+        reading.detail = !s.seen && !s.twistSeen ? "The DVL driver is up but no pings have arrived on " + s.topic
+                         : driver ? "No pings for " + number(s.seen ? age : twistAge) + " s on " + s.topic
+                                  : "No DVL driver: nothing publishes " + s.topic;
+        return reading;
+    }
+
     // The fields the voltage monitor reports; pack current is negative while discharging.
     void battery(Source &s, const BatteryStatus &m) {
         mark(s);
@@ -219,7 +296,7 @@ class UwrtTelemetry final : public Telemetry {
 };
 } // namespace
 
-// Registers "uwrt.telemetry"; battery readings and temperature readings take different keys.
+// Registers "uwrt.telemetry"; battery, DVL and temperature readings take different keys.
 void registerUwrtTelemetry(Registry &registry, const RuntimeFactory &runtime) {
     registry.providers.emplace(
         "uwrt.telemetry",
@@ -249,13 +326,21 @@ void registerUwrtTelemetry(Registry &registry, const RuntimeFactory &runtime) {
                             throw std::invalid_argument("duplicate telemetry reading ID");
                         continue;
                     }
+                    if (source == "dvl") {
+                        keys(entry, {"id", "label", "source", "topic", "twist_topic", "timeout"}, "dvl reading");
+                        required(entry, {"id", "topic"});
+                        positive(entry, "timeout", 2);
+                        if (!ids.insert(entry["id"].as<std::string>()).second)
+                            throw std::invalid_argument("duplicate telemetry reading ID");
+                        continue;
+                    }
                     keys(entry, {"id", "label", "source", "topic", "status", "warn_c", "error_c", "timeout"},
                          "telemetry reading");
                     required(entry, {"id", "source", "topic", "warn_c", "error_c"});
                     if (!ids.insert(entry["id"].as<std::string>()).second)
                         throw std::invalid_argument("duplicate telemetry reading ID");
                     if (source != "gyro_status" && source != "diagnostic")
-                        throw std::invalid_argument("reading source must be gyro_status, diagnostic or battery");
+                        throw std::invalid_argument("reading source must be gyro_status, diagnostic, battery or dvl");
                     if (source == "diagnostic")
                         required(entry, {"status"});
                     else if (entry["status"])
