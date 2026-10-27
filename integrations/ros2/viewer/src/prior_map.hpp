@@ -52,15 +52,16 @@ struct Document {
     std::vector<std::string> loadedNames; // names the file had (a name gone from `objects` is a deletion)
 };
 
-// Not shown or edited, kept untouched on save.
-bool deprecated(const std::string &name);
-
 // Parses `text`; preferredNs if present, else the first talos namespace, else the first. Throws on bad input.
 Document load(const std::string &text, const std::string &preferredNs = {});
 // The new file text for `doc.objects`: only changed values are rewritten, comments, order, other namespaces
 // and unrelated keys stay byte-identical. The result is re-parsed and checked; throws if it would not load
 // back as `doc.objects` or would change anything else.
 std::string save(const Document &doc);
+// `edited`'s changes (its objects against what its own text loads as) carried onto `current`, the file as it is
+// now: objects the editor changed, added or deleted take the edit; everything else, in init_data or not, is as
+// `current` has it. So a save never undoes what changed on disk since the load (a pull, a hand edit).
+Document rebase(const Document &edited, const std::string &current);
 
 // ------------------------------------------------------------------ the tree
 

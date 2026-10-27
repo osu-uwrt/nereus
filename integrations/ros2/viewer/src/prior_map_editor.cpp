@@ -305,12 +305,24 @@ void PriorMapEditor::openFile(const fs::path &path) {
     }
 }
 
-// Writes the file through prior_map::save (which checks the result), then reloads from the written text.
+// Writes the file through prior_map::save (which checks the result), then reloads from the written text. The
+// edits go onto the file as it is now, so whatever changed on disk since the load stays.
 void PriorMapEditor::saveFile() {
     if (!loaded())
         return;
     try {
-        const auto text = pm::save(doc_);
+        std::string current;
+        {
+            std::ifstream in(configPath_);
+            if (!in)
+                throw std::runtime_error("cannot read " + configPath_.string());
+            std::stringstream text;
+            text << in.rdbuf();
+            current = text.str();
+        }
+        const bool merged = current != doc_.text;
+        const auto target = merged ? pm::rebase(doc_, current) : doc_;
+        const auto text = pm::save(target);
         {
             std::ofstream out(configPath_);
             out << text;
@@ -321,14 +333,15 @@ void PriorMapEditor::saveFile() {
         // Reload what was written, so doc_.text matches the file for the next save.
         auto reloaded = pm::load(text, doc_.ns);
         for (auto &o : reloaded.objects) // the editor's own flags survive the reload
-            if (const auto *before = pm::find(doc_.objects, o.name)) {
+            if (const auto *before = pm::find(target.objects, o.name)) {
                 o.locked = before->locked;
                 o.hidden = before->hidden;
             }
         doc_ = std::move(reloaded);
         dirty_ = false;
         saveState();
-        message_ = "Saved " + configPath_.filename().string() + " (read back and checked)";
+        message_ = "Saved " + configPath_.filename().string() +
+                   (merged ? " onto its newer contents on disk (read back and checked)" : " (read back and checked)");
         messageError_ = false;
     } catch (const std::exception &error) {
         message_ = std::string("Not saved: ") + error.what();

@@ -49,7 +49,8 @@ TEST(PriorMap, LoadsTheTalosSection) {
     ASSERT_TRUE(rescue);
     EXPECT_EQ(rescue->parent, "gate"); // "gate_frame" in the file
     EXPECT_TRUE(rescue->locked);       // children ride along with their assembly
-    EXPECT_FALSE(find(doc.objects, "prequal_gate"));
+    ASSERT_TRUE(find(doc.objects, "prequal_gate")); // every init_data frame is shown, prequal ones too
+    EXPECT_TRUE(find(doc.objects, "prequal_pole"));
 
     // At least one object carries a class and one points its yaw at its parent.
     bool classes = false, pointing = false;
@@ -112,7 +113,7 @@ TEST(PriorMap, FlagsAndClassesAreAddedAndRemoved) {
 }
 
 // New objects are written under their parent's "_frame" name, and deleting one keeps its children in place.
-// Sections the editor doesn't show (deprecated entries, other robots) survive the save.
+// Sections the editor doesn't show (other robots) survive the save.
 TEST(PriorMap, AddedAndDeletedObjects) {
     auto doc = load(fixture());
     const auto name = add(doc.objects, "gate", {5, 1, -1, 90});
@@ -129,12 +130,37 @@ TEST(PriorMap, AddedAndDeletedObjects) {
     ASSERT_TRUE(find(back.objects, "prop"));
     EXPECT_EQ(find(back.objects, "prop")->parent, "gate");
     EXPECT_NE(out.find("      prop:\n        parent: gate_frame\n"), std::string::npos);
-    EXPECT_NE(out.find("prequal_gate:"), std::string::npos); // deprecated entries stay
     EXPECT_NE(out.find("/liltank/riptide_mapping2:"), std::string::npos);
 
     const auto mapped = mapPoses(back.objects);
     EXPECT_NEAR(mapped.at("prop").x, 5, 1e-5);
     EXPECT_NEAR(mapped.at("prop").yaw, 90, 1e-5);
+}
+
+// A save after the file changed on disk (a pull while the editor was open) keeps the newer file, with only the
+// editor's own changes on top: an object edited here, one added, one deleted, the rest as the disk has it.
+TEST(PriorMap, RebaseKeepsTheFileAsItIsNow) {
+    auto doc = load(fixture());
+    find(doc.objects, "gate")->pose.x = 4.5;
+    add(doc.objects, "map", {1, 2, -1, 0});
+    remove(doc.objects, "prequal_pole");
+
+    // Meanwhile on disk: a new setting outside init_data and another object moved.
+    auto disk = load(fixture());
+    find(disk.objects, "torpedo")->pose.y = 7.25;
+    auto current = save(disk);
+    const auto at = current.find("/talos/riptide_mapping2:");
+    ASSERT_NE(at, std::string::npos);
+    current.insert(at, "/**/new_estimator:\n  ros__parameters:\n    gain: 3.0\n\n");
+
+    const auto out = save(rebase(doc, current));
+    EXPECT_NE(out.find("/**/new_estimator:\n  ros__parameters:\n    gain: 3.0\n"), std::string::npos);
+    const auto back = load(out);
+    EXPECT_NEAR(find(back.objects, "gate")->pose.x, 4.5, 1e-9);
+    EXPECT_NEAR(find(back.objects, "torpedo")->pose.y, 7.25, 1e-9);
+    EXPECT_TRUE(find(back.objects, "prop"));
+    EXPECT_FALSE(find(back.objects, "prequal_pole"));
+    EXPECT_TRUE(find(back.objects, "prequal_gate"));
 }
 
 // Reparent, swap, rename and duplicate: map poses are preserved and invalid edits are refused with a reason.

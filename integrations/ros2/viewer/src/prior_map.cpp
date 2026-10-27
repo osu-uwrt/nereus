@@ -14,9 +14,6 @@ namespace {
 
 constexpr double kPi = 3.14159265358979323846;
 
-// Entries the editor hides and save() must leave byte-identical.
-const std::set<std::string> kDeprecated{"prequal_gate", "prequal_pole"};
-
 double radians(double degrees) {
     return degrees * kPi / 180;
 }
@@ -262,10 +259,6 @@ Pose decompose(const Pose &parent, const Pose &mapPose) {
     return {dx * c + dy * s, -dx * s + dy * c, mapPose.z - parent.z, wrapDegrees(mapPose.yaw - parent.yaw)};
 }
 
-bool deprecated(const std::string &name) {
-    return kDeprecated.count(name) > 0;
-}
-
 Document load(const std::string &text, const std::string &preferredNs) {
     const YAML::Node root = YAML::Load(text);
     if (!root.IsMap())
@@ -289,12 +282,12 @@ Document load(const std::string &text, const std::string &preferredNs) {
              : talos != doc.namespaces.end() ? *talos
                                              : doc.namespaces[0];
 
-    // One Object per entry, in file order; deprecated and malformed entries are left out.
+    // One Object per entry, in file order; malformed entries are left out.
     const auto init = initData(root, doc.ns);
     for (auto it = init.begin(); it != init.end(); ++it) {
         const auto name = it->first.Scalar();
         const auto entry = it->second;
-        if (name.empty() || deprecated(name) || !entry.IsMap())
+        if (name.empty() || !entry.IsMap())
             continue;
         Object o;
         o.name = name;
@@ -432,7 +425,7 @@ std::string save(const Document &doc) {
 
     // Deletions: only names the tool loaded and the operator removed.
     for (const auto &name : doc.loadedNames)
-        if (!find(doc.objects, name) && !deprecated(name))
+        if (!find(doc.objects, name))
             if (const auto key = keyNode(init, name)) {
                 const auto [s, e] = src.block(key);
                 splices.push_back({s, e, ""});
@@ -476,14 +469,33 @@ std::string save(const Document &doc) {
     std::vector<std::string> path;
     if (!same(root, YAML::Load(out), path, {doc.ns, "ros__parameters", "init_data"}))
         throw std::runtime_error("the save would change other parts of the file; nothing written");
+    return out;
+}
 
-    // And the deprecated entries inside it, which load() skips, must survive untouched.
-    const YAML::Node reloaded = YAML::Load(out); // kept alive: nodes found in it point into its memory
-    const auto newInit = initData(reloaded, doc.ns);
-    for (auto it = init.begin(); it != init.end(); ++it)
-        if (deprecated(it->first.Scalar()) &&
-            YAML::Dump(it->second) != YAML::Dump(child(newInit, it->first.Scalar()))) // untouched, as loaded
-            throw std::runtime_error("the save would change " + it->first.Scalar() + "; nothing written");
+Document rebase(const Document &edited, const std::string &current) {
+    const auto base = load(edited.text, edited.ns).objects;
+    auto out = load(current, edited.ns);
+    if (out.ns != edited.ns)
+        throw std::runtime_error(edited.ns + " is no longer in the file");
+    for (const auto &o : edited.objects) {
+        auto *now = find(out.objects, o.name);
+        const auto *was = find(base, o.name);
+        if (was && sameObject(*was, o)) { // untouched here: the file's version, with the editor's flags
+            if (now) {
+                now->locked = o.locked;
+                now->hidden = o.hidden;
+            }
+        } else if (now) {
+            *now = o;
+        } else {
+            out.objects.push_back(o);
+        }
+    }
+    for (const auto &name : edited.loadedNames) // deleted here
+        if (!find(edited.objects, name))
+            out.objects.erase(std::remove_if(out.objects.begin(), out.objects.end(),
+                                             [&](const Object &o) { return o.name == name; }),
+                              out.objects.end());
     return out;
 }
 
@@ -574,11 +586,9 @@ bool reparent(std::vector<Object> &objects, const std::string &name, const std::
 bool rename(std::vector<Object> &objects, const std::string &name, const std::string &next, std::string *error) {
     if (next.empty() || next == name || !find(objects, name))
         return false;
-    if (find(objects, next) || deprecated(next) || !plain(next)) {
+    if (find(objects, next) || !plain(next)) {
         if (error)
-            *error = find(objects, next) ? "'" + next + "' already exists"
-                     : deprecated(next)  ? "'" + next + "' is a reserved (deprecated) name"
-                                         : "use letters, digits, '_', '-' or '.'";
+            *error = find(objects, next) ? "'" + next + "' already exists" : "use letters, digits, '_', '-' or '.'";
         return false;
     }
     for (auto &o : objects) {
