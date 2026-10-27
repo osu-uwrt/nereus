@@ -231,6 +231,10 @@ struct LedSetting {
     int target = 3; // LedCommand TARGET_*: CCB 1, ALU 2, all 3
 };
 
+// LED effects the viewer animates itself: Cop (red / blue double flashes, the CCB strip and the ALU board always
+// opposite), Rainbow (a colour wheel, the two half a wheel apart).
+enum class LedEffect { None, Cop, Rainbow };
+
 struct ElectricalState {
     std::vector<ElectricalCommandItem> commands;
     std::string commandMessage;
@@ -263,6 +267,7 @@ struct ElectricalState {
     bool hasLeds = false;
     std::optional<LedSetting> ledsLast;
     std::string ledsMessage;
+    LedEffect ledEffect = LedEffect::None;
 };
 
 struct Electrical : Provider {
@@ -281,7 +286,9 @@ struct Electrical : Provider {
     virtual void setPingerEnabled(bool) = 0;
     virtual void setPingerFrequency(int khz) = 0;
     virtual void sendIvc(int header, int command) = 0;
-    virtual void setLeds(const LedSetting &) = 0;
+    virtual void setLeds(const LedSetting &) = 0; // stops a running effect
+    // Starts (or re-scales) an effect at brightness 0..1; None stops it, leaving the LEDs on its last colours.
+    virtual void setLedEffect(LedEffect, float brightness) = 0;
 };
 
 // --- Bagging ---

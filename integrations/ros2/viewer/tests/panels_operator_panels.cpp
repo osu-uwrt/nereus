@@ -553,11 +553,35 @@ ui:
     assert(elec.ledsLast && std::abs(elec.ledsLast->brightness - 128 / 255.f) < 1e-6f && elec.ledsLast->red == 1 &&
            std::abs(elec.ledsLast->green - .5f) < 1e-6f && elec.ledsLast->blue == 0);
     assert(elec.ledsMessage.find("Sent #804000 breath to all LEDs") != std::string::npos);
+    // Effects: Cop flashes red / blue with the CCB and ALU opposite; Rainbow sends both targets; a colour stops them.
+    ledsSent.clear();
+    electrical->setLedEffect(LedEffect::Cop, 1);
+    spin(.7, false);
+    bool copRed = false, copBlue = false;
+    for (const auto &m : ledsSent) {
+        const bool ccb = m.target == riptide_msgs2::msg::LedCommand::TARGET_CCB;
+        assert(ccb || m.target == riptide_msgs2::msg::LedCommand::TARGET_ALU);
+        copRed |= ccb && m.red == 255 && m.blue == 0;
+        copBlue |= ccb && m.blue == 255 && m.red == 0;
+    }
+    assert(copRed && copBlue && electrical->state().ledEffect == LedEffect::Cop);
+    electrical->setLedEffect(LedEffect::Rainbow, .5f);
+    ledsSent.clear();
+    spin(.3, false);
+    assert(ledsSent.size() >= 6 && electrical->state().ledEffect == LedEffect::Rainbow);
+    for (const auto &m : ledsSent)
+        assert(std::max({m.red, m.green, m.blue}) <= 128);
+    electrical->setLeds({1, .5f, 0, .5f, riptide_msgs2::msg::LedCommand::MODE_BREATH, 3});
+    spin(.15, false);
+    ledsSent.clear();
+    spin(.2, false);
+    assert(ledsSent.empty() && electrical->state().ledEffect == LedEffect::None);
+
     // A detection pulse (single flash) leaves the LEDs, and so the reading, as they were.
     electrical->setLeds({0, 1, 0, 1, riptide_msgs2::msg::LedCommand::SINGLETON_FLASH, 2});
     spin(.15);
     elec = electrical->state();
-    assert(ledsSent.size() == 2 && elec.ledsLast->mode == riptide_msgs2::msg::LedCommand::MODE_BREATH &&
+    assert(elec.ledsLast->mode == riptide_msgs2::msg::LedCommand::MODE_BREATH &&
            elec.ledsLast->red == 1);
 
     // IVC: header in the top 3 bits, status / command in the low 5; out-of-range sends are dropped.

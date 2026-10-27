@@ -265,7 +265,10 @@ class ElectricalPanel final : public Panel {
         ImGui::SetNextItemWidth(-1);
         if (ImGui::SliderInt("##led_brightness", &percent, 0, 100, "Brightness %d%%")) {
             led.brightness = float(percent) / 100;
-            changed = true;
+            if (s.ledEffect != LedEffect::None) // a running effect takes the brightness and keeps going
+                electrical->setLedEffect(s.ledEffect, led.brightness);
+            else
+                changed = true;
         }
 
         // Single flash is left out: a momentary pulse (mapping's detections), not a colour the LEDs keep.
@@ -285,6 +288,24 @@ class ElectricalPanel final : public Panel {
             ImGui::EndCombo();
         }
 
+        // Effects the viewer animates (click again to stop: the LEDs go back to the colour above).
+        const auto effect = [&](const char *label, LedEffect which, float width) {
+            const bool on = s.ledEffect == which;
+            pushActiveColors(on);
+            if (pins::Button(label, {width, ui(30)})) {
+                electrical->setLedEffect(on ? LedEffect::None : which, led.brightness);
+                ledsPending = on; // stopping: send the manual colour again
+            }
+            popActiveColors();
+        };
+        effect("Cop###leds_cop", LedEffect::Cop, half);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Red / blue double flashes, the CCB strip and the ALU board always opposite");
+        ImGui::SameLine();
+        effect("Rainbow###leds_rainbow", LedEffect::Rainbow, half);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("A colour wheel every 3 s, the CCB strip and the ALU board half a wheel apart");
+
         if (pins::Button("Off###leds_off", {-1, ui(30)})) {
             auto off = led;
             off.brightness = 0;
@@ -293,7 +314,8 @@ class ElectricalPanel final : public Panel {
             ledsSentAt = ImGui::GetTime();
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Black on the selected LEDs; the controls keep their colour for the next change.\n"
+            ImGui::SetTooltip("Black on the selected LEDs (and any effect stopped); the controls keep their colour "
+                              "for the next change.\n"
                               "No light at all? Power has Enable LEDs.");
 
         ledsPending |= changed;

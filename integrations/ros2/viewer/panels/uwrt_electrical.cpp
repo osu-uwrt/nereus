@@ -2,10 +2,12 @@
 // and registers, FOG tare, pinger, IVC link and LEDs).
 #include "ros_runtime.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
 #include <deque>
+#include <optional>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <riptide_msgs2/action/mag_cal.hpp>
 #include <riptide_msgs2/action/tare_gyro.hpp>
@@ -31,6 +33,31 @@ using LedMsg = riptide_msgs2::msg::LedCommand;
 
 const char *const kLedModes[] = {"solid", "slow flash", "fast flash", "breath", "single flash"};
 const char *const kLedTargets[] = {"no LEDs", "CCB", "ALU", "all"};
+
+// Cop: (CCB, ALU) colours and how long each step holds (s). Side A double-flashes while B is dark, then swap.
+struct CopStep {
+    std::array<float, 3> ccb, alu;
+    double seconds;
+};
+constexpr std::array<float, 3> kRed{1, 0, 0}, kBlue{0, 0, 1}, kDark{0, 0, 0};
+const CopStep kCop[] = {{kRed, kBlue, .08}, {kDark, kDark, .05}, {kRed, kBlue, .08}, {kDark, kDark, .07},
+                        {kBlue, kRed, .08}, {kDark, kDark, .05}, {kBlue, kRed, .08}, {kDark, kDark, .07}};
+constexpr double kRainbowCycle = 3;  // s per turn of the colour wheel
+constexpr double kRainbowPeriod = .05; // s between rainbow updates (20 per second, per target)
+
+// Full-saturation, full-value hue (turns) as RGB 0..1.
+std::array<float, 3> hue(double turns) {
+    const double h = 6 * (turns - std::floor(turns));
+    const float x = float(1 - std::abs(std::fmod(h, 2) - 1));
+    switch (int(h)) {
+    case 0: return {1, x, 0};
+    case 1: return {x, 1, 0};
+    case 2: return {0, 1, x};
+    case 3: return {0, x, 1};
+    case 4: return {x, 0, 1};
+    default: return {1, 0, x};
+    }
+}
 
 // An LedCommand as a setting: the brightest channel is the brightness, the colour normalized to it.
 LedSetting ledSetting(const LedMsg &m) {
@@ -120,6 +147,9 @@ class UwrtElectrical final : public Electrical {
                 value.ledsLast = ledSetting(msg);
             });
         }
+
+        if (ledPub)
+            effectTimer = node->create_wall_timer(std::chrono::milliseconds(10), [this] { animate(); });
 
         if (const auto pinger = cfg["pinger"]) {
             value.hasPinger = true;
@@ -349,6 +379,8 @@ class UwrtElectrical final : public Electrical {
     // The colour scaled by the brightness, each channel rounded to 0..255.
     void setLeds(const LedSetting &led) override {
         std::lock_guard<std::mutex> lock(mutex);
+        if (ledPub)
+            value.ledEffect = LedEffect::None;
         if (!ledPub || led.mode < LedMsg::MODE_SOLID || led.mode > LedMsg::SINGLETON_FLASH ||
             led.target < LedMsg::TARGET_CCB || led.target > LedMsg::TARGET_ALL)
             return;
@@ -366,6 +398,21 @@ class UwrtElectrical final : public Electrical {
         std::snprintf(rgb, sizeof(rgb), "#%02X%02X%02X", msg.red, msg.green, msg.blue);
         value.ledsMessage = clockStamp() + "  Sent " + rgb + " " + kLedModes[msg.mode] + " to " +
                             kLedTargets[msg.target] + " LEDs";
+    }
+
+    void setLedEffect(LedEffect effect, float brightness) override {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!ledPub)
+            return;
+        effectBrightness = std::clamp(brightness, 0.f, 1.f);
+        if (effect == value.ledEffect)
+            return; // a new brightness only
+        value.ledEffect = effect;
+        effectStart = Steady::now();
+        effectSent.reset();
+        value.ledsMessage = clockStamp() + (effect == LedEffect::Cop       ? "  Cop lights on"
+                                            : effect == LedEffect::Rainbow ? "  Rainbow on"
+                                                                           : "  Effect stopped");
     }
 
     // One IVC byte: 3-bit header, 5-bit command. Status headers only take a listed status index.
@@ -440,6 +487,57 @@ class UwrtElectrical final : public Electrical {
             ivcLines.pop_front();
     }
 
+    // 100 Hz while an effect runs: each target's colour from the time since it started, sent when it changes
+    // (Cop) or every kRainbowPeriod (Rainbow).
+    void animate() {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (value.ledEffect == LedEffect::None)
+            return;
+        const auto now = Steady::now();
+        const double t = std::chrono::duration<double>(now - effectStart).count();
+        std::array<float, 3> ccb, alu;
+        if (value.ledEffect == LedEffect::Cop) {
+            double cycle = 0;
+            for (const auto &step : kCop)
+                cycle += step.seconds;
+            double at = std::fmod(t, cycle);
+            const CopStep *step = &kCop[0];
+            for (const auto &s : kCop) {
+                step = &s;
+                if (at < s.seconds)
+                    break;
+                at -= s.seconds;
+            }
+            ccb = step->ccb;
+            alu = step->alu;
+        } else {
+            if (effectSent && std::chrono::duration<double>(now - effectSentAt).count() < kRainbowPeriod)
+                return;
+            ccb = hue(t / kRainbowCycle);
+            alu = hue(t / kRainbowCycle + .5);
+        }
+        const auto bytes = [&](const std::array<float, 3> &c) {
+            std::array<uint8_t, 3> out;
+            for (int i = 0; i < 3; ++i)
+                out[i] = uint8_t(std::lround(255 * c[i] * effectBrightness));
+            return out;
+        };
+        const std::array<std::array<uint8_t, 3>, 2> frame{bytes(ccb), bytes(alu)};
+        if (effectSent && *effectSent == frame)
+            return;
+        for (int i = 0; i < 2; ++i) {
+            LedMsg msg;
+            msg.red = frame[i][0];
+            msg.green = frame[i][1];
+            msg.blue = frame[i][2];
+            msg.mode = LedMsg::MODE_SOLID;
+            msg.target = i == 0 ? LedMsg::TARGET_CCB : LedMsg::TARGET_ALU;
+            ledPub->publish(msg);
+        }
+        effectSent = frame;
+        effectSentAt = now;
+    }
+
     // 10 Hz: readiness flags, request timeouts and the pinger heartbeat.
     void tick() {
         std::lock_guard<std::mutex> lock(mutex);
@@ -508,6 +606,11 @@ class UwrtElectrical final : public Electrical {
     rclcpp::Subscription<riptide_msgs2::msg::UInt8Stamped>::SharedPtr ivcConfirm;
     rclcpp::Publisher<LedMsg>::SharedPtr ledPub;
     rclcpp::Subscription<LedMsg>::SharedPtr ledSub;
+    // The running LED effect: its brightness, start, and the last (CCB, ALU) colours sent and when.
+    float effectBrightness = 1;
+    Steady::time_point effectStart{}, effectSentAt{};
+    std::optional<std::array<std::array<uint8_t, 3>, 2>> effectSent;
+    rclcpp::TimerBase::SharedPtr effectTimer;
     rclcpp::TimerBase::SharedPtr timer;
 };
 
