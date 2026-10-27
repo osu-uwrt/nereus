@@ -52,6 +52,7 @@ class UwrtAutonomy final : public Autonomy {
                 std::lock_guard<std::mutex> lock(mutex);
                 externalBusy = std::any_of(msg.status_list.begin(), msg.status_list.end(),
                                            [](const auto &item) { return item.status >= 1 && item.status <= 3; });
+                noteGoalStatus(msg);
                 if (externalBusy && !value.busy && !goal && !awaitingGoal) {
                     externalExecution = true;
                     value.activeTree.clear();
@@ -122,6 +123,7 @@ class UwrtAutonomy final : public Autonomy {
                 return;
             }
             goal = accepted;
+            goalSeen = ended = false;
             value.busy = true;
             value.message = "Running";
             if (stopping) {
@@ -138,6 +140,9 @@ class UwrtAutonomy final : public Autonomy {
         // Success needs a SUCCEEDED action, no error flag and returncode 2 (the tree's SUCCESS status).
         options.result_callback = [this](const Goal::WrappedResult &result) {
             std::lock_guard<std::mutex> lock(mutex);
+            // A late result for a goal already settled from the status topic must not touch a newer one.
+            if (!goal || goal->get_goal_id() != result.goal_id)
+                return;
             goal.reset();
             awaitingGoal = false;
             value.pending = false;
@@ -180,6 +185,40 @@ class UwrtAutonomy final : public Autonomy {
     }
 
   private:
+    // The result reply is sent once; if the link drops (untethered) while the tree ends, it is lost and rclcpp
+    // never asks again, so `goal` would stay set and Start stay disabled until restart. The status topic is
+    // transient-local, so after a reconnect it shows our goal's terminal state, or no longer lists it once the
+    // server has expired it. Note that here; tick() settles the goal if the result still hasn't come (mutex held).
+    void noteGoalStatus(const action_msgs::msg::GoalStatusArray &msg) {
+        if (!goal || ended)
+            return;
+        const auto id = goal->get_goal_id();
+        const auto ours = std::find_if(msg.status_list.begin(), msg.status_list.end(),
+                                       [&](const auto &item) { return item.goal_info.goal_id.uuid == id; });
+        if (ours != msg.status_list.end() && ours->status >= 1 && ours->status <= 3)
+            goalSeen = true;
+        else if (ours != msg.status_list.end() || goalSeen) {
+            ended = true;
+            endedCode = ours == msg.status_list.end() ? 0 : ours->status;
+            endedSince = Steady::now();
+        }
+    }
+
+    // Settles our goal from its noted terminal status when the result never arrived (mutex held).
+    void settleMissedResult() {
+        using action_msgs::msg::GoalStatus;
+        goal.reset();
+        ended = false;
+        value.pending = false;
+        value.busy = externalBusy || awaitingGoal;
+        stopping = false;
+        value.failed = endedCode != GoalStatus::STATUS_SUCCEEDED && endedCode != GoalStatus::STATUS_CANCELED;
+        value.message = endedCode == GoalStatus::STATUS_SUCCEEDED  ? "Tree ended (result missed)"
+                        : endedCode == GoalStatus::STATUS_CANCELED ? "Stopped (result missed)"
+                        : endedCode == GoalStatus::STATUS_ABORTED  ? "Tree aborted (result missed)"
+                                                                   : "Tree ended; outcome unknown";
+    }
+
     // Asks list_service for the available trees (mutex held); at most one request in flight.
     void refreshLocked() {
         if (value.refreshing)
@@ -221,8 +260,18 @@ class UwrtAutonomy final : public Autonomy {
         if (value.connected && value.trees.empty() && !value.refreshing && now - lastRefresh > std::chrono::seconds(3))
             refreshLocked();
 
+        // Our goal ended on the robot but its result never came (sent while untethered).
+        if (goal && ended && std::chrono::duration<double>(now - endedSince).count() > timeout)
+            settleMissedResult();
+
         // A start / stop with no answer: give up and cancel everything to be safe.
         if (value.pending && std::chrono::duration<double>(now - operationSince).count() > timeout) {
+            // An unanswered Stop drops our goal: busy then follows the robot's status topic alone, so Start
+            // comes back as soon as the robot reports nothing running.
+            if (stopping) {
+                goal.reset();
+                value.busy = externalBusy || awaitingGoal;
+            }
             value.pending = false;
             value.failed = true;
             value.message = "Autonomy request timed out; stop unconfirmed";
@@ -240,11 +289,15 @@ class UwrtAutonomy final : public Autonomy {
     MissionState value;
     // externalBusy: some client's goal is active; awaitingGoal: our goal is sent but not yet accepted;
     // externalExecution: the running tree was started by another client.
-    bool externalBusy = false, awaitingGoal = false, stopping = false, externalExecution = false;
+    // goalSeen: our goal has appeared as active on the status topic; ended: it has since ended there (endedCode,
+    // a GoalStatus, or 0 once expired) but its result has not arrived.
+    bool externalBusy = false, awaitingGoal = false, stopping = false, externalExecution = false, goalSeen = false,
+         ended = false;
+    int endedCode = 0;
     double timeout, stackTimeout;
     uint64_t refreshEpoch = 0;
     int64_t requestId = 0;
-    Steady::time_point lastRefresh{}, operationSince{}, stackReceived{};
+    Steady::time_point lastRefresh{}, operationSince{}, stackReceived{}, endedSince{};
     Goal::SharedPtr goal;
     rclcpp_action::Client<Execute>::SharedPtr client;
     rclcpp::Client<List>::SharedPtr list;

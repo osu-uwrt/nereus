@@ -4,6 +4,7 @@
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panels/pose_math.hpp"
 #include "nereus/ros_viewer/panels/ros_providers.hpp"
+#include <action_msgs/msg/goal_status_array.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -316,6 +317,30 @@ int main(int argc, char **argv) {
     running.reset();
     spin(.3);
     assert(!mission->state().failed && !mission->state().busy);
+
+    // A result lost while untethered: once the status topic shows the goal ended and the result still hasn't
+    // come after the request timeout, Start is free again; the late result then changes nothing.
+    auto status = node->create_publisher<action_msgs::msg::GoalStatusArray>(
+        "autonomy/run_tree/_action/status", rclcpp::QoS(1).reliable().transient_local());
+    mission->start("/trees/test.xml");
+    spin(.3);
+    assert(running);
+    action_msgs::msg::GoalStatusArray ended;
+    ended.status_list.resize(1);
+    ended.status_list[0].goal_info.goal_id.uuid = running->get_goal_id();
+    ended.status_list[0].status = action_msgs::msg::GoalStatus::STATUS_SUCCEEDED;
+    status->publish(ended);
+    spin(.5);
+    assert(mission->state().busy); // the result may still be on its way
+    spin(3);
+    assert(!mission->state().busy && !mission->state().failed);
+    assert(mission->state().message == "Tree ended (result missed)");
+    result->returncode = 3;
+    running->succeed(result);
+    running.reset();
+    spin(.3);
+    assert(!mission->state().busy && !mission->state().failed);
+    assert(mission->state().message == "Tree ended (result missed)");
 
     // A late goal response after timeout is canceled, never left executing.
     mission->start("/trees/test.xml");
