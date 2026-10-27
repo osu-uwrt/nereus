@@ -103,6 +103,7 @@ providers:
         - {id: clear_depth, label: Clear depth, value: 7}
       imu: {mag_cal_action: vectornav/mag_cal, config_service: vectornav/config}
       tare_action: gyro/tare
+      leds: {topic: command/led}   # riptide_msgs2/LedCommand; brightness scales the colour
       pinger:
         enable_topic: ivc/pinger/enable
         frequency_topic: ivc/pinger/set_freq_broker_khz

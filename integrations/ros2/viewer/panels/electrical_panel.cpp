@@ -1,10 +1,12 @@
-// Electrical panel: power rail commands, IMU mag cal and register access, FOG gyro tare, pinger settings and the
-// IVC link, each section shown only when the bound Electrical provider configures it.
+// Electrical panel: power rail commands, IMU mag cal and register access, FOG gyro tare, pinger settings, the
+// IVC link and the LEDs, each section shown only when the bound Electrical provider configures it.
 #include "nereus/ros_viewer/panel_layout.hpp"
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/pins.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
+#include <iterator>
 #include <imgui.h>
 
 namespace nereus::ros_viewer::panels {
@@ -29,6 +31,9 @@ class ElectricalPanel final : public Panel {
     double tareTimeout = 20;                                      // seconds
     bool pingerEnabled = true, pingerInitialized = false;         // checkbox seeded once from the provider
     std::size_t logLines = 0;                                     // IVC log length last frame, to auto-scroll
+    LedSetting led;                                               // the LED controls
+    bool ledsInitialized = false, ledsPending = false;            // seeded once from the robot; a change unsent
+    double ledsSentAt = -1;                                       // ImGui time of the last LED send
 
     // Power commands two per row; those marked `confirm` (power cuts) open a confirmation popup first.
     void power(const ElectricalState &s) {
@@ -214,13 +219,114 @@ class ElectricalPanel final : public Panel {
         ImGui::EndChild();
     }
 
+    // LEDs: colour, brightness, mode and target, sent live as they change (at most 5 per second, the last change
+    // always); presets set the colour; Off blacks them out and leaves the controls as they are.
+    void leds(const ElectricalState &s) {
+        sectionTitle("LEDs");
+        if (!ledsInitialized && s.ledsLast) {
+            led = *s.ledsLast;
+            led.target = std::clamp(led.target, 1, 3);
+            led.mode = std::clamp(led.mode, 0, 4);
+            ledsInitialized = true;
+        }
+        bool changed = false;
+
+        float rgb[3] = {led.red, led.green, led.blue};
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::ColorEdit3("##led_color", rgb, ImGuiColorEditFlags_DisplayRGB | ImGuiColorEditFlags_PickerHueWheel)) {
+            led.red = rgb[0], led.green = rgb[1], led.blue = rgb[2];
+            changed = true;
+        }
+
+        // Preset colours: one click sets and sends.
+        static const struct {
+            const char *name;
+            float r, g, b;
+        } presets[] = {{"Red", 1, 0, 0},   {"Orange", 1, .35f, 0}, {"Yellow", 1, .85f, 0}, {"Green", 0, 1, 0},
+                       {"Cyan", 0, 1, 1},  {"Blue", 0, 0, 1},      {"Purple", .6f, 0, 1},  {"Magenta", 1, 0, .75f},
+                       {"White", 1, 1, 1}};
+        const float swatch = ui(22);
+        for (std::size_t i = 0; i < std::size(presets); ++i) {
+            const auto &p = presets[i];
+            if (i)
+                sameLineIfFits(swatch);
+            ImGui::PushID(int(i));
+            if (ImGui::ColorButton(p.name, {p.r, p.g, p.b, 1}, ImGuiColorEditFlags_NoTooltip, {swatch, swatch})) {
+                led.red = p.r, led.green = p.g, led.blue = p.b;
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", p.name);
+            ImGui::PopID();
+        }
+
+        int percent = int(std::lround(led.brightness * 100));
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::SliderInt("##led_brightness", &percent, 0, 100, "Brightness %d%%")) {
+            led.brightness = float(percent) / 100;
+            changed = true;
+        }
+
+        static const char *const modes[] = {"Solid", "Slow flash", "Fast flash", "Breath", "Single flash"};
+        static const char *const targets[] = {"None", "CCB", "ALU", "All"};
+        const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
+        ImGui::SetNextItemWidth(half);
+        changed |= ImGui::Combo("##led_mode", &led.mode, modes, int(std::size(modes)));
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(half);
+        if (ImGui::BeginCombo("##led_target", (std::string(targets[led.target]) + " LEDs").c_str())) {
+            for (int t = 1; t <= 3; ++t)
+                if (ImGui::Selectable(targets[t], t == led.target)) {
+                    led.target = t;
+                    changed = true;
+                }
+            ImGui::EndCombo();
+        }
+
+        if (pins::Button("Off###leds_off", {-1, ui(30)})) {
+            auto off = led;
+            off.brightness = 0;
+            electrical->setLeds(off);
+            ledsPending = false;
+            ledsSentAt = ImGui::GetTime();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Black on the selected LEDs; the controls keep their colour for the next change.\n"
+                              "No light at all? Power has Enable LEDs.");
+
+        ledsPending |= changed;
+        if (ledsPending && ImGui::GetTime() - ledsSentAt >= .2) {
+            electrical->setLeds(led);
+            ledsPending = false;
+            ledsSentAt = ImGui::GetTime();
+        }
+
+        // What the LEDs were last told, by this panel or anything else on the robot (the latest command wins).
+        if (s.ledsLast) {
+            const auto &l = *s.ledsLast;
+            ImGui::ColorButton("##led_last", {l.red * l.brightness, l.green * l.brightness, l.blue * l.brightness, 1},
+                               ImGuiColorEditFlags_NoTooltip, {ui(14), ui(14)});
+            ImGui::SameLine();
+            const int m = std::clamp(l.mode, 0, 4), t = std::clamp(l.target, 0, 3);
+            char text[96];
+            std::snprintf(text, sizeof(text), "Robot: %s, %d%%, %s LEDs", modes[m], int(std::lround(l.brightness * 100)),
+                          targets[t]);
+            muted(text);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("The last LED command on the robot, from this panel or another node (the pressure "
+                                  "monitor, pool ident): the latest one wins.");
+        } else
+            muted("No LED command seen on the robot yet");
+        muted(s.ledsMessage);
+    }
+
   public:
     explicit ElectricalPanel(const Binding &b) : electrical(std::dynamic_pointer_cast<Electrical>(b.provider)) {}
 
     void draw() override {
         if (!electrical) {
-            emptyState("Connected, this shows the power rails and their switches, the IMU, FOG and pinger, and the "
-                       "IVC link.");
+            emptyState("Connected, this shows the power rails and their switches, the IMU, FOG and pinger, the LEDs "
+                       "and the IVC link.");
             return;
         }
 
@@ -234,6 +340,8 @@ class ElectricalPanel final : public Panel {
             fog(s);
         if (s.hasPinger)
             pinger(s);
+        if (s.hasLeds)
+            leds(s);
         if (s.hasIvc)
             ivc(s);
     }

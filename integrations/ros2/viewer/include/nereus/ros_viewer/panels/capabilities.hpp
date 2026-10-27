@@ -224,6 +224,13 @@ struct ElectricalCommandItem {
     bool confirm = false; // cuts power somewhere: the panel asks first
 };
 
+// The robot's LEDs (riptide_msgs2/LedCommand): a colour 0..1 per channel, scaled by brightness 0..1 when sent.
+struct LedSetting {
+    float red = 1, green = 1, blue = 1, brightness = 1;
+    int mode = 0;   // LedCommand MODE_*: solid, slow flash, fast flash, breath, single flash
+    int target = 3; // LedCommand TARGET_*: CCB 1, ALU 2, all 3
+};
+
 struct ElectricalState {
     std::vector<ElectricalCommandItem> commands;
     std::string commandMessage;
@@ -250,6 +257,11 @@ struct ElectricalState {
     std::vector<std::string> ivcHeaders, ivcStatuses;
     int ivcStatusHeaders = 0;        // headers below this index carry a status, the rest a raw 5-bit command
     std::vector<std::string> ivcLog; // newest last
+
+    // LEDs: the last command on the LED topic (from anyone: this panel, the pressure monitor, ...).
+    bool hasLeds = false;
+    std::optional<LedSetting> ledsLast;
+    std::string ledsMessage;
 };
 
 struct Electrical : Provider {
@@ -268,6 +280,7 @@ struct Electrical : Provider {
     virtual void setPingerEnabled(bool) = 0;
     virtual void setPingerFrequency(int khz) = 0;
     virtual void sendIvc(int header, int command) = 0;
+    virtual void setLeds(const LedSetting &) = 0;
 };
 
 // --- Bagging ---

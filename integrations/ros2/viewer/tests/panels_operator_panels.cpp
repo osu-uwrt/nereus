@@ -4,6 +4,7 @@
 #include "nereus/ros_viewer/panels/composition.hpp"
 #include "nereus/ros_viewer/panels/ros_providers.hpp"
 #include <cassert>
+#include <cmath>
 #include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #ifdef NEREUS_VIEWER_HAVE_CHAMELEON
 #include <chameleon_tf_msgs/action/model_frame.hpp>
@@ -21,6 +22,7 @@
 #include <riptide_msgs2/msg/battery_status.hpp>
 #include <riptide_msgs2/msg/electrical_command.hpp>
 #include <riptide_msgs2/msg/gyro_status.hpp>
+#include <riptide_msgs2/msg/led_command.hpp>
 #include <riptide_msgs2/msg/mapping_target_info.hpp>
 #include <riptide_msgs2/msg/u_int8_stamped.hpp>
 #include <riptide_msgs2/srv/mapping_target.hpp>
@@ -533,6 +535,24 @@ ui:
     spin(.15);
     elec = electrical->state();
     assert(pingerFrequencies == std::vector<int>{30} && elec.pingerSelected == 30 && elec.pingerAmplitude == .25f);
+
+    // LEDs: the colour scaled by the brightness; bad modes / targets are dropped; the last command on the topic
+    // (any sender) reads back as colour and brightness.
+    std::vector<riptide_msgs2::msg::LedCommand> ledsSent;
+    auto ledSub = node->create_subscription<riptide_msgs2::msg::LedCommand>(
+        "command/led", 10, [&](const riptide_msgs2::msg::LedCommand &m) { ledsSent.push_back(m); });
+    assert(elec.hasLeds && !elec.ledsLast);
+    spin(.3, false); // discovery
+    electrical->setLeds({1, .5f, 0, .5f, riptide_msgs2::msg::LedCommand::MODE_BREATH, 3});
+    electrical->setLeds({1, 1, 1, 1, 9, 3}); // no such mode
+    electrical->setLeds({1, 1, 1, 1, 0, 0}); // no LEDs
+    spin(.15);
+    assert(ledsSent.size() == 1 && ledsSent[0].red == 128 && ledsSent[0].green == 64 && ledsSent[0].blue == 0 &&
+           ledsSent[0].mode == riptide_msgs2::msg::LedCommand::MODE_BREATH && ledsSent[0].target == 3);
+    elec = electrical->state();
+    assert(elec.ledsLast && std::abs(elec.ledsLast->brightness - 128 / 255.f) < 1e-6f && elec.ledsLast->red == 1 &&
+           std::abs(elec.ledsLast->green - .5f) < 1e-6f && elec.ledsLast->blue == 0);
+    assert(elec.ledsMessage.find("Sent #804000 breath to all LEDs") != std::string::npos);
 
     // IVC: header in the top 3 bits, status / command in the low 5; out-of-range sends are dropped.
     electrical->sendIvc(1, 2);

@@ -1,13 +1,16 @@
 // "uwrt.electrical" provider: the RViz electrical panel's tools for the viewer (board commands, IMU mag cal
-// and registers, FOG tare, pinger and IVC link).
+// and registers, FOG tare, pinger, IVC link and LEDs).
 #include "ros_runtime.hpp"
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <ctime>
 #include <deque>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <riptide_msgs2/action/mag_cal.hpp>
 #include <riptide_msgs2/action/tare_gyro.hpp>
 #include <riptide_msgs2/msg/electrical_command.hpp>
+#include <riptide_msgs2/msg/led_command.hpp>
 #include <riptide_msgs2/msg/u_int8_stamped.hpp>
 #include <riptide_msgs2/srv/query_imu_serial.hpp>
 #include <set>
@@ -24,6 +27,25 @@ using TareGyro = riptide_msgs2::action::TareGyro;
 using TareGoal = rclcpp_action::ClientGoalHandle<TareGyro>;
 using ImuSerial = riptide_msgs2::srv::QueryImuSerial;
 using CommandMsg = riptide_msgs2::msg::ElectricalCommand;
+using LedMsg = riptide_msgs2::msg::LedCommand;
+
+const char *const kLedModes[] = {"solid", "slow flash", "fast flash", "breath", "single flash"};
+const char *const kLedTargets[] = {"no LEDs", "CCB", "ALU", "all"};
+
+// An LedCommand as a setting: the brightest channel is the brightness, the colour normalized to it.
+LedSetting ledSetting(const LedMsg &m) {
+    LedSetting led;
+    const int peak = std::max({m.red, m.green, m.blue});
+    led.brightness = float(peak) / 255;
+    if (peak > 0) {
+        led.red = float(m.red) / float(peak);
+        led.green = float(m.green) / float(peak);
+        led.blue = float(m.blue) / float(peak);
+    }
+    led.mode = m.mode;
+    led.target = m.target;
+    return led;
+}
 
 // Local wall-clock time as HH:MM:SS, for message and log prefixes.
 std::string clockStamp() {
@@ -84,6 +106,16 @@ class UwrtElectrical final : public Electrical {
         if (cfg["tare_action"]) {
             value.hasTare = true;
             tare = rclcpp_action::create_client<TareGyro>(node, name(cfg["tare_action"]));
+        }
+
+        if (const auto leds = cfg["leds"]) {
+            value.hasLeds = true;
+            const auto topic = name(leds["topic"]);
+            ledPub = node->create_publisher<LedMsg>(topic, 10);
+            ledSub = node->create_subscription<LedMsg>(topic, 10, [this](const LedMsg &msg) {
+                std::lock_guard<std::mutex> lock(mutex);
+                value.ledsLast = ledSetting(msg);
+            });
         }
 
         if (const auto pinger = cfg["pinger"]) {
@@ -311,6 +343,28 @@ class UwrtElectrical final : public Electrical {
         pingerFrequency->publish(msg);
     }
 
+    // The colour scaled by the brightness, each channel rounded to 0..255.
+    void setLeds(const LedSetting &led) override {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!ledPub || led.mode < LedMsg::MODE_SOLID || led.mode > LedMsg::SINGLETON_FLASH ||
+            led.target < LedMsg::TARGET_CCB || led.target > LedMsg::TARGET_ALL)
+            return;
+        const auto byte = [&](float channel) {
+            return uint8_t(std::lround(255 * std::clamp(channel, 0.f, 1.f) * std::clamp(led.brightness, 0.f, 1.f)));
+        };
+        LedMsg msg;
+        msg.red = byte(led.red);
+        msg.green = byte(led.green);
+        msg.blue = byte(led.blue);
+        msg.mode = uint8_t(led.mode);
+        msg.target = uint8_t(led.target);
+        ledPub->publish(msg);
+        char rgb[16];
+        std::snprintf(rgb, sizeof(rgb), "#%02X%02X%02X", msg.red, msg.green, msg.blue);
+        value.ledsMessage = clockStamp() + "  Sent " + rgb + " " + kLedModes[msg.mode] + " to " +
+                            kLedTargets[msg.target] + " LEDs";
+    }
+
     // One IVC byte: 3-bit header, 5-bit command. Status headers only take a listed status index.
     void sendIvc(int header, int command) override {
         std::lock_guard<std::mutex> lock(mutex);
@@ -449,6 +503,8 @@ class UwrtElectrical final : public Electrical {
     rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr ivcTx;
     rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr ivcTxSub, ivcRx;
     rclcpp::Subscription<riptide_msgs2::msg::UInt8Stamped>::SharedPtr ivcConfirm;
+    rclcpp::Publisher<LedMsg>::SharedPtr ledPub;
+    rclcpp::Subscription<LedMsg>::SharedPtr ledSub;
     rclcpp::TimerBase::SharedPtr timer;
 };
 
@@ -470,7 +526,7 @@ void registerUwrtElectrical(Registry &registry, const RuntimeFactory &runtime) {
             Kind::Electrical,
             [](const YAML::Node &cfg) {
                 keys(cfg,
-                     {"command_topic", "commands", "imu", "tare_action", "pinger", "ivc", "request_timeout",
+                     {"command_topic", "commands", "imu", "tare_action", "pinger", "ivc", "leds", "request_timeout",
                       "save_timeout"},
                      "uwrt.electrical");
                 positive(cfg, "request_timeout", 3);
@@ -504,6 +560,10 @@ void registerUwrtElectrical(Registry &registry, const RuntimeFactory &runtime) {
                     const double heartbeat = pinger["heartbeat_s"].as<double>(1);
                     if (!std::isfinite(heartbeat) || heartbeat < 0 || heartbeat > 60)
                         throw std::invalid_argument("pinger heartbeat_s must be 0 (off) to 60");
+                }
+                if (const auto leds = cfg["leds"]) {
+                    keys(leds, {"topic"}, "electrical leds");
+                    requireTopics(leds, {"topic"}, "electrical leds");
                 }
                 if (const auto ivc = cfg["ivc"]) {
                     keys(ivc, {"tx_topic", "rx_topic", "confirm_topic", "headers", "statuses", "status_headers"},
