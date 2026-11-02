@@ -10,6 +10,7 @@ the robot is drawn from the localization estimate (map -> <ns>/base_link), wall-
 simulator-only panels hidden, camera cards and point clouds from the robot's ROS topics.
 robot_only:=true hides the simulated pool and course layout (it does not match a real pool).
 The robot must be reachable with the same RMW / ROS_DOMAIN_ID (Zenoh: a router connected to the robot's).
+A viewer ros2 launch leaves running when it exits is stopped by launch_cleanup.py.
 """
 
 import ctypes.util
@@ -27,6 +28,10 @@ from launch.actions import (
     SetEnvironmentVariable,
 )
 from launch.substitutions import LaunchConfiguration as LC
+
+# launch_cleanup is imported straight from this directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import launch_cleanup  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[3]
 # The resolver needs the pack tools' dependencies, which ./build.sh installs into .venv; ros2 launch runs
@@ -62,6 +67,7 @@ def _gpu_env(context):
 
 def _processes(context):
     """Resolves the scenario pack, then launches the viewer on it in estimate pose mode."""
+    launch_cleanup.register()
     rmw = LC("rmw").perform(context)
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
     # The resolver and viewer run in the repository root: relative paths mean the caller's directory.

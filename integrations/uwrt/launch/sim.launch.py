@@ -24,6 +24,9 @@ close_with_viewer:=false keeps the simulator and stack running when the viewer i
 The simulator runs under sim_supervisor.py, which restarts it in another pool when the viewer asks (View > Pool;
 or `ros2 topic pub --once /talos/simulator/load_scenario std_msgs/msg/String "{data: rpac}"`). Each restart writes
 its records to <output>-2, <output>-3, ...; the robot stack keeps running.
+
+Processes ros2 launch leaves running when it exits (it fails partway, e.g. "package 'complete_controller' not
+found") are stopped by launch_cleanup.py.
 """
 
 import ctypes.util
@@ -46,8 +49,9 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration as LC
 
-# Sibling modules (sim_supervisor, mpc_sim_model) are imported straight from this directory.
+# Sibling modules (sim_supervisor, mpc_sim_model, launch_cleanup) are imported straight from this directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import launch_cleanup  # noqa: E402
 import sim_supervisor  # noqa: E402  (resolving and the pool table, shared with the supervisor)
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -117,6 +121,7 @@ def _mpc_sim_model(context, resolved, output):
 
 def _processes(context):
     """Resolves the scenario, then starts the supervised simulator, the UWRT stack and the viewer."""
+    launch_cleanup.register()
     rmw = LC("rmw").perform(context)
     actions = [SetEnvironmentVariable("RMW_IMPLEMENTATION", rmw)] if rmw else []
     # The resolver and simulator run in the repository root: relative paths mean the caller's directory.
