@@ -2536,6 +2536,15 @@ void App::drawDisplayWindow() {
 
 // Observer visibility and lighting: what this view draws, never what the robot cameras see.
 void App::drawDisplaySettings() {
+    // The pool and equipment together. The tiles follow but do not count: they only show on the walls and floor.
+    const bool equipment = !model_->pack().equipmentInstances().empty();
+    const bool anyShown = observer_.water || observer_.walls || observer_.floor || (equipment && look_.equipment);
+    if (pins::Button(anyShown ? "Hide all###pool_all" : "Show all###pool_all")) {
+        observer_.water = observer_.walls = observer_.floor = observer_.tiles = !anyShown;
+        if (equipment)
+            look_.equipment = !anyShown;
+    }
+
     pins::Checkbox("Water", &observer_.water);
     pins::Checkbox("Pool walls & deck", &observer_.walls);
     pins::Checkbox("Pool floor", &observer_.floor);
@@ -2543,7 +2552,7 @@ void App::drawDisplaySettings() {
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("The tile grout on the walls and floor (this view only); the lane lines stay.");
 
-    if (!model_->pack().equipmentInstances().empty()) {
+    if (equipment) {
         pins::Checkbox("AprilTag board", &look_.equipment);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("The equipment pack (calibration board) in this view; camera cards always show it.");

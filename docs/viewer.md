@@ -370,6 +370,7 @@ bigger (or float it) for full-size labels.
 
 The toolbar's **Display** button (or Windows → Display) opens it; it stays open while you change things.
 
+- **Hide all / Show all**: Water, the pool, its tiles and the AprilTag board together.
 - **Water, Pool walls & deck, Pool floor, Surface reflections**: visibility (camera cards always see the pool).
   **Pool tiles** off draws the walls and floor plain, keeping the lane lines (this view only).
 - **AprilTag board**: the scenario's equipment pack (the calibration board) in this view only; camera cards always
