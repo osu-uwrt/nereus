@@ -441,17 +441,18 @@ void RosSide::setImageTopic(ImageFeed &feed, const std::string &topic) {
 void RosSide::updateImageFeeds() {
     bool waiting = false;
     for (auto &feed : imageFeeds) {
-        if (!feed.open) {
+        const bool wanted = feed.open || feed.main;
+        if (!wanted) {
             feed.compressedSub.reset();
             feed.rawSub.reset();
         }
-        waiting = waiting || (feed.open && !feed.subscribed() && !feed.topic.empty());
+        waiting = waiting || (wanted && !feed.subscribed() && !feed.topic.empty());
     }
     if (!waiting || !live_)
         return;
     for (const auto &topic : imageTopics())
         for (auto &feed : imageFeeds)
-            if (feed.open && !feed.subscribed() && feed.topic == topic.name)
+            if ((feed.open || feed.main) && !feed.subscribed() && feed.topic == topic.name)
                 subscribeImage(feed, topic);
 }
 

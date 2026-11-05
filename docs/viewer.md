@@ -77,7 +77,8 @@ run scorecard) is a window you can place:
   menu); right-click that menu item to pin a **+ Image** button to the toolbar. The new window lists every `sensor_msgs/Image` and `CompressedImage`
   topic in the ROS graph: pick one, such as `yolo_orientation/annotated/compressed` to see what the detector sees, or
   type a name and press Enter for one nothing publishes yet. The dropdown at the top of the window changes the topic
-  later. Right-click the tab → *Remove* to drop the view. A view is subscribed only while its window is open, and
+  later, and **Main view** shows the image in the pool view, like a camera's (the Camera dropdown and View menu list
+  the views too; pick another camera to go back). Right-click the tab → *Remove* to drop the view. A view is subscribed only while its window is open, and
   views are part of the layout, so they come back next time and with named layouts.
   JPEG, PNG and raw color, mono, `16UC1` and `32FC1` images work; depth is colored over each frame's own range.
 - **Layout** → *Standard* (panels left, cameras and map right), *Wide view* (cameras and map in a strip under the

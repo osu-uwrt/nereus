@@ -116,6 +116,7 @@ struct ImageFeed : ImageArrivals {
     int id = 0;        // the window's identity in saved layouts
     std::string topic; // absolute; empty until one is picked
     bool open = true;
+    bool main = false; // shown in the pool view, which also keeps it subscribed with its window closed
 
     std::vector<std::uint8_t> rgb; // newest decoded preview (RGB8)
     int width = 0, height = 0, sourceWidth = 0, sourceHeight = 0;

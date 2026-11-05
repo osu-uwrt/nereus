@@ -413,6 +413,8 @@ class App {
     void showImageTopic(const std::string &topic);
     void setImageTopic(ImageFeed &, const std::string &topic);
     void removeImageView(int id);
+    ImageFeed *mainImageFeed();
+    void showImageInMain(ImageFeed &);
     void dockImageWindow(const std::string &name);
     void installImageTopicSettings();
     void drawMapWindow();
@@ -1917,6 +1919,14 @@ void drawCardVeil(ImVec2 pos, float w, float h, const char *reason, float alpha)
     draw->PopClipRect();
     endSurface();
 }
+
+// What an image view shows instead of its image, if anything.
+const char *imageWaitReason(const ImageFeed &feed, const ImageCard &card) {
+    return !feed.error.empty()  ? feed.error.c_str()
+           : !feed.subscribed() ? "Waiting for the topic to appear"
+           : !card.texture      ? "Waiting for images"
+                                : nullptr;
+}
 } // namespace
 
 // One camera window's contents: source controls, the image fitted to the window, and the feed status.
@@ -2032,10 +2042,6 @@ void App::drawCameraCard(std::size_t index) {
 // rate, and the image fitted to the window.
 void App::drawImageCard(ImageFeed &feed) {
     auto &card = imageCards_[feed.id];
-    if (feed.dirty) {
-        upload(card.texture, card.width, card.height, feed.rgb, feed.width, feed.height);
-        feed.dirty = false;
-    }
     ImGui::PushID(feed.id);
     if (feed.topic.empty()) {
         ImGui::BeginChild("##topics");
@@ -2056,11 +2062,11 @@ void App::drawImageCard(ImageFeed &feed) {
                               feed.encoding.empty() ? "" : "\n", card.width, card.height);
     };
 
-    // The picker takes the row, up to the status (the tooltip has it where it does not fit)
+    // The picker takes the row, up to Main view and the status (the tooltip has it where it does not fit)
     ImGui::PushFont(window_->small);
     const float statusWidth = ImGui::CalcTextSize(status).x;
     ImGui::PopFont();
-    const float row = ImGui::GetContentRegionAvail().x;
+    const float row = ImGui::GetContentRegionAvail().x - buttonWidth("Main view") - ImGui::GetStyle().ItemSpacing.x;
     const bool statusFits = row - statusWidth - ui(16) >= ui(160);
     ImGui::SetNextItemWidth(statusFits ? row - statusWidth - ui(16) : row);
     ImGui::SetNextWindowSizeConstraints(ui(ImVec2(420, 0)), ui(ImVec2(900, 420)));
@@ -2069,6 +2075,17 @@ void App::drawImageCard(ImageFeed &feed) {
         ImGui::EndCombo();
     } else
         details();
+    ImGui::SameLine();
+    pushActiveColors(feed.main);
+    if (pins::Button("Main view")) {
+        if (feed.main)
+            setViewMode(0);
+        else
+            showImageInMain(feed);
+    }
+    popActiveColors();
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip(feed.main ? "Back to the orbit camera" : "Show this image in the pool view");
     if (statusFits) {
         ImGui::PushFont(window_->small);
         ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - statusWidth);
@@ -2090,11 +2107,7 @@ void App::drawImageCard(ImageFeed &feed) {
         ImGui::Dummy({w, h});
     const ImVec2 below = ImGui::GetCursorScreenPos();
 
-    const char *reason = !feed.error.empty()  ? feed.error.c_str()
-                         : !feed.subscribed() ? "Waiting for the topic to appear"
-                         : !card.texture      ? "Waiting for images"
-                                              : nullptr;
-    if (reason)
+    if (const char *reason = imageWaitReason(feed, card))
         drawCardVeil(pos, w, h, reason, card.texture ? .7f : 1.f);
     ImGui::SetCursorScreenPos(below);
     ImGui::Dummy({0, 0});
@@ -2620,6 +2633,22 @@ void App::setViewMode(int mode) {
         freeRoll_ = std::atan2(glm::dot(up, right), glm::dot(up, glm::cross(right, forward)));
     }
     mode_ = mode;
+    for (auto &feed : ros_->imageFeeds)
+        feed.main = false;
+}
+
+// The image view in the pool view, if there is one (over the orbit camera, which waits behind it).
+ImageFeed *App::mainImageFeed() {
+    if (workspace_ == Workspace::Operate)
+        for (auto &feed : ros_->imageFeeds)
+            if (feed.main && !feed.topic.empty())
+                return &feed;
+    return nullptr;
+}
+
+void App::showImageInMain(ImageFeed &feed) {
+    setViewMode(0);
+    feed.main = true;
 }
 
 // A toolbar dropdown that names what it chooses: "Camera \u00b7 Orbit". Returns the chosen index (or -1).
@@ -2648,10 +2677,23 @@ void App::toolbarView() {
     std::vector<std::string> views{"Orbit", "Free camera"};
     for (const auto &camera : s.cameras)
         views.push_back(camera.id);
-    if (const int mode = labeledCombo("##view", "Camera", views, mode_); mode >= 0)
+    // then the image views: past the cameras, these are not camera modes
+    const int firstImage = int(views.size());
+    int current = mode_;
+    std::vector<ImageFeed *> images;
+    for (auto &feed : ros_->imageFeeds)
+        if (!feed.topic.empty()) {
+            if (feed.main)
+                current = int(views.size());
+            views.push_back(imageTopicTitle(feed.topic));
+            images.push_back(&feed);
+        }
+    if (const int mode = labeledCombo("##view", "Camera", views, current); mode >= firstImage)
+        showImageInMain(*images[std::size_t(mode - firstImage)]);
+    else if (mode >= 0)
         setViewMode(mode);
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Camera: orbit, free camera (WASD), or look through a robot camera");
+        ImGui::SetTooltip("Camera: orbit, free camera (WASD), look through a robot camera, or an image view");
 }
 
 void App::toolbarFocus() {
@@ -3521,6 +3563,10 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
         for (std::size_t i = 0; i < scenario_->cameras.size(); ++i)
             add("Camera", "Look through the " + scenario_->cameras[i].title, mode_ == int(i) + 2,
                 [this, i] { setViewMode(int(i) + 2); });
+        for (auto &feed : ros_->imageFeeds)
+            if (!feed.topic.empty())
+                add("Camera", "Show " + imageTopicTitle(feed.topic), feed.main,
+                    [this, &feed] { showImageInMain(feed); });
         if (!demoMode_)
             add("Window", "New image view", false, [this] { newImageView(); });
         for (const auto &topic : ros_->imageTopics()) {
@@ -4332,6 +4378,9 @@ void App::drawViewMenu() {
         for (std::size_t i = 0; i < scenario_->cameras.size(); ++i)
             if (ImGui::MenuItem(scenario_->cameras[i].id.c_str(), nullptr, mode_ == int(i) + 2))
                 setViewMode(int(i) + 2);
+        for (auto &feed : ros_->imageFeeds)
+            if (!feed.topic.empty() && ImGui::MenuItem(imageTopicTitle(feed.topic).c_str(), nullptr, feed.main))
+                showImageInMain(feed);
         if (ImGui::BeginMenu("Focus")) {
             for (const auto &name : focusNames_)
                 if (ImGui::MenuItem(name.c_str(), nullptr, focusName_ == name))
@@ -4843,6 +4892,9 @@ void App::drawPoolView(double time, float dt) {
     // mouse-capture request.
     hovered = hovered && ImGui::IsWindowHovered() && mode_ == oldMode &&
               !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+    // An image in the view: the mouse does nothing to the camera behind it, and no 3D overlay lines up with it.
+    const ImageFeed *mainImage = mainImageFeed();
+    hovered = hovered && !mainImage;
     // The tabs that bring back a snapped-shut side take their own clicks, not the camera's.
     for (const Side side : {Side::Left, Side::Right})
         hovered = hovered && !sides_[int(side)].dragging && !drawSideHandle(side, position, {width, viewHeight}, false);
@@ -5011,8 +5063,20 @@ void App::drawPoolView(double time, float dt) {
     ImGui::SetCursorScreenPos(imagePos);
     // A promoted sensor view shows the bridge's depth image instead while its card is on DEPTH.
     const std::size_t sensorIndex = sensor ? std::size_t(mode_ - 2) : 0;
-    if (sensor && sensorIndex < cards_.size() && sensorIndex < ros_->feeds.size() &&
-        ros_->feeds[sensorIndex].wantDepth && cards_[sensorIndex].depth)
+    if (mainImage) {
+        const auto &card = imageCards_[mainImage->id];
+        const float aspect = card.height > 0 ? float(card.width) / float(card.height) : 16.f / 9.f;
+        const float h = std::min(viewHeight, width / aspect), w = h * aspect;
+        const ImVec2 at(position.x + (width - w) / 2, position.y + (viewHeight - h) / 2);
+        ImGui::SetCursorScreenPos(at);
+        if (card.texture)
+            ImGui::Image(textureID(card.texture), {w, h});
+        else
+            ImGui::Dummy({w, h});
+        if (const char *reason = imageWaitReason(*mainImage, card))
+            drawCardVeil(at, w, h, reason, card.texture ? .7f : 1.f);
+    } else if (sensor && sensorIndex < cards_.size() && sensorIndex < ros_->feeds.size() &&
+               ros_->feeds[sensorIndex].wantDepth && cards_[sensorIndex].depth)
         ImGui::Image(textureID(cards_[sensorIndex].depth), {iw, ih});
     else
         ImGui::Image(textureID(frame.color_texture), {iw, ih}, {0, 1}, {1, 0});
@@ -5020,52 +5084,55 @@ void App::drawPoolView(double time, float dt) {
     // Overlays over the image: TF, detections, MPC path, thrust, panel gizmos, the 2D chart's frame, the map editor
     const ScreenRect rect{imagePos, iw, ih};
     const auto vp = view.projection * view.view;
-    if (showTf_) {
-        TfOverlay overlay;
-        overlay.snapshot = &tf_;
-        overlay.axisLength = tfAxisLength_;
-        overlay.names = tfNames_;
-        overlay.font = window_->small;
-        overlay.caption = demoMode_ ? "TF preview from robot pack"
-                                    : "ROS TF in " + scenario_->mapFrame + ": " + std::to_string(tf_.resolved) +
-                                          " frames, " + std::to_string(tf_.missing) + " unavailable";
-        drawTfAxes(overlay, vp, rect);
-    }
-    if (detections_ && !demoMode_)
-        drawDetections(ros_->placedDetections, vp, rect, ros_->detectionShow().truth && ros_->detectionShow().estimate);
-    if (showMpc_ && !demoMode_) {
-        drawPlannedPath(ros_->plannedPath, vp, rect);
-        drawMpcPath(ros_->mpcPath, vp, rect);
-    }
-    if (showCovariance_ && !demoMode_) {
-        // Targets: what mapping is fusing now (all of them until it has said)
-        std::vector<RosSide::MappingEstimate> shown;
-        for (const auto &estimate : ros_->mappingEstimates)
-            if (covarianceAll_ || !ros_->haveMappingTargets ||
-                std::find(ros_->mappingTargets.begin(), ros_->mappingTargets.end(), estimate.object) !=
-                    ros_->mappingTargets.end())
-                shown.push_back(estimate);
-        CovarianceOverlay overlay;
-        overlay.estimates = &shown;
-        overlay.sigmas = float(covarianceSigmas_);
-        overlay.lineWidth = covarianceLineWidth_;
-        overlay.labels = covarianceLabels_;
-        overlay.font = window_->small;
-        drawCovariances(overlay, vp, rect);
-    }
-    if (showThrust_ && !demoMode_)
-        drawThrust(scenario_->thrusterMounts, ros_->thrust, body_, thrustScale_, vp, rect);
-    if (operating && composition_ && mode_ == 0) {
-        panelView.projection = view.projection;
-        panelView.view = view.view;
-        panelView.eye = view.eye;
-        composition_->drawOverlays(panelView);
-    }
-    if (planLook)
-        drawPlanFrame(vp, {imagePos.x, imagePos.y}, {iw, ih});
-    if (editing) {
-        editorView.viewProjection = vp;
-        priorMap_->drawOverlay(editorView, window_->small);
+    if (!mainImage) {
+        if (showTf_) {
+            TfOverlay overlay;
+            overlay.snapshot = &tf_;
+            overlay.axisLength = tfAxisLength_;
+            overlay.names = tfNames_;
+            overlay.font = window_->small;
+            overlay.caption = demoMode_ ? "TF preview from robot pack"
+                                        : "ROS TF in " + scenario_->mapFrame + ": " + std::to_string(tf_.resolved) +
+                                              " frames, " + std::to_string(tf_.missing) + " unavailable";
+            drawTfAxes(overlay, vp, rect);
+        }
+        if (detections_ && !demoMode_)
+            drawDetections(ros_->placedDetections, vp, rect,
+                           ros_->detectionShow().truth && ros_->detectionShow().estimate);
+        if (showMpc_ && !demoMode_) {
+            drawPlannedPath(ros_->plannedPath, vp, rect);
+            drawMpcPath(ros_->mpcPath, vp, rect);
+        }
+        if (showCovariance_ && !demoMode_) {
+            // Targets: what mapping is fusing now (all of them until it has said)
+            std::vector<RosSide::MappingEstimate> shown;
+            for (const auto &estimate : ros_->mappingEstimates)
+                if (covarianceAll_ || !ros_->haveMappingTargets ||
+                    std::find(ros_->mappingTargets.begin(), ros_->mappingTargets.end(), estimate.object) !=
+                        ros_->mappingTargets.end())
+                    shown.push_back(estimate);
+            CovarianceOverlay overlay;
+            overlay.estimates = &shown;
+            overlay.sigmas = float(covarianceSigmas_);
+            overlay.lineWidth = covarianceLineWidth_;
+            overlay.labels = covarianceLabels_;
+            overlay.font = window_->small;
+            drawCovariances(overlay, vp, rect);
+        }
+        if (showThrust_ && !demoMode_)
+            drawThrust(scenario_->thrusterMounts, ros_->thrust, body_, thrustScale_, vp, rect);
+        if (operating && composition_ && mode_ == 0) {
+            panelView.projection = view.projection;
+            panelView.view = view.view;
+            panelView.eye = view.eye;
+            composition_->drawOverlays(panelView);
+        }
+        if (planLook)
+            drawPlanFrame(vp, {imagePos.x, imagePos.y}, {iw, ih});
+        if (editing) {
+            editorView.viewProjection = vp;
+            priorMap_->drawOverlay(editorView, window_->small);
+        }
     }
 
     auto *d = ImGui::GetWindowDrawList();
@@ -5104,7 +5171,7 @@ void App::drawPoolView(double time, float dt) {
 
     // Course labels: a leader line and a name plate for each focus landmark in view
     // (the editor labels the Sim course's tasks itself while they are edited)
-    if (labels_ && mode_ < 2 && presetFor(focusName_).labels && !priorMap_->hidesCourse() &&
+    if (labels_ && mode_ < 2 && !mainImage && presetFor(focusName_).labels && !priorMap_->hidesCourse() &&
         !(priorMap_->active() && priorMap_->editingCourse())) {
         for (const auto &key : focusNames_) {
             const auto found = scenario_->landmarks.find(key);
@@ -5151,6 +5218,8 @@ void App::drawPoolView(double time, float dt) {
                         "   ESC  stop",
                     std::string("DRIVING   ") + step + "   ESC  stop"};
     }
+    if (mainImage)
+        wordings = {mainImage->topic};
     const char *controls = wordings.back().c_str();
     for (const auto &hint : wordings)
         if (window_->small->CalcTextSizeA(window_->small->FontSize, 1e9f, 0, hint.c_str()).x + ui(28) <= width) {
@@ -5357,6 +5426,11 @@ void App::drawCameraWindows() {
     ros_->setCamerasWanted(camerasShown_);
 
     for (auto &feed : ros_->imageFeeds) {
+        auto &card = imageCards_[feed.id];
+        if (feed.dirty) { // also for the pool view, with the window closed or behind a tab
+            upload(card.texture, card.width, card.height, feed.rgb, feed.width, feed.height);
+            feed.dirty = false;
+        }
         if (!feed.open) {
             if (feed.topic.empty()) // nothing to come back to
                 imageRemovals_.push_back(feed.id);
@@ -5370,11 +5444,18 @@ void App::drawCameraWindows() {
             ImGui::Begin(name.c_str(), &feed.open, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
         ImGui::PopStyleVar();
         if (visible) {
-            windowContextMenu("image." + std::to_string(feed.id));
+            const auto key = "image." + std::to_string(feed.id);
+            windowContextMenu(key);
+            pins::beginScope(key, imageTopicTitle(feed.topic));
             drawImageCard(feed);
+            pins::endScope();
         }
         ImGui::End();
     }
+
+    for (auto &feed : ros_->imageFeeds) // pinned controls of hidden ones
+        if (const auto key = "image." + std::to_string(feed.id); pins::needsDrawing(key))
+            pins::drawOffscreen(key, imageTopicTitle(feed.topic), [&] { drawImageCard(feed); });
 }
 
 // Controls & shortcuts (F1): the pool view's mouse and keys, robot moves, shortcuts and window handling.
@@ -6337,8 +6418,7 @@ void App::setWorkspace(Workspace next) {
             }
         }
         workspace_ = next;
-        if (mode_ != 0)
-            setViewMode(0);
+        setViewMode(0);
         if (!mapIni_.empty())
             pendingIni_ = mapIni_;
         else
