@@ -370,6 +370,9 @@ bigger (or float it) for full-size labels.
 
 The toolbar's **Display** button (or Windows → Display) opens it; it stays open while you change things.
 
+What you show or hide here (the pool, the board, the ghosts and each mesh) is remembered in
+`~/.config/nereus/viewer.yaml`, over the host config's settings.
+
 - **Hide all / Show all**: Water, the pool, its tiles and the AprilTag board together.
 - **Water, Pool walls & deck, Pool floor, Surface reflections**: visibility (camera cards always see the pool).
   **Pool tiles** off draws the walls and floor plain, keeping the lane lines (this view only).

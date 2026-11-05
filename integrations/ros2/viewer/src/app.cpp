@@ -474,6 +474,10 @@ class App {
     void loadMappingMarkers();
     void drawPointCloudSettings();
     void drawMappingMeshList();
+    std::vector<std::pair<const char *, bool *>> displayFlags();
+    std::string displaySignature();
+    void loadDisplayChoices();
+    void saveDisplayChoices();
     void toolbarFollow();
     void toolbarLabels();
     void toolbarTf();
@@ -796,6 +800,7 @@ class App {
     std::set<std::string> focusOnce_;         // windows brought to front (tab selected) on their next frame
     std::string pendingPreset_, pendingIni_, beforeMaximize_, layoutMessage_;
     fs::path sessionIni_, layoutDir_, preferencesFile_;
+    std::string displaySaved_; // Display's show/hide choices as last loaded or saved (displaySignature)
     bool persist_ = false, layoutReady_ = false, layoutLocked_ = false, maximized_ = false, commandLineDone_ = false,
          presetApplied_ = false;
     char layoutName_[64]{};
@@ -1287,6 +1292,7 @@ void App::loadScenario(const std::string &json) {
     // Back on the UI thread: the observer look and a fresh card per camera
     look_.appearance = scenario_->appearance;
     look_.equipment = lookup(config_, {"equipment_visible"}).as<bool>(true);
+    loadDisplayChoices();
     releaseCardTextures(); // the last scenario's cards
     cards_.assign(scenario_->cameras.size(), {});
     cardDue_.assign(cards_.size(), 0.);
@@ -3363,6 +3369,7 @@ void App::drawInterface(double time, float dt) {
     pins::drawMenu();
     handleWindowEdges();
     windowStates_.update();
+    saveDisplayChoices();
 }
 
 // ----------------------------------------------------------------------------------------- title bar
@@ -3996,6 +4003,67 @@ void App::applyPendingTheme() {
     if (after.fontFamily != before.fontFamily || after.fontPoints != before.fontPoints ||
         after.fontRegular != before.fontRegular)
         pendingUiScale_ = resolvedUiScale(); // reload the fonts between frames
+}
+
+// Display's show/hide choices by their key in viewer.yaml's `display:`, which also lists the hidden mapping meshes
+// by TF frame.
+std::vector<std::pair<const char *, bool *>> App::displayFlags() {
+    return {{"water", &observer_.water},
+            {"walls", &observer_.walls},
+            {"floor", &observer_.floor},
+            {"tiles", &observer_.tiles},
+            {"reflections", &observer_.reflections},
+            {"equipment", &look_.equipment},
+            {"mapping_ghost", &mappingGhost_},
+            {"robot_ghost", &robotGhost_}};
+}
+
+std::string App::displaySignature() {
+    std::string signature;
+    for (const auto &[key, flag] : displayFlags())
+        signature += *flag ? '1' : '0';
+    for (const auto &marker : mappingMarkers_)
+        if (!marker.visible)
+            signature += ' ' + marker.frame;
+    return signature;
+}
+
+// The saved choices over the configured ones, once the scenario's look and meshes are set.
+void App::loadDisplayChoices() {
+    if (persist_ && fs::exists(preferencesFile_))
+        try {
+            const auto display = YAML::LoadFile(preferencesFile_.string())["display"];
+            for (const auto &[key, flag] : displayFlags())
+                *flag = display[key].as<bool>(*flag);
+            if (const auto hidden = display["hidden_meshes"]) {
+                std::set<std::string> names;
+                for (const auto &name : hidden)
+                    names.insert(name.as<std::string>());
+                for (auto &marker : mappingMarkers_)
+                    marker.visible = !names.count(marker.frame);
+            }
+        } catch (const std::exception &error) {
+            std::cerr << "nereus-viewer: ignoring saved display: " << error.what() << '\n';
+        }
+    displaySaved_ = displaySignature();
+}
+
+// Called every frame: writes the choices when one has changed.
+void App::saveDisplayChoices() {
+    if (displaySaved_.empty())
+        return;
+    auto signature = displaySignature();
+    if (signature == displaySaved_)
+        return;
+    displaySaved_ = std::move(signature);
+    YAML::Node display(YAML::NodeType::Map), hidden(YAML::NodeType::Sequence);
+    for (const auto &[key, flag] : displayFlags())
+        display[key] = *flag;
+    for (const auto &marker : mappingMarkers_)
+        if (!marker.visible)
+            hidden.push_back(marker.frame);
+    display["hidden_meshes"] = hidden;
+    savePreference("display", display);
 }
 
 // The operator's interface preferences (theme, scale) in viewer.yaml in the config directory.
