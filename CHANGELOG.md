@@ -14,7 +14,7 @@ First version for the team.
   closed viewer; any viewer picks it up) or on this computer, all topics with an exclude regex or a picked list with
   presets (configured, or saved from the panel to `~/.config/nereus/bag_presets.yaml`) and a Browse all / Recording
   view, and a BAG chip in the command bar while recording.
-- Viewer **image views**: **+ Image** on a camera or image window opens a dock window showing any
+- Viewer **image views**: Windows > New image view (or a pinned toolbar button) opens a dock window showing any
   `sensor_msgs/Image` or `CompressedImage` topic picked in it (the detector's annotated output, a depth image); the
   views are saved with the layout.
 - Viewer **plots**: live plots of any numeric field of any ROS topic (and of the Motion axes and telemetry readings)

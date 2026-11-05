@@ -334,7 +334,7 @@ constexpr const char *kPoolView = "Pool view###pool_view", *kCourseMap = "Course
                      *kSceneSettings = "Scene settings###scene_settings", *kDisplay = "Display###display",
                      *kTfFrames = "TF frames###tf", *kHelp = "Controls & shortcuts###help",
                      *kMapObjects = "Map objects###map_objects", *kMapInspector = "Inspector###map_inspector",
-                     *kNewImageButton = "+ Image";
+                     *kNewImageButton = "+ Image", *kNewImagePin = "new_image";
 
 std::string cameraWindowName(const SensorCamera &camera) {
     return camera.title + "###camera." + camera.id;
@@ -408,6 +408,7 @@ class App {
     void drawCameraWindows();
     void drawImageCard(ImageFeed &);
     void drawImageTopicList(ImageFeed &, ImageCard &);
+    void newImagePinMenu();
     void newImageView(const std::string &topic = "");
     void showImageTopic(const std::string &topic);
     void setImageTopic(ImageFeed &, const std::string &topic);
@@ -1968,13 +1969,6 @@ void App::drawCameraCard(std::size_t index) {
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip(mode_ == cameraMode ? "Back to the orbit camera"
                                               : "Look through this camera in the pool view");
-    if (!demoMode_) {
-        ImGui::SameLine();
-        if (ImGui::Button(kNewImageButton))
-            newImageView();
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("A new window showing any image topic");
-    }
 
     ImGui::PushFont(window_->small);
     // the camera, its resolution, and the live rate of the images the bridge publishes (when that is the source)
@@ -2062,25 +2056,19 @@ void App::drawImageCard(ImageFeed &feed) {
                               feed.encoding.empty() ? "" : "\n", card.width, card.height);
     };
 
-    // The picker takes the row, up to the new view button and the status (the tooltip has it where it does not fit)
+    // The picker takes the row, up to the status (the tooltip has it where it does not fit)
     ImGui::PushFont(window_->small);
     const float statusWidth = ImGui::CalcTextSize(status).x;
     ImGui::PopFont();
-    const float row = ImGui::GetContentRegionAvail().x, gap = ImGui::GetStyle().ItemSpacing.x;
-    const float buttons = row - buttonWidth(kNewImageButton) - gap;
-    const bool statusFits = buttons - statusWidth - ui(16) >= ui(160);
-    ImGui::SetNextItemWidth(statusFits ? buttons - statusWidth - ui(16) : buttons);
+    const float row = ImGui::GetContentRegionAvail().x;
+    const bool statusFits = row - statusWidth - ui(16) >= ui(160);
+    ImGui::SetNextItemWidth(statusFits ? row - statusWidth - ui(16) : row);
     ImGui::SetNextWindowSizeConstraints(ui(ImVec2(420, 0)), ui(ImVec2(900, 420)));
     if (ImGui::BeginCombo("##topic", feed.topic.c_str())) {
         drawImageTopicList(feed, card);
         ImGui::EndCombo();
     } else
         details();
-    ImGui::SameLine();
-    if (ImGui::Button(kNewImageButton))
-        newImageView();
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("A new window showing any image topic");
     if (statusFits) {
         ImGui::PushFont(window_->small);
         ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - statusWidth);
@@ -3200,6 +3188,14 @@ void App::drawToolbar(float left, int &oldMode) {
     for (const auto &entry : windowEntries())
         if (pins_[entry.key])
             pinnedWindowButton(entry);
+    if (pins_[kNewImagePin] && !demoMode_) {
+        sameLineIfFits(buttonWidth(kNewImageButton));
+        if (ImGui::Button(kNewImageButton))
+            newImageView();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("A new window showing any image topic");
+        newImagePinMenu();
+    }
     pins::drawPinned(); // controls pinned from the panels
 
     // Customize: the trailing button or a right-click anywhere on the toolbar.
@@ -4408,9 +4404,11 @@ void App::drawWindowsMenu() {
                 ImGui::SetTooltip("%s", entry.tooltip);
             ImGui::PopID();
         }
-        if (section == MenuSection::Cameras && workspace_ == Workspace::Operate &&
-            ImGui::MenuItem("New image view", nullptr, false, !demoMode_))
-            newImageView();
+        if (section == MenuSection::Cameras && workspace_ == Workspace::Operate) {
+            if (ImGui::MenuItem("New image view", nullptr, false, !demoMode_))
+                newImageView();
+            newImagePinMenu();
+        }
         // windows the panels open themselves (Simulation, Run tracking) follow the host's tools
         if (section == MenuSection::Tools && composition_)
             composition_->drawToolMenuItems();
@@ -4458,6 +4456,16 @@ void App::drawImageTopicList(ImageFeed &feed, ImageCard &card) {
         setImageTopic(feed, picked);
         ImGui::CloseCurrentPopup();
     }
+}
+
+// Right-click on New image view, in the Windows menu or on the toolbar: pins it to the toolbar, or unpins it.
+void App::newImagePinMenu() {
+    if (!ImGui::BeginPopupContextItem("##new_image_pin"))
+        return;
+    bool &pinned = pins_[kNewImagePin];
+    if (ImGui::MenuItem("Pin to toolbar", nullptr, pinned))
+        pinned = !pinned;
+    ImGui::EndPopup();
 }
 
 // A new image view in a window with the feeds, showing `topic` or asking for one.
@@ -5539,6 +5547,7 @@ WindowStates::Flags App::toolbarFlags() {
             flags.emplace_back("toolbar." + item.id, item.visible);
     for (const auto &entry : windowEntries())
         flags.emplace_back("pin." + entry.key, &pins_[entry.key]);
+    flags.emplace_back(std::string("pin.") + kNewImagePin, &pins_[kNewImagePin]);
     return flags;
 }
 
@@ -5656,6 +5665,8 @@ void App::drawToolbarCustomization() {
 
     sectionTitle("Pinned controls");
     pins::drawCustomization();
+    if (!demoMode_)
+        ImGui::Checkbox("New image view", &pins_[kNewImagePin]);
 
     sectionTitle("Pinned windows");
     ImGui::TextDisabled("Also: right-click a window's tab > Pin to toolbar");

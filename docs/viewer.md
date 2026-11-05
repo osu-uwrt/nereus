@@ -73,10 +73,10 @@ run scorecard) is a window you can place:
   edge arrow to split that space, or anywhere else to float it. Drag the borders between windows to resize.
 - **Close** a window with the x on its tab; reopen it from **Windows**. Closed windows give their space to the
   others and come back where they were.
-- **Add a view of any image topic** with **+ Image** on a camera or image window (also a tab's right-click menu,
-  **Windows** → *New image view* and Ctrl+P). The new window lists every `sensor_msgs/Image` and `CompressedImage`
+- **Add a view of any image topic** from **Windows** → *New image view* (also Ctrl+P and a camera tab's right-click
+  menu); right-click that menu item to pin a **+ Image** button to the toolbar. The new window lists every `sensor_msgs/Image` and `CompressedImage`
   topic in the ROS graph: pick one, such as `yolo_orientation/annotated/compressed` to see what the detector sees, or
-  type a name and press Enter for one nothing publishes yet. The box at the top of the window changes the topic
+  type a name and press Enter for one nothing publishes yet. The dropdown at the top of the window changes the topic
   later. Right-click the tab → *Remove* to drop the view. A view is subscribed only while its window is open, and
   views are part of the layout, so they come back next time and with named layouts.
   JPEG, PNG and raw color, mono, `16UC1` and `32FC1` images work; depth is colored over each frame's own range.
