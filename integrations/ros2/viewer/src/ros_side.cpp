@@ -43,7 +43,7 @@ std::string imageTopicTitle(const std::string &topic) {
     if (!parts.empty() && parts.back() == "compressed")
         parts.pop_back();
     if (parts.empty())
-        return topic;
+        return "Image";
     return parts.size() == 1 ? parts.back() : parts[parts.size() - 2] + "/" + parts.back();
 }
 
@@ -409,17 +409,33 @@ const std::vector<ImageTopic> &RosSide::imageTopics() {
     return imageTopics_;
 }
 
-bool RosSide::addImageTopic(const std::string &topic) {
-    for (const auto &feed : imageFeeds)
-        if (feed.topic == topic)
-            return false;
+ImageFeed &RosSide::addImageFeed(const std::string &topic, int id) {
+    if (id == 0) {
+        for (const auto &feed : imageFeeds)
+            id = std::max(id, feed.id);
+        ++id;
+    }
     imageFeeds.emplace_back();
+    imageFeeds.back().id = id;
     imageFeeds.back().topic = topic;
-    return true;
+    return imageFeeds.back();
 }
 
-void RosSide::removeImageTopic(const std::string &topic) {
-    imageFeeds.remove_if([&](const ImageFeed &feed) { return feed.topic == topic; });
+void RosSide::removeImageFeed(int id) {
+    imageFeeds.remove_if([&](const ImageFeed &feed) { return feed.id == id; });
+}
+
+void RosSide::setImageTopic(ImageFeed &feed, const std::string &topic) {
+    feed.compressedSub.reset();
+    feed.rawSub.reset();
+    feed.decoder.reset(); // with it, any frame of the old topic still being decoded
+    static_cast<ImageArrivals &>(feed) = {};
+    feed.topic = topic;
+    feed.rgb.clear();
+    feed.width = feed.height = feed.sourceWidth = feed.sourceHeight = 0;
+    feed.dirty = false;
+    feed.encoding.clear();
+    feed.error.clear();
 }
 
 void RosSide::updateImageFeeds() {
@@ -429,7 +445,7 @@ void RosSide::updateImageFeeds() {
             feed.compressedSub.reset();
             feed.rawSub.reset();
         }
-        waiting = waiting || (feed.open && !feed.subscribed());
+        waiting = waiting || (feed.open && !feed.subscribed() && !feed.topic.empty());
     }
     if (!waiting || !live_)
         return;

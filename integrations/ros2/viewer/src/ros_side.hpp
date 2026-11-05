@@ -109,10 +109,12 @@ struct ImageTopic {
     bool compressed = false;
 };
 
-// An image topic the operator added: shown in its own window. Its type comes from the ROS graph, so a topic can
-// be added before anything publishes it; it is subscribed once it appears and while its window is open.
+// An image view the operator added: a window of its own that shows the topic picked in it. The topic's type comes
+// from the ROS graph, so it can be picked before anything publishes it; it is subscribed once it appears and while
+// the window is open.
 struct ImageFeed : ImageArrivals {
-    std::string topic;
+    int id = 0;        // the window's identity in saved layouts
+    std::string topic; // absolute; empty until one is picked
     bool open = true;
 
     std::vector<std::uint8_t> rgb; // newest decoded preview (RGB8)
@@ -129,7 +131,8 @@ struct ImageFeed : ImageArrivals {
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr rawSub;
 };
 
-// A window title for an image topic: its last two parts, without the transport suffix ("compressed").
+// A window title for an image topic: its last two parts, without the transport suffix ("compressed"); "Image"
+// when there is no topic.
 std::string imageTopicTitle(const std::string &topic);
 
 // One configured PointCloud2 topic (host config `point_clouds:`). Subscribed only while enabled; like RViz's
@@ -287,11 +290,12 @@ class RosSide {
     // Turns all camera subscriptions on or off.
     void setCamerasWanted(bool wanted);
     void refreshCameras(); // re-evaluate RGB/depth subscriptions after wantDepth changes
-    // The image topics in the ROS graph (refreshed at most once a second), and the added ones. Adding a topic
-    // already there returns false.
+    // The image topics in the ROS graph (refreshed at most once a second), and the added image views: id 0 takes
+    // the next free one. Changing a view's topic starts it over.
     const std::vector<ImageTopic> &imageTopics();
-    bool addImageTopic(const std::string &topic);
-    void removeImageTopic(const std::string &topic);
+    ImageFeed &addImageFeed(const std::string &topic, int id = 0);
+    void removeImageFeed(int id);
+    void setImageTopic(ImageFeed &, const std::string &topic);
     // Publishes a std_msgs/Bool on one of the scenario's mechanism_controls topics (unknown topics are ignored).
     void publishMechanism(const std::string &topic, bool value);
 
