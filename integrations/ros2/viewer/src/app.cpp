@@ -998,15 +998,19 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     if (opt_.renderRate < 0 || opt_.renderRate > 240)
         throw std::runtime_error("render rate must be in [0,240] (0 = uncapped)");
 
-    // Scenario: --scenario now, else the bridge's latched topic (loaded between frames); the simulator supervisor's
-    // status feeds File > Switch pool.
+    // Scenario: --scenario, else the bridge's latched topic, both loaded between frames over the loading screen (a
+    // capture run shows none and takes the file now); the simulator supervisor's status feeds File > Switch pool.
     if (!opt_.scenarioFile.empty()) {
         std::ifstream file(opt_.scenarioFile);
         if (!file)
             throw std::runtime_error("cannot read scenario " + opt_.scenarioFile);
         std::stringstream text;
         text << file.rdbuf();
-        loadScenario(text.str());
+        pendingScenario_ = text.str();
+        if (opt_.frames > 0 || opt_.hidden || pendingScenario_.empty()) {
+            loadScenario(pendingScenario_);
+            pendingScenario_.clear();
+        }
     } else if (demoMode_) {
         throw std::runtime_error("--demo needs --scenario FILE (there is no bridge to publish a scene)");
     } else {
@@ -6206,9 +6210,12 @@ int App::loop() {
         else if (!pendingScenario_.empty()) {
             const auto json = std::move(pendingScenario_);
             pendingScenario_.clear();
+            const bool first = !scenario_;
             try {
                 loadScenario(json); // the loading screen keeps moving meanwhile (animateLoadingWhile)
             } catch (const std::exception &error) {
+                if (first && !opt_.scenarioFile.empty()) // no other scenario is coming: stop, as a bad file always has
+                    throw;
                 std::cerr << "nereus-viewer: rejecting scenario document: " << error.what() << '\n';
             }
             buildingShown_ = false;
