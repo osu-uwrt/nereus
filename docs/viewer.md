@@ -40,7 +40,7 @@ starts it for you; for the real robot use `ros2 launch nereus robot.launch.py`.
 
 The camera and focus dropdowns lead the pool view's toolbar, which is grouped (camera, overlays, windows, task
 preview) by thin dividers. **Focus** jumps to the vehicle, a mechanism (Claw,
-Payloads) or a course element; **Follow** keeps the camera on the robot. **Labels** names course elements; **TF**
+Payloads) or a course element; **Follow** keeps the camera on the robot. View → *Turn with the vehicle* also turns the orbit with its heading, a chase view. **Labels** names course elements; **TF**
 draws frame axes (its arrow opens the TF frames window: names, axis length, the frame tree); **MPC path** draws the
 MPC's predicted path; **Covariance** draws mapping's estimates (`mapping/<object>`) as covariance ellipsoids
 placed through TF, each labeled with its horizontal 1-sigma spread (its arrow: 1, 2 or 3 sigma, line width, mapping's current

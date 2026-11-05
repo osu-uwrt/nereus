@@ -39,6 +39,7 @@
 #include <imgui_internal.h>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <mutex>
 #include <nereus/rendering/renderer.hpp>
 #include <set>
@@ -667,6 +668,9 @@ class App {
     glm::vec3 target_{10, 4, -.8f}, freeEye_{-2, -5, 2};
     float yaw_ = -2.45f, pitch_ = .57f, distance_ = 19, freeYaw_ = .5f, freePitch_ = -.2f, freeRoll_ = 0;
     bool follow_ = false, labels_ = true, mouseCaptured_ = false;
+    // Follow also turns the orbit with the followed body's heading (a chase view); lastFollowHeading_ is NaN until set
+    bool followHeading_ = false;
+    float lastFollowHeading_ = std::numeric_limits<float>::quiet_NaN();
     double lastMouseX_ = 0, lastMouseY_ = 0;
     int mode_ = 0; // 0 orbit, 1 free, 2+ sensor camera
     std::string focusName_ = "Vehicle";
@@ -1771,6 +1775,10 @@ SensorView App::viewFor(float aspect, float dt, bool hovered, float viewportHeig
         return planCamera(aspect);
     if (follow_)
         target_ = focusTarget(focusName_);
+    const float bodyHeading = heading(followBody());
+    if (follow_ && followHeading_ && !std::isnan(lastFollowHeading_))
+        yaw_ += std::remainder(bodyHeading - lastFollowHeading_, 2 * glm::pi<float>());
+    lastFollowHeading_ = bodyHeading;
     if (mode_ >= 2 && scenario_ && std::size_t(mode_ - 2) < scenario_->cameras.size()) {
         const auto &camera = scenario_->cameras[std::size_t(mode_ - 2)];
         (void)aspect; // the sensor keeps its own aspect; drawInterface resizes the intrinsics to the image
@@ -3485,6 +3493,7 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
             add("Image topic", topic.name, added, [this, name = topic.name] { toggleImageTopic(name); });
         }
         add("View", "Follow", follow_, [this] { follow_ = !follow_; });
+        add("View", "Turn with the vehicle", followHeading_, [this] { followHeading_ = !followHeading_; });
         add("View", "Labels", labels_, [this] { labels_ = !labels_; });
         add("View", "TF frames", showTf_, [this] { showTf_ = !showTf_; });
         if (!demoMode_) {
@@ -4293,6 +4302,7 @@ void App::drawViewMenu() {
             ImGui::EndMenu();
         }
         ImGui::MenuItem("Follow", "Ctrl+F", &follow_, presetFor(focusName_).follow);
+        ImGui::MenuItem("Turn with the vehicle", nullptr, &followHeading_, presetFor(focusName_).follow);
         sectionTitle("Overlays");
         ImGui::MenuItem("Labels", nullptr, &labels_);
         ImGui::MenuItem("TF frames", nullptr, &showTf_);
