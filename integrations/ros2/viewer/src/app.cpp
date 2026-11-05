@@ -1934,16 +1934,6 @@ void App::drawCameraCard(std::size_t index) {
     auto &feed = ros_->feeds[index];
     auto &tex = cards_[index];
     const auto &camera = *feed.camera;
-    // New images from the feed into the card's textures
-    if (feed.rgbDirty) {
-        upload(tex.rgb, tex.rgbWidth, tex.rgbHeight, feed.rgb, feed.rgbWidth, feed.rgbHeight);
-        tex.flipped = false;
-        feed.rgbDirty = false;
-    }
-    if (feed.depthDirty) {
-        upload(tex.depth, tex.depthWidth, tex.depthHeight, feed.depth, feed.depthWidth, feed.depthHeight);
-        feed.depthDirty = false;
-    }
 
     ImGui::PushID(camera.id.c_str());
     // Local rendering needs the simulator's truth pose; without it the card is the ROS image topic.
@@ -5070,8 +5060,11 @@ void App::drawPoolView(double time, float dt) {
     // The image, centered in the view
     const ImVec2 imagePos(position.x + (width - iw) / 2, position.y + (viewHeight - ih) / 2);
     ImGui::SetCursorScreenPos(imagePos);
-    // A promoted sensor view shows the bridge's depth image instead while its card is on DEPTH.
+    // A promoted sensor view shows what its card does: the bridge's depth image while the card is on DEPTH, and the
+    // camera's images while its source is ROS (on the real robot, always), else this viewer's render.
     const std::size_t sensorIndex = sensor ? std::size_t(mode_ - 2) : 0;
+    const bool sensorCard = sensor && sensorIndex < cards_.size() && sensorIndex < ros_->feeds.size();
+    const bool sensorImages = sensorCard && !demoMode_ && (ros_->feeds[sensorIndex].rosMode || !ros_->truthActive());
     if (mainImage) {
         const auto &card = imageCards_[mainImage->id];
         const float aspect = card.height > 0 ? float(card.width) / float(card.height) : 16.f / 9.f;
@@ -5084,10 +5077,18 @@ void App::drawPoolView(double time, float dt) {
             ImGui::Dummy({w, h});
         if (const char *reason = imageWaitReason(*mainImage, card))
             drawCardVeil(at, w, h, reason, card.texture ? .7f : 1.f);
-    } else if (sensor && sensorIndex < cards_.size() && sensorIndex < ros_->feeds.size() &&
-               ros_->feeds[sensorIndex].wantDepth && cards_[sensorIndex].depth)
+    } else if (sensorCard && ros_->feeds[sensorIndex].wantDepth && cards_[sensorIndex].depth)
         ImGui::Image(textureID(cards_[sensorIndex].depth), {iw, ih});
-    else
+    else if (sensorImages) {
+        const auto &card = cards_[sensorIndex];
+        if (card.rgb)
+            ImGui::Image(textureID(card.rgb), {iw, ih}, card.flipped ? ImVec2(0, 1) : ImVec2(0, 0),
+                         card.flipped ? ImVec2(1, 0) : ImVec2(1, 1));
+        else {
+            ImGui::Dummy({iw, ih});
+            drawCardVeil(imagePos, iw, ih, "Waiting for camera images", 1.f);
+        }
+    } else
         ImGui::Image(textureID(frame.color_texture), {iw, ih}, {0, 1}, {1, 0});
 
     // Overlays over the image: TF, detections, MPC path, thrust, panel gizmos, the 2D chart's frame, the map editor
@@ -5407,6 +5408,19 @@ void App::drawCameraWindows() {
     camerasShown_ = false;
     for (std::size_t i = 0; i < ros_->feeds.size() && i < cards_.size(); ++i) {
         cardVisible_[i] = 0;
+        // New images from the feed into the card's textures: the pool view shows them too, with the window closed
+        auto &feed = ros_->feeds[i];
+        auto &tex = cards_[i];
+        feed.fullSize = mode_ == int(i) + 2;
+        if (feed.rgbDirty) {
+            upload(tex.rgb, tex.rgbWidth, tex.rgbHeight, feed.rgb, feed.rgbWidth, feed.rgbHeight);
+            tex.flipped = false;
+            feed.rgbDirty = false;
+        }
+        if (feed.depthDirty) {
+            upload(tex.depth, tex.depthWidth, tex.depthHeight, feed.depth, feed.depthWidth, feed.depthHeight);
+            feed.depthDirty = false;
+        }
         if (!cards_[i].open)
             continue;
         camerasShown_ = true;
@@ -5432,7 +5446,7 @@ void App::drawCameraWindows() {
         if (pins::needsDrawing("camera." + ros_->feeds[i].camera->id))
             pins::drawOffscreen("camera." + ros_->feeds[i].camera->id, ros_->feeds[i].camera->title,
                                 [&] { drawCameraCard(i); });
-    ros_->setCamerasWanted(camerasShown_);
+    ros_->setCamerasWanted(camerasShown_ || mode_ >= 2); // the pool view may be showing one
 
     for (auto &feed : ros_->imageFeeds) {
         auto &card = imageCards_[feed.id];

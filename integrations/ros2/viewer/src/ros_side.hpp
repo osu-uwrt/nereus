@@ -93,6 +93,7 @@ struct CameraFeed : ImageArrivals {
     std::vector<std::uint8_t> rgb, depth; // decoded previews (RGB8)
     int rgbWidth = 0, rgbHeight = 0, depthWidth = 0, depthHeight = 0;
     bool rgbDirty = false, depthDirty = false, wantDepth = false;
+    bool fullSize = false; // shown in the pool view: RGB decodes at full size rather than as a card preview
 
     // false: the card shows the viewer's own render from the truth pose; true (card source button "ROS (stack)"):
     // the bridge's published images. Depth always comes from the topic.

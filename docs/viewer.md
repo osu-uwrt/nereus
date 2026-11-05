@@ -359,7 +359,7 @@ Topics, the command list and the IVC names are in the `electrical` provider of `
 **RGB / Depth** switches the image; **Main view** shows that camera in the pool view (click again for the orbit
 camera). The image keeps its aspect at any window size. In sim the label under the image is a button: **truth
 pose** shows the viewer's own render from the true camera pose (fast, no noise); click it for **ROS (stack)**, the
-images your stack actually receives.
+images your stack actually receives. **Main view** shows what the card does, so on the real robot it is the camera's own images, at full size, with the overlays drawn over them.
 
 ## Course map
 

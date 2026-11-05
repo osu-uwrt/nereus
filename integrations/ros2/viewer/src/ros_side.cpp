@@ -17,6 +17,8 @@ namespace {
 
 // Preview width (px): JPEG previews decode to at least this; depth images are subsampled down toward it.
 constexpr int kPreviewWidth = 480;
+// A camera in the pool view decodes to at least this.
+constexpr int kFullSizeWidth = 1920;
 // Added image topics are read at full window size (a detector's labels), so they decode to at least this.
 constexpr int kImageTopicWidth = 960;
 
@@ -358,7 +360,10 @@ void RosSide::subscribeCamera(CameraFeed &feed) {
             feed.camera->rgbTopic, qos, [&feed](const sensor_msgs::msg::CompressedImage::ConstSharedPtr &msg) {
                 // Arrival bookkeeping only; the decode (and its cost) belongs to the worker.
                 feed.arrived();
-                feed.decoder->submit(msg->data);
+                const int width = feed.fullSize ? kFullSizeWidth : kPreviewWidth;
+                feed.decoder->submit([msg, width](DecodedImage &out) {
+                    return decodeJpeg(msg->data.data(), msg->data.size(), width, out);
+                });
             });
     }
 
