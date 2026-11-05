@@ -4,7 +4,7 @@
 #pragma once
 #include "detection_pose.hpp"
 #include "display_clock.hpp"
-#include "jpeg_decode.hpp"
+#include "image_decode.hpp"
 #include "point_cloud_convert.hpp"
 #include "scenario.hpp"
 #include "status_lights.hpp"
@@ -16,6 +16,7 @@
 #include <functional>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
+#include <list>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -63,8 +64,31 @@ struct PlacedDetection {
     Kind kind = Kind::Truth;
 };
 
+// Arrival rate and count of a feed's images.
+struct ImageArrivals {
+    double hz = 0;
+    std::uint64_t frames = 0;
+    Clock::time_point lastFrame{};
+
+    // Called once per image received.
+    void arrived() {
+        const auto now = Clock::now();
+        if (frames > 0) {
+            const double dt = std::chrono::duration<double>(now - lastFrame).count();
+            if (dt > 1e-4)
+                hz = hz > 0 ? hz * .8 + .2 / dt : 1. / dt;
+        }
+        lastFrame = now;
+        ++frames;
+    }
+    // A frame arrived within the last 2 s.
+    bool connected() const {
+        return frames > 0 && std::chrono::duration<double>(Clock::now() - lastFrame).count() < 2.0;
+    }
+};
+
 // One scenario camera's preview card: decoded RGB and colorized depth for the GUI, and its subscriptions.
-struct CameraFeed {
+struct CameraFeed : ImageArrivals {
     const SensorCamera *camera = nullptr;
     std::vector<std::uint8_t> rgb, depth; // decoded previews (RGB8)
     int rgbWidth = 0, rgbHeight = 0, depthWidth = 0, depthHeight = 0;
@@ -74,20 +98,39 @@ struct CameraFeed {
     // the bridge's published images. Depth always comes from the topic.
     bool rosMode = true;
 
-    // Arrival rate and count.
-    double hz = 0;
-    std::uint64_t frames = 0;
-    Clock::time_point lastFrame{};
-
-    std::unique_ptr<AsyncJpegDecoder> decoder; // JPEG decoding runs off the UI thread
+    std::unique_ptr<AsyncImageDecoder> decoder; // JPEG decoding runs off the UI thread
     rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr rgbSub;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depthSub;
-
-    // A frame arrived within the last 2 s.
-    bool connected() const {
-        return frames > 0 && std::chrono::duration<double>(Clock::now() - lastFrame).count() < 2.0;
-    }
 };
+
+// A sensor_msgs Image or CompressedImage topic in the ROS graph.
+struct ImageTopic {
+    std::string name;
+    bool compressed = false;
+};
+
+// An image topic the operator added: shown in its own window. Its type comes from the ROS graph, so a topic can
+// be added before anything publishes it; it is subscribed once it appears and while its window is open.
+struct ImageFeed : ImageArrivals {
+    std::string topic;
+    bool open = true;
+
+    std::vector<std::uint8_t> rgb; // newest decoded preview (RGB8)
+    int width = 0, height = 0, sourceWidth = 0, sourceHeight = 0;
+    bool dirty = false;
+    std::string encoding, error; // of the newest image: its encoding or format, and why it cannot be shown
+
+    bool subscribed() const {
+        return compressedSub || rawSub;
+    }
+
+    std::unique_ptr<AsyncImageDecoder> decoder; // decoding runs off the UI thread
+    rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr compressedSub;
+    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr rawSub;
+};
+
+// A window title for an image topic: its last two parts, without the transport suffix ("compressed").
+std::string imageTopicTitle(const std::string &topic);
 
 // One configured PointCloud2 topic (host config `point_clouds:`). Subscribed only while enabled; like RViz's
 // default (decay 0) only the newest message is shown, placed once in the fixed frame and then left in place.
@@ -244,6 +287,11 @@ class RosSide {
     // Turns all camera subscriptions on or off.
     void setCamerasWanted(bool wanted);
     void refreshCameras(); // re-evaluate RGB/depth subscriptions after wantDepth changes
+    // The image topics in the ROS graph (refreshed at most once a second), and the added ones. Adding a topic
+    // already there returns false.
+    const std::vector<ImageTopic> &imageTopics();
+    bool addImageTopic(const std::string &topic);
+    void removeImageTopic(const std::string &topic);
     // Publishes a std_msgs/Bool on one of the scenario's mechanism_controls topics (unknown topics are ignored).
     void publishMechanism(const std::string &topic, bool value);
 
@@ -254,6 +302,7 @@ class RosSide {
     std::vector<glm::mat4> mpcPath, plannedPath;
     std::vector<float> thrust;
     std::deque<CameraFeed> feeds;
+    std::list<ImageFeed> imageFeeds; // stable elements: subscription callbacks and window flags point into them
 
     std::size_t detectionCount() const {
         return detectionMarkers_.size();
@@ -278,6 +327,9 @@ class RosSide {
 
     // (Un)subscribes a feed's RGB and depth topics to match what is wanted.
     void subscribeCamera(CameraFeed &);
+    // Subscribes open image feeds whose topic is in the graph, and drops the closed ones' subscriptions.
+    void updateImageFeeds();
+    void subscribeImage(ImageFeed &, const ImageTopic &);
     // A TF transform as a 4x4 matrix.
     glm::mat4 matrixOf(const geometry_msgs::msg::Transform &) const;
 
@@ -307,6 +359,8 @@ class RosSide {
     ThrusterVisuals *thrusters_ = nullptr;
 
     bool live_ = false, camerasWanted_ = true;
+    std::vector<ImageTopic> imageTopics_;
+    Clock::time_point imageTopicsScanned_{};
 
     // Pose source state (updatePose()).
     std::string status_ = "WAITING FOR PHYSICS";

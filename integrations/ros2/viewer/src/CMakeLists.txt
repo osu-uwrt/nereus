@@ -12,14 +12,14 @@ find_package(X11 REQUIRED) # custom title bar: window-manager move / resize
 find_package(Fontconfig REQUIRED) # a theme's font family (the desktop's Qt font)
 
 # Logic that needs no GL context (tested by tests/host_*).
-add_library(nereus_viewer_host_core STATIC scenario.cpp scenario_packs.cpp jpeg_decode.cpp prior_map.cpp
+add_library(nereus_viewer_host_core STATIC scenario.cpp scenario_packs.cpp image_decode.cpp prior_map.cpp
             file_picker.cpp)
 target_include_directories(nereus_viewer_host_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
   ${PROJECT_SOURCE_DIR}/integrations/ros2/viewer/include)
 target_link_libraries(nereus_viewer_host_core PUBLIC nereus_glm nereus_mesh_assets nereus_pack_scene Eigen3::Eigen yaml-cpp
   rclcpp::rclcpp tf2_ros::tf2_ros ${geometry_msgs_TARGETS} ${visualization_msgs_TARGETS}
   ${std_msgs_TARGETS} ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS}
-  PRIVATE JPEG::JPEG Threads::Threads)
+  PRIVATE JPEG::JPEG PNG::PNG Threads::Threads)
 target_compile_features(nereus_viewer_host_core PUBLIC cxx_std_17)
 target_compile_definitions(nereus_viewer_host_core PRIVATE NEREUS_PACK_CONTENT="${PROJECT_SOURCE_DIR}/content/packs")
 
@@ -45,7 +45,7 @@ if(BUILD_TESTING)
   include(GoogleTest)
 
   # One GTest binary per host_<name>.cpp, all linked against the GL-free core.
-  set(_host_tests viewer_input tf_tree detection_pose status_lights thruster_visuals camera_geometry jpeg scenario
+  set(_host_tests viewer_input tf_tree detection_pose status_lights thruster_visuals camera_geometry image_decode scenario
       display_clock frame_profiler point_cloud mapping_markers prior_map scenario_packs file_picker covariance_ellipsoid)
   foreach(name ${_host_tests})
     add_executable(host_${name}_test ../tests/host_${name}.cpp)
@@ -57,7 +57,7 @@ if(BUILD_TESTING)
   endforeach()
 
   # Extra link/defines for the tests that need them.
-  target_link_libraries(host_jpeg_test PRIVATE JPEG::JPEG Threads::Threads)
+  target_link_libraries(host_image_decode_test PRIVATE JPEG::JPEG PNG::PNG Threads::Threads)
   target_compile_definitions(host_prior_map_test PRIVATE
     NEREUS_TEST_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../tests/host_prior_map_config.yaml")
 

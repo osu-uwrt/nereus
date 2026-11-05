@@ -321,6 +321,12 @@ struct CardTexture {
     bool metaInline = true; // the camera / resolution line sits on the button row (else its own line)
 };
 
+// The GL texture of one added image topic's window.
+struct ImageCard {
+    GLuint texture = 0;
+    int width = 0, height = 0;
+};
+
 // Dockable host windows. The part after ### is the window's identity in saved layouts; the title can change.
 constexpr const char *kPoolView = "Pool view###pool_view", *kCourseMap = "Course map###course_map",
                      *kSceneSettings = "Scene settings###scene_settings", *kDisplay = "Display###display",
@@ -329,6 +335,10 @@ constexpr const char *kPoolView = "Pool view###pool_view", *kCourseMap = "Course
 
 std::string cameraWindowName(const SensorCamera &camera) {
     return camera.title + "###camera." + camera.id;
+}
+
+std::string imageWindowName(const std::string &topic) {
+    return imageTopicTitle(topic) + "###image." + topic;
 }
 
 // Uploads an RGB8 image into `texture` (created on first use) and records its size in tw x th.
@@ -393,6 +403,13 @@ class App {
     void drawCommandBar();
     void drawPoolView(double time, float dt);
     void drawCameraWindows();
+    void drawImageCard(ImageFeed &);
+    void drawImageTopicMenu();
+    void toggleImageTopic(const std::string &topic);
+    void addImageTopic(std::string topic);
+    void removeImageTopic(const std::string &topic);
+    void dockImageWindow(const std::string &name);
+    void installImageTopicSettings();
     void drawMapWindow();
     void drawSceneSettingsWindow();
     void drawDisplayWindow();
@@ -740,7 +757,13 @@ class App {
     std::deque<glm::vec3> trail_;
     std::string status_ = "WAITING FOR SCENARIO";
     std::vector<CardTexture> cards_;
-    std::vector<double> cardDue_;   // next render time per card
+    std::map<std::string, ImageCard> imageCards_; // added image topics' textures, by topic
+    std::vector<std::string> imageRemovals_;      // topics to drop before the next windows are drawn
+    std::string imageDock_;                       // an added topic's window to dock on the next frame
+    char imageTopicText_[256] = "";               // Image topics menu: filter, or a topic to add
+    std::vector<std::string> iniImageTopics_;     // read from the ini, applied when it has all loaded
+    bool iniImageTopicsSeen_ = false;             // the ini had the section (older layouts keep the topics there are)
+    std::vector<double> cardDue_;                 // next render time per card
     std::vector<char> cardVisible_; // drawn on screen last frame (scrolled-out / hidden cards are skipped)
     std::size_t nextCardTurn_ = 0;  // round-robin start so cards share the frame budget evenly
 
@@ -853,6 +876,7 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
     // (--frames) neither read nor write it, so they always see the configured built-in layout.
     dockspace_ = ImHashStr("nereus_dockspace");
     defaultOpen_ = {{"map", true}, {"scene_settings", false}, {"display", false}, {"tf", false}, {"help", false}};
+    installImageTopicSettings(); // first: their windows' saved states are applied by the next handler
     windowStates_.install();
     pins::install();
     installToolWindows();
@@ -1868,6 +1892,22 @@ std::string App::runTime() const {
 
 // -------------------------------------------------------------------------------------- camera cards
 
+namespace {
+// Over a card's image while there is nothing to show: the reason, centered on a veil in the board's colors.
+void drawCardVeil(ImVec2 pos, float w, float h, const char *reason, float alpha) {
+    beginSurface(Surface::Board);
+    auto *draw = ImGui::GetWindowDrawList();
+    const ImVec4 strip = palette().bar;
+    draw->PushClipRect(pos, {pos.x + w, pos.y + h}, true);
+    draw->AddRectFilled(pos, {pos.x + w, pos.y + h}, ImGui::GetColorU32(ImVec4(strip.x, strip.y, strip.z, alpha)));
+    const ImVec2 size = ImGui::CalcTextSize(reason);
+    draw->AddText({pos.x + (w - size.x) * .5f, pos.y + (h - size.y) * .5f}, ImGui::GetColorU32(palette().muted),
+                  reason);
+    draw->PopClipRect();
+    endSurface();
+}
+} // namespace
+
 // One camera window's contents: source controls, the image fitted to the window, and the feed status.
 void App::drawCameraCard(std::size_t index) {
     auto &feed = ros_->feeds[index];
@@ -1965,27 +2005,65 @@ void App::drawCameraCard(std::size_t index) {
 
     const bool ready = demoMode_ || !local || ros_->poseFresh();
     const ImVec2 below = ImGui::GetCursorScreenPos();
-    // No overlay on the image: the source is the Truth / ROS switch, the rate is in the header. While there is
-    // nothing to show, the reason sits centered on a veil in the board's colors.
-    beginSurface(Surface::Board);
-    auto *draw = ImGui::GetWindowDrawList();
-    const ImVec4 strip = palette().bar;
-    draw->PushClipRect(pos, {pos.x + w, pos.y + h}, true);
-    if (!ready || !texture) {
-        draw->AddRectFilled(pos, {pos.x + w, pos.y + h},
-                            ImGui::GetColorU32(ImVec4(strip.x, strip.y, strip.z, texture ? .7f : 1.f)));
-        const char *waiting = !ready                 ? "Waiting for pose"
-                              : local && !depthShown ? "Rendering the local view"
-                                                     : "Waiting for camera images";
-        const ImVec2 size = ImGui::CalcTextSize(waiting);
-        draw->AddText({pos.x + (w - size.x) * .5f, pos.y + (h - size.y) * .5f}, ImGui::GetColorU32(palette().muted),
-                      waiting);
-    }
-    draw->PopClipRect();
-    endSurface();
+    // No overlay on the image: the source is the Truth / ROS switch, the rate is in the header.
+    if (!ready || !texture)
+        drawCardVeil(pos, w, h,
+                     !ready                 ? "Waiting for pose"
+                     : local && !depthShown ? "Rendering the local view"
+                                            : "Waiting for camera images",
+                     texture ? .7f : 1.f);
     ImGui::SetCursorScreenPos(below);
     ImGui::Dummy({0, 0});
     ImGui::PopID();
+}
+
+// An added image topic's window contents: the topic and its live size and rate, then the image fitted to the window.
+void App::drawImageCard(ImageFeed &feed) {
+    auto &card = imageCards_[feed.topic];
+    if (feed.dirty) {
+        upload(card.texture, card.width, card.height, feed.rgb, feed.width, feed.height);
+        feed.dirty = false;
+    }
+
+    ImGui::PushFont(window_->small);
+    char status[64] = "No images";
+    if (feed.connected() && !feed.error.empty())
+        std::snprintf(status, sizeof(status), "%.1f Hz", feed.hz);
+    else if (feed.connected())
+        std::snprintf(status, sizeof(status), "%d x %d  /  %.1f Hz", feed.sourceWidth, feed.sourceHeight, feed.hz);
+    const float statusWidth = ImGui::CalcTextSize(status).x, row = ImGui::GetContentRegionAvail().x;
+    // the topic where it fits beside the status (the window's title and the tooltip name it either way)
+    if (ImGui::CalcTextSize(feed.topic.c_str()).x + statusWidth + ui(16) <= row) {
+        ImGui::TextColored(palette().muted, "%s", feed.topic.c_str());
+        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - statusWidth);
+    }
+    ImGui::TextColored(palette().muted, "%s", status);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s\n%s%sPreview: %d x %d", feed.topic.c_str(), feed.encoding.c_str(),
+                          feed.encoding.empty() ? "" : "\n", card.width, card.height);
+    ImGui::PopFont();
+
+    // The image, as large as the window allows at its own aspect, centered
+    const auto available = ImGui::GetContentRegionAvail();
+    const float aspect = card.height > 0 ? float(card.width) / float(card.height) : 16.f / 9.f;
+    const float w = std::max(16.f, std::min(available.x, available.y * aspect));
+    const float h = w / aspect;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (available.x - w) / 2);
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    if (card.texture)
+        ImGui::Image(textureID(card.texture), {w, h});
+    else
+        ImGui::Dummy({w, h});
+    const ImVec2 below = ImGui::GetCursorScreenPos();
+
+    const char *reason = !feed.error.empty()  ? feed.error.c_str()
+                         : !feed.subscribed() ? "Waiting for the topic to appear"
+                         : !card.texture      ? "Waiting for images"
+                                              : nullptr;
+    if (reason)
+        drawCardVeil(pos, w, h, reason, card.texture ? .7f : 1.f);
+    ImGui::SetCursorScreenPos(below);
+    ImGui::Dummy({0, 0});
 }
 
 // ------------------------------------------------------------------------------------ scene settings
@@ -3016,13 +3094,18 @@ void App::toolbarCovariance() {
 void App::drawCovarianceSettings() {
     int sigmas = covarianceSigmas_ - 1;
     ImGui::SetNextItemWidth(ui(170));
-    if (pins::Combo("Ellipsoid", &sigmas, "1 sigma\0" "2 sigma\0" "3 sigma\0"))
+    if (pins::Combo("Ellipsoid", &sigmas,
+                    "1 sigma\0"
+                    "2 sigma\0"
+                    "3 sigma\0"))
         covarianceSigmas_ = sigmas + 1;
     ImGui::SetNextItemWidth(ui(170));
     ImGui::SliderFloat("Line width", &covarianceLineWidth_, .5f, 6.f, "%.1f px");
     int show = covarianceAll_ ? 1 : 0;
     ImGui::SetNextItemWidth(ui(170));
-    if (pins::Combo("Objects", &show, "Mapping targets\0" "All\0"))
+    if (pins::Combo("Objects", &show,
+                    "Mapping targets\0"
+                    "All\0"))
         covarianceAll_ = show == 1;
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Mapping targets: what mapping is fusing now (its state/mapping list).\n"
@@ -3146,6 +3229,11 @@ void App::drawInterface(double time, float dt) {
     if (!pendingPreset_.empty() && scenario_) {
         applyPreset(pendingPreset_);
         pendingPreset_.clear();
+        imageDock_.clear();
+    }
+    if (!imageDock_.empty() && scenario_) {
+        dockImageWindow(imageDock_);
+        imageDock_.clear();
     }
     if (pendingMapLayout_ && scenario_) {
         applyMapLayout();
@@ -3390,6 +3478,12 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
         for (std::size_t i = 0; i < scenario_->cameras.size(); ++i)
             add("Camera", "Look through the " + scenario_->cameras[i].title, mode_ == int(i) + 2,
                 [this, i] { setViewMode(int(i) + 2); });
+        for (const auto &topic : ros_->imageTopics()) {
+            bool added = false;
+            for (const auto &feed : ros_->imageFeeds)
+                added = added || feed.topic == topic.name;
+            add("Image topic", topic.name, added, [this, name = topic.name] { toggleImageTopic(name); });
+        }
         add("View", "Follow", follow_, [this] { follow_ = !follow_; });
         add("View", "Labels", labels_, [this] { labels_ = !labels_; });
         add("View", "TF frames", showTf_, [this] { showTf_ = !showTf_; });
@@ -4263,6 +4357,8 @@ void App::drawWindowsMenu() {
                 ImGui::SetTooltip("%s", entry.tooltip);
             ImGui::PopID();
         }
+        if (section == MenuSection::Cameras && workspace_ == Workspace::Operate)
+            drawImageTopicMenu();
         // windows the panels open themselves (Simulation, Run tracking) follow the host's tools
         if (section == MenuSection::Tools && composition_)
             composition_->drawToolMenuItems();
@@ -4273,6 +4369,150 @@ void App::drawWindowsMenu() {
         plots::drawMenu();
         ImGui::EndMenu();
     }
+}
+
+// Windows > Image topics: every image topic in the ROS graph to tick into a window of its own or out again, and
+// a box that filters them; Enter adds what it holds, for a topic nothing publishes yet.
+void App::drawImageTopicMenu() {
+    if (!ImGui::BeginMenu("Image topics", !demoMode_))
+        return;
+    ImGui::SetNextItemWidth(ui(340));
+    if (ImGui::IsWindowAppearing())
+        ImGui::SetKeyboardFocusHere();
+    if (ImGui::InputTextWithHint("##image_topic", "Filter, or Enter to add a topic", imageTopicText_,
+                                 sizeof(imageTopicText_), ImGuiInputTextFlags_EnterReturnsTrue)) {
+        addImageTopic(imageTopicText_);
+        imageTopicText_[0] = 0;
+        ImGui::CloseCurrentPopup();
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("A name without a leading / is in the robot's namespace.");
+
+    // The graph's topics, then added ones it does not have (not published right now)
+    struct Row {
+        std::string name;
+        const char *kind;
+        bool added;
+    };
+    std::vector<Row> rows;
+    for (const auto &topic : ros_->imageTopics()) {
+        rows.push_back({topic.name, topic.compressed ? "compressed" : "raw", false});
+        for (const auto &feed : ros_->imageFeeds)
+            rows.back().added = rows.back().added || feed.topic == topic.name;
+    }
+    for (const auto &feed : ros_->imageFeeds)
+        if (std::none_of(rows.begin(), rows.end(), [&](const Row &row) { return row.name == feed.topic; }))
+            rows.push_back({feed.topic, "not published", true});
+    std::sort(rows.begin(), rows.end(), [](const Row &a, const Row &b) { return a.name < b.name; });
+
+    if (rows.empty())
+        ImGui::TextDisabled("No image topics published");
+    for (const auto &row : rows)
+        if (row.name.find(imageTopicText_) != std::string::npos &&
+            ImGui::MenuItem(row.name.c_str(), row.kind, row.added))
+            toggleImageTopic(row.name);
+    ImGui::EndMenu();
+}
+
+void App::toggleImageTopic(const std::string &topic) {
+    for (const auto &feed : ros_->imageFeeds)
+        if (feed.topic == topic) {
+            imageRemovals_.push_back(topic);
+            return;
+        }
+    addImageTopic(topic);
+}
+
+// Adds a topic (absolute, or in the robot's namespace) in a window under the cameras; one already there is shown.
+void App::addImageTopic(std::string topic) {
+    topic.erase(0, topic.find_first_not_of(" \t"));
+    topic.erase(topic.find_last_not_of(" \t/") + 1);
+    if (topic.empty() || !scenario_)
+        return;
+    if (topic.front() != '/')
+        topic = scenario_->absolute(topic);
+    if (ros_->addImageTopic(topic)) {
+        imageDock_ = imageWindowName(topic);
+        return;
+    }
+    for (const auto &entry : windowEntries())
+        if (entry.key == "image." + topic)
+            showWindow(entry);
+}
+
+void App::removeImageTopic(const std::string &topic) {
+    const auto card = imageCards_.find(topic);
+    if (card != imageCards_.end()) {
+        glDeleteTextures(1, &card->second.texture);
+        imageCards_.erase(card);
+    }
+    ros_->removeImageTopic(topic);
+}
+
+// A new image window splits the tallest shown camera or image window, so it starts with the feeds; else it floats.
+void App::dockImageWindow(const std::string &name) {
+    std::vector<std::string> feeds;
+    for (const auto &camera : scenario_->cameras)
+        feeds.push_back(cameraWindowName(camera));
+    for (const auto &feed : ros_->imageFeeds)
+        if (imageWindowName(feed.topic) != name)
+            feeds.push_back(imageWindowName(feed.topic));
+    ImGuiID node = 0;
+    float tallest = 0;
+    for (const auto &feed : feeds) {
+        const auto *window = ImGui::FindWindowByName(feed.c_str());
+        if (window && window->WasActive && window->DockId && window->Size.y > tallest) {
+            node = window->DockId;
+            tallest = window->Size.y;
+        }
+    }
+    if (!node)
+        return;
+    const ImGuiID below = ImGui::DockBuilderSplitNode(node, ImGuiDir_Down, .5f, nullptr, &node);
+    ImGui::DockBuilderDockWindow(name.c_str(), below);
+    ImGui::DockBuilderFinish(dockspace_);
+}
+
+// The added topics are part of the layout, as its plots are: [NereusImages][Topics] holds one per line. A layout
+// from before them has no such section and keeps the topics there are.
+void App::installImageTopicSettings() {
+    ImGuiSettingsHandler handler;
+    handler.TypeName = "NereusImages";
+    handler.TypeHash = ImHashStr("NereusImages");
+    handler.UserData = this;
+    handler.ReadOpenFn = [](ImGuiContext *, ImGuiSettingsHandler *h, const char *) -> void * {
+        auto *app = static_cast<App *>(h->UserData);
+        app->iniImageTopics_.clear();
+        app->iniImageTopicsSeen_ = true;
+        return app;
+    };
+    handler.ReadLineFn = [](ImGuiContext *, ImGuiSettingsHandler *, void *entry, const char *line) {
+        if (*line)
+            static_cast<App *>(entry)->iniImageTopics_.emplace_back(line);
+    };
+    handler.ApplyAllFn = [](ImGuiContext *, ImGuiSettingsHandler *h) {
+        auto *app = static_cast<App *>(h->UserData);
+        const bool seen = app->iniImageTopicsSeen_;
+        app->iniImageTopicsSeen_ = false;
+        if (!seen || app->workspace_ == Workspace::Map) // Map's own layout says nothing about Operate's windows
+            return;
+        const auto &wanted = app->iniImageTopics_;
+        std::vector<std::string> extra;
+        for (const auto &feed : app->ros_->imageFeeds)
+            if (std::find(wanted.begin(), wanted.end(), feed.topic) == wanted.end())
+                extra.push_back(feed.topic);
+        for (const auto &topic : extra)
+            app->removeImageTopic(topic);
+        for (const auto &topic : wanted)
+            app->ros_->addImageTopic(topic);
+    };
+    handler.WriteAllFn = [](ImGuiContext *, ImGuiSettingsHandler *h, ImGuiTextBuffer *out) {
+        out->append("[NereusImages][Topics]\n");
+        for (const auto &feed : static_cast<App *>(h->UserData)->ros_->imageFeeds)
+            out->appendf("%s\n", feed.topic.c_str());
+        out->append("\n");
+    };
+    ImGui::AddSettingsHandler(&handler);
 }
 
 // Layout: built-in presets, saved layouts (load, save, delete), lock and maximize. The Map workspace has one
@@ -5020,6 +5260,10 @@ std::string App::layoutSnapshot() {
 // One window per open camera card (closed ones with pinned controls are drawn unseen); the ROS side's camera
 // subscriptions follow whether any is shown.
 void App::drawCameraWindows() {
+    for (const auto &topic : imageRemovals_)
+        removeImageTopic(topic);
+    imageRemovals_.clear();
+
     camerasShown_ = false;
     for (std::size_t i = 0; i < ros_->feeds.size() && i < cards_.size(); ++i) {
         cardVisible_[i] = 0;
@@ -5049,6 +5293,23 @@ void App::drawCameraWindows() {
             pins::drawOffscreen("camera." + ros_->feeds[i].camera->id, ros_->feeds[i].camera->title,
                                 [&] { drawCameraCard(i); });
     ros_->setCamerasWanted(camerasShown_);
+
+    for (auto &feed : ros_->imageFeeds) {
+        if (!feed.open)
+            continue;
+        const auto name = imageWindowName(feed.topic);
+        focusIfRequested(name);
+        ImGui::SetNextWindowSize(ui(ImVec2(440, 360)), ImGuiCond_FirstUseEver);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui(ImVec2(10, 8)));
+        const bool visible =
+            ImGui::Begin(name.c_str(), &feed.open, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        ImGui::PopStyleVar();
+        if (visible) {
+            windowContextMenu("image." + feed.topic);
+            drawImageCard(feed);
+        }
+        ImGui::End();
+    }
 }
 
 // Controls & shortcuts (F1): the pool view's mouse and keys, robot moves, shortcuts and window handling.
@@ -5191,6 +5452,9 @@ std::vector<App::WindowEntry> App::windowEntries() {
             entries.push_back({"camera." + scenario_->cameras[i].id, cameraWindowName(scenario_->cameras[i]),
                                scenario_->cameras[i].title, &cards_[i].open, MenuSection::Cameras});
     entries.push_back({"map", kCourseMap, "Course map", &mapOpen_, MenuSection::Cameras});
+    for (auto &feed : ros_->imageFeeds)
+        entries.push_back({"image." + feed.topic, imageWindowName(feed.topic), imageTopicTitle(feed.topic), &feed.open,
+                           MenuSection::Cameras});
     entries.push_back({"scene_settings", kSceneSettings, "Scene settings", &sceneOpen_});
     entries.push_back({"display", kDisplay, "Display", &displayOpen_});
     entries.push_back({"tf", kTfFrames, "TF frames", &tfOpen_});
@@ -5262,6 +5526,10 @@ void App::windowContextMenu(const std::string &key) {
         for (const auto &entry : windowEntries())
             if (entry.key == key)
                 *entry.open = false;
+    if (key.rfind("image.", 0) == 0 && ImGui::MenuItem("Remove topic"))
+        imageRemovals_.push_back(key.substr(6));
+    if (key.rfind("image.", 0) == 0 || key.rfind("camera.", 0) == 0)
+        drawImageTopicMenu();
     ImGui::EndPopup();
 }
 
@@ -5442,6 +5710,8 @@ void App::applyPreset(const std::string &id) {
     std::vector<LayoutWindow> windows;
     for (const auto &camera : scenario_->cameras)
         windows.push_back({cameraWindowName(camera), Dock::Right, true, false});
+    for (const auto &feed : ros_->imageFeeds)
+        windows.push_back({imageWindowName(feed.topic), Dock::Right, true, false});
     windows.push_back({kCourseMap, Dock::RightBottom, false, false});
     if (composition_)
         for (const auto &panel : composition_->panelWindows())
@@ -5763,7 +6033,8 @@ int App::loop() {
             if (scenario_)
                 std::cout << "capture: status=" << status_ << " detections stored/placed=" << ros_->detectionCount()
                           << "/" << ros_->placedDetections.size() << " mpc_points=" << ros_->mpcPath.size()
-                          << " planned_points=" << ros_->plannedPath.size() << " mapping_estimates=" << ros_->mappingEstimates.size() << " props=" << ros_->props.size()
+                          << " planned_points=" << ros_->plannedPath.size()
+                          << " mapping_estimates=" << ros_->mappingEstimates.size() << " props=" << ros_->props.size()
                           << " projectiles=" << ros_->projectiles.size()
                           << " magnet_lights=" << ros_->magnetLights.size() << " tf_frames=" << tf_.frames.size()
                           << " camera_frames=" << (ros_->feeds.empty() ? 0 : ros_->feeds[0].frames) << " body=("

@@ -14,6 +14,8 @@ First version for the team.
   closed viewer; any viewer picks it up) or on this computer, all topics with an exclude regex or a picked list with
   presets (configured, or saved from the panel to `~/.config/nereus/bag_presets.yaml`) and a Browse all / Recording
   view, and a BAG chip in the command bar while recording.
+- Viewer **image topics**: Windows > Image topics adds any `sensor_msgs/Image` or `CompressedImage` topic (the
+  detector's annotated output, a depth image) in its own dock window; the topics are saved with the layout.
 - Viewer **plots**: live plots of any numeric field of any ROS topic (and of the Motion axes and telemetry readings)
   in dock windows: lanes on one shared timeline with a results table each, a Topics browser to drag fields from,
   "Plot this" on Motion rows and readouts, Ctrl+P, a 30 s trend in those figures' tooltips, per-series colors,

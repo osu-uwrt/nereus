@@ -73,6 +73,12 @@ run scorecard) is a window you can place:
   edge arrow to split that space, or anywhere else to float it. Drag the borders between windows to resize.
 - **Close** a window with the x on its tab; reopen it from **Windows**. Closed windows give their space to the
   others and come back where they were.
+- **Add any image topic** from **Windows** → *Image topics*: it lists every `sensor_msgs/Image` and
+  `CompressedImage` topic in the ROS graph (or Ctrl+P, or type a name and press Enter, for one nothing publishes
+  yet), and the topic opens in its own window under the cameras: `yolo_orientation/annotated/compressed` shows what
+  the detector sees. Untick it there, or right-click its tab → *Remove topic*, to drop it. It is subscribed only
+  while its window is open. The topics are part of the layout, so they come back next time and with named layouts.
+  JPEG, PNG and raw color, mono, `16UC1` and `32FC1` images work; depth is colored over each frame's own range.
 - **Layout** → *Standard* (panels left, cameras and map right), *Wide view* (cameras and map in a strip under the
   pool view) or *Camera wall* (large camera feeds) rebuilds the arrangement and reopens the default windows.
 - **Layout** → *Save current as* keeps the arrangement (positions and which windows are open) under a name;

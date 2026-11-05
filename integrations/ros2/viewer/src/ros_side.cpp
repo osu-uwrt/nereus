@@ -1,7 +1,7 @@
 // RosSide: the viewer's ROS subscriptions, the TF buffer fed from a dedicated thread, display-clock pose sampling
 // and the per-frame placement of detections, point clouds and paths. See ros_side.hpp.
 #include "ros_side.hpp"
-#include "jpeg_decode.hpp"
+#include "image_decode.hpp"
 #include <algorithm>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cstring>
@@ -17,6 +17,8 @@ namespace {
 
 // Preview width (px): JPEG previews decode to at least this; depth images are subsampled down toward it.
 constexpr int kPreviewWidth = 480;
+// Added image topics are read at full window size (a detector's labels), so they decode to at least this.
+constexpr int kImageTopicWidth = 960;
 
 // A geometry_msgs pose as a 4x4 matrix (a zero quaternion is taken as identity).
 glm::mat4 poseOf(const geometry_msgs::msg::Pose &p) {
@@ -30,22 +32,20 @@ double seconds(const builtin_interfaces::msg::Duration &d) {
     return d.sec + d.nanosec * 1e-9;
 }
 
-// Turbo-like ramp: near = warm, far = cool, invalid = dark.
-void colorize(float meters, float lo, float hi, std::uint8_t *out) {
-    if (!std::isfinite(meters) || meters <= 0) {
-        out[0] = out[1] = out[2] = 8;
-        return;
-    }
-    const float t = std::clamp((meters - lo) / std::max(1e-3f, hi - lo), 0.f, 1.f);
-    static const float stops[5][3] = {{255, 214, 84}, {96, 214, 110}, {48, 200, 210}, {60, 100, 220}, {60, 40, 110}};
-    const float x = t * 4;
-    const int i = std::min(3, int(x));
-    const float f = x - float(i);
-    for (int c = 0; c < 3; ++c)
-        out[c] = std::uint8_t(stops[i][c] + (stops[i + 1][c] - stops[i][c]) * f);
-}
-
 } // namespace
+
+std::string imageTopicTitle(const std::string &topic) {
+    std::vector<std::string> parts;
+    std::stringstream names(topic);
+    for (std::string part; std::getline(names, part, '/');)
+        if (!part.empty())
+            parts.push_back(part);
+    if (!parts.empty() && parts.back() == "compressed")
+        parts.pop_back();
+    if (parts.empty())
+        return topic;
+    return parts.size() == 1 ? parts.back() : parts[parts.size() - 2] + "/" + parts.back();
+}
 
 std::filesystem::path resolveMeshResource(const std::string &uri) {
     const std::string file = "file://", package = "package://";
@@ -164,8 +164,10 @@ void RosSide::requestScenario(const std::string &topic, const std::string &folde
 }
 
 void RosSide::spin() {
-    if (node_)
+    if (node_) {
+        updateImageFeeds();
         executor_->spin_some();
+    }
 
     // Collect JPEGs the worker finished (newest only) for the GUI to upload.
     for (auto &feed : feeds) {
@@ -176,6 +178,20 @@ void RosSide::spin() {
             feed.rgb = std::move(image.rgb);
             feed.rgbDirty = true;
         }
+    }
+    for (auto &feed : imageFeeds) {
+        DecodedImage image;
+        if (!feed.decoder || !feed.decoder->take(image))
+            continue;
+        feed.error = image.error;
+        if (!image.error.empty())
+            continue;
+        feed.width = image.width;
+        feed.height = image.height;
+        feed.sourceWidth = image.sourceWidth;
+        feed.sourceHeight = image.sourceHeight;
+        feed.rgb = std::move(image.rgb);
+        feed.dirty = true;
     }
 }
 
@@ -337,18 +353,11 @@ void RosSide::subscribeCamera(CameraFeed &feed) {
     const auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable();
     if (!feed.camera->rgbTopic.empty() && !feed.rgbSub && camerasWanted_ && wantsRos(feed)) {
         if (!feed.decoder)
-            feed.decoder = std::make_unique<AsyncJpegDecoder>(kPreviewWidth);
+            feed.decoder = std::make_unique<AsyncImageDecoder>(kPreviewWidth);
         feed.rgbSub = node_->create_subscription<sensor_msgs::msg::CompressedImage>(
             feed.camera->rgbTopic, qos, [&feed](const sensor_msgs::msg::CompressedImage::ConstSharedPtr &msg) {
                 // Arrival bookkeeping only; the decode (and its cost) belongs to the worker.
-                const auto now = Clock::now();
-                if (feed.frames > 0) {
-                    const double dt = std::chrono::duration<double>(now - feed.lastFrame).count();
-                    if (dt > 1e-4)
-                        feed.hz = feed.hz > 0 ? feed.hz * .8 + .2 / dt : 1. / dt;
-                }
-                feed.lastFrame = now;
-                ++feed.frames;
+                feed.arrived();
                 feed.decoder->submit(msg->data);
             });
     }
@@ -383,6 +392,85 @@ void RosSide::subscribeCamera(CameraFeed &feed) {
         feed.depthSub.reset();
     if (!camerasWanted_ || !wantsRos(feed))
         feed.rgbSub.reset();
+}
+
+const std::vector<ImageTopic> &RosSide::imageTopics() {
+    const auto now = Clock::now();
+    if (!live_ || now - imageTopicsScanned_ < std::chrono::seconds(1))
+        return imageTopics_;
+    imageTopicsScanned_ = now;
+    imageTopics_.clear();
+    for (const auto &[name, types] : node_->get_topic_names_and_types())
+        for (const auto &type : types)
+            if (type == "sensor_msgs/msg/Image" || type == "sensor_msgs/msg/CompressedImage") {
+                imageTopics_.push_back({name, type == "sensor_msgs/msg/CompressedImage"});
+                break;
+            }
+    return imageTopics_;
+}
+
+bool RosSide::addImageTopic(const std::string &topic) {
+    for (const auto &feed : imageFeeds)
+        if (feed.topic == topic)
+            return false;
+    imageFeeds.emplace_back();
+    imageFeeds.back().topic = topic;
+    return true;
+}
+
+void RosSide::removeImageTopic(const std::string &topic) {
+    imageFeeds.remove_if([&](const ImageFeed &feed) { return feed.topic == topic; });
+}
+
+void RosSide::updateImageFeeds() {
+    bool waiting = false;
+    for (auto &feed : imageFeeds) {
+        if (!feed.open) {
+            feed.compressedSub.reset();
+            feed.rawSub.reset();
+        }
+        waiting = waiting || (feed.open && !feed.subscribed());
+    }
+    if (!waiting || !live_)
+        return;
+    for (const auto &topic : imageTopics())
+        for (auto &feed : imageFeeds)
+            if (feed.open && !feed.subscribed() && feed.topic == topic.name)
+                subscribeImage(feed, topic);
+}
+
+void RosSide::subscribeImage(ImageFeed &feed, const ImageTopic &topic) {
+    // Best effort matches publishers of either reliability; a reliable subscription misses sensor-data ones.
+    const auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).best_effort();
+    if (!feed.decoder)
+        feed.decoder = std::make_unique<AsyncImageDecoder>(kImageTopicWidth);
+    // The decode jobs hold the message, so the pixels are not copied.
+    if (topic.compressed)
+        feed.compressedSub = node_->create_subscription<sensor_msgs::msg::CompressedImage>(
+            feed.topic, qos, [&feed](const sensor_msgs::msg::CompressedImage::ConstSharedPtr &msg) {
+                feed.arrived();
+                feed.encoding = msg->format;
+                feed.decoder->submit([msg](DecodedImage &out) {
+                    return decodeCompressed(msg->data.data(), msg->data.size(), kImageTopicWidth, out);
+                });
+            });
+    else
+        feed.rawSub = node_->create_subscription<sensor_msgs::msg::Image>(
+            feed.topic, qos, [&feed](const sensor_msgs::msg::Image::ConstSharedPtr &msg) {
+                feed.arrived();
+                feed.encoding = msg->encoding;
+                feed.decoder->submit([msg](DecodedImage &out) {
+                    RawImage image;
+                    image.data = msg->data.data();
+                    image.size = msg->data.size();
+                    image.step = msg->step;
+                    image.width = int(msg->width);
+                    image.height = int(msg->height);
+                    image.encoding = msg->encoding;
+                    image.bigEndian = msg->is_bigendian != 0;
+                    return decodeRaw(image, kImageTopicWidth, out);
+                });
+            });
 }
 
 void RosSide::setCamerasWanted(bool wanted) {
