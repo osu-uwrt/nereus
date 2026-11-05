@@ -73,8 +73,8 @@ run scorecard) is a window you can place:
   edge arrow to split that space, or anywhere else to float it. Drag the borders between windows to resize.
 - **Close** a window with the x on its tab; reopen it from **Windows**. Closed windows give their space to the
   others and come back where they were.
-- **Add a view of any image topic** from **Windows** → *New image view* (also Ctrl+P and a camera tab's right-click
-  menu); right-click that menu item to pin a **+ Image** button to the toolbar. The new window lists every `sensor_msgs/Image` and `CompressedImage`
+- **Add a view of any image topic** from **Windows** → *New image view* (also a camera tab's right-click menu, and
+  Ctrl+P, where the topics themselves come only after `image `, or *Show an image topic…*, which types it); right-click that menu item to pin a **+ Image** button to the toolbar. The new window lists every `sensor_msgs/Image` and `CompressedImage`
   topic in the ROS graph: pick one, such as `yolo_orientation/annotated/compressed` to see what the detector sees, or
   type a name and press Enter for one nothing publishes yet. The dropdown at the top of the window changes the topic
   later, and **Main view** shows the image in the pool view, like a camera's (the Camera dropdown and View menu list

@@ -3546,6 +3546,9 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
     const auto add = [&](const std::string &group, const std::string &label, bool checked, std::function<void()> run) {
         out.push_back({group, label, checked, std::move(run)});
     };
+    std::string query = paletteQuery_;
+    query.erase(0, query.find_first_not_of(' '));
+    std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return char(std::tolower(c)); });
 
     // Windows, then the workspace's own commands: layouts, focus targets, cameras and view toggles in Operate
     for (const auto &entry : windowEntries())
@@ -3566,14 +3569,18 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
             if (!feed.topic.empty())
                 add("Camera", "Show " + imageTopicTitle(feed.topic), feed.main,
                     [this, &feed] { showImageInMain(feed); });
-        if (!demoMode_)
+        // the image topics only once "image " is typed, like the plots' fields: there can be dozens of them
+        if (!demoMode_) {
             add("Window", "New image view", false, [this] { newImageView(); });
-        for (const auto &topic : ros_->imageTopics()) {
-            bool added = false;
-            for (const auto &feed : ros_->imageFeeds)
-                added = added || feed.topic == topic.name;
-            add("Image topic", topic.name, added, [this, name = topic.name] { showImageTopic(name); });
+            out.push_back({"Image topic", "Show an image topic\u2026", false, nullptr, "image "});
         }
+        if (query.rfind("image ", 0) == 0)
+            for (const auto &topic : ros_->imageTopics()) {
+                bool added = false;
+                for (const auto &feed : ros_->imageFeeds)
+                    added = added || feed.topic == topic.name;
+                add("Image topic", topic.name, added, [this, name = topic.name] { showImageTopic(name); });
+            }
         add("View", "Follow", follow_, [this] { follow_ = !follow_; });
         add("View", "Turn with the vehicle", followHeading_, [this] { followHeading_ = !followHeading_; });
         add("View", "Labels", labels_, [this] { labels_ = !labels_; });
@@ -3682,10 +3689,6 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
     // Plots: New plot, the saved plots and "Plot a topic field…"; once the search starts with "plot ", every
     // topic field, panel figure and Motion axis too (Shift adds to the focused plot)
     if (workspace_ == Workspace::Operate) {
-        std::string query = paletteQuery_;
-        query.erase(0, query.find_first_not_of(' '));
-        std::transform(query.begin(), query.end(), query.begin(),
-                       [](unsigned char c) { return char(std::tolower(c)); });
         for (auto &command : plots::commands(query.rfind("plot ", 0) == 0)) {
             if (command.run)
                 add(command.group, command.label, false, std::move(command.run));
