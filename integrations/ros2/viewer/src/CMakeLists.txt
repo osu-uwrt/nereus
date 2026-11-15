@@ -31,6 +31,11 @@ add_library(nereus_viewer_host STATIC ros_side.cpp scene_model.cpp overlay_draw.
 target_include_directories(nereus_viewer_host PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(nereus_viewer_host PUBLIC nereus_viewer_host_core nereus_scene_rendering nereus_viewer_panels nereus_imgui
   ament_index_cpp::ament_index_cpp PRIVATE glfw GLEW::GLEW OpenGL::GL PNG::PNG Fontconfig::Fontconfig)
+if(APPLE)
+  enable_language(OBJCXX)
+  target_sources(nereus_viewer_host PRIVATE dock_icon_cocoa.mm) # the Dock icon (no window icons on macOS)
+  target_link_libraries(nereus_viewer_host PRIVATE "-framework AppKit")
+endif()
 if(X11_FOUND)
   target_link_libraries(nereus_viewer_host PRIVATE X11::X11)
   target_compile_definitions(nereus_viewer_host PRIVATE NEREUS_VIEWER_X11=1)

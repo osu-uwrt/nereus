@@ -1,6 +1,9 @@
 // Window: GLFW window and GL 3.3 context, ImGui setup and fonts, frame presentation, detached (loading-screen)
 // frames, X11 move / resize for the custom title bar, and PNG read / write.
 #include "window.hpp"
+#ifdef __APPLE__
+#include "dock_icon.hpp"
+#endif
 #include "nereus/ros_viewer/theme.hpp"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -347,8 +350,13 @@ void Window::setIcon(const std::vector<std::filesystem::path> &pngs) {
         pixels.push_back(std::move(rgba));
         images.push_back({width, height, pixels.back().data()});
     }
+#ifdef __APPLE__
+    if (!pngs.empty())
+        setDockIcon(pngs.back()); // no window icons on macOS: the Dock's, from the largest
+#else
     if (!images.empty())
         glfwSetWindowIcon(window_, int(images.size()), images.data());
+#endif
 }
 
 unsigned long Window::x11Id() const {
