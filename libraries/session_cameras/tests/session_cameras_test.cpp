@@ -324,6 +324,7 @@ TEST(SessionCameras, FullResetRestoresNoiseStreams) {
             ++different;
     }
     EXPECT_EQ(different, 0u) << "same seed, same pose, same time must reproduce the frame";
+    (void)same; // clang's -Wunused-but-set-variable
     (void)second;
     (void)id;
     cameras->close();

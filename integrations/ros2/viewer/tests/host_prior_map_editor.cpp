@@ -18,6 +18,7 @@ class EditorTest : public ::testing::Test {
         auto &io = ImGui::GetIO();
         io.DisplaySize = {800, 600};
         io.DeltaTime = 1.f / 60;
+        io.ConfigMacOSXBehaviors = false; // keys as on Linux: macOS ImGui swaps the Ctrl the tests press for Cmd
         io.IniFilename = nullptr;
         io.Fonts->Build();
         editor = std::make_unique<PriorMapEditor>(std::filesystem::path(), NEREUS_TEST_FIXTURE);
