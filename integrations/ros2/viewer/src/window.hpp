@@ -72,8 +72,11 @@ class Window {
     // theme's own font files (in `fontDirectory`) or family (fontconfig name, e.g. a Qt theme's) at its point size
     // replace the viewer's DejaVu Sans.
     void loadFonts(float ui, float titleBar, const Theme &theme = {}, const std::filesystem::path &fontDirectory = {});
-    // The desktop's UI scale for this window (GNOME at 200 %: 2), as other applications size themselves.
+    // The desktop's UI scale for this window (GNOME at 200 %: 2), as other applications size themselves, in
+    // window units: 1 on a Retina Mac, whose window units are already points.
     float contentScale() const;
+    // Framebuffer pixels per window unit (2 on a Retina Mac, 1 on X11).
+    float pixelRatio() const;
     // ImGui errors recovered in the current frame (a --frames run fails on any).
     int imguiErrors() const;
 
@@ -85,6 +88,7 @@ class Window {
     bool backendReady_ = false;
     bool detached_ = false;   // another thread is drawing (contentScale answers from the last query)
     mutable float scale_ = 1; // the last content scale queried
+    mutable float ratio_ = 1; // the last pixel ratio queried
     unsigned kept_ = 0;       // the frame kept for detached frames (a texture, until reattach)
     GLFWwindow *window_ = nullptr;
     bool custom_ = false;

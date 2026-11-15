@@ -42,8 +42,7 @@ Window::Window(int width, int height, const std::string &titleText, bool hidden,
     // The configured size is at 100 %: on a scaled desktop (GNOME at 200 %) the window opens that size in the
     // desktop's units, or maximized when that would not fit the screen. Capture runs keep the exact pixels.
     if (!hidden) {
-        float scaleX = 1, scaleY = 1;
-        glfwGetWindowContentScale(window_, &scaleX, &scaleY);
+        const float scaleX = contentScale(), scaleY = scaleX;
         int areaX = 0, areaY = 0, areaW = 0, areaH = 0;
         if (GLFWmonitor *monitor = glfwGetPrimaryMonitor())
             glfwGetMonitorWorkarea(monitor, &areaX, &areaY, &areaW, &areaH);
@@ -96,7 +95,17 @@ float Window::contentScale() const {
         return scale_;
     float x = 1, y = 1;
     glfwGetWindowContentScale(window_, &x, &y);
-    return scale_ = std::isfinite(x) && x > 0 ? x : 1;
+    // macOS scales points to pixels itself: only what's left over is ours
+    return scale_ = std::isfinite(x) && x > 0 ? x / pixelRatio() : 1;
+}
+
+float Window::pixelRatio() const {
+    if (detached_)
+        return ratio_;
+    int w = 0, h = 0, fw = 0, fh = 0;
+    glfwGetWindowSize(window_, &w, &h);
+    glfwGetFramebufferSize(window_, &fw, &fh);
+    return ratio_ = w > 0 && fw > 0 ? float(fw) / float(w) : 1;
 }
 
 namespace {
@@ -157,8 +166,10 @@ void Window::loadFonts(float ui, float titleBar, const Theme &theme, const std::
     // Latin-1 and general punctuation (dashes, ellipsis, the › of field paths)
     static const ImWchar ranges[] = {0x0020, 0x00FF, 0x2010, 0x203A, 0};
     if (std::filesystem::exists(font)) {
+        ImFontConfig config;
+        config.RasterizerDensity = pixelRatio(); // sharp on a Retina Mac
         const auto add = [&](const char *file, float size) {
-            return io.Fonts->AddFontFromFileTTF(file, size, nullptr, ranges);
+            return io.Fonts->AddFontFromFileTTF(file, size, &config, ranges);
         };
         normal = add(font.c_str(), 15 * k * ui);
         const auto *heavy = std::filesystem::exists(bold) ? bold.c_str() : font.c_str();
