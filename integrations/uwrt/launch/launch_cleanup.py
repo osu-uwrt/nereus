@@ -10,6 +10,7 @@ is left and it does nothing. It cannot help when ros2 launch itself is killed wi
 import atexit
 import os
 import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -17,6 +18,14 @@ from pathlib import Path
 
 def _children(pid):
     """Live (not zombie) child processes of `pid`."""
+    if not Path("/proc").is_dir():  # macOS: ask ps
+        ps = subprocess.Popen(["ps", "-A", "-o", "pid=,ppid=,state="], stdout=subprocess.PIPE, text=True)
+        rows = [line.split() for line in ps.communicate()[0].splitlines()]
+        return [
+            int(row[0])
+            for row in rows
+            if len(row) == 3 and int(row[1]) == pid and int(row[0]) != ps.pid and not row[2].startswith("Z")
+        ]
     children = []
     for entry in Path("/proc").iterdir():
         try:
