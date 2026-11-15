@@ -1,5 +1,9 @@
 # CPU assets are independently usable without OpenGL or simulation.
-find_package(assimp 5 REQUIRED CONFIG)
+# Assimp 5 or later (5 on jammy, 6 in nixpkgs); its config only matches one major version, so check by hand.
+find_package(assimp REQUIRED CONFIG)
+if(assimp_VERSION VERSION_LESS 5)
+  message(FATAL_ERROR "Nereus needs Assimp 5 or later (found ${assimp_VERSION})")
+endif()
 
 # nereus_mesh_assets: Assimp mesh loading (assets.cpp); Assimp stays private.
 add_library(nereus_mesh_assets src/assets.cpp)
@@ -49,15 +53,22 @@ if(NEREUS_BUILD_SCENE_RENDERER)
   install(FILES ${PROJECT_SOURCE_DIR}/third_party/glm/glm/copying.txt
     DESTINATION ${CMAKE_INSTALL_DATADIR}/nereus/legal RENAME glm-license.txt)
 
-  # Optional headless EGL host for the renderer (offscreen.cpp).
+  # Optional headless host for the renderer: EGL (offscreen.cpp), or CGL on macOS (offscreen_cgl.cpp), which has
+  # no EGL.
   if(NEREUS_BUILD_OFFSCREEN_RENDERER)
-    find_package(OpenGL REQUIRED COMPONENTS EGL)
+    if(APPLE)
+      set(nereus_offscreen_gl OpenGL::GL)
+      add_library(nereus_offscreen_rendering src/offscreen_cgl.cpp)
+    else()
+      find_package(OpenGL REQUIRED COMPONENTS EGL)
+      set(nereus_offscreen_gl OpenGL::EGL)
+      add_library(nereus_offscreen_rendering src/offscreen.cpp)
+    endif()
     find_package(Threads REQUIRED)
-    add_library(nereus_offscreen_rendering src/offscreen.cpp)
     add_library(Nereus::offscreen_rendering ALIAS nereus_offscreen_rendering)
     set_target_properties(nereus_offscreen_rendering PROPERTIES EXPORT_NAME offscreen_rendering)
     target_link_libraries(nereus_offscreen_rendering PUBLIC nereus_scene_rendering
-      PRIVATE OpenGL::EGL GLEW::GLEW Threads::Threads)
+      PRIVATE ${nereus_offscreen_gl} GLEW::GLEW Threads::Threads)
     nereus_project_options(nereus_offscreen_rendering)
     install(TARGETS nereus_offscreen_rendering EXPORT NereusTargets
       ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -66,7 +77,7 @@ if(NEREUS_BUILD_SCENE_RENDERER)
     if(BUILD_TESTING)
       add_executable(offscreen_tests tests/offscreen_test.cpp)
       target_link_libraries(offscreen_tests PRIVATE nereus_offscreen_rendering GTest::gtest_main
-        OpenGL::EGL Threads::Threads PNG::PNG)
+        ${nereus_offscreen_gl} Threads::Threads PNG::PNG)
       target_compile_definitions(offscreen_tests PRIVATE
         NEREUS_RENDERING_SHADERS="${CMAKE_CURRENT_SOURCE_DIR}/shaders")
       nereus_project_options(offscreen_tests)

@@ -18,24 +18,40 @@
 namespace nereus::rendering {
 namespace {
 
-// Assimp IO handler that records every file the importer opens (mesh plus material/buffer sidecars).
-class DependencyIO final : public Assimp::DefaultIOSystem {
+// Assimp IO handler that records every file the importer opens (mesh plus material/buffer sidecars). Wraps
+// the default handler, which Assimp 6 made final.
+class DependencyIO final : public Assimp::IOSystem {
   public:
+    bool Exists(const char *path) const override {
+        return disk_.Exists(path);
+    }
+    char getOsSeparator() const override {
+        return disk_.getOsSeparator();
+    }
+    bool ComparePaths(const char *one, const char *second) const override {
+        return disk_.ComparePaths(one, second);
+    }
     Assimp::IOStream *Open(const char *path, const char *mode = "rb") override {
         // Resolve before opening so an allocation/filesystem failure cannot leak a stream.
         const auto canonical = std::filesystem::weakly_canonical(path);
-        auto *stream = Assimp::DefaultIOSystem::Open(path, mode);
+        auto *stream = disk_.Open(path, mode);
         if (stream) {
             try {
                 files.insert(canonical);
             } catch (...) {
-                Assimp::DefaultIOSystem::Close(stream);
+                disk_.Close(stream);
                 throw;
             }
         }
         return stream;
     }
+    void Close(Assimp::IOStream *stream) override {
+        disk_.Close(stream);
+    }
     std::set<std::filesystem::path> files; // Canonical paths, sorted.
+
+  private:
+    Assimp::DefaultIOSystem disk_;
 };
 
 // Assimp matrices are row-major (a1..a4 is the first row).

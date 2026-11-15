@@ -1,7 +1,12 @@
-// Tests for the headless EGL OffscreenRenderer: color/depth captures, EGL context hygiene and threading, and
+// Tests for the headless OffscreenRenderer (EGL; CGL on macOS): color/depth captures, context hygiene, threading and
 // the label pass (ids + depth) used for dataset export. Label ids are (instance id << 8) | part value.
+#ifdef __APPLE__
+#define GL_SILENCE_DEPRECATION
+#include <OpenGL/OpenGL.h>
+#else
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#endif
 #include <Eigen/Geometry>
 #include <cmath>
 #include <cstdio>
@@ -16,6 +21,15 @@
 
 namespace r = nereus::rendering;
 namespace {
+// No context is current on this thread (EGL, or CGL on macOS).
+bool noCurrentContext() {
+#ifdef __APPLE__
+    return CGLGetCurrentContext() == nullptr;
+#else
+    return eglGetCurrentContext() == EGL_NO_CONTEXT;
+#endif
+}
+
 // Unit box 3 m in front of the default camera (camera looks down -Z).
 r::Scene scene() {
     r::Scene result;
@@ -64,7 +78,7 @@ TEST(Offscreen, CapturesWithoutAWindowAndOwnsPixelsAcrossResize) {
     const auto resized = capture(host, 17);
     EXPECT_EQ(resized.rgb.size(), 17u * 32 * 3);
     EXPECT_EQ(image.rgb, saved);
-    EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
+    EXPECT_TRUE(noCurrentContext());
 }
 
 // A SensorFormat capture holds what the CPU makes of a plain one: the same pixels with rows top-down, and depth
@@ -115,7 +129,7 @@ TEST(Offscreen, SensorFormatMatchesTheCpuFlipAndDepthConversion) {
     EXPECT_TRUE(color.depth.empty());
     EXPECT_THROW(host.capture(boxes, view(), appearance(), 0, width, height, true, true, r::SensorFormat{1, 1}),
                  std::invalid_argument);
-    EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
+    EXPECT_TRUE(noCurrentContext());
 }
 
 // Captures may run on other threads; concurrent calls are serialized and give identical results.
@@ -138,17 +152,37 @@ TEST(Offscreen, HostsShareDisplayLifetimeAndRecoverFromInvalidInput) {
     first.reset();
     EXPECT_EQ(capture(second).depth, expected.depth);
     EXPECT_THROW(capture(second, 0), std::invalid_argument);
-    EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
+    EXPECT_TRUE(noCurrentContext());
     EXPECT_EQ(capture(second).rgb, expected.rgb);
 }
 
 TEST(Offscreen, FailedConstructionReleasesItsContext) {
     EXPECT_THROW(r::OffscreenRenderer("/nonexistent/nereus-shaders"), std::runtime_error);
-    EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
+    EXPECT_TRUE(noCurrentContext());
     r::OffscreenRenderer next(NEREUS_RENDERING_SHADERS);
     EXPECT_FALSE(capture(next).rgb.empty());
 }
 
+#ifdef __APPLE__
+// A caller's current CGL context (e.g. a GLFW window's) is restored after a capture, even a failed one.
+TEST(Offscreen, RestoresCallersCglContextAfterSuccessAndFailure) {
+    r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
+    const CGLPixelFormatAttribute attributes[] = {kCGLPFAAllowOfflineRenderers, CGLPixelFormatAttribute(0)};
+    CGLPixelFormatObj format = nullptr;
+    GLint count = 0;
+    ASSERT_EQ(CGLChoosePixelFormat(attributes, &format, &count), kCGLNoError);
+    CGLContextObj context = nullptr;
+    ASSERT_EQ(CGLCreateContext(format, nullptr, &context), kCGLNoError);
+    CGLDestroyPixelFormat(format);
+    ASSERT_EQ(CGLSetCurrentContext(context), kCGLNoError);
+    EXPECT_NO_THROW(capture(host));
+    EXPECT_EQ(CGLGetCurrentContext(), context);
+    EXPECT_THROW(capture(host, -1), std::invalid_argument);
+    EXPECT_EQ(CGLGetCurrentContext(), context);
+    CGLSetCurrentContext(nullptr);
+    CGLDestroyContext(context);
+}
+#else
 // A caller's current EGL context, surfaces and bound API are restored after a capture, even a failed one.
 TEST(Offscreen, RestoresCallersEglContextAndApiAfterSuccessAndFailure) {
     r::OffscreenRenderer host(NEREUS_RENDERING_SHADERS);
@@ -182,18 +216,21 @@ TEST(Offscreen, RestoresCallersEglContextAndApiAfterSuccessAndFailure) {
     EXPECT_EQ(eglQueryAPI(), EGL_OPENGL_ES_API);
 }
 
+#endif
+
 // The host can be destroyed on a different thread from the one that created it.
 TEST(Offscreen, HostCanBeDestroyedOnAWorkerThread) {
     auto host = std::make_unique<r::OffscreenRenderer>(NEREUS_RENDERING_SHADERS);
     capture(*host);
     std::async(std::launch::async, [host = std::move(host)]() mutable {
         host.reset();
-        EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
+        EXPECT_TRUE(noCurrentContext());
     }).get();
     r::OffscreenRenderer next(NEREUS_RENDERING_SHADERS);
     EXPECT_FALSE(capture(next).rgb.empty());
 }
 
+#ifndef __APPLE__ // EGL display lifetime
 // Destroying the last host must not terminate the display under an external context that is still current.
 TEST(Offscreen, LastHostDoesNotInvalidateAnExternalContextOnTheSameDisplay) {
     auto host = std::make_unique<r::OffscreenRenderer>(NEREUS_RENDERING_SHADERS);
@@ -234,6 +271,7 @@ TEST(Offscreen, ReinitializesDisplayTerminatedBetweenHostLifetimes) {
     r::OffscreenRenderer next(NEREUS_RENDERING_SHADERS);
     EXPECT_FALSE(capture(next).rgb.empty());
 }
+#endif
 
 // Label pass (ids + depth) through the offscreen host.
 namespace {
@@ -550,7 +588,7 @@ TEST_F(Labels, LabelPassesDoNotDisturbCapturesAndInvalidInputIsRejected) {
     auto missing = label(1);
     missing.submeshes = {{0, directory / "missing.png"}};
     EXPECT_THROW(host.captureLabels(scene(), {missing}, view(), 32, 32), std::invalid_argument);
-    EXPECT_EQ(eglGetCurrentContext(), EGL_NO_CONTEXT);
+    EXPECT_TRUE(noCurrentContext());
     EXPECT_EQ(host.captureLabels(scene(), {labeled}, view(), 32, 32).ids[16 * 32 + 16] >> 8, 1u);
     EXPECT_EQ(capture(host).rgb, expected.rgb);
 }
