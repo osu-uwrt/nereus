@@ -1,5 +1,5 @@
-// The desktop's "open file" dialog (zenity, else kdialog), run as its own process so the viewer keeps drawing
-// while it is open: the UI thread opens it, then polls for the file picked.
+// The desktop's "open file" dialog (zenity, else kdialog, else osascript on macOS), run as its own process so the
+// viewer keeps drawing while it is open: the UI thread opens it, then polls for the file picked.
 #pragma once
 #include <filesystem>
 #include <memory>
@@ -10,7 +10,7 @@
 namespace nereus::ros_viewer::host {
 class FilePicker {
   public:
-    // Finds the picker program on PATH (zenity, else kdialog).
+    // Finds the picker program on PATH (zenity, else kdialog, else osascript on macOS).
     FilePicker();
     ~FilePicker(); // closes a dialog that is still open
     FilePicker(const FilePicker &) = delete;
@@ -36,7 +36,7 @@ class FilePicker {
     // A Browse button's tooltip: what it does, or why it can't.
     const char *hint() const;
 
-    // The command line open() runs for `program` (zenity or kdialog).
+    // The command line open() runs for `program` (zenity, kdialog or osascript).
     static std::vector<std::string> command(const std::string &program, const std::string &title,
                                             const std::string &start, const std::string &kind,
                                             const std::vector<std::string> &patterns, unsigned long parent);

@@ -1241,7 +1241,11 @@ void openFolder(const fs::path &folder) {
     for (const char c : folder.string())
         quoted += c == '\'' ? std::string("'\\''") : std::string(1, c);
     quoted += "'";
+#ifdef __APPLE__
+    const int result = std::system(("open " + quoted + " >/dev/null 2>&1 &").c_str());
+#else
     const int result = std::system(("xdg-open " + quoted + " >/dev/null 2>&1 &").c_str());
+#endif
     (void)result;
 }
 

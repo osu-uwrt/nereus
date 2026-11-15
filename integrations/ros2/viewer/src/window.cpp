@@ -15,8 +15,10 @@
 #include <png.h>
 #include <stdexcept>
 #include <strings.h>
+#ifdef NEREUS_VIEWER_X11
 #define GLFW_EXPOSE_NATIVE_X11
 #include <GLFW/glfw3native.h> // after everything else: X11 headers define macros such as None and Status
+#endif
 
 namespace nereus::ros_viewer::host {
 Window::Window(int width, int height, const std::string &titleText, bool hidden, bool vsync, bool customTitleBar)
@@ -52,7 +54,12 @@ Window::Window(int width, int height, const std::string &titleText, bool hidden,
             glfwSetWindowSize(window_, scaledW, scaledH);
     }
 
-    if (custom_ && !glfwGetX11Display()) { // no window-manager protocol to move / resize with
+#ifdef NEREUS_VIEWER_X11
+    const bool x11 = glfwGetX11Display() != nullptr;
+#else
+    const bool x11 = false;
+#endif
+    if (custom_ && !x11) { // no window-manager protocol to move / resize with
         custom_ = false;
         glfwSetWindowAttrib(window_, GLFW_DECORATED, GLFW_TRUE);
     }
@@ -334,7 +341,11 @@ void Window::setIcon(const std::vector<std::filesystem::path> &pngs) {
 }
 
 unsigned long Window::x11Id() const {
+#ifdef NEREUS_VIEWER_X11
     return glfwGetX11Display() ? static_cast<unsigned long>(glfwGetX11Window(window_)) : 0;
+#else
+    return 0;
+#endif
 }
 
 void Window::beginMove() {
@@ -350,6 +361,9 @@ void Window::beginResize(int edge) {
 // decorations would (snapping, tiling, maximize on drag). It also takes the button release, so ImGui is told the
 // button went up.
 void Window::moveResize(long direction) {
+#ifndef NEREUS_VIEWER_X11
+    (void)direction; // only with the custom title bar, which needs X11
+#else
     Display *display = glfwGetX11Display();
     const ::Window window = glfwGetX11Window(window_);
     if (!display || !window)
@@ -376,6 +390,7 @@ void Window::moveResize(long direction) {
     XFlush(display);
 
     ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+#endif
 }
 
 // libpng simplified API, converting any PNG to RGBA8.

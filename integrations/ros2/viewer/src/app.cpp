@@ -192,12 +192,17 @@ int fuzzyScore(const std::string &text, const std::string &query) {
     return score;
 }
 
-// A folder in the desktop's file manager (xdg-open), without waiting for it.
+// A folder in the desktop's file manager (xdg-open, open on macOS), without waiting for it.
 void openFolder(const fs::path &folder) {
+#ifdef __APPLE__
+    const char *opener = "open";
+#else
+    const char *opener = "xdg-open";
+#endif
     pid_t pid = 0;
     const std::string path = folder.string();
-    char *argv[] = {const_cast<char *>("xdg-open"), const_cast<char *>(path.c_str()), nullptr};
-    if (posix_spawnp(&pid, "xdg-open", nullptr, nullptr, argv, environ) == 0)
+    char *argv[] = {const_cast<char *>(opener), const_cast<char *>(path.c_str()), nullptr};
+    if (posix_spawnp(&pid, opener, nullptr, nullptr, argv, environ) == 0)
         std::thread([pid] { waitpid(pid, nullptr, 0); }).detach();
 }
 

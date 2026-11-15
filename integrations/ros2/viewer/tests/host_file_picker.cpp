@@ -57,6 +57,12 @@ TEST(FilePicker, CommandLines) {
     EXPECT_EQ(FilePicker::command("kdialog", "Open", "/maps/", "YAML", {"*.yaml", "*.yml"}, 42),
               (std::vector<std::string>{"kdialog", "--attach", "42", "--title", "Open", "--getopenfilename", "/maps/",
                                         "*.yaml *.yml|YAML"}));
+    // osascript: values as script arguments, a preselected file's folder, extensions as types
+    EXPECT_EQ(FilePicker::command("osascript", "Open", "/maps/a.yaml", "YAML", {"*.yaml", "*"}, 42),
+              (std::vector<std::string>{"osascript", "-e", "on run argv", "-e",
+                                        "POSIX path of (choose file with prompt (item 1 of argv) default location "
+                                        "(POSIX file (item 2 of argv)) of type (items 3 thru -1 of argv))",
+                                        "-e", "end run", "Open", "/maps", "yaml"}));
 }
 
 // A pick comes back once; the dialog starts in the given folder (with zenity's trailing slash).
@@ -96,8 +102,12 @@ TEST(FilePicker, FallsBackToKdialogOrNothing) {
     }
     FakePicker none("unrelated", "exit 0\n");
     FilePicker picker;
+#ifdef __APPLE__
+    EXPECT_EQ(picker.program(), "osascript"); // always there
+#else
     EXPECT_TRUE(picker.program().empty());
     EXPECT_FALSE(picker.open("Open", {}, "YAML", {"*.yaml"}));
+#endif
 }
 
 // Destroying the picker closes a dialog that is still open.
