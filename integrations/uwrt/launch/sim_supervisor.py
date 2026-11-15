@@ -97,6 +97,8 @@ def water_changes(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
 def _die_with_parent() -> None:
     """In the simulator: SIGTERM if the supervisor dies without stopping it (Linux). The signal follows the
     *thread* that started the process, so Simulator starts it from a thread that lives as long as it does."""
+    if not sys.platform.startswith("linux"):
+        return  # no prctl (macOS): the simulator only outlives a supervisor that crashes
     libc = ctypes.CDLL(None, use_errno=True)
     libc.prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
 
