@@ -71,7 +71,7 @@ done
 int main(int argc, char **argv) {
     // A scratch tree: bin/ros2 (the stand-in recorder), ssh / ssh_down stand-ins, and the robot's home.
     char pattern[] = "/tmp/nereus_bagging_XXXXXX";
-    const fs::path root = mkdtemp(pattern);
+    const fs::path root = fs::canonical(mkdtemp(pattern)); // the scripts report real paths (macOS: /private/tmp)
     const fs::path bin = root / "bin", robotHome = root / "robot_home";
     fs::create_directories(bin);
     fs::create_directories(robotHome);

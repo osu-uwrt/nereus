@@ -24,6 +24,19 @@ extern char **environ;
 namespace nereus::ros_viewer::panels {
 namespace {
 
+// pipe2(O_CLOEXEC), which macOS doesn't have.
+bool cloexecPipe(int fds[2]) {
+#ifdef __APPLE__
+    if (pipe(fds) != 0)
+        return false;
+    fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+    fcntl(fds[1], F_SETFD, FD_CLOEXEC);
+    return true;
+#else
+    return pipe2(fds, O_CLOEXEC) == 0;
+#endif
+}
+
 // Shared by every script. `active` describes the running recording, `last` the most recent one that ended,
 // `stopping` marks a recorder told to finish. Values are reported one per line, newlines flattened.
 constexpr const char *preamble = R"SH(
@@ -31,12 +44,16 @@ state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/nereus/bag"
 active="$state_dir/active"
 report() { printf 'NEREUS_BAG %s %s\n' "$1" "$(printf '%s' "$2" | tr '\r\n' '  ')"; }
 expand_dir() { case "$1" in "~") printf '%s' "$HOME" ;; "~/"*) printf '%s/%s' "$HOME" "${1#"~/"}" ;; *) printf '%s' "$1" ;; esac; }
-alive() { [ -n "$1" ] && kill -0 "$1" 2>/dev/null && tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null | grep -q 'bag record'; }
-size_of() { du -sb "$1" 2>/dev/null | cut -f1; }
+alive() {
+  [ -n "$1" ] && kill -0 "$1" 2>/dev/null &&
+    { tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null || ps -ww -o args= -p "$1" 2>/dev/null; } | grep -q 'bag record'
+}
+# GNU du/df, else BSD's (a local recording on macOS) in KiB
+size_of() { du -sb "$1" 2>/dev/null | cut -f1 | grep . || du -sk "$1" 2>/dev/null | awk '{print $1 * 1024}'; }
 free_of() {
   d="$1"
   while [ ! -d "$d" ] && [ "$d" != / ] && [ -n "$d" ]; do d=$(dirname "$d"); done
-  df -PB1 "$d" 2>/dev/null | awk 'NR==2 {print $4}'
+  df -PB1 "$d" 2>/dev/null | awk 'NR==2 {print $4}' | grep . || df -Pk "$d" 2>/dev/null | awk 'NR==2 {print $4 * 1024}'
 }
 read_active() {
   pid= bag= start= log=
@@ -162,8 +179,9 @@ command -v ros2 >/dev/null 2>&1 || fail "ros2 not found after the setup. $(log_t
 command -v python3 >/dev/null 2>&1 || fail "python3 not found"
 log="$state_dir/record.log"
 # A background job of a non-interactive shell starts with SIGINT ignored, and Python only turns SIGINT into a clean
-# shutdown when it starts at the default: reset it on the way, so Stop closes the bag as Ctrl-C does.
-setsid python3 -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execvp(sys.argv[1], sys.argv[1:])' \
+# shutdown when it starts at the default: reset it on the way, so Stop closes the bag as Ctrl-C does. Its own
+# session too (os.setsid: macOS has no setsid command).
+python3 -c 'import os, signal, sys; os.setsid(); signal.signal(signal.SIGINT, signal.SIG_DFL); os.execvp(sys.argv[1], sys.argv[1:])' \
 )SH";
     script += "  " + record + " </dev/null >\"$log\" 2>&1 &\n";
 
@@ -268,7 +286,7 @@ ProcessResult runProcess(const std::vector<std::string> &argv, double timeoutSec
 
     // One pipe takes both stdout and stderr; stdin is /dev/null.
     int out[2];
-    if (pipe2(out, O_CLOEXEC) != 0) {
+    if (!cloexecPipe(out)) {
         result.output = std::string("pipe: ") + std::strerror(errno);
         return result;
     }
