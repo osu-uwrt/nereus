@@ -251,7 +251,8 @@ TEST(PerforatePanel, TexturedPanelKeepsAuthoredUvAndRejectsMismatch) {
 
 TEST(PerforatePanel, RejectsExistingCutoutsAndSelectsFirstMatchingFaceOnly) {
     Submesh part = mixedSubmesh();
-    part.material.cutouts = {{{.5f, .5f}, .1f}};
+    // Assign, not a braced list: gcc 15 calls the list temporary's Eigen member maybe-uninitialized.
+    part.material.cutouts.assign(1, UvCutout{Eigen::Vector2f(.5f, .5f), .1f});
     EXPECT_THROW(perforatePanel(asset({part}), panelOptions()), std::invalid_argument);
     // Faces at 0 and 0.0004 both match the triangle; only the first counts it.
     auto panel = panelOptions();

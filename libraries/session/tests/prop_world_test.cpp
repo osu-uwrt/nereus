@@ -316,7 +316,7 @@ TEST(PropWorld, HeldPropIsPartOfTheRobotAgainstScenery) {
                 if (e.at("type") == "detach")
                     detached.push_back(e.at("data").at("reason").get<std::string>());
         }
-        return std::make_pair(detached, stateAt(mount, mount_local, {}).head<3>().z() - lowest);
+        return std::make_pair(detached, stateAt(mount, mount_local, Eigen::Vector3d::Zero()).head<3>().z() - lowest);
     };
     const auto [with, depth_with] = press(true);
     EXPECT_TRUE(with.empty()) << "grasp lost with robot contacts: " << (with.empty() ? "" : with.front());
