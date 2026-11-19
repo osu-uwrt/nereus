@@ -596,15 +596,19 @@ bool RosSide::updatePose(glm::mat4 &body, bool &first) {
     case PoseSource::Estimate:
         truth = false;
         break;
-    default: // simulator truth while it is alive, else the estimate; before any pose, truth until proven absent
-        truth = truth_.fresh || (!estimate_.fresh && (truth_.seen || !estimate_.seen));
+    default: { // simulator truth while it is alive, else the estimate; before any pose, truth until proven absent.
+        // Once on truth it stays there through a stall of up to 3 s (a loaded or paused simulator), so a short gap
+        // does not flip the source (and the cameras) back and forth.
+        const bool holding = usingTruth_ && truth_.seen &&
+                             std::chrono::duration<double>(Clock::now() - truth_.wall).count() < 3.;
+        truth = truth_.fresh || holding || (!estimate_.fresh && (truth_.seen || !estimate_.seen));
+    }
     }
 
-    const bool switched = truth != usingTruth_;
-    usingTruth_ = truth;
-    if (switched) {
-        delivered_ = false; // refocus on the new source
-        refreshCameras();   // without truth the cards fall back to the ROS image topics
+    // A switch keeps the view where the operator put it: only the session's first pose refocuses the camera
+    if (truth != usingTruth_) {
+        usingTruth_ = truth;
+        refreshCameras(); // without truth the cards fall back to the ROS image topics
     }
 
     Probe &src = truth ? truth_ : estimate_;
