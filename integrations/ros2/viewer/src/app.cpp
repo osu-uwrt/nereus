@@ -3626,7 +3626,7 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
     for (const auto &theme : themes())
         add("Theme", theme.label, currentTheme() == theme.id, [this, id = theme.id] { setTheme(id); });
     add("Interface scale", "Match desktop", uiScaleSetting_ <= 0, [this] { setUiScale(0); });
-    for (const float scale : {1.f, 1.25f, 1.5f, 1.75f, 2.f})
+    for (const float scale : {.5f, .75f, 1.f, 1.25f, 1.5f, 1.75f, 2.f})
         add("Interface scale", std::to_string(int(std::lround(scale * 100))) + " %",
             uiScaleSetting_ > 0 && std::abs(uiScaleSetting_ - scale) < .01f, [this, scale] { setUiScale(scale); });
     if (poolSwitch_.packs.empty())
@@ -4116,7 +4116,8 @@ void App::applyPendingUiScale() {
 void App::drawScaleMenu() {
     if (!ImGui::BeginMenu("Interface scale"))
         return;
-    for (const float scale : {1.f, 1.25f, 1.5f, 1.75f, 2.f}) {
+    // 50 / 75 %: a laptop panel (a MacBook's "looks like" resolution) fits more of the layout
+    for (const float scale : {.5f, .75f, 1.f, 1.25f, 1.5f, 1.75f, 2.f}) {
         char label[16];
         std::snprintf(label, sizeof(label), "%d %%", int(std::lround(scale * 100)));
         if (ImGui::MenuItem(label, nullptr, uiScaleSetting_ == scale))
