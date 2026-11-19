@@ -31,6 +31,7 @@
 #include <cctype>
 #include <cfloat>
 #include <cmath>
+#include <map>
 #include <cstring>
 #include <ctime>
 #include <deque>
@@ -563,6 +564,15 @@ class App {
         std::string fill;          // instead of running: the search box takes this, for the rest to be typed
     };
     std::string paletteFill_; // text the search box takes next frame (a command that needs more typing)
+    // How often and when each palette command was run (group + label), saved for this computer: often and lately
+    // used ones rank first (palette_usage in viewer.yaml)
+    struct PaletteUse {
+        int count = 0;
+        double last = 0; // seconds since the epoch
+    };
+    std::map<std::string, PaletteUse> paletteUsage_;
+    double paletteFrecency(const PaletteCommand &, double now) const;
+    void notePaletteUse(const PaletteCommand &);
 
     // The robot from the keyboard: moves typed in the palette ("forward 0.5", "turn 30", "go 1 2 -1 90") and
     // keyboard driving (WASD, R / F, Q / E, one step a press). Enable / KILL stay off the keyboard.
@@ -574,7 +584,10 @@ class App {
     void commandPose(const PoseTarget &);
     void driveWithKeys();
     void setDriving(bool on); // on only while the robot takes poses in Position control (else says why)
+    void driveKeysOnEnable(); // preference drive_keys_on_enable: driving turns on as the robot is enabled
     bool driving_ = false;
+    bool driveKeysOnEnable_ = false, wasEnabled_ = false, armDriveKeys_ = false;
+    Clock::time_point armedAt_{};
     int driveStep_ = 2;              // index into kDriveMeters / kDriveDegrees
     std::optional<PoseTarget> sent_; // the last keyboard target, until the robot reports it as its command
     Clock::time_point sentAt_{};
@@ -950,6 +963,18 @@ App::App(const Options &options, int argc, char **argv) : opt_(options), argc_(a
             theme = YAML::LoadFile(preferencesFile_.string())["theme"].as<std::string>("");
         } catch (const std::exception &error) {
             std::cerr << "nereus-viewer: ignoring " << preferencesFile_ << ": " << error.what() << '\n';
+        }
+    if (persist_ && fs::exists(preferencesFile_)) // the search's ranking: how often each command was run
+        try {
+            for (const auto &entry : YAML::LoadFile(preferencesFile_.string())["palette_usage"])
+                paletteUsage_[entry.first.as<std::string>()] = {entry.second["count"].as<int>(0),
+                                                                 entry.second["last"].as<double>(0)};
+        } catch (const std::exception &) {
+        }
+    if (persist_ && fs::exists(preferencesFile_)) // Robot: drive with keys when enabled (this computer's choice)
+        try {
+            driveKeysOnEnable_ = YAML::LoadFile(preferencesFile_.string())["drive_keys_on_enable"].as<bool>(false);
+        } catch (const std::exception &) {
         }
     if (persist_ && fs::exists(preferencesFile_)) // File > Open recent
         try {
@@ -3314,6 +3339,7 @@ void App::drawInterface(double time, float dt) {
     pins::newFrame();
     plots::frame();
     handleShortcuts();
+    driveKeysOnEnable();
     driveWithKeys();
     drawMenuBar();
     drawCommandBar();
@@ -3550,8 +3576,8 @@ void App::drawCommandCenter(float t) {
 
 // ------------------------------------------------------------------------------------ command center
 
-// Everything the palette can run: the menus' items, as commands. Enable and KILL are not here on purpose: a
-// fuzzy match must never start or stop the robot.
+// Everything the palette can run: the menus' items, as commands. Enable and KILL only once their word is being
+// typed ("en", "ki" on): a fuzzy match or a much-used command at the top must never start or stop the robot.
 std::vector<App::PaletteCommand> App::paletteCommands() {
     std::vector<PaletteCommand> out;
     const auto add = [&](const std::string &group, const std::string &label, bool checked, std::function<void()> run) {
@@ -3652,6 +3678,23 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
     add("File", "Quit", false, [this] { window_->requestClose(); });
     add("Help", "Controls & shortcuts", helpOpen_, [this] { helpOpen_ = true; });
 
+    // The robot's kill switch: KILL whenever there is a robot (as the button: it stops its trees too), Enable when
+    // it is killed; and whether keyboard driving turns on as it is enabled (saved for this computer)
+    if (const auto robot = motion()) {
+        const auto s = robot->state();
+        const bool canKill = s.enabled || s.pending || s.competing || (s.observedKilled && !*s.observedKilled);
+        const std::string first = query.substr(0, query.find(' '));
+        const auto typing = [&](const std::string &word) { return first.size() >= 2 && word.rfind(first, 0) == 0; };
+        if (typing("kill"))
+            add("Robot", "KILL the robot", false, [this, robot] { composition_->kill(robot); });
+        if (!canKill && typing("enable"))
+            add("Robot", "Enable the robot", false, [robot] { robot->enable(); });
+        add("Robot", "Drive with keys when enabled", driveKeysOnEnable_, [this] {
+            driveKeysOnEnable_ = !driveKeysOnEnable_;
+            savePreference("drive_keys_on_enable", YAML::Node(driveKeysOnEnable_));
+        });
+    }
+
     // The robot: moves to type out (each fills the box with its first word), and keyboard driving
     if (workspace_ == Workspace::Operate && motion()) {
         const auto type = [&](const std::string &label, const std::string &fill) {
@@ -3685,7 +3728,8 @@ std::vector<App::PaletteCommand> App::paletteCommands() {
     }
 
     // Every control in every window (as pinning knows them): run as a click on it would, in its window or, when
-    // that is closed or behind a tab, off screen. Unavailable ones are left out, and so are Enable / KILL.
+    // that is closed or behind a tab, off screen. Unavailable ones are left out, and so are the Enable / KILL keys
+    // (Robot above has KILL and Enable).
     for (const auto &control : pins::controls()) {
         if (control.disabled || control.key.find("enable_kill") != std::string::npos || control.window.empty())
             continue;
@@ -3762,14 +3806,19 @@ void App::drawCommandPalette() {
     for (auto &command : paletteCommands())
         commands.push_back(std::move(command));
 
-    // the matches, best first (ties keep the menus' order); with nothing typed, everything in that order
-    std::vector<std::pair<int, std::size_t>> ranked;
+    // the matches, best first (ties keep the menus' order). Commands run often and lately rank higher: with nothing
+    // typed they come first, while typing they only break near-ties (a clearly better match still wins)
+    const bool empty = std::string(paletteQuery_).find_first_not_of(' ') == std::string::npos;
+    const double now = double(std::time(nullptr));
+    std::vector<std::pair<double, std::size_t>> ranked;
     for (std::size_t i = 0; i < commands.size(); ++i) {
         const int label = fuzzyScore(commands[i].label, paletteQuery_),
                   full = fuzzyScore(commands[i].group + " " + commands[i].label, paletteQuery_);
         const int score = i < typed ? typedScore : label >= 0 ? label : full >= 0 ? full + 50 : -2;
-        if (score >= -1)
-            ranked.push_back({score, i});
+        if (score < -1)
+            continue;
+        const double used = i < typed ? 0 : 3 * std::log2(1 + paletteFrecency(commands[i], now));
+        ranked.push_back({score - (empty ? used : std::min(used, 10.0)), i});
     }
     std::stable_sort(ranked.begin(), ranked.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
     const int shownCount = int(std::min<std::size_t>(ranked.size(), 14));
@@ -3781,8 +3830,9 @@ void App::drawCommandPalette() {
         paletteIndex_ = std::max(paletteIndex_ - 1, 0);
     paletteIndex_ = std::clamp(paletteIndex_, 0, std::max(0, shownCount - 1));
     const PaletteCommand *chosen = nullptr;
+    std::size_t chosenAt = 0;
     if (paletteEnter_ && shownCount > 0)
-        chosen = &commands[ranked[std::size_t(paletteIndex_)].second];
+        chosen = &commands[chosenAt = ranked[std::size_t(paletteIndex_)].second];
     paletteEnter_ = false;
 
     // The rows: the group in a left column, the label, and "on" at the right for a current choice
@@ -3798,8 +3848,10 @@ void App::drawCommandPalette() {
         ImGui::PushID(row);
         const ImVec2 at = ImGui::GetCursorScreenPos();
         const bool selected = row == paletteIndex_;
-        if (ImGui::Selectable("##row", selected, 0, {0, ImGui::GetTextLineHeight() + ui(6)}))
+        if (ImGui::Selectable("##row", selected, 0, {0, ImGui::GetTextLineHeight() + ui(6)})) {
             chosen = &command;
+            chosenAt = ranked[std::size_t(row)].second;
+        }
         const bool hovered = ImGui::IsItemHovered(), held = ImGui::IsItemActive();
         if (hovered && (ImGui::GetIO().MouseDelta.x != 0 || ImGui::GetIO().MouseDelta.y != 0))
             paletteIndex_ = row;
@@ -3850,8 +3902,36 @@ void App::drawCommandPalette() {
     if (run ||
         (!paletteTyping_ && !paletteFocus_ && !overResults && !overBox && !ImGui::IsMouseDown(ImGuiMouseButton_Left)))
         close();
+    if (run && chosenAt >= typed) // a typed move is not a command to remember
+        notePaletteUse(*chosen);
     if (run)
         run();
+}
+
+// How much a command was used: its runs, the recent ones counting most (a day: all, a week: 0.6, a month: 0.3).
+double App::paletteFrecency(const PaletteCommand &command, double now) const {
+    const auto use = paletteUsage_.find(command.group + "/" + command.label);
+    if (use == paletteUsage_.end())
+        return 0;
+    const double days = (now - use->second.last) / 86400;
+    return use->second.count * (days <= 1 ? 1 : days <= 7 ? .6 : days <= 30 ? .3 : .1);
+}
+
+// Counts a run and saves the counts (the 300 most recently used commands).
+void App::notePaletteUse(const PaletteCommand &command) {
+    auto &use = paletteUsage_[command.group + "/" + command.label];
+    ++use.count;
+    use.last = double(std::time(nullptr));
+    while (paletteUsage_.size() > 300)
+        paletteUsage_.erase(std::min_element(paletteUsage_.begin(), paletteUsage_.end(), [](const auto &a, const auto &b) {
+            return a.second.last < b.second.last;
+        }));
+    YAML::Node usage(YAML::NodeType::Map);
+    for (const auto &[key, entry] : paletteUsage_) {
+        usage[key]["count"] = entry.count;
+        usage[key]["last"] = entry.last;
+    }
+    savePreference("palette_usage", usage);
 }
 
 // The viewer's own title bar (no system decorations): the menu bar's empty space moves the window (drag) or
@@ -5602,6 +5682,10 @@ void App::drawHelpWindow() {
                {"Drive with keys", "Ctrl+P or the Motion panel (Position control): W / S forward / back, A / D "
                                    "left / right, Space / Shift up / down, Q / E turn: one step a press; [ / ] step "
                                    "size; Esc stops"},
+               {"Ctrl+P, Drive with keys when enabled", "keyboard driving turns on each time the robot is enabled "
+                                                        "(saved for this computer)"},
+               {"Ctrl+P, KILL / Enable", "type kill / enable: the robot's kill switch, as the KILL / Enable key "
+                                         "(KILL stops its trees)"},
                {"Ctrl+P, Run <tree>", "start an autonomy tree (robot enabled); Stop the tree from there too"},
                {"Enable / KILL", "never from the keyboard: the button in the command bar"}});
 
@@ -6623,6 +6707,33 @@ void App::setDriving(bool on) {
         return;
     }
     driving_ = on;
+}
+
+// Drive with keys when enabled: as the robot goes from killed to enabled, keyboard driving turns on once it takes
+// poses (a mode change after Enable is waited out, for up to 5 s; Feedforward control never takes them). It ends
+// as usual: Esc, KILL, or the robot no longer taking poses.
+void App::driveKeysOnEnable() {
+    const auto robot = motion();
+    const bool enabled = robot && robot->state().enabled;
+    if (enabled && !wasEnabled_ && driveKeysOnEnable_) {
+        armDriveKeys_ = true;
+        armedAt_ = Clock::now();
+    }
+    wasEnabled_ = enabled;
+    if (!armDriveKeys_)
+        return;
+    if (!enabled || driving_ || Clock::now() - armedAt_ > std::chrono::seconds(5)) {
+        armDriveKeys_ = false;
+        return;
+    }
+    std::string why;
+    bool wait = false;
+    if (commandable(&why, &wait) && !wait) {
+        armDriveKeys_ = false;
+        setDriving(true);
+        if (driving_)
+            notify("Driving with keys: W / S, A / D, Space / Shift, Q / E; Esc stops");
+    }
 }
 
 // Keyboard driving: each press moves the target one step from where it was told to be (no repeat while held,

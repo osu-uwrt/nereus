@@ -181,6 +181,8 @@ class Composition {
     // Whether `mission` may start a tree now: the motion it owns (the `ownership` links) is enabled, fresh, and
     // neither pending nor contested. The autonomy panel's Start and the command palette both ask.
     bool mayStart(const std::shared_ptr<Provider> &mission) const;
+    // KILL: `motion`'s kill switch, and Stop for the trees it drives. The KILL buttons and the command palette.
+    void kill(const std::shared_ptr<Provider> &motion);
 
   private:
     struct PanelInstance {

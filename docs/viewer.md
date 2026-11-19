@@ -153,7 +153,14 @@ The Robot entries (*Move…*, *Turn…*, *Go to…*, *Set…*) put the first wor
 moves the target one step a key press: W / S forward / back,
 A / D left / right, Space / Shift up / down, Q / E turn; `[` / `]` choose the step (5 cm / 2° up to 1 m / 45°, 25 cm /
 15° to start). Holding a key does not repeat. The pool view's key strip shows the keys and step while it is on;
-Esc, the Map workspace, Feedforward, a kill or a tree starting ends it. Keys go to a text field when one has the keyboard, and
+Esc, the Map workspace, Feedforward, a kill or a tree starting ends it. **Drive with keys when enabled** (in the
+search) turns it on each time the robot is enabled, once it takes poses; the choice is saved for this computer
+(`drive_keys_on_enable` in `~/.config/nereus/viewer.yaml`). The search also has **KILL the robot** (as the KILL key: it
+stops the robot's trees too) and, while it is killed, **Enable the robot**; they are listed only once their word is
+being typed ("ki…", "en…"), so a match on something else never starts or stops the robot.
+
+The search ranks the commands run often and lately first (with nothing typed, the most used come first; while typing,
+use only breaks near ties). The counts are this computer's, in `palette_usage` in `~/.config/nereus/viewer.yaml`. Keys go to a text field when one has the keyboard, and
 to the free camera while it has the mouse.
 
 **Run <tree>** starts an autonomy tree, under the same rule as the Autonomy panel's Start (the robot it drives

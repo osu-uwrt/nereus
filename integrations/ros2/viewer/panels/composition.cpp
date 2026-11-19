@@ -272,14 +272,7 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
             b.provider = sources.at(providerId);
         b.options = item["options"] ? item["options"] : YAML::Node(YAML::NodeType::Map);
         b.mayStart = [this, provider = b.provider] { return mayStart(provider); };
-        b.kill = [this, provider = b.provider] {
-            if (auto motion = std::dynamic_pointer_cast<Motion>(provider)) {
-                motion->kill();
-                for (const auto &link : ownership)
-                    if (link.motion == motion && link.mission->state().busy)
-                        link.mission->stop();
-            }
-        };
+        b.kill = [this, provider = b.provider] { kill(provider); };
         return b;
     };
 
@@ -309,6 +302,15 @@ Composition::Composition(const YAML::Node &config, const Context &ctx, const Reg
                             item["visible"].as<bool>(true),
                             registry.overlays.at(item["type"].as<std::string>()).create(binding(item)),
                             item["provider"].as<std::string>()});
+}
+
+void Composition::kill(const std::shared_ptr<Provider> &provider) {
+    if (auto motion = std::dynamic_pointer_cast<Motion>(provider)) {
+        motion->kill();
+        for (const auto &link : ownership)
+            if (link.motion == motion && link.mission->state().busy)
+                link.mission->stop();
+    }
 }
 
 bool Composition::mayStart(const std::shared_ptr<Provider> &mission) const {

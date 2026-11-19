@@ -14,6 +14,9 @@ First version for the team.
   closed viewer; any viewer picks it up) or on this computer, all topics with an exclude regex or a picked list with
   presets (configured, or saved from the panel to `~/.config/nereus/bag_presets.yaml`) and a Browse all / Recording
   view, and a BAG chip in the command bar while recording.
+- Viewer search (Ctrl+P): **KILL the robot** / **Enable the robot** (listed once "ki" / "en" is typed), and **Drive
+  with keys when enabled** (keyboard driving turns on each time the robot is enabled; saved per computer in
+  `viewer.yaml`). Commands run often and lately rank first (`palette_usage` in `viewer.yaml`).
 - Viewer **image views**: Windows > New image view (or a pinned toolbar button) opens a dock window showing any
   `sensor_msgs/Image` or `CompressedImage` topic picked in it (the detector's annotated output, a depth image); the
   views are saved with the layout.
