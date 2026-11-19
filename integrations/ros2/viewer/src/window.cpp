@@ -169,6 +169,16 @@ void Window::loadFonts(float ui, float titleBar, const Theme &theme, const std::
             body = theme.fontPoints * 96.f / 72.f; // points to pixels at 96 dpi
     }
 
+    // The default faces are where Debian / Ubuntu install them. Elsewhere (macOS, Nix) ask fontconfig for the same
+    // family rather than dropping to ImGui's bitmap font; with those files present nothing changes.
+    if (!std::filesystem::exists(font)) {
+        if (const auto dejavu = fontFile("DejaVu Sans", "Book"); !dejavu.empty()) {
+            font = dejavu;
+            const auto dejavuBold = fontFile("DejaVu Sans", "Bold");
+            bold = dejavuBold.empty() ? dejavu : dejavuBold;
+        }
+    }
+
     // Every size scales with the body size (k) and the interface scale; the title bar's with `titleBar`.
     const float k = body / 15;
     // Latin-1 and general punctuation (dashes, ellipsis, the › of field paths)
