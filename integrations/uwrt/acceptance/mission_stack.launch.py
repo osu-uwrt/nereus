@@ -60,7 +60,12 @@ def _stack(context):
                             AnyLaunchDescriptionSource(
                                 share("riptide_hardware2") + "/launch/apriltag.launch.py"
                             ),
-                            launch_arguments={"robot": "talos"}.items(),
+                            # the bridge publishes the ffc as rgb/image_rect_color/compressed (bridge.yaml)
+                            launch_arguments={
+                                "robot": "talos",
+                                "image_transport": "compressed",
+                                "camera": "rgb",
+                            }.items(),
                         ),
                     ]
                 ),
