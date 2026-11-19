@@ -35,6 +35,11 @@ Window::Window(int width, int height, const std::string &titleText, bool hidden,
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_VISIBLE, hidden ? GLFW_FALSE : GLFW_TRUE);
+#ifdef __APPLE__
+    // The custom title bar needs X11, so macOS always falls back to the system one (below). Decide that before the
+    // window exists: created undecorated, maximized, then decorated, the Cocoa window couldn't be resized.
+    custom_ = false;
+#endif
     glfwWindowHint(GLFW_DECORATED, custom_ ? GLFW_FALSE : GLFW_TRUE);
     window_ = glfwCreateWindow(width, height, titleText.c_str(), nullptr, nullptr);
     if (!window_) {
