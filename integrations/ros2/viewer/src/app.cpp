@@ -5037,7 +5037,14 @@ void App::drawPoolView(double time, float dt) {
         ih = std::min(viewHeight, width / aspect);
         iw = ih * aspect;
     }
-    const int rw = std::max(16, int(iw)), rh = std::max(16, int(ih));
+    // Render at the display's pixel density: a Retina Mac has 2 x 2 pixels per point, and the image is still drawn
+    // at iw x ih points below. depthPoint works in uv and the frame's own size, so it follows. Linux keeps 1.
+#ifdef __APPLE__
+    const float density = std::max(1.f, window_->pixelRatio());
+#else
+    const float density = 1;
+#endif
+    const int rw = std::max(16, int(iw * density)), rh = std::max(16, int(ih * density));
     // A sensor view keeps its own field of view at any displayed size.
     if (sensor) {
         auto k = sensor->k;
