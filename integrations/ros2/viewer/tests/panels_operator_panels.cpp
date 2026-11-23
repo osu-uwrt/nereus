@@ -317,6 +317,11 @@ ui:
     auto mappingPub = node->create_publisher<riptide_msgs2::msg::MappingTargetInfo>("mapping_state", 10);
     auto actuatorPub =
         node->create_publisher<riptide_msgs2::msg::ActuatorStatus>("state/actuator/status", rclcpp::SensorDataQoS());
+    auto commandStatusPub = node->create_publisher<std_msgs::msg::Bool>("state/actuator/cmd_status", 10);
+    auto commandFeedbackPub = node->create_publisher<std_msgs::msg::String>("state/actuator/cmd_feedback", 10);
+    std::vector<float> clawCommands;
+    auto clawSub = node->create_subscription<std_msgs::msg::Float32>(
+        "command/actuator/claw_move_s", 10, [&](const std_msgs::msg::Float32 &m) { clawCommands.push_back(m.data); });
     auto scorePub = node->create_publisher<std_msgs::msg::String>("simulator/run_score", 10);
     auto lightPub = node->create_publisher<visualization_msgs::msg::MarkerArray>("simulator/magnet_lights", 10);
     auto eventPub = node->create_publisher<std_msgs::msg::String>("simulator/task_events", 10);
@@ -798,10 +803,33 @@ ui:
     spin(.1);
     assert(mapping->state().resetMessage.find("timed out") != std::string::npos);
 
+    assert(actuators->state().hasCommandFeedback && !actuators->state().commandResultReceived &&
+           !actuators->state().commandFeedbackReceived);
+    std_msgs::msg::Bool commandStatusMsg;
+    std_msgs::msg::String commandFeedbackMsg;
+    commandStatusMsg.data = false;
+    commandFeedbackMsg.data = "Waiting for feedback";
+    commandStatusPub->publish(commandStatusMsg);
+    commandFeedbackPub->publish(commandFeedbackMsg);
+    spin(.15);
+    assert(actuators->state().commandResultReceived && !actuators->state().commandSucceeded &&
+           actuators->state().commandFeedbackReceived &&
+           actuators->state().commandFeedback == "Waiting for feedback");
+    commandFeedbackMsg.data.clear();
+    commandFeedbackPub->publish(commandFeedbackMsg);
+    spin(.15);
+    assert(actuators->state().commandFeedbackReceived && actuators->state().commandFeedback.empty());
+    commandStatusMsg.data = true;
+    commandStatusPub->publish(commandStatusMsg);
+    spin(.15);
+    assert(actuators->state().commandSucceeded);
+
     // Torpedo fires only once the actuators report armed; arm toggles.
     actuators->command("torpedo");
+    actuators->command("open_claw", 1.5f);
     actuators->command("arm");
     spin(.15);
+    assert(clawCommands.empty());
     assert(fireCount == 0 && armCount == 1 && lastArm);
     actuatorMsg.actuators_armed = true;
     spin(.1);
@@ -809,6 +837,16 @@ ui:
     actuators->command("arm");
     spin(.15);
     assert(fireCount == 1 && armCount == 2 && !lastArm);
+    actuators->command("open_claw", 0);
+    actuators->command("close_claw", -1);
+    actuators->command("open_claw", 1.5f);
+    actuators->command("close_claw", 2.5f);
+    actuators->command("stop_claw");
+    spin(.15);
+    assert(clawCommands.size() == 2 && clawCommands[0] == 1.5f && clawCommands[1] == -2.5f);
+    for (const auto &action : actuators->state().actions)
+        if (action.id == "stop_claw")
+            assert(!action.available);
 
     // Run commands go out as JSON with the run options; a start while the run is already running is dropped.
     run->command(YAML::Load("{action: start, role: 'quoted \" role', coin: true, amount: 2.5}"));
@@ -844,11 +882,12 @@ ui:
     assert(reading("dvl").value == "Lock" && reading("dvl").level == Level::Ok);
 
     // Stale: commands are refused.
+    actuators->command("open_claw", 1);
     actuators->command("torpedo");
     run->command(YAML::Load("{action: stop}"));
     run->reset();
     spin(.1, false);
-    assert(fireCount == 1 && runCommands.size() == 2 && resetCount == 1);
+    assert(fireCount == 1 && clawCommands.size() == 2 && runCommands.size() == 2 && resetCount == 1);
 
     scoreMsg.data = "{running: true}";
     spin(.1);

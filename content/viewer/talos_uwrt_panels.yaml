@@ -35,13 +35,15 @@ providers:
     type: uwrt.actuators
     options:
       status_topic: state/actuator/status
+      command_status_topic: state/actuator/cmd_status
+      command_feedback_topic: state/actuator/cmd_feedback
       commands:
         - {id: arm, label: Arm actuators, armed_label: Disarm, topic: command/actuator/arm, type: bool, toggle_armed: true}
         - {id: torpedo, label: Fire torpedo, topic: command/actuator/torpedo, type: empty, requires_armed: true}
         - {id: dropper, label: Drop marker, topic: command/actuator/dropper, type: empty, requires_armed: true}
-        - {id: open_claw, label: Open claw, topic: command/actuator/claw, type: bool, value: true, requires_armed: true}
-        - {id: close_claw, label: Close claw, topic: command/actuator/claw, type: bool, value: false, requires_armed: true}
-        - {id: stop_claw, label: Stop claw, topic: command/actuator/claw_move_s, type: float32, value: 0, requires_armed: true}
+        - {id: open_claw, label: Open claw, topic: command/actuator/claw_move_s, type: float32, duration_sign: 1, requires_armed: true}
+        - {id: close_claw, label: Close claw, topic: command/actuator/claw_move_s, type: float32, duration_sign: -1, requires_armed: true}
+        - {id: stop_claw, label: Stop claw, topic: command/actuator/claw_move_s, type: float32, value: 0, requires_armed: true, disabled: true}
         - {id: reload, label: Reload / disarm, topic: command/actuator/notify_reload, type: empty}
   telemetry:
     type: uwrt.telemetry

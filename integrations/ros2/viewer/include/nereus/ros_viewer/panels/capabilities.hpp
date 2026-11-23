@@ -104,6 +104,7 @@ struct Mapping : Provider {
 struct ActuatorAction {
     std::string id, label;
     bool available = false;
+    bool usesDuration = false;
 };
 
 // Whether a mechanism's hardware (claw, torpedo) is answering: Ok connected, Error not, Stale no status.
@@ -117,6 +118,9 @@ struct ActuatorState {
     std::vector<ActuatorAction> actions;
     std::vector<ActuatorLink> links;
     std::vector<std::pair<std::string, std::string>> readings; // label, value
+    bool hasCommandFeedback = false, commandResultReceived = false, commandSucceeded = false;
+    bool commandFeedbackReceived = false;
+    std::string commandFeedback;
     std::string message = "Waiting for actuator status";
 };
 struct Actuators : Provider {
@@ -124,7 +128,7 @@ struct Actuators : Provider {
         return Kind::Actuators;
     }
     virtual ActuatorState state() = 0;
-    virtual void command(const std::string &id) = 0;
+    virtual void command(const std::string &id, float duration = 0) = 0;
 };
 
 // --- Run: competition run control and scoring ---
