@@ -71,6 +71,7 @@ Frame Processor::process(const Intrinsics &calibration, const DepthNoise &noise,
     result.width = calibration.width;
     result.height = calibration.height;
     auto candidate = random_; // Failed processing must not consume the camera's random state.
+    auto candidate_state = state_;
 
     // Buffers the GPU already delivered sensor-ready are taken as they are.
     const bool flipRgb = !rgb.empty() && !layout.top_down;
@@ -105,8 +106,12 @@ Frame Processor::process(const Intrinsics &calibration, const DepthNoise &noise,
                 }
         }
 
-    if (!result.depth.empty())
+    if (!result.depth.empty()) {
+        if (noise.enabled)
+            detail::applyStructuredNoise(noise, result.depth, result.width, result.height, calibration.fx,
+                                         calibration.fy, calibration.cx, calibration.cy, candidate, candidate_state);
         detail::applyNoise(noise, result.depth, result.width, result.height, candidate);
+    }
 
     // OpenCV encodes BGR, so swap channels before compressing.
     if (jpeg) {
@@ -119,6 +124,7 @@ Frame Processor::process(const Intrinsics &calibration, const DepthNoise &noise,
 
     // Commit the random stream only once the whole frame succeeded.
     random_ = candidate;
+    state_ = std::move(candidate_state);
     return result;
 }
 

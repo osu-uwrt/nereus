@@ -244,6 +244,17 @@ SessionCameras::SessionCameras(const session::ResolvedScenario &resolved, Option
         noise.outliers = n.at("outliers").get<double>();
         noise.correlation = n.at("correlation").get<double>();
         noise.patch_size = n.at("patch_size_px").get<int>();
+        noise.wave_sigma = n.value("wave_sigma_m", 0.0);
+        noise.wave_range_sigma = n.value("wave_range_coefficient", 0.0);
+        noise.wave_patch = n.value("wave_patch_px", 100);
+        noise.wave_correlation = n.value("wave_correlation", 0.0);
+        noise.tilt_sigma = n.value("tilt_sigma_rad", 0.0);
+        noise.scale_sigma = n.value("scale_sigma", 0.0);
+        noise.tilt_correlation = n.value("tilt_correlation", 0.0);
+        noise.edge_fatten = n.value("edge_fatten_px", 0);
+        noise.edge_smooth = n.value("edge_smooth_px", 0.0);
+        noise.edge_band_dropout = n.value("edge_band_dropout", 0.0);
+        noise.edge_jump = n.value("edge_jump_m", 0.1);
         noise.validate();
 
         // Stereo geometry and outputs; output names this library doesn't know are ignored.

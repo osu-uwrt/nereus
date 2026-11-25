@@ -219,9 +219,14 @@ sensors:
     depth:
       min_range_m: 0.15
       max_range_m: 4.0
-      noise: {base_sigma_m: 0.002, range_coefficient: 0.0015, range_exponent: 2.0, bias_m: 0.0,
-              dropout: 0.005, range_dropout: 0.10, edge_dropout: 0.20, outliers: 0.002,
-              correlation: 0.5, patch_size_px: 8}
+      # Fitted 2026-11-24 to real FFC depth (NEURAL_LIGHT, stabilization 0, confidence 70; torpedo board at
+      # 0.4-3 m): smooth waves ~100 px across, 9 mm per m of range, mostly new each frame; little per-pixel noise;
+      # edges smeared (sigma 8 px); no scattered dropouts or outliers.
+      noise: {base_sigma_m: 0.0005, range_coefficient: 0.0005, range_exponent: 2.0, bias_m: 0.0,
+              dropout: 0.0, range_dropout: 0.03, edge_dropout: 0.0, outliers: 0.0,
+              correlation: 0.5, patch_size_px: 8,
+              wave_sigma_m: 0.0, wave_range_coefficient: 0.009, wave_patch_px: 100, wave_correlation: 0.2,
+              edge_smooth_px: 8.0, edge_band_dropout: 0.0}
 - id: dfc
   type: stereo_camera
   frame: dfc_left_optical
@@ -239,9 +244,14 @@ sensors:
     depth:
       min_range_m: 0.15
       max_range_m: 4.0
-      noise: {base_sigma_m: 0.002, range_coefficient: 0.0015, range_exponent: 2.0, bias_m: 0.0,
-              dropout: 0.005, range_dropout: 0.10, edge_dropout: 0.20, outliers: 0.002,
-              correlation: 0.5, patch_size_px: 8}
+      # Fitted 2026-11-24 to real DFC depth (NEURAL_LIGHT, stabilization 30, confidence 95; RPAC table at
+      # 0.3-2 m): smooth waves ~300 px across, 12 mm per m of range, kept 0.9 frame to frame; edges smeared
+      # (sigma 2 px) with 10% of the edge band missing; no scattered dropouts or outliers.
+      noise: {base_sigma_m: 0.0005, range_coefficient: 0.0005, range_exponent: 2.0, bias_m: 0.0,
+              dropout: 0.0, range_dropout: 0.01, edge_dropout: 0.0, outliers: 0.0,
+              correlation: 0.5, patch_size_px: 8,
+              wave_sigma_m: 0.0, wave_range_coefficient: 0.012, wave_patch_px: 300, wave_correlation: 0.9,
+              edge_smooth_px: 2.0, edge_band_dropout: 0.10}
 
 # Payloads, claw and magnet.
 mechanisms:

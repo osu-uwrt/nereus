@@ -235,3 +235,61 @@ TEST(CameraNoise, CompleteDropoutAndInvalidParametersAreExplicit) {
     noise.correlation = 1.1;
     EXPECT_THROW(noise.validate(), std::invalid_argument);
 }
+
+// Structured (stereo-matcher) noise on a flat wall at 1 m: wave error of the configured size that is smooth
+// (neighbors nearly equal, far pixels independent), carried between frames by wave_correlation.
+TEST(DepthNoise, WavesAreSmoothSizedAndCarried) {
+    const Intrinsics k = small(320, 240);
+    DepthNoise noise;
+    noise.base_sigma = noise.range_sigma = 0;
+    noise.dropout = noise.range_dropout = noise.edge_dropout = noise.outliers = 0;
+    noise.wave_range_sigma = .01; // 1 cm at 1 m
+    noise.wave_patch = 40;
+    noise.wave_correlation = .9;
+    const std::vector<float> wall(static_cast<std::size_t>(k.width) * k.height, 1.f);
+    Processor processor;
+    const auto first = processor.process(k, noise, {}, wall, false, 93, {true, true}).depth;
+    const auto second = processor.process(k, noise, {}, wall, false, 93, {true, true}).depth;
+    double sum = 0, near = 0, far = 0, across = 0;
+    int n = 0;
+    for (int y = 0; y < k.height; ++y)
+        for (int x = 0; x + 100 < k.width; ++x) {
+            const std::size_t i = static_cast<std::size_t>(y) * k.width + x;
+            const double e = first[i] - 1, e1 = first[i + 1] - 1, e100 = first[i + 100] - 1, f = second[i] - 1;
+            sum += e * e;
+            near += e * e1;
+            far += e * e100;
+            across += e * f;
+            ++n;
+        }
+    const double var = sum / n;
+    EXPECT_NEAR(std::sqrt(var), .01, .0025);
+    EXPECT_GT(near / n / var, .95);         // smooth over a pixel
+    EXPECT_LT(std::abs(far / n / var), .4); // ~2.5 waves apart: mostly independent
+    EXPECT_GT(across / n / var, .7);        // next frame keeps most of the waves
+}
+
+// Edge smearing: a 1 m / 2 m step becomes a gradual transition within ~2 sigma of the edge, the rest is untouched,
+// and edge_band_dropout removes the band.
+TEST(DepthNoise, EdgeSmearingBlendsOnlyNearDepthJumps) {
+    const Intrinsics k = small(120, 40);
+    DepthNoise noise;
+    noise.base_sigma = noise.range_sigma = 0;
+    noise.dropout = noise.range_dropout = noise.edge_dropout = noise.outliers = 0;
+    noise.edge_smooth = 4;
+    std::vector<float> step(static_cast<std::size_t>(k.width) * k.height);
+    for (int y = 0; y < k.height; ++y)
+        for (int x = 0; x < k.width; ++x)
+            step[static_cast<std::size_t>(y) * k.width + x] = x < 60 ? 1.f : 2.f;
+    const auto smeared = Processor().process(k, noise, {}, step, false, 93, {true, true}).depth;
+    const auto at = [&](const std::vector<float> &d, int x) { return d[static_cast<std::size_t>(20) * k.width + x]; };
+    EXPECT_FLOAT_EQ(at(smeared, 30), 1.f); // far from the edge: unchanged
+    EXPECT_FLOAT_EQ(at(smeared, 90), 2.f);
+    EXPECT_GT(at(smeared, 59), 1.2f); // next to the edge: in between
+    EXPECT_LT(at(smeared, 60), 1.8f);
+    EXPECT_LT(at(smeared, 57), at(smeared, 59)); // monotone transition
+    noise.edge_band_dropout = 1;
+    const auto dropped = Processor().process(k, noise, {}, step, false, 93, {true, true}).depth;
+    EXPECT_TRUE(std::isnan(at(dropped, 59)));
+    EXPECT_FLOAT_EQ(at(dropped, 30), 1.f);
+}

@@ -44,6 +44,21 @@ struct DepthNoise {
     double outliers = .002, correlation = .5;
     int patch_size = 8;
 
+    // Structured error of a learned stereo matcher (ZED NEURAL*), which is smooth: the depth of a flat surface
+    // undulates in waves wave_patch pixels across, with sigma wave_sigma + wave_range_sigma * depth, and each frame
+    // keeps wave_correlation of the previous frame's waves. Off (0) by default.
+    double wave_sigma = 0, wave_range_sigma = 0, wave_correlation = 0;
+    int wave_patch = 100;
+    // Per-frame plane error: depth *= 1 + scale + a * x/z + b * y/z with a, b ~ N(0, tilt_sigma) (radians of
+    // surface tilt) and scale ~ N(0, scale_sigma), each keeping tilt_correlation of the previous frame's value.
+    double tilt_sigma = 0, scale_sigma = 0, tilt_correlation = 0;
+    // Foreground fattening: within edge_fatten pixels of a depth edge the nearer surface spreads over the farther.
+    int edge_fatten = 0;
+    // Edge smearing: within 2 * edge_smooth pixels of a depth jump larger than edge_jump, depth is the valid-weighted
+    // Gaussian (sigma edge_smooth px) average, so the matcher's gradual transition replaces a sharp step; each pixel of
+    // that band is also dropped with probability edge_band_dropout. Off (0) by default.
+    double edge_smooth = 0, edge_band_dropout = 0, edge_jump = .1;
+
     void validate() const;
 };
 
@@ -66,6 +81,13 @@ struct RawLayout {
 
 // One processor per camera, used by one owner; reset restores its random stream.
 // Inputs are RGB8/depth buffers in `layout` (moved from when already top-down); either may be empty.
+// Noise carried from frame to frame (structured terms).
+struct NoiseState {
+    std::vector<float> waves; // coarse wave grid
+    int rows = 0, cols = 0;
+    double tilt_x = 0, tilt_y = 0, scale = 0;
+};
+
 class Processor {
   public:
     explicit Processor(std::uint32_t seed = 7);
@@ -78,6 +100,7 @@ class Processor {
 
   private:
     std::mt19937 random_;
+    NoiseState state_;
 };
 
 } // namespace nereus::cameras

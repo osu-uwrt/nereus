@@ -661,7 +661,18 @@
                   "type": "integer",
                   "minimum": 1,
                   "maximum": 64
-                }
+                },
+                "wave_sigma_m": {"type": "number", "minimum": 0},
+                "wave_range_coefficient": {"type": "number", "minimum": 0},
+                "wave_patch_px": {"type": "integer", "minimum": 2, "maximum": 4096},
+                "wave_correlation": {"type": "number", "minimum": 0, "exclusiveMaximum": 1},
+                "tilt_sigma_rad": {"type": "number", "minimum": 0},
+                "scale_sigma": {"type": "number", "minimum": 0},
+                "tilt_correlation": {"type": "number", "minimum": 0, "exclusiveMaximum": 1},
+                "edge_fatten_px": {"type": "integer", "minimum": 0, "maximum": 64},
+                "edge_smooth_px": {"type": "number", "minimum": 0, "maximum": 64},
+                "edge_band_dropout": {"type": "number", "minimum": 0, "maximum": 1},
+                "edge_jump_m": {"type": "number", "exclusiveMinimum": 0}
               },
               "required": [
                 "base_sigma_m",
